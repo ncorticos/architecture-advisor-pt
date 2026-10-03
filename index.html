@@ -2360,6 +2360,8 @@ const CHIMNEY_FAM = {
     colours:['#F4F1EA', '#C98A5E'] },
   arca:      { name:'Cacela chest', shaft:0.55, h:1.05, cap:0.1, pots:2, long:1.9,
     colours:['#F4F1EA', '#C98A5E'] },
+  alongada:  { name:'Alentejo long range', shaft:0.55, h:1.8, cap:0.12, pots:5, long:3.4, fret:true,
+    colours:['#F4F1EA', '#C98A5E'] },
   simple:    { name:'Simple pot', shaft:0.45, h:1.2, cap:0.15, pots:1,
     colours:['#EFE9DC', '#C98A5E'] }
 };
@@ -2389,6 +2391,7 @@ Object.assign(SCE_ICON, {
   nortenha:  ['Northern granite', 'A heavy mass with open flues under one great slab — the northern chimney.'],
   beira:     ['Beira schist', 'A stone shaft with a slab cap and one pot — the Beira chimney.'],
   insular:   ['Island basalt', 'A dark shaft with a washed crown and one pot — the island chimney.'],
+  alongada:  ['Alentejo long range', 'A long white range with five flues under one slab — the Alentejo long range.'],
   balao:     ['Monchique balloon', 'A conical volume closed by a clay cylinder — the Monchique balloon.'],
   arca:      ['Cacela chest', 'A long low chest with small flues — the Cacela arca.'],
   simple:    ['Simple pot', 'A plain washed stack with one pot — every region builds one.']
@@ -2448,7 +2451,7 @@ function chimneyFaces(famKey, x, y, z0, hEff) {
       quad([a0[0], a0[1], z1], [b0[0], b0[1], z1], [b1[0], b1[1], z2], [a1[0], a1[1], z2], fill);
     }
   };
-  box(x - w / 2 - 0.12, y - w / 2 - 0.12, z0 - 0.1, x + w / 2 + 0.12, y + w / 2 + 0.12, z0 + 0.3, shaftC);
+  box(x - sw / 2 - 0.12, y - w / 2 - 0.12, z0 - 0.1, x + sw / 2 + 0.12, y + w / 2 + 0.12, z0 + 0.3, shaftC);
   box(x - sw / 2, y - w / 2, z0 - 0.35, x + sw / 2, y + w / 2, z0 + h - skirt, shaftC);
   if (F.cone) {
     const cb = z0 + h, ch = F.cone.h, dr = F.drum.r;
@@ -2467,12 +2470,12 @@ function chimneyFaces(famKey, x, y, z0, hEff) {
   if (F.brick) box(x - w / 2 - 0.06, y - w / 2 - 0.06, z0 + h - 0.14, x + w / 2 + 0.06, y + w / 2 + 0.06, z0 + h - 0.07, '#8A4A2E');
   if (F.fret) {
     const fz1 = z0 + h - 0.44, fz2 = z0 + h - 0.14, e = 0.006, tw = 0.13;
-    const nF = Math.max(2, Math.round(w / 0.17));
     for (let s = 0; s < 4; s++) {
+      const fw = (s < 2) ? w : sw, nF = Math.max(2, Math.round(fw / 0.17));
       for (let k = 0; k < nF; k++) {
-        const c = -w / 2 + (k + 0.5) * (w / nF), a0 = c - tw / 2, b0 = c + tw / 2;
-        if (s === 0) tri([x + w / 2 + e, y + a0, fz1], [x + w / 2 + e, y + b0, fz1], [x + w / 2 + e, y + c, fz2], '#33302c');
-        else if (s === 1) tri([x - w / 2 - e, y + b0, fz1], [x - w / 2 - e, y + a0, fz1], [x - w / 2 - e, y + c, fz2], '#33302c');
+        const c = -fw / 2 + (k + 0.5) * (fw / nF), a0 = c - tw / 2, b0 = c + tw / 2;
+        if (s === 0) tri([x + sw / 2 + e, y + a0, fz1], [x + sw / 2 + e, y + b0, fz1], [x + sw / 2 + e, y + c, fz2], '#33302c');
+        else if (s === 1) tri([x - sw / 2 - e, y + b0, fz1], [x - sw / 2 - e, y + a0, fz1], [x - sw / 2 - e, y + c, fz2], '#33302c');
         else if (s === 2) tri([x + a0, y + w / 2 + e, fz1], [x + b0, y + w / 2 + e, fz1], [x + c, y + w / 2 + e, fz2], '#33302c');
         else tri([x + b0, y - w / 2 - e, fz1], [x + a0, y - w / 2 - e, fz1], [x + c, y - w / 2 - e, fz2], '#33302c');
       }
@@ -2482,7 +2485,7 @@ function chimneyFaces(famKey, x, y, z0, hEff) {
   const zt = z0 + h + capT;
   if (F.pots > 0) {
     for (let k = 0; k < F.pots; k++) {
-      const px = F.pots === 1 ? x : x - sw / 4 + k * (sw / 2) / Math.max(1, F.pots - 1);
+      const px = F.pots === 1 ? x : x - sw / 2 + 0.15 + k * (sw - 0.3) / Math.max(1, F.pots - 1);
       prism(px, y, 0.09, zt, zt + 0.5, potC, 8);
       tri([px - 0.09, y, zt + 0.5], [px + 0.09, y, zt + 0.5], [px, y + 0.09, zt + 0.5], '#2b2b2e');
       tri([px - 0.09, y, zt + 0.5], [px, y - 0.09, zt + 0.5], [px + 0.09, y, zt + 0.5], '#2b2b2e');
@@ -3758,8 +3761,9 @@ function glassShare(f) {
   return faceUnits(f).reduce((a, w) => a + (w.on ? w.frac : 0), 0);
 }
 /** Absolute spans of one wall's glass [u0,u1] per unit, in order: each
-    unit's share shifted by its own offset along the wall, then settled
-    left to right inside the wall so neighbours never overlap. */
+    unit's share shifted by its own offset along the wall, clamped to the
+    wall itself. Units cross and overlap freely — the wall is the only
+    boundary; shared totals below count overlaps once. */
 /** One window's vertical span on storey k: the band's sill-to-head slid
     by the unit's own lift, height kept, clamped to its storey. Doors
     ignore lift and stand on the floor. */
@@ -3798,13 +3802,12 @@ function faceFins(f) {
 function glassSpans(f, u0, u1, segLen) {
   const us = faceUnits(f), out = [], bandW = Math.max(0, u1 - u0);
   const hi = segLen === undefined ? u1 : Math.max(u1, segLen);
-  let u = u0, prev = 0;
+  let u = u0;
   us.forEach((w, i) => {
-    const wd0 = Math.max(0, w.frac) * bandW, c0 = u + wd0 / 2 + (w.off || 0);
-    const wd = wd0, c = c0;
-    const a = Math.min(Math.max(c - wd / 2, prev), Math.max(prev, hi - wd));
+    const wd = Math.max(0, w.frac) * bandW, c = u + wd / 2 + (w.off || 0);
+    const a = Math.min(Math.max(c - wd / 2, 0), Math.max(0, hi - wd));
     out.push({ a, b:Math.min(hi, a + wd), on:w.on, ui:i });
-    u += wd; prev = out[out.length - 1].b;
+    u += wd;
   });
   return out;
 }
@@ -8365,20 +8368,32 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
     const ws = winsOf(f), o = OPEN[f], us = faceUnits(f);
     const wall = ws.reduce((a, x) => a + x.w.glass / (o.wwr || 1), 0);
     const per = us.map(u => ({ area:0, w:0, on:!!u.on, frac:u.frac, door:!!u.door, up:u.up || 0, gel:!!u.gel }));
+    let builtUnion = 0;
     ws.forEach(x => {
       const u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2, spans = glassSpans(f, u0, u1, x.sg.len);
       spans.forEach(sp => { per[sp.ui].w += Math.max(0, sp.b - sp.a) / Math.max(1, ws.length); });
       x.w.rows.forEach((r, k) => {
-        const hTop = Math.min(r.head, h0()), hDoor = hTop - (k * G.fh + 0.05);
+        const hTop = Math.min(r.head, h0()), ivs = [];
         spans.forEach(sp => {
           const u = us[sp.ui];
-          const h = u.door ? hDoor : shiftRow(r.sill, hTop, k, G.fh, u.up)[1] - shiftRow(r.sill, hTop, k, G.fh, u.up)[0];
+          if (!u.on) return;
+          const h = u.door ? hTop - (k * G.fh + 0.05) : shiftRow(r.sill, hTop, k, G.fh, u.up)[1] - shiftRow(r.sill, hTop, k, G.fh, u.up)[0];
           per[sp.ui].area += Math.max(0, sp.b - sp.a) * Math.max(0, h);
+          if (!u.gel && h > 0 && sp.b > sp.a) ivs.push([sp.a, sp.b, h]);
         });
+        /* overlaps count once, at the tallest glass covering them */
+        if (!ivs.length) return;
+        const xs = [...new Set(ivs.flatMap(v => [v[0], v[1]]))].sort((p2, q2) => p2 - q2);
+        for (let s = 0; s < xs.length - 1; s++) {
+          let mh = 0;
+          const m = (xs[s] + xs[s + 1]) / 2;
+          ivs.forEach(v => { if (m >= v[0] && m <= v[1]) mh = Math.max(mh, v[2]); });
+          builtUnion += (xs[s + 1] - xs[s]) * mh;
+        }
       });
     });
     us.forEach((u, i) => { if (!u.on) { per[i].area = 0; per[i].w = 0; } });
-    const built = per.reduce((a, q, k) => a + (us[k].gel ? 0 : q.area), 0);
+    const built = builtUnion;
     return { wall, built, eff:wall > 0 ? built / wall : 0, per };
   }
 
