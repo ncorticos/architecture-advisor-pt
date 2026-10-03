@@ -2414,7 +2414,7 @@ const chimTopH = (F, h) => (h === undefined ? F.h : h) + (F.cap || 0.15) + (F.po
 /** Triangles [{pts:[3], fill, n}] for a chimney of the region's family,
     standing on the roof surface at (x, y, z0): plinth, shaft, cap, pots or
     open flues, the Algarve's openwork crown. Small enough to paint anywhere. */
-function chimneyFaces(famKey, x, y, z0, hEff, wEff, taperDeg) {
+function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg) {
   const F0 = CHIMNEY_FAM[famKey] || CHIMNEY_FAM.alentejana;
   const F = Object.assign({}, F0, { h:(hEff === undefined ? F0.h : hEff) });
   const tap = isFinite(+taperDeg) ? Math.max(0, +taperDeg) * RAD : 0;
@@ -2452,7 +2452,7 @@ function chimneyFaces(famKey, x, y, z0, hEff, wEff, taperDeg) {
     for (let k = 1; k < n - 1; k++) tri([P(0)[0], P(0)[1], z2], [P(k)[0], P(k)[1], z2], [P(k + 1)[0], P(k + 1)[1], z2], fill);
   };
   const shaftC = F.colours[0], capC = (famKey === 'nortenha' || famKey === 'beira') ? F.colours[0] : '#EFE9DC', potC = '#C98A5E';
-  const w = (wEff === undefined ? F.shaft : wEff), h = F.h, sw = F.long ? w * F.long : w, skirt = F.skirt ? 0.6 : 0, capT = Math.max(0.15, F.cap || 0.15);
+  const w = (foot && isFinite(+foot.y)) ? +foot.y : F.shaft, h = F.h, sw = (foot && isFinite(+foot.x)) ? +foot.x : F.shaft * (F.long || 1), skirt = F.skirt ? 0.6 : 0, capT = Math.max(0.15, F.cap || 0.15);
   const hs = h - skirt + 0.35, inset = hs * Math.tan(tap);
   const wt = Math.max(0.3, w - 2 * inset), swt = Math.max(0.3, sw - 2 * inset);
   const coneFrustum = (cx, cy, r0, r1, z1, z2, fill, n) => {
@@ -2529,10 +2529,15 @@ function chimEffH(ch) {
   const F = CHIMNEY_FAM[ch.fam] || CHIMNEY_FAM.alentejana;
   return isFinite(+ch.h) ? clamp(+ch.h, 0.3, 3) : F.h;
 }
-/** Shaft width in metres, per family until the student widens it. */
-function chimEffW(ch) {
+/** Shaft footprint in metres, east-west by south-north: one width each
+    way, the family (and its oblong) until the student sets them. */
+function chimFoot(ch) {
   const F = CHIMNEY_FAM[ch.fam] || CHIMNEY_FAM.alentejana;
-  return isFinite(+ch.w) ? clamp(+ch.w, 0.3, 1.5) : F.shaft;
+  const base = isFinite(+ch.w) ? clamp(+ch.w, 0.3, 1.5) : F.shaft;
+  return {
+    x:isFinite(+ch.wx) ? clamp(+ch.wx, 0.3, 2.5) : base * (F.long || 1),
+    y:isFinite(+ch.wy) ? clamp(+ch.wy, 0.3, 2.5) : base
+  };
 }
 /** Side pitch in degrees off vertical: 0 builds at 90°, straight up. */
 function chimTaper(ch) {
@@ -4035,7 +4040,7 @@ function pushChimPar(arr, M, map) {
   const ch = ROOF.chim;
   if (ch && ch.on && isFinite(+ch.x) && isFinite(+ch.y) && M.pl.inside(+ch.x, +ch.y)) {
     const z = M.zAt(+ch.x, +ch.y);
-    if (z !== null) chimneyFaces(ch.fam, +ch.x, +ch.y, z, chimEffH(ch), chimEffW(ch), chimTaper(ch)).forEach(f => arr.push({ pts:map ? f.pts.map(map) : f.pts, fill:f.fill, chim:1 }));
+    if (z !== null) chimneyFaces(ch.fam, +ch.x, +ch.y, z, chimEffH(ch), chimFoot(ch), chimTaper(ch)).forEach(f => arr.push({ pts:map ? f.pts.map(map) : f.pts, fill:f.fill, chim:1 }));
   }
 }
 
@@ -7297,9 +7302,20 @@ function buildRoof(host) {
     const cH = rangeCtl('Height above roof', 0.3, 3.0, 0.05, isFinite(+ch.h) ? +ch.h : F.h,
       v => { RF.chim.h = +v.toFixed(2); roofDraw(); }, v => fmt(v, 2) + ' m');
     chimBox.appendChild(cH);
-    const cW = rangeCtl('Width', 0.3, 1.5, 0.05, isFinite(+ch.w) ? +ch.w : F.shaft,
-      v => { RF.chim.w = +v.toFixed(2); roofDraw(); }, v => fmt(v, 2) + ' m');
-    chimBox.appendChild(cW);
+    const ft0 = chimFoot(ch);
+    let cWx = null, cWy = null;
+    cWx = rangeCtl('Width E–W', 0.3, 2.5, 0.05, +ft0.x.toFixed(2),
+      v => { RF.chim.wx = +v.toFixed(2); if (RF.chim.lock !== false) { RF.chim.wy = +v.toFixed(2); if (cWy) { cWy.range.value = +v.toFixed(2); cWy.out.textContent = fmt(v, 2) + ' m'; } } roofDraw(); }, v => fmt(v, 2) + ' m');
+    chimBox.appendChild(cWx);
+    cWy = rangeCtl('Width S–N', 0.3, 2.5, 0.05, +ft0.y.toFixed(2),
+      v => { RF.chim.wy = +v.toFixed(2); if (RF.chim.lock !== false) { RF.chim.wx = +v.toFixed(2); if (cWx) { cWx.range.value = +v.toFixed(2); cWx.out.textContent = fmt(v, 2) + ' m'; } } roofDraw(); }, v => fmt(v, 2) + ' m');
+    chimBox.appendChild(cWy);
+    chimBox.appendChild(el('button', { class:'btn small' + (RF.chim.lock !== false ? ' solid' : ''), text:t('Link widths'), title:t('Keep both widths equal'),
+      'aria-pressed':String(RF.chim.lock !== false), onclick:() => {
+        if (RF.chim.lock !== false) { RF.chim.lock = false; }
+        else { const ft = chimFoot(RF.chim); RF.chim.lock = true; RF.chim.wx = +ft.x.toFixed(2); RF.chim.wy = +ft.x.toFixed(2); }
+        buildChimUI(); roofDraw();
+      } }));
     const cT = rangeCtl('Side pitch', 0, 10, 0.5, isFinite(+ch.taper) ? +ch.taper : 0,
       v => { RF.chim.taper = +v.toFixed(1); roofDraw(); }, v => fmt(v, 1) + '°');
     chimBox.appendChild(cT);
@@ -12488,7 +12504,7 @@ function toDecisionsJSON() {
       roof:{ type:['flat', 'shed', 'gable', 'hip'][ROOF.n], pitch:ROOF.n === 0 ? 0 : ROOF.th,
         zones:(ROOF.zones || []).map((z, i) => ({ part:'ABC'[i], type:['flat', 'shed', 'gable', 'hip'][z.n], pitch:z.n === 0 ? 0 : z.th, from:+z.f0.toFixed(3), to:+z.f1.toFixed(3) })), roofColour:colourOf(rfin),
         parapet:ROOF.par && ROOF.par.on ? { height:+ROOF.par.h.toFixed(2) } : null,         beirado:ROOF.bei && ROOF.bei.on ? { projection:+ROOF.bei.d.toFixed(2), gables:ROOF.bei.ends !== false } : null,
-        chimney:ROOF.chim && ROOF.chim.on ? { family:ROOF.chim.fam, x:+ROOF.chim.x.toFixed(2), y:+ROOF.chim.y.toFixed(2), heightAboveRoof:isFinite(+ROOF.chim.h) ? +ROOF.chim.h : null, width:isFinite(+ROOF.chim.w) ? +ROOF.chim.w : null, sidePitch:isFinite(+ROOF.chim.taper) ? +ROOF.chim.taper : null } : null, roofColour:colourOf(rfin),
+        chimney:ROOF.chim && ROOF.chim.on ? { family:ROOF.chim.fam, x:+ROOF.chim.x.toFixed(2), y:+ROOF.chim.y.toFixed(2), heightAboveRoof:isFinite(+ROOF.chim.h) ? +ROOF.chim.h : null, widthEW:+chimFoot(ROOF.chim).x.toFixed(2), widthSN:+chimFoot(ROOF.chim).y.toFixed(2), sidePitch:isFinite(+ROOF.chim.taper) ? +ROOF.chim.taper : null } : null, roofColour:colourOf(rfin),
         solar:ROOF.sol && ROOF.sol.tech !== 'none' ? { technology:ROOF.sol.tech === 'pv' ? 'photovoltaic panels' : 'flat-plate thermal collectors', columns:ROOF.sol.cols, rows:ROOF.sol.rows } : null },
       openings:OPEN, sunspace:SUNSP, roofWindows:RWIN,
       planting:SCENE.veg.map(v => { const q = SCENE.plant ? SCENE.plant(v) : null;
@@ -14762,6 +14778,7 @@ Object.assign(PT, {
   "Height": "Altura",
   "Chimney": "Chaminé",
   "Side pitch": "Inclinação das faces",
+  "Width E–W": "Largura E–O", "Width S–N": "Largura S–N", "Link widths": "Ligar larguras", "Keep both widths equal": "Manter as duas larguras iguais",
   "+ Add chimney": "+ Acrescentar chaminé",
   "Raise the region’s chimney where the roof is highest": "Levantar a chaminé da região onde a cobertura é mais alta",
   "Take the chimney away": "Retirar a chaminé",
