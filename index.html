@@ -12637,6 +12637,20 @@ function caMaterials(done) {
     })
     .catch(() => finish(null));
 }
+/* Building-material physics read live from this Mac's Archicad 29
+   (project Casa_15x11.pln) through Tapir on 2026-10-04 — names, λ and ρ
+   are facts, safe to carry; bitmaps are not. Whitewash points at the
+   project's own Alentejo limewash, whose thermal slots are unset there. */
+const AC_BM = {
+  brick:{ bm:'Brick', lam:0.58, rho:1500 },
+  concrete:{ bm:'Concrete', lam:1.15, rho:1800 },
+  timber:{ bm:'Timber - Structural', lam:0.18, rho:700 },
+  plaster:{ bm:'Plaster - Lime Sand', lam:0.8, rho:1600 },
+  whitewash:{ bm:'Alentejo - caiada', lam:null, rho:null },
+  stone:{ bm:'Stone - Structural', lam:1.7, rho:2200 },
+  glass:{ bm:'Glass', lam:1.0, rho:2500 },
+  metal:{ bm:'Titanium Zinc', lam:110, rho:7200 }
+};
 /* This tab's finishes against that library: fixed keys, one key per zone
    for stone and timber, and the honest gaps — limewash, glass, thatch, a
    green or white roof capping are not stocked materials there. */
@@ -13514,6 +13528,14 @@ style === 'sketch' ? '#EFEBE0'
         return a === true ? 'stocked here (' + (e.keys.join('/') || e.kind) + ')' : a === false ? 'scarce here — verify supply' : 'unchecked';
       };
       L.push('availability (Construction Advisor, web' + (z ? ', zone ' + z : '') + '): walls ' + av(look.wall) + ' · roof ' + av(look.roof));
+      {
+        const ph = o => {
+          if (!o || !AC_BM[o.key]) return 'no_building-material_match';
+          const b = AC_BM[o.key];
+          return b.bm + (b.lam === null ? ' (thermal unset in source project)' : ' λ' + b.lam + ' ρ' + b.rho);
+        };
+        L.push('physics (Archicad 29 on this Mac, Tapir 2026-10-04): walls ' + ph(look.wall) + ' · roof ' + ph(look.roof));
+      }
     }
     if (showNb) L.push('surroundings: ' + nbRender().length + ' neighbour prisms as transparent tip (OpenStreetMap)');
     if (look.unknown.length) L.push('unparsed: ' + look.unknown.join(', '));
@@ -13527,7 +13549,9 @@ style === 'sketch' ? '#EFEBE0'
       ['Wall material', look.wall ? look.wall.key + (acName(look.wall) ? ' [Archicad: ' + acName(look.wall) + ']' : '') : 'site finish (' + (MASS.col || 'none') + ')'],
       ['Roof material', look.roof ? look.roof.key + (acName(look.roof) ? ' [Archicad: ' + acName(look.roof) + ']' : '') : 'site finish (' + (ROOF.col || 'none') + ')'],
       ['Wall availability (Construction Advisor, web)', look.wall ? (caAvailable(caEntryFor(look.wall.key)) !== false ? 'stocked/available' : 'scarce — verify supply') : ''],
+      ['Wall physics (Archicad 29, Tapir)', look.wall && AC_BM[look.wall.key] ? AC_BM[look.wall.key].bm + (AC_BM[look.wall.key].lam === null ? ' (unset)' : ' λ' + AC_BM[look.wall.key].lam + ' ρ' + AC_BM[look.wall.key].rho) : ''], 
       ['Roof availability (Construction Advisor, web)', look.roof ? (caAvailable(caEntryFor(look.roof.key)) !== false ? 'stocked/available' : 'scarce — verify supply') : ''],
+      ['Roof physics (Archicad 29, Tapir)', look.roof && AC_BM[look.roof.key] ? AC_BM[look.roof.key].bm + (AC_BM[look.roof.key].lam === null ? ' (unset)' : ' λ' + AC_BM[look.roof.key].lam + ' ρ' + AC_BM[look.roof.key].rho) : ''],
       ['Solar hour', +hour.toFixed(1)], ['Sun altitude (°)', +sun.alt.toFixed(1)], ['Sun azimuth (°)', +sun.azi.toFixed(1)],
       ['Sky', look.sky ? look.sky.key : 'site'], ['Finish', styleNow()], ['Night', nightNow() ? 'yes' : 'no'],
       ['Terrain grid', rGrid ? rGrid.n + '×' + rGrid.n + ' at ' + rGrid.step + ' m' : 'none'],
