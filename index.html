@@ -12656,22 +12656,22 @@ const RENDER_CA = {
    paint: one press copies the view, the model and the prompt as a render
    brief for an image studio of the student's choosing. */
 const RENDER_WALLS = [
-  { key:'whitewash', c:'#EFE7D5', words:['whitewash', 'whitewashed', 'white', 'cal', 'caiada', 'caiado', 'branca', 'branco'] },
-  { key:'plaster', c:'#E2D5BE', words:['plaster', 'reboco', 'stucco', 'estuque'] },
-  { key:'brick', c:'#A2593B', words:['brick', 'tijolo', 'tijoleira'] },
-  { key:'stone', c:'#99928A', words:['stone', 'pedra', 'granite', 'granito', 'cantaria'] },
-  { key:'timber', c:'#8A6844', words:['timber', 'wood', 'wooden', 'madeira', 'tabua', 'ripado'] },
-  { key:'concrete', c:'#B7BABD', words:['concrete', 'betao', 'betão', 'concreto'] },
+  { key:'whitewash', c:'#FFFFFF', ac:'Stucco - White Rough', words:['whitewash', 'whitewashed', 'white', 'cal', 'caiada', 'caiado', 'branca', 'branco'] },
+  { key:'plaster', c:'#E7CFAB', ac:'Stucco - Beige Rough', words:['plaster', 'reboco', 'stucco', 'estuque'] },
+  { key:'brick', c:'#B48778', ac:'Brick - Running Bond', words:['brick', 'tijolo', 'tijoleira'] },
+  { key:'stone', c:'#B4B4B4', ac:'Stone - Granite Gray', words:['stone', 'pedra', 'granite', 'granito', 'cantaria'] },
+  { key:'timber', c:'#CCBEAC', ac:'Wood - Oak Light', words:['timber', 'wood', 'wooden', 'madeira', 'tabua', 'ripado'] },
+  { key:'concrete', c:'#7F7F7F', ac:'Concrete - 02', words:['concrete', 'betao', 'betão', 'concreto'] },
   { key:'cork', c:'#B5894F', words:['cork', 'cortica', 'cortiça'] },
-  { key:'glass', c:'#9FC4DE', words:['glass', 'vidro', 'glazed', 'envidracado'] }
+  { key:'glass', c:'#84ADF9', ac:'Glass - Blue', words:['glass', 'vidro', 'glazed', 'envidracado'] }
 ];
 const RENDER_ROOFS = [
-  { key:'tile', c:'#A34A2E', words:['tile', 'tiled', 'telha', 'telhado', 'terracota', 'terracotta'] },
+  { key:'tile', c:'#CD9881', ac:'Roof Tiles - Spanish 01', words:['tile', 'tiled', 'telha', 'telhado', 'terracota', 'terracotta'] },
   { key:'slate', c:'#4B5158', words:['slate', 'ardosia', 'ardósia', 'lousa'] },
-  { key:'metal', c:'#8F979E', words:['metal', 'zinc', 'zinco', 'chapa', 'metalica'] },
+  { key:'metal', c:'#A9ACAD', ac:'Metal - Zinc', words:['metal', 'zinc', 'zinco', 'chapa', 'metalica'] },
   { key:'thatch', c:'#C2A15C', words:['thatch', 'colmo', 'palha'] },
-  { key:'green', c:'#5F7F4A', words:['green roof', 'telhado verde', 'ajardinada', 'vegetal', 'sedum'] },
-  { key:'white', c:'#E6E3DA', words:['white roof', 'cobertura branca'] }
+  { key:'green', c:'#56A92E', ac:'Grass - Green', words:['green roof', 'telhado verde', 'ajardinada', 'vegetal', 'sedum'] },
+  { key:'white', c:'#FFFFFF', ac:'Paint - Titanium White', words:['white roof', 'cobertura branca'] }
 ];
 const RENDER_TIMES = [
   { key:'dawn', h:6.5, words:['dawn', 'alvorada', 'sunrise', 'nascer'] },
@@ -12689,7 +12689,7 @@ const RENDER_SKIES = [
 ];
 const RENDER_STYLES = [
   { key:'photo', words:['photo', 'photorealistic', 'foto', 'fotografia', 'realista', 'realistic', 'color', 'cor', 'render'] },
-  { key:'clay', words:['clay', 'maqueta', 'maquete', 'barro', 'modelo', 'study', 'estudo', 'white card'] },
+  { key:'study', words:['study', 'maqueta', 'maquete', 'barro', 'modelo', 'study', 'estudo', 'white card'] },
   { key:'bw', words:['bw', 'b&w', 'black and white', 'preto e branco', 'grayscale', 'monocromo', 'monochrome', 'pb', 'p&b'] }
 ];
 const RENDER_STOP = ('the a an de da do das dos em no na nos nas com uma umas uns para por como is are and or with without with of to in on at '
@@ -12752,7 +12752,7 @@ function buildRender(host) {
   let look = parseRenderPrompt(prompt);
   let hour = K0 && isFinite(+K0.hour) ? clamp(+K0.hour, 5, 22) : (look.time ? look.time.h : 15);
   let hourTouched = !!(K0 && K0.hourTouched);
-  let styleLock = K0 && ['clay', 'photo', 'bw'].indexOf(K0.styleLock) >= 0 ? K0.styleLock : 'photo';
+  let styleLock = K0 && ['study', 'photo', 'bw'].indexOf(K0.styleLock) >= 0 ? K0.styleLock : 'photo';
   let styleTouched = !!(K0 && K0.styleTouched);
   let showShadow = !K0 || K0.showShadow !== false, showTrees = !K0 || K0.showTrees !== false;
   let showGround = !K0 || K0.showGround !== false;
@@ -12855,6 +12855,7 @@ function buildRender(host) {
     return 'rgb(' + v[0] + ',' + v[1] + ',' + v[2] + ')';
   };
   /* Name a parsed material in the interface language for the reading line. */
+  const acName = o => (o && o.ac) || null;
   const matName = o => {
     if (!o) return null;
     return LANG === 'pt' ? (RENDER_PTNAME[o.key] || o.words[0]) : o.words[0];
@@ -12994,11 +12995,11 @@ function buildRender(host) {
   sunBox.appendChild(hourCtl);
   props.appendChild(el('div', { class:'gh', text:'Finish' }));
   const finBox = props.appendChild(el('div', { class:'controls' }));
-  const styleCtl = segCtl(null, [{ value:'clay', label:t('Study') }, { value:'photo', label:t('Render') }, { value:'bw', label:t('B&W Render') }],
+  const styleCtl = segCtl(null, [{ value:'study', label:t('Study') }, { value:'photo', label:t('Render') }, { value:'bw', label:t('B&W Render') }],
     styleLock, v => { styleLock = v; styleTouched = true; refreshRender(); });
   const styleBtns = { clay:0, photo:1, bw:2 };
   function syncStyleCtl() {
-    const btns = styleCtl.querySelectorAll('button'), order = ['clay', 'photo', 'bw'];
+    const btns = styleCtl.querySelectorAll('button'), order = ['study', 'photo', 'bw'];
     btns.forEach((b, i) => b.setAttribute('aria-pressed', String(order[i] === styleLock)));
   }
   finBox.appendChild(styleCtl);
@@ -13029,7 +13030,7 @@ function buildRender(host) {
     onclick: () => fetchRenderTerrain() }));
   const terrSlot = props.appendChild(el('div', { class:'hint' }));
   host.appendChild(hint('render-how',
-    'Pick wall and roof finishes from the boxes — every finish dresses the massing photorealistically, and the reading confirms what the model wears. The offer is three finishes: <b>Study</b> (the white card model), <b>Render</b> (full colour) and <b>B&W Render</b> (black and white). The view is downstream of every tab: the plan, breaks and patio from Site, pitch, parapet, eaves, chimney and collectors from Roof, glass, doors, overhangs, fins and sunspace from Openings and Shadowing, planting, walls and neighbours from Ventilation — change any of them and this model follows on the next visit. The brief carries the same scene to an image studio for the freer renders.'));
+    'Pick wall and roof finishes from the boxes — every finish dresses the massing photorealistically, each in the exact colours of its Archicad 29 surface twin (named in the Look panel, so the same surface can be applied over in Archicad), and the reading confirms what the model wears. The offer is three finishes: <b>Study</b> (the white card model), <b>Render</b> (full colour) and <b>B&W Render</b> (black and white). The view is downstream of every tab: the plan, breaks and patio from Site, pitch, parapet, eaves, chimney and collectors from Roof, glass, doors, overhangs, fins and sunspace from Openings and Shadowing, planting, walls and neighbours from Ventilation — change any of them and this model follows on the next visit. The brief carries the same scene to an image studio for the freer renders.'));
   function fallbackCopy(txt, done) {
     const f = el('textarea', { style:'position:fixed;opacity:0' });
     f.value = txt; document.body.appendChild(f); f.select();
@@ -13089,9 +13090,9 @@ function buildRender(host) {
       if (strokeColor) { stroke(ctx, strokeColor, width || 1.2); ctx.stroke(); }
     };
     /* sky */
-    const skyTop = night ? '#10182E' : style === 'clay' ? '#D8D5CE' : style === 'watercolor' ? '#F4EFE2'
+    const skyTop = night ? '#10182E' : style === 'watercolor' ? '#F4EFE2'
       : sun.alt > 30 ? '#7FB2E5' : sun.alt > 5 ? '#9CC3E8' : '#3A4A6B';
-    const skyBot = night ? '#2A3350' : style === 'clay' ? '#EDEAE3' : style === 'watercolor' ? '#F9F5EA'
+    const skyBot = night ? '#2A3350' : style === 'watercolor' ? '#F9F5EA'
       : sun.alt > 30 ? '#DCEBF7' : sun.alt > 5 ? '#F2D9B8' : '#8A6A5A';
     const grd = ctx.createLinearGradient(0, 0, 0, H);
     grd.addColorStop(0, skyTop); grd.addColorStop(1, skyBot);
@@ -13118,7 +13119,6 @@ function buildRender(host) {
     const depthOf = (x, y, z) => (x * ax.d[0] + y * ax.d[1]) * ax.ce - (z || 0) * ax.se;
     /* ground */
     const terrCol = h => {
-      if (style === 'clay') return night ? '#3A3D45' : '#D5D2CA';
       if (style === 'sketch') return '#EFEBE0';
       const span = Math.max(1e-6, mm.hi - mm.lo), f = clamp((h - mm.lo) / span, 0, 1);
       const c0 = [226, 233, 219], c1 = [210, 196, 160], c2 = [180, 142, 104];
@@ -13158,7 +13158,7 @@ function buildRender(host) {
     } else {
       const bb = M.pl.bbox, gx = Math.max(-bb[0], bb[2]) + 10, gy = Math.max(-bb[1], bb[3]) + 10;
       poly([[-gx, -gy, 0], [gx, -gy, 0], [gx, gy, 0], [-gx, gy, 0]],
-        style === 'clay' ? (night ? '#3A3D45' : '#D5D2CA') : style === 'sketch' ? '#EFEBE0'
+style === 'sketch' ? '#EFEBE0'
         : night ? 'rgba(24,30,48,.85)' : 'rgba(120,140,105,.30)',
         style === 'sketch' ? CH.ink : CH.line, style === 'sketch' ? 1.6 : 1.2);
     }
@@ -13180,14 +13180,14 @@ function buildRender(host) {
       const sg = wl.sg;
       if (!wallSeen(sg.n)) return;
       const wpts = [onWall(sg, 0, 0), onWall(sg, sg.len, 0)].concat(wl.prof.slice().reverse().map(q => onWall(sg, q[0], q[1])));
-      const base = style === 'clay' ? '#E4E1D8' : wallBase();
+      const base = wallBase();
       items.push({ pts:wpts, fill:shadeHex(base, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), d:wpts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / wpts.length, mat:look.wall ? look.wall.key : 'site', wallSg:sg });
     });
     M.pieces.forEach(pc => {
       const f = pc.f;
       if ((-f.t * f.a * ax.c[0] - f.t * f.b * ax.c[1]) * ax.ce + ax.se <= 1e-6) return;
       const pts = pc.poly.map(q => [q[0], q[1], M.zOf(f, q[0], q[1])]);
-      const base = style === 'clay' ? '#D5D2CA' : roofBase();
+      const base = roofBase();
       const fk = 0.6 + 0.4 * Math.max(0, -f.a * sunL[0] - f.b * sunL[1]) * (0.3 + 0.7 * sinA);
       items.push({ pts, fill:shadeHex(base, night ? 0.32 : fk), d:pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / pts.length, mat:look.roof ? look.roof.key : 'site' });
     });
@@ -13203,7 +13203,7 @@ function buildRender(host) {
         gl.push({ q:[off(onWall(sg, u0, v0), 0.07), off(onWall(sg, u1, v0), 0.07), off(onWall(sg, u1, v1), 0.07), off(onWall(sg, u0, v1), 0.07)], u0, u1, v0, v1 });
       });
       gl.forEach(g => items.push({ pts:g.q, win:{ sg, u0:g.u0, u1:g.u1, v0:g.v0, v1:g.v1 },
-        fill:night ? '#FFD27A' : style === 'clay' ? '#C9CFD2' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : '#BCD6E8',
+        fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : '#BCD6E8',
         glass:true, d:g.q.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / 4 }));
     });
     /* entrance doors: only where Openings sets a door unit — never invented.
@@ -13223,7 +13223,7 @@ function buildRender(host) {
       const q = [off(onWall(sg, uc - dw / 2, 0.02), 0.06), off(onWall(sg, uc + dw / 2, 0.02), 0.06),
         off(onWall(sg, uc + dw / 2, dh), 0.06), off(onWall(sg, uc - dw / 2, dh), 0.06)];
       items.push({ pts:q, door:{ sg, uc, dw, dh },
-        fill:style === 'clay' ? '#C2BFB5' : '#2E3236',
+        fill:'#2E3236',
         d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4 });
     });
     /* sunspace as a glass box on its facade */
@@ -13245,7 +13245,7 @@ function buildRender(host) {
       const quad = w.along === 'y'
         ? [[w.x, w.y - hw, 0], [w.x, w.y + hw, 0], [w.x, w.y + hw, w.height], [w.x, w.y - hw, w.height]]
         : [[w.x - hw, w.y, 0], [w.x + hw, w.y, 0], [w.x + hw, w.y, w.height], [w.x - hw, w.y, w.height]];
-      items.push({ pts:quad, fill:shadeHex(style === 'clay' ? '#E4E1D8' : wallBase(), night ? 0.3 : 0.85),
+      items.push({ pts:quad, fill:shadeHex(wallBase(), night ? 0.3 : 0.85),
         d:quad.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / 4 });
     });
     /* planting as billboard crowns inside the same depth order */
@@ -13253,7 +13253,7 @@ function buildRender(host) {
       const gz = terrOn ? rTerraAt(v.x, v.y) : 0, H = Math.max(0.5, v.height);
       const trunkH = clamp(v.trunk != null ? v.trunk : H * 0.4, 0, H - 0.3);
       const r = Math.max(0.5, (v.canopy != null ? v.canopy : H * 0.4) * 0.55);
-      const col = style === 'clay' ? '#D5D2CA' : greenOf(v.type);
+      const col = greenOf(v.type);
       items.push({ blob:true, x:v.x, y:v.y, z:gz, trunkH, r, H, col, d:depthOf(v.x, v.y, gz + H / 2) });
     });
     /* surrounding buildings as a transparent tip: plain massing prisms in
@@ -13339,7 +13339,7 @@ function buildRender(host) {
        chimney, balconies, collectors — the render is downstream of all of
        them, never a model of its own ---- */
     const dc = q => q.reduce((a2, r) => a2 + depthOf(r[0], r[1], r[2]), 0) / q.length;
-    const devCol = style === 'clay' ? '#CFCCC2' : '#9A938A';
+    const devCol = '#9A938A';
     wins.forEach(o => {
       const f = o.w.f, oo = OPEN[f];
       if (!oo || !wallSeen(o.sg.n)) return;
@@ -13372,7 +13372,7 @@ function buildRender(host) {
         const i1 = [a[0] - nx * 0.09, a[1] - ny * 0.09], i2 = [b[0] - nx * 0.09, b[1] - ny * 0.09];
         const q = [[o1[0], o1[1], H0], [o2[0], o2[1], H0], [o2[0], o2[1], H0 + ph], [o1[0], o1[1], H0 + ph]];
         const t2 = [[o1[0], o1[1], H0 + ph], [o2[0], o2[1], H0 + ph], [i2[0], i2[1], H0 + ph], [i1[0], i1[1], H0 + ph]];
-        const base = style === 'clay' ? '#E4E1D8' : wallBase();
+        const base = wallBase();
         items.push({ pts:q, fill:shadeHex(base, night ? 0.3 : 0.85), d:dc(q) });
         items.push({ pts:t2, fill:shadeHex(base, night ? 0.32 : 1), d:dc(t2) });
       });
@@ -13382,7 +13382,7 @@ function buildRender(host) {
         const zx = M.zAt(+RF.chim.x, +RF.chim.y);
         if (zx !== null && isFinite(zx)) {
           chimneyFaces(RF.chim.fam, +RF.chim.x, +RF.chim.y, zx, chimEffH(RF.chim), chimFoot(RF.chim), chimTaper(RF.chim), (qx, qy) => M.zAt(qx, qy))
-            .forEach(f => items.push({ pts:f.pts, fill:style === 'clay' ? '#D5D2CA' : f.fill, d:dc(f.pts) }));
+            .forEach(f => items.push({ pts:f.pts, fill:f.fill, d:dc(f.pts) }));
         }
       } catch (e) {}
     }
@@ -13390,7 +13390,7 @@ function buildRender(host) {
       const BS = balcScene(G);
       (BS.solids || []).forEach(sl => {
         if (!sl.pts || sl.pts.length < 3) return;
-        items.push({ pts:sl.pts, fill:style === 'clay' ? '#D5D2CA' : 'rgba(190,185,175,.92)', d:dc(sl.pts) });
+        items.push({ pts:sl.pts, fill:'rgba(190,185,175,.92)', d:dc(sl.pts) });
       });
     } catch (e) {}
     ['pv', 'thermal'].forEach(t => {
@@ -13401,7 +13401,7 @@ function buildRender(host) {
         const opt = solarOptimum(S, t, G.rot, C.t);
         const fld = solarField(G, RF, S.lat, opt.tilt, Object.assign({ tech:t }, o));
         if (!fld || !fld.fits) return;
-        fld.mods.forEach(mo => items.push({ pts:mo.q, fill:style === 'clay' ? '#C9CFD2' : t === 'pv' ? '#1E3A8A' : '#22262B', d:dc(mo.q) }));
+        fld.mods.forEach(mo => items.push({ pts:mo.q, fill:t === 'pv' ? '#1E3A8A' : '#22262B', d:dc(mo.q) }));
       } catch (e) {}
     });
     items.sort((a, b) => b.d - a.d);
@@ -13409,7 +13409,7 @@ function buildRender(host) {
     items.forEach(it => {
       if (it.blob) {
         const gnd = proj(FR, it.x, it.y, it.z), top = proj(FR, it.x, it.y, it.z + it.trunkH + (it.H - it.trunkH) / 2);
-        if (it.trunkH > 0.2) { stroke(ctx, style === 'clay' ? '#B9B5AA' : '#6B4A3A', Math.max(1, kpx * 0.09)); seg(ctx, gnd[0], gnd[1], top[0], top[1]); }
+        if (it.trunkH > 0.2) { stroke(ctx, '#6B4A3A', Math.max(1, kpx * 0.09)); seg(ctx, gnd[0], gnd[1], top[0], top[1]); }
         const cz = it.z + it.trunkH + (it.H - it.trunkH) * 0.55;
         [[0, 0, 1], [-0.45, 0.15, 0.7], [0.45, -0.1, 0.7]].forEach(([ox, oy, sc]) => {
           const c = proj(FR, it.x + ox * it.r, it.y + oy * it.r, cz);
@@ -13451,7 +13451,7 @@ function buildRender(host) {
         const leaf = [[dr.uc - dr.dw / 2 + 0.07, 0.06], [dr.uc + dr.dw / 2 - 0.07, 0.06], [dr.uc + dr.dw / 2 - 0.07, dr.dh - 0.05], [dr.uc - dr.dw / 2 + 0.07, dr.dh - 0.05]]
           .map(([u, v]) => { const p = onWall(sg, u, v); return proj(FR, p[0] + n[0] * 0.12, p[1] + n[1] * 0.12, p[2]); });
         ctx.beginPath(); leaf.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
-        ctx.fillStyle = night ? '#3A3E42' : style === 'clay' ? '#C2BFB5' : '#44584E'; ctx.fill();
+        ctx.fillStyle = night ? '#3A3E42' : '#44584E'; ctx.fill();
         if (style === 'photo' && !night) {
           stroke(ctx, 'rgba(0,0,0,.35)', 1);
           [0.35, 0.65].forEach(f => {
@@ -13502,7 +13502,7 @@ function buildRender(host) {
       + (SUNSP && SUNSP.on ? ' · sunspace on ' + SUNSP.face : '') + ' · planting ' + SCENE.veg.length + ', walls ' + SCENE.walls.length);
     const mm = rMinMax();
     L.push('ground: ' + (rGrid && mm ? '240 m grid, low ' + fmt(mm.lo, 0) + ' m, high +' + fmt(mm.hi, 0) + ' m vs site' : 'flat (no grid derived)'));
-    L.push('look: walls ' + (look.wall ? look.wall.key : 'site finish') + ', roof ' + (look.roof ? look.roof.key : 'site finish')
+    L.push('look: walls ' + (look.wall ? look.wall.key + (acName(look.wall) ? ' [Archicad: ' + acName(look.wall) + ']' : '') : 'site finish') + ', roof ' + (look.roof ? look.roof.key + (acName(look.roof) ? ' [Archicad: ' + acName(look.roof) + ']' : '') : 'site finish')
       + ', 21 Jun ' + fmt(hour, 1) + ' h solar (alt ' + fmt(sun.alt, 0) + '°, azi ' + fmt(sun.azi, 0) + '°), sky ' + (look.sky ? look.sky.key : 'site') + ', finish ' + style + (nightNow() ? ', night' : ''));
     L.push('prompt: ' + prompt);
     {
@@ -13524,8 +13524,8 @@ function buildRender(host) {
     const sun = sunNow(), mm = rMinMax();
     const rows = [['Parameter', 'Value'],
       ['Prompt', prompt],
-      ['Wall material', look.wall ? look.wall.key : 'site finish (' + (MASS.col || 'none') + ')'],
-      ['Roof material', look.roof ? look.roof.key : 'site finish (' + (ROOF.col || 'none') + ')'],
+      ['Wall material', look.wall ? look.wall.key + (acName(look.wall) ? ' [Archicad: ' + acName(look.wall) + ']' : '') : 'site finish (' + (MASS.col || 'none') + ')'],
+      ['Roof material', look.roof ? look.roof.key + (acName(look.roof) ? ' [Archicad: ' + acName(look.roof) + ']' : '') : 'site finish (' + (ROOF.col || 'none') + ')'],
       ['Wall availability (Construction Advisor, web)', look.wall ? (caAvailable(caEntryFor(look.wall.key)) !== false ? 'stocked/available' : 'scarce — verify supply') : ''],
       ['Roof availability (Construction Advisor, web)', look.roof ? (caAvailable(caEntryFor(look.roof.key)) !== false ? 'stocked/available' : 'scarce — verify supply') : ''],
       ['Solar hour', +hour.toFixed(1)], ['Sun altitude (°)', +sun.alt.toFixed(1)], ['Sun azimuth (°)', +sun.azi.toFixed(1)],
@@ -13576,8 +13576,8 @@ function buildRender(host) {
     });
     syncPresets();
     lookSlot.innerHTML = '';
-    const rows = [[t('Wall material'), look.wall ? matName(look.wall) : t('site finish') + ' (' + (MASS.col || '—') + ')'],
-      [t('Roof material'), look.roof ? matName(look.roof) : t('site finish') + ' (' + (ROOF.col || '—') + ')'],
+    const rows = [[t('Wall material'), look.wall ? matName(look.wall) + (acName(look.wall) ? ' — Archicad: ' + acName(look.wall) : '') : t('site finish') + ' (' + (MASS.col || '—') + ')'],
+      [t('Roof material'), look.roof ? matName(look.roof) + (acName(look.roof) ? ' — Archicad: ' + acName(look.roof) : '') : t('site finish') + ' (' + (ROOF.col || '—') + ')'],
       [t('Solar hour'), fmt(hour, 1) + ' h'], [t('Finish'), t(styleNow())]];
     rows.forEach(([k, v]) => {
       const d = el('div', { class:'fact' }, [el('span', { text:k })]);
@@ -16442,6 +16442,7 @@ Object.assign(PT, {
   "Visualization view": "Vista — Visualização",
   "The dressed massing in its ground, under the chosen sun.": "A volumetria vestida no seu terreno, sob o sol escolhido.",
   "bw": "P&B",
+  "study": "estudo",
   "Render view": "Vista renderizada",
   "The dressed massing in its ground, under the prompted sun.": "A volumetria vestida no seu terreno, sob o sol do prompt.",
   "Prompt": "Prompt",
@@ -17049,7 +17050,7 @@ Object.assign(PT_HINT, {
   'vent-face':
     'A câmara orbita o modelo: ↺ e ↻ rodam-no 45°, ▲ e ▼ inclinam-no 15°, Topo olha a direito para baixo como uma planta, Barlavento coloca-se de onde vem o vento, e De lado ao vento põe-se de perfil em relação a ele, baixa, para se verem as camadas a subir sobre a cobertura e a descer para o lado de sotavento. Repor volta ao canto sudoeste que os outros separadores usam. Árvores, muros e o escoamento lêem-se do seu lugar no local, não da vista: rodar a câmara só muda o que se vê.',
   'render-how':
-    'Escolha os acabamentos de parede e cobertura nas caixas — cada acabamento veste a volumetria de forma fotorrealista, e a leitura confirma o que o modelo veste. A oferta são três acabamentos: <b>Estudo</b> (o modelo em cartão branco), <b>Render</b> (a cores) e <b>Render P&B</b> (a preto e branco). A vista depende de todos os separadores: a planta, quebras e pátio do Local, inclinação, platibanda, beirado, chaminé e colectores do Telhado, vidro, portas, palas, brises e estufa das Aberturas, plantação, muros e vizinhos da Ventilação — mude qualquer um e este modelo acompanha na visita seguinte. O brief leva a mesma cena a um estúdio de imagem para as renderizações mais livres.',
+    'Escolha os acabamentos de parede e cobertura nas caixas — cada acabamento veste a volumetria de forma fotorrealista, nas cores exactas da sua superfície gémea do Archicad 29 (nomeada no painel Aspeto, para aplicar a mesma superfície no Archicad), e a leitura confirma o que o modelo veste. A oferta são três acabamentos: <b>Estudo</b> (o modelo em cartão branco), <b>Render</b> (a cores) e <b>Render P&B</b> (a preto e branco). A vista depende de todos os separadores: a planta, quebras e pátio do Local, inclinação, platibanda, beirado, chaminé e colectores do Telhado, vidro, portas, palas, brises e estufa das Aberturas, plantação, muros e vizinhos da Ventilação — mude qualquer um e este modelo acompanha na visita seguinte. O brief leva a mesma cena a um estúdio de imagem para as renderizações mais livres.',
   'vent-terrain':
     'O terreno aberto (plano) trava menos o vento; o terreno partido e montanhoso abriga mais (expoente da lei de potência 0,14–0,28). A exposição multiplica de novo: abrigada 0,6, moderada 1,0, exposta 1,4 (Olgyay, pp.37–40; DeKay & Brown, Estratégia 85). A classe de terreno e os doze ventos dominantes mensais derivam destas coordenadas automaticamente à entrada (reanálise ERA5 via Open-Meteo — como a consulta de altitude, só as coordenadas saem do navegador); o botão repete-a. O desenho vai mais longe: uma malha regular de 240 m de alturas do terreno é buscada para o local e desenhada sob o modelo com o seu baixo e alto, e cada linha de vento acompanha-a — subindo uma elevação, assentando numa depressão — para o juízo de exposição se ler contra a geografia real. A malha é o MDT Copernicus edição 2021 (GLO-90, resolução de 90 m, https://doi.org/10.5270/ESA-c5d3d65), servido pelo Open-Meteo sob licença livre — o mesmo modelo de elevação por trás da consulta de altitude. A exposição continua manual: lê a envolvente imediata, que nenhum produto em grelha vê.',
   'vent-air':
