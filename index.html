@@ -2414,7 +2414,7 @@ const chimTopH = (F, h) => (h === undefined ? F.h : h) + (F.cap || 0.15) + (F.po
 /** Triangles [{pts:[3], fill, n}] for a chimney of the region's family,
     standing on the roof surface at (x, y, z0): plinth, shaft, cap, pots or
     open flues, the Algarve's openwork crown. Small enough to paint anywhere. */
-function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg) {
+function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
   const F0 = CHIMNEY_FAM[famKey] || CHIMNEY_FAM.alentejana;
   const F = Object.assign({}, F0, { h:(hEff === undefined ? F0.h : hEff) });
   const tap = isFinite(+taperDeg) ? Math.max(0, +taperDeg) * RAD : 0;
@@ -2463,8 +2463,30 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg) {
       quad([a0[0], a0[1], z1], [b0[0], b0[1], z1], [b1[0], b1[1], z2], [a1[0], a1[1], z2], fill);
     }
   };
-  box(x - sw / 2 - 0.12, y - w / 2 - 0.12, z0 - 0.1, x + sw / 2 + 0.12, y + w / 2 + 0.12, z0 + 0.3, shaftC);
-  frustum(x, y, sw / 2, w / 2, swt / 2, wt / 2, z0 - 0.35, z0 + h - skirt, shaftC);
+  /* The foot follows the roof: the lowest surface under the widened shaft
+     buries the shaft on any pitch, and a flashing collar hugs the slope
+     where a level plate would float downhill. Without a surface callback
+     both fall back to the old level foot. */
+  const rawZ = (qx, qy) => {
+    if (typeof zAtFn !== 'function') return null;
+    try { const v = zAtFn(qx, qy); return isFinite(v) ? v : null; } catch (e) { return null; }
+  };
+  const surfZ = (qx, qy) => { const v = rawZ(qx, qy); return v === null ? z0 : v; };
+  let zB = null;
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+    const v = rawZ(x + sx * (sw / 2 + 0.14), y + sy * (w / 2 + 0.14));
+    if (v !== null) zB = zB === null ? v : Math.min(zB, v);
+  });
+  if (zB === null) zB = z0 - 0.35;
+  frustum(x, y, sw / 2, w / 2, swt / 2, wt / 2, zB - 0.05, z0 + h - skirt, shaftC);
+  const collarSide = (ix0, iy0, ix1, iy1, ox0, oy0, ox1, oy1) => {
+    quad([ix0, iy0, surfZ(ix0, iy0) - 0.16], [ix1, iy1, surfZ(ix1, iy1) - 0.16],
+      [ox1, oy1, surfZ(ox1, oy1) + 0.05], [ox0, oy0, surfZ(ox0, oy0) + 0.05], shaftC);
+  };
+  collarSide(x + sw / 2, y - w / 2, x + sw / 2, y + w / 2, x + sw / 2 + 0.14, y - w / 2 - 0.14, x + sw / 2 + 0.14, y + w / 2 + 0.14);
+  collarSide(x - sw / 2, y + w / 2, x - sw / 2, y - w / 2, x - sw / 2 - 0.14, y + w / 2 + 0.14, x - sw / 2 - 0.14, y - w / 2 - 0.14);
+  collarSide(x + sw / 2, y + w / 2, x - sw / 2, y + w / 2, x + sw / 2 + 0.14, y + w / 2 + 0.14, x - sw / 2 - 0.14, y + w / 2 + 0.14);
+  collarSide(x - sw / 2, y - w / 2, x + sw / 2, y - w / 2, x - sw / 2 - 0.14, y - w / 2 - 0.14, x + sw / 2 + 0.14, y - w / 2 - 0.14);
   if (F.cone) {
     const cb = z0 + h, ch = F.cone.h, hwt = Math.min(swt, wt) / 2, cr0 = Math.min(F.cone.r, hwt + 0.05), dr = Math.min(F.drum.r, hwt), cr1 = Math.min(dr + 0.07, cr0);
     coneFrustum(x, y, cr0, cr1, cb, cb + ch, shaftC);
@@ -4062,7 +4084,7 @@ function pushChimPar(arr, M, map) {
   const ch = ROOF.chim;
   if (ch && ch.on && isFinite(+ch.x) && isFinite(+ch.y) && M.pl.inside(+ch.x, +ch.y)) {
     const z = M.zAt(+ch.x, +ch.y);
-    if (z !== null) chimneyFaces(ch.fam, +ch.x, +ch.y, z, chimEffH(ch), chimFoot(ch), chimTaper(ch)).forEach(f => arr.push({ pts:map ? f.pts.map(map) : f.pts, fill:f.fill, chim:1 }));
+    if (z !== null) chimneyFaces(ch.fam, +ch.x, +ch.y, z, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy)).forEach(f => arr.push({ pts:map ? f.pts.map(map) : f.pts, fill:f.fill, chim:1 }));
   }
 }
 
@@ -9329,6 +9351,7 @@ function buildVentilation(host) {
      from the same open-Meteo elevation service as the altitude lookup —
      only the coordinates leave the browser. Null until derived. */
   let terrainGrid = K0 && K0.terrainGrid ? K0.terrainGrid : null;
+  if (terrainGrid) EXPORT_TERRAIN = terrainGrid;
   /** Bilinear ground height under a plan point, m above the site; 0 where
       there is no grid yet, or the point lies beyond it. The grid is stored
       in world metres east/north of the site; the plan frame turns with the
@@ -10775,6 +10798,7 @@ function buildVentilation(host) {
       if (!Array.isArray(tv) || tv.length !== TN * TN || tv.some(v => typeof v !== 'number' || !isFinite(v))) throw new Error('terrain');
       const datum = tv[TC * TN + TC];
       terrainGrid = { n:TN, step:TSTEP, h:tv.map(v => +(v - datum).toFixed(1)) };
+      EXPORT_TERRAIN = terrainGrid;
       const mm = terraMinMax();
       notes.push(t('terrain 240 m grid: low ' + fmt(mm.lo, 0) + ' m, high +' + fmt(mm.hi, 0) + ' m (Copernicus DEM via Open-Meteo)'));
       ok = true;
@@ -12664,10 +12688,9 @@ const RENDER_SKIES = [
   { key:'overcast', words:['overcast', 'encoberto', 'encoberta', 'grey sky', 'cinzento'] }
 ];
 const RENDER_STYLES = [
-  { key:'photo', words:['photo', 'photorealistic', 'foto', 'fotografia', 'realista', 'realistic'] },
-  { key:'watercolor', words:['watercolor', 'watercolour', 'aquarela', 'aguarela'] },
-  { key:'clay', words:['clay', 'maqueta', 'maquete', 'barro', 'model', 'modelo'] },
-  { key:'sketch', words:['sketch', 'esboco', 'esquisso', 'esboço', 'drawing', 'desenho', 'ink', 'tinta'] }
+  { key:'photo', words:['photo', 'photorealistic', 'foto', 'fotografia', 'realista', 'realistic', 'color', 'cor', 'render'] },
+  { key:'clay', words:['clay', 'maqueta', 'maquete', 'barro', 'modelo', 'study', 'estudo', 'white card'] },
+  { key:'bw', words:['bw', 'b&w', 'black and white', 'preto e branco', 'grayscale', 'monocromo', 'monochrome', 'pb', 'p&b'] }
 ];
 const RENDER_STOP = ('the a an de da do das dos em no na nos nas com uma umas uns para por como is are and or with without with of to in on at '
   + 'o a os as e ou sem para por uma com que se não nao').split(' ');
@@ -12714,10 +12737,10 @@ function buildRender(host) {
   const S = STATE.site, C = STATE.clim;
   const lat = S.lat, lon = S.lon, tz = lon / 15;
   const G = MASS, RF = ROOF;
-  pageHead(host, 'Render',
-    'The model in its terrain, finished from a prompt. Describe materials, light and finish — the tab reads the request, dresses the massing, and renders it here. Freer scenes go by brief: copy it into an image studio.');
+  pageHead(host, 'Visualization',
+    'The model in its terrain, finished from the material buttons. Pick wall and roof finishes — the tab dresses the massing and renders it here. Freer scenes go by brief: copy it into an image studio.');
   if (!G) { host.appendChild(el('p', { text:t('Define the site first — go to the Site tab.') })); return; }
-  const K0 = KEEP.render || null;
+  const K0 = KEEP.visualization || null;
   /* Fresh students start dressed for their region: the popular architecture
      where the house stands becomes the opening prompt, freely overwritten. */
   const reg0 = renderRegionFor(S.nuts);
@@ -12729,7 +12752,8 @@ function buildRender(host) {
   let look = parseRenderPrompt(prompt);
   let hour = K0 && isFinite(+K0.hour) ? clamp(+K0.hour, 5, 22) : (look.time ? look.time.h : 15);
   let hourTouched = !!(K0 && K0.hourTouched);
-  let styleLock = K0 && K0.styleLock ? K0.styleLock : 'auto';
+  let styleLock = K0 && ['clay', 'photo', 'bw'].indexOf(K0.styleLock) >= 0 ? K0.styleLock : 'photo';
+  let styleTouched = !!(K0 && K0.styleTouched);
   let showShadow = !K0 || K0.showShadow !== false, showTrees = !K0 || K0.showTrees !== false;
   let showGround = !K0 || K0.showGround !== false;
   /* Surrounding buildings as a transparent tip: the Environment tab's
@@ -12739,6 +12763,7 @@ function buildRender(host) {
   /* terrain: the ventilation grid where this browser already derived it,
      else a grid of our own over the same service — only coordinates leave */
   let rGrid = KEEP.vent && KEEP.vent.terrainGrid ? KEEP.vent.terrainGrid : null;
+  if (rGrid) EXPORT_TERRAIN = rGrid;
   let rGridNote = rGrid ? '' : t('Flat for now — open Ventilation once, or fetch below, for the real ground.');
   const betaR = () => (G.rot - 180) * RAD;
   const rTerraAt = (x, y) => {
@@ -12796,6 +12821,7 @@ function buildRender(host) {
       if (!Array.isArray(tv) || tv.length !== TN * TN || tv.some(v => typeof v !== 'number' || !isFinite(v))) throw new Error('terrain');
       const datum = tv[TC * TN + TC];
       rGrid = { n:TN, step:TSTEP, h:tv.map(v => +(v - datum).toFixed(1)) };
+      EXPORT_TERRAIN = rGrid;
       const mm = rMinMax();
       rGridNote = t('Ground in view: low ' + fmt(mm.lo, 0) + ' m, high +' + fmt(mm.hi, 0) + ' m (240 m grid).');
     } catch (e) {
@@ -12815,7 +12841,7 @@ function buildRender(host) {
     const f = finishOf(ROOF.col);
     return f ? f.hex : '#8F7A68';
   };
-  const styleNow = () => styleLock !== 'auto' ? styleLock : (look.style ? look.style.key : 'photo');
+  const styleNow = () => styleLock;
   const nightNow = () => hour >= 20 || hour < 6.5;
   const sunNow = () => sunPos(172, hour, lat, lon, tz);
   const sunDirPlan = () => {
@@ -12839,33 +12865,25 @@ function buildRender(host) {
   const rail = bench.appendChild(el('div', { class:'rail' }));
   const stage = bench.appendChild(el('div', { class:'stage' }));
   const props = bench.appendChild(el('div', { class:'props' }));
-  rail.appendChild(el('div', { class:'gh', text:'Prompt' }));
-  const promptBox = rail.appendChild(el('div', { class:'controls' }));
-  const ta = el('textarea', { rows:'3', maxlength:'500',
-    style:'font:inherit;font-size:12.5px;width:100%;min-height:64px;resize:vertical;padding:7px 9px;border:1px solid var(--line);border-radius:6px' });
-  ta.value = prompt;
-  ta.placeholder = t('whitewashed walls, clay tile roof, afternoon sun, photorealistic');
-  promptBox.appendChild(ta);
   const readSlot = rail.appendChild(el('div', { class:'effect' }));
   /* Finish presets, render-house style: every wall and roof finish as a
      pick box, photorealistically dressed onto the surfaces. The region's
      popular finish wears a star. Picking rewrites the prompt, so the study
-     file, the brief and the reading all stay truthful; typing clears back
-     to the prompt's own words. */
+     file, the brief and the reading all stay truthful. */
   const presetSyncs = [];
   function setPromptMaterial(cat, entry) {
     const lists = cat === 'wall' ? RENDER_WALLS : RENDER_ROOFS;
     const vocab = {};
     lists.forEach(o => o.words.forEach(w => { vocab[plainName(w)] = 1; }));
-    const parts = String(ta.value).split(/(\s+|[,;]+)/);
+    const parts = String(prompt).split(/(\s+|[,;]+)/);
     let done = false;
     const out = parts.map(p => {
       if (!done && vocab[plainName(p)]) { done = true; return entry.words[0]; }
       return p;
     });
     const tag = /\s/.test(entry.words[0]) ? entry.words[0] : entry.words[0] + (cat === 'wall' ? ' walls' : ' roof');
-    ta.value = (done ? out.join('') : (ta.value.replace(/\s+$/, '') + ', ' + tag)).slice(0, 500);
-    prompt = ta.value; RENDER_PROMPT = prompt; promptTouched = true;
+    prompt = (done ? out.join('') : (prompt.replace(/\s+$/, '') + ', ' + tag)).slice(0, 500);
+    RENDER_PROMPT = prompt; promptTouched = true;
     applyPrompt(true); refreshRender();
   }
   /* Finish presets, render-house style: photographic thumbnails, not colour
@@ -12976,8 +12994,13 @@ function buildRender(host) {
   sunBox.appendChild(hourCtl);
   props.appendChild(el('div', { class:'gh', text:'Finish' }));
   const finBox = props.appendChild(el('div', { class:'controls' }));
-  const styleCtl = segCtl(null, [{ value:'auto', label:t('Auto') }, { value:'photo', label:t('Photo') }, { value:'watercolor', label:t('Watercolor') }, { value:'clay', label:t('Clay') }, { value:'sketch', label:t('Sketch') }],
-    styleLock, v => { styleLock = v; refreshRender(); });
+  const styleCtl = segCtl(null, [{ value:'clay', label:t('Study') }, { value:'photo', label:t('Render') }, { value:'bw', label:t('B&W Render') }],
+    styleLock, v => { styleLock = v; styleTouched = true; refreshRender(); });
+  const styleBtns = { clay:0, photo:1, bw:2 };
+  function syncStyleCtl() {
+    const btns = styleCtl.querySelectorAll('button'), order = ['clay', 'photo', 'bw'];
+    btns.forEach((b, i) => b.setAttribute('aria-pressed', String(order[i] === styleLock)));
+  }
   finBox.appendChild(styleCtl);
   props.appendChild(el('div', { class:'gh', text:'View' }));
   const viewBox = props.appendChild(el('div', { class:'controls' }));
@@ -13006,7 +13029,7 @@ function buildRender(host) {
     onclick: () => fetchRenderTerrain() }));
   const terrSlot = props.appendChild(el('div', { class:'hint' }));
   host.appendChild(hint('render-how',
-    'The prompt dresses the massing drawn on Site, roofed on Roof and planted on Ventilation — <b>walls</b> (whitewash, brick, stone, timber, concrete, cork, glass), <b>roof</b> (tile, slate, metal, thatch, green), <b>light</b> (dawn to night) and <b>finish</b> (photo, watercolor, clay, sketch). The view is downstream of every tab: the plan, breaks and patio from Site, pitch, parapet, eaves, chimney and collectors from Roof, glass, doors, overhangs, fins and sunspace from Openings and Shadowing, planting, walls and neighbours from Ventilation — change any of them and this model follows on the next visit. What the tab cannot paint it says back under the prompt. The brief carries the same scene to an image studio for the freer renders.'));
+    'Pick wall and roof finishes from the boxes — every finish dresses the massing photorealistically, and the reading confirms what the model wears. The offer is three finishes: <b>Study</b> (the white card model), <b>Render</b> (full colour) and <b>B&W Render</b> (black and white). The view is downstream of every tab: the plan, breaks and patio from Site, pitch, parapet, eaves, chimney and collectors from Roof, glass, doors, overhangs, fins and sunspace from Openings and Shadowing, planting, walls and neighbours from Ventilation — change any of them and this model follows on the next visit. The brief carries the same scene to an image studio for the freer renders.'));
   function fallbackCopy(txt, done) {
     const f = el('textarea', { style:'position:fixed;opacity:0' });
     f.value = txt; document.body.appendChild(f); f.select();
@@ -13043,7 +13066,7 @@ function buildRender(host) {
     const top = 34, bottom = H - 26, availV = Math.max(40, bottom - top);
     const sByW = (W / 2 - 16) / (CAM_K * uMax);
     const sByH = availV / (CAM_K * ((vMax - vMin) + maxH * ax.ce));
-    const s = Math.max(3, Math.min(sByW, sByH)) * zoomOf('render');
+    const s = Math.max(3, Math.min(sByW, sByH)) * zoomOf('visualization');
     return { cx, cy:bottom + CAM_K * s * vMin, s, H0, ridge, M, ax };
   };
 
@@ -13095,12 +13118,15 @@ function buildRender(host) {
     const depthOf = (x, y, z) => (x * ax.d[0] + y * ax.d[1]) * ax.ce - (z || 0) * ax.se;
     /* ground */
     const terrCol = h => {
-      if (style === 'clay') return '#D5D2CA';
+      if (style === 'clay') return night ? '#3A3D45' : '#D5D2CA';
       if (style === 'sketch') return '#EFEBE0';
       const span = Math.max(1e-6, mm.hi - mm.lo), f = clamp((h - mm.lo) / span, 0, 1);
       const c0 = [226, 233, 219], c1 = [210, 196, 160], c2 = [180, 142, 104];
       const c = f < 0.5 ? c0.map((v, i) => Math.round(v + (c1[i] - v) * f * 2))
         : c1.map((v, i) => Math.round(v + (c2[i] - v) * (f - 0.5) * 2));
+      /* moonlit grade: crushed dark and cooled, so the ground sits back
+         instead of outshining the lit house */
+      if (night) return 'rgb(' + Math.round(c[0] * 0.22 + 6) + ',' + Math.round(c[1] * 0.24 + 8) + ',' + Math.round(c[2] * 0.30 + 18) + ')';
       return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
     };
     if (terrOn) {
@@ -13132,7 +13158,8 @@ function buildRender(host) {
     } else {
       const bb = M.pl.bbox, gx = Math.max(-bb[0], bb[2]) + 10, gy = Math.max(-bb[1], bb[3]) + 10;
       poly([[-gx, -gy, 0], [gx, -gy, 0], [gx, gy, 0], [-gx, gy, 0]],
-        style === 'clay' ? '#D5D2CA' : style === 'sketch' ? '#EFEBE0' : 'rgba(120,140,105,.30)',
+        style === 'clay' ? (night ? '#3A3D45' : '#D5D2CA') : style === 'sketch' ? '#EFEBE0'
+        : night ? 'rgba(24,30,48,.85)' : 'rgba(120,140,105,.30)',
         style === 'sketch' ? CH.ink : CH.line, style === 'sketch' ? 1.6 : 1.2);
     }
     /* shadow blob: the footprint dropped along the sun ray */
@@ -13354,18 +13381,8 @@ function buildRender(host) {
       try {
         const zx = M.zAt(+RF.chim.x, +RF.chim.y);
         if (zx !== null && isFinite(zx)) {
-          const ft = chimFoot(RF.chim), hx = ft.x / 2, hy = ft.y / 2;
-          const hTop = zx + chimEffH(RF.chim), cx0 = +RF.chim.x, cy0 = +RF.chim.y;
-          const corners = [[cx0 - hx, cy0 - hy], [cx0 + hx, cy0 - hy], [cx0 + hx, cy0 + hy], [cx0 - hx, cy0 + hy]];
-          const chBase = style === 'clay' ? '#E4E1D8' : wallBase();
-          for (let i = 0; i < 4; i++) {
-            const a = corners[i], b = corners[(i + 1) % 4];
-            const q = [[a[0], a[1], zx - 0.1], [b[0], b[1], zx - 0.1], [b[0], b[1], hTop], [a[0], a[1], hTop]];
-            items.push({ pts:q, fill:shadeHex(chBase, night ? 0.3 : 0.85), d:dc(q) });
-          }
-          const cap = [[cx0 - hx - 0.08, cy0 - hy - 0.08, hTop], [cx0 + hx + 0.08, cy0 - hy - 0.08, hTop],
-            [cx0 + hx + 0.08, cy0 + hy + 0.08, hTop], [cx0 - hx - 0.08, cy0 + hy + 0.08, hTop]];
-          items.push({ pts:cap, fill:shadeHex(chBase, night ? 0.32 : 1), d:dc(cap) });
+          chimneyFaces(RF.chim.fam, +RF.chim.x, +RF.chim.y, zx, chimEffH(RF.chim), chimFoot(RF.chim), chimTaper(RF.chim), (qx, qy) => M.zAt(qx, qy))
+            .forEach(f => items.push({ pts:f.pts, fill:style === 'clay' ? '#D5D2CA' : f.fill, d:dc(f.pts) }));
         }
       } catch (e) {}
     }
@@ -13470,6 +13487,9 @@ function buildRender(host) {
     ctx.fillStyle = night ? '#E8EAF0' : CH.ink2; ctx.font = F(10); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText(prompt.slice(0, 90), 8, H - 22);
     label(ctx, t('sun') + ' ' + fmt(sun.alt, 0) + '° · ' + t(styleNow()) + (night ? ' · ' + t('night') : ''), 8, H - 9, night ? '#AEB6C8' : CH.muted, F(9), 'left', 'middle');
+    /* B&W Render: drain the saturation last, so the study model, the lit
+       windows and the caption all print in black and white */
+    if (style === 'bw') { ctx.save(); ctx.globalCompositeOperation = 'saturation'; ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
   };
   function renderBrief() {
     const sun = sunNow(), style = styleNow();
@@ -13517,7 +13537,7 @@ function buildRender(host) {
       ['Köppen–Geiger', STATE.clim.k.code]];
     return csvRows(rows);
   }
-  SCORES.render = () => ({ 'Render look':(look.wall ? look.wall.key : 'site') + ' + ' + (look.roof ? look.roof.key : 'site'),
+  SCORES.visualization = () => ({ 'Render look':(look.wall ? look.wall.key : 'site') + ' + ' + (look.roof ? look.roof.key : 'site'),
     'Render sun':fmt(hour, 1) + ' h', 'Render finish':styleNow() });
 
   /* ---- prompt assessment line ---- */
@@ -13568,30 +13588,30 @@ function buildRender(host) {
   function applyPrompt(resetHour) {
     look = parseRenderPrompt(prompt);
     if (resetHour && look.time && !hourTouched) { hour = look.time.h; hourCtl.range.value = hour; hourCtl.out.textContent = fmt(hour, 1) + ' h'; }
+    if (look.style && !styleTouched) { styleLock = look.style.key; syncStyleCtl(); }
     refreshReading();
   }
-  let deb = 0;
-  ta.addEventListener('input', () => {
-    prompt = ta.value.slice(0, 500);
-    RENDER_PROMPT = prompt; promptTouched = true;
-    clearTimeout(deb);
-    deb = setTimeout(() => { applyPrompt(true); refreshRender(); }, 350);
-  });
-
   /* ---- stage ---- */
   const stageBar = stage.appendChild(el('div', { class:'viewbar' }));
-  renderPanel = makePanel(stage, { title:t('Render view'), note:t('The dressed massing in its ground, under the prompted sun.'),
+  renderPanel = makePanel(stage, { title:t('Visualization view'), note:t('The dressed massing in its ground, under the chosen sun.'),
     render:renderRender, csv:renderCSV,
     heightFn: w => Math.round(clamp(Math.min(w * 0.74, (window.innerHeight || 900) - 190), 320, 900)) });
   const pillLine = stage.appendChild(el('div', { class:'limitrow readings' }));
   const pillLook = el('span', { class:'pill ok', text:'' });
   pillLine.appendChild(pillLook);
-  const renderCam = camBar(stage, CAM, () => G.rot, () => renderPanel.draw(), 'render', set => [
+  const renderCam = camBar(stage, CAM, () => G.rot, () => renderPanel.draw(), 'visualization', set => [
     ['From S', 'Stand to the true south of the building', () => set(camAzFrom(G.rot, 180), camMidEl(CAM))],
     ['Reset', 'Back to the south-west corner', () => set(225, ISO_EL)]], 0);
   function refreshRender() {
     applyPrompt(false);
     const sun = sunNow();
+    /* publish the dressed materials for the exporters: keys, colours and
+       the Construction-Advisor keys the availability check resolved */
+    RENDER_MATS = {
+      wall:look.wall ? { key:look.wall.key, color:wallBase(), ca:caEntryFor(look.wall.key).keys } : null,
+      roof:look.roof ? { key:look.roof.key, color:roofBase(), ca:caEntryFor(look.roof.key).keys } : null,
+      zone:caZone()
+    };
     pillLook.textContent = (look.wall ? matName(look.wall) : t('site finish')) + ' · ' + (look.roof ? matName(look.roof) : t('site finish'))
       + ' · ' + t('sun') + ' ' + fmt(sun.alt, 0) + '° · ' + t(styleNow())
       + (look.unknown.length ? ' · ' + t('not painted') + ': ' + look.unknown.join(', ') : '');
@@ -13599,7 +13619,7 @@ function buildRender(host) {
     if (renderPanel) renderPanel.draw();
     benchStage(stage);
   }
-  KEEPERS.push(() => { KEEP.render = { prompt, promptTouched, hour, hourTouched, styleLock, showShadow, showTrees, showGround, showNb, cam:{ az:CAM.az, el:CAM.el } }; });
+  KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showNb, cam:{ az:CAM.az, el:CAM.el } }; });
   host._refresh = () => { renderCam.sync(); refreshRender(); };
   const rcv = renderPanel.canvas;
   rcv.style.touchAction = 'none';
@@ -13617,13 +13637,13 @@ function buildRender(host) {
   const endOrbit = () => { orbit.end(); rcv.style.cursor = 'grab'; };
   rcv.addEventListener('pointerup', endOrbit);
   rcv.addEventListener('pointercancel', endOrbit);
-  zoomGesture(rcv, 'render');
+  zoomGesture(rcv, 'visualization');
   /* + and − zoom the model for a closer oversight, as on Ventilation */
   document.addEventListener('keydown', ev => {
-    if (STATE.tab !== 'render' || !host.isConnected) return;
+    if (STATE.tab !== 'visualization' || !host.isConnected) return;
     if (/INPUT|SELECT|TEXTAREA/.test((ev.target && ev.target.tagName) || '')) return;
-    if (ev.key === '+' || ev.key === '=') modelZoom('render', 1.25);
-    else if (ev.key === '-' || ev.key === '_') modelZoom('render', 1 / 1.25);
+    if (ev.key === '+' || ev.key === '=') modelZoom('visualization', 1.25);
+    else if (ev.key === '-' || ev.key === '_') modelZoom('visualization', 1 / 1.25);
   });
   refreshReading();
   refreshRender();
@@ -13642,7 +13662,7 @@ const TABS = [
   { key:'roof', label:'Roof', build:buildRoof },
   { key:'openings', label:'Openings and Shadowing', build:buildOpenings },
   { key:'ventilation', label:'Ventilation', build:buildVentilation },
-  { key:'render', label:'Render', build:buildRender }
+  { key:'visualization', label:'Visualization', build:buildRender }
 ];
 
 /* --- the references, built from one list so the footer and the pages agree - */
@@ -13788,12 +13808,12 @@ function exportModel() {
     const uLeftIsB = (along[0] * n[1] + along[1] * -n[0]) > 0;
     const x0 = Math.max(0, u0 - (uLeftIsB ? (o.ovR || 0) : (o.ovL || 0))), x1 = Math.min(segLen === undefined ? u1 + 1 : segLen, u1 + (uLeftIsB ? (o.ovL || 0) : (o.ovR || 0)));
     const off = (p, d) => [p[0] + n[0] * d, p[1] + n[1] * d, p[2]];
-    add('window', tag + ' window' + (gk ? ' ' + gk : ''), gk === 'gelosia' ? 'AA-GELOSIA' : 'AA-GLAZING', [[[P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)], n]], { width:ww, height:v1 - v0, wwr:o.wwr, facade:f });
+    add('window', tag + ' window' + (gk ? ' ' + gk : ''), gk === 'gelosia' ? 'AA-GELOSIA' : 'AA-GLAZING', [[[P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)], n]], { width:ww, height:v1 - v0, wwr:o.wwr, facade:f, mat:'AA_Glass' });
     if (o.ovD > 0) {
       const vs = o.ovN <= 1 ? [v1] : Array.from({ length:o.ovN }, (_, i) => v0 + (v1 - v0) * (i / (o.ovN - 1)));
       vs.forEach((vt, i) => add('shading', tag + (o.ovN > 1 ? ' louvre ' + (i + 1) : ' overhang'), 'AA-SHADING',
         [[[P(x0, vt), P(x1, vt), off(P(x1, vt), o.ovD), off(P(x0, vt), o.ovD)], up]],
-        { device:o.ovN > 1 ? 'Louvre' : 'Overhang', depth:o.ovD }));
+        { device:o.ovN > 1 ? 'Louvre' : 'Overhang', depth:o.ovD, mat:'AA_Shade' }));
     }
 
   };
@@ -13867,7 +13887,7 @@ function exportModel() {
             if (mouths.some(m => m[2] <= v0 + 1e-6 && m[3] >= v1 - 1e-6 && uF > m[0] - 0.05 && uF < m[1] + 0.05)) return;
             add('shading', tag + ' fin ' + (i + 1), 'AA-SHADING',
               [[[P(uF, fv0), off(P(uF, fv0), OPEN[f].finD), off(P(uF, fv1), OPEN[f].finD), P(uF, fv1)], along]],
-              { device:'Fin', depth:OPEN[f].finD });
+              { device:'Fin', depth:OPEN[f].finD, mat:'AA_Shade' });
           });
         }
       });
@@ -13880,7 +13900,7 @@ function exportModel() {
       if (q0[1] - H0 > 1e-4 || q1[1] - H0 > 1e-4) faces.push([[P(q0[0], H0), P(q1[0], H0), P(q1[0], q1[1]), P(q0[0], q0[1])], n]);
     }
     const facing = COMPASS8_EN[Math.round(((G.rot + { S:0, N:180, E:270, W:90 }[f]) % 360) / 45) % 8];
-    add('wall', tag + ' wall (faces ' + facing + ')', 'AA-WALLS', faces, { facade:f, finish:finishOf(G.col) });
+    add('wall', tag + ' wall (faces ' + facing + ')', 'AA-WALLS', faces, { facade:f, finish:finishOf(G.col), mat:'AA_Wall' });
   });
   if (RM.steps.length) add('wall', 'Roof step walls', 'AA-WALLS', RM.steps.reduce((acc, st) => {
     const P = (u, z) => st.ax === 'x' ? [st.a[0], st.a[1] + u, z] : [st.a[0] + u, st.a[1], z], n = [st.n[0], st.n[1], 0];
@@ -13889,7 +13909,7 @@ function exportModel() {
       acc.push([[P(q0[0], q0[1]), P(q1[0], q1[1]), P(q1[0], q1[2]), P(q0[0], q0[2])], n]);
     }
     return acc;
-  }, []), { finish:finishOf(G.col) });
+  }, []), { finish:finishOf(G.col), mat:'AA_Wall' });
   /** A convex polygon in plan less rectangles, as convex pieces. */
   const lessRects = (P0, rects) => rects.reduce((parts, r) => parts.reduce((acc, Q) => acc.concat(subtractConvex(Q,
     [{ a:1, b:0, c:-r[0], th:0 }, { a:-1, b:0, c:r[2], th:0 }, { a:0, b:1, c:-r[1], th:0 }, { a:0, b:-1, c:r[3], th:0 }])), []), [P0]);
@@ -13903,10 +13923,10 @@ function exportModel() {
     const th = pcs.reduce((a, q) => q.area > a.area ? q : a, pcs[0]).f.th;
     add('roof', nm + ' roof', 'AA-ROOF',
       pcs.reduce((acc, pc) => acc.concat(lessRects(pc.poly, openTop).map(Q => [Q.map(q => [q[0], q[1], RM.zOf(pc.f, q[0], q[1])]), [-pc.f.t * pc.f.a, -pc.f.t * pc.f.b, 1]])), []),
-      { roofType:rt, pitch:nn === 0 ? 0 : th });
+      { roofType:rt, pitch:nn === 0 ? 0 : th, mat:'AA_Roof' });
   });
   add('slab', 'Ground floor', 'AA-FLOOR', pl.cells.reduce((acc, c) => acc.concat(lessRects([[c[0], c[1]], [c[2], c[1]], [c[2], c[3]], [c[0], c[3]]], openFoot)
-    .map(Q => [Q.map(q => [q[0], q[1], 0]), [0, 0, -1]])), []));
+    .map(Q => [Q.map(q => [q[0], q[1], 0]), [0, 0, -1]])), []), { mat:'AA_Slab' });
 
   /* the loggias: each storey's back wall with its window cut out, its
      sides, and the ceiling and floor that close the heated volume — the
@@ -13924,12 +13944,12 @@ function exportModel() {
         const gh = L.glass.map(g => [Math.min(ub(g[0]), ub(g[1])), Math.max(ub(g[0]), ub(g[1])), g[0][2], g[2][2]]);
         holedRect((a0, a1, b0, b1) => [[Pb(a0, b0), Pb(a1, b0), Pb(a1, b1), Pb(a0, b1)], fc.n], B.u0, B.u1, c.z0, c.z1, gh).forEach(q => faces.push(q));
         L.glass.forEach((g, j) => add('window', 'Loggia ' + no + ' window, floor ' + c.k, 'AA-GLAZING', [[g, fc.n]],
-          { width:gh[j][1] - gh[j][0], height:gh[j][3] - gh[j][2], wwr:OPEN[segFace(B.sg)].wwr, facade:segFace(B.sg) }));
+          { width:gh[j][1] - gh[j][0], height:gh[j][3] - gh[j][2], wwr:OPEN[segFace(B.sg)].wwr, facade:segFace(B.sg), mat:'AA_Glass' }));
         return;
       }
       faces.push([fc.pts, fc.n]);
     });
-    add('wall', 'Loggia ' + no + ', floor ' + c.k, 'AA-WALLS', faces, { facade:segFace(B.sg), finish:finishOf(G.col), depth:B.d, width:B.w });
+    add('wall', 'Loggia ' + no + ', floor ' + c.k, 'AA-WALLS', faces, { facade:segFace(B.sg), finish:finishOf(G.col), depth:B.d, width:B.w, mat:'AA_Wall' });
   });
   /* each projecting balcony: its slab, and the parapet round its free
      edges; a loggia above the ground floor, the parapet across its mouth */
@@ -13938,7 +13958,7 @@ function exportModel() {
     const no = bgx.all.indexOf(B) + 1;
     B.levels.forEach(k => {
       const z = (k - 1) * G.fh;
-      add('balcony', 'Balcony ' + no + ' slab, floor ' + k, 'AA-BALCONY', B.rects.reduce((acc, r) => acc.concat(box(r[0], r[1], z - BALC_SLAB, r[2], r[3], z)), []), { depth:B.d, width:B.w });
+      add('balcony', 'Balcony ' + no + ' slab, floor ' + k, 'AA-BALCONY', B.rects.reduce((acc, r) => acc.concat(box(r[0], r[1], z - BALC_SLAB, r[2], r[3], z)), []), { depth:B.d, width:B.w, mat:'AA_Slab' });
       add('railing', 'Balcony ' + no + ' parapet, floor ' + k, 'AA-BALCONY', BSx.solids.filter(sl => sl.B === B && sl.k === k && sl.kind === 'par').map(sl => [sl.pts, sl.n]));
     });
   });
@@ -13960,7 +13980,7 @@ function exportModel() {
     if (fld && fld.fits) {
       const b0 = (fld.flat ? fld.tilt : RF.th) * RAD, nrm = [0, -Math.sin(b0), Math.cos(b0)];
       fld.mods.forEach((mo, k) => add('solar', nm + (k + 1), 'AA-SOLAR', [[mo.q, nrm]],
-        { solarType:st, pitch:fld.tilt }));
+        { solarType:st, pitch:fld.tilt, mat:'AA_Solar' }));
     }
   });
 
@@ -13974,7 +13994,7 @@ function exportModel() {
       const a = [m[0] - side[0] * W / 2, m[1] - side[1] * W / 2, 0], c = [m[0] + side[0] * W / 2, m[1] + side[1] * W / 2, 0];
       const off = p => [p[0] + n[0] * d, p[1] + n[1] * d, p[2]], a2 = off(a), c2 = off(c), z = p => [p[0], p[1], hS];
       add('sunspace', 'Sunspace', 'AA-SUNSPACE', [[[a2, c2, z(c2), z(a2)], n], [[a, a2, z(a2), z(a)], side.map(x => -x)],
-        [[c, c2, z(c2), z(c)], side], [[z(a), z(c), z(c2), z(a2)], up]], { depth:d });
+        [[c, c2, z(c2), z(c)], side], [[z(a), z(c), z(c2), z(a2)], up]], { depth:d, mat:'AA_Glass' });
     }
   }
 
@@ -13983,14 +14003,34 @@ function exportModel() {
     const t2 = 0.1, hl = w.length / 2;
     add('sitewall', 'Detached wall ' + (i + 1), 'AA-SITE-WALLS', w.along === 'y'
       ? box(w.x - t2, w.y - hl, 0, w.x + t2, w.y + hl, w.height) : box(w.x - hl, w.y - t2, 0, w.x + hl, w.y + t2, w.height),
-      { height:w.height, length:w.length });
+      { height:w.height, length:w.length, mat:'AA_Wall' });
   });
-  if (SCENE.plant) SCENE.veg.forEach((v, i) => {
-    const q = SCENE.plant(v), wt = q.wTrunk / 2;
-    const faces = q.trunkTop > 0.05 ? box(v.x - wt, v.y - wt, 0, v.x + wt, v.y + wt, q.trunkTop) : [];
-    add('plant', (i + 1) + ' ' + q.name + ' (' + q.sci + ')', 'AA-PLANTING', faces.concat(ellipsoid(v.x, v.y, q.zc, q.R, q.RZ)),
-      { species:q.name, sci:q.sci, plantKind:q.kind, height:v.height, trunk:q.T, crownRadius:+q.R.toFixed(2), density:v.density });
+  SCENE.veg.forEach((v, i) => {
+    const q = SCENE.plant ? SCENE.plant(v) : null;
+    const nm = (i + 1) + ' ' + (q ? q.name + ' (' + q.sci + ')' : String(v.type || 'tree'));
+    const trunk = q ? (q.trunkTop > 0.05 ? box(v.x - q.wTrunk / 2, v.y - q.wTrunk / 2, 0, v.x + q.wTrunk / 2, v.y + q.wTrunk / 2, q.trunkTop) : [])
+      : box(v.x - 0.09, v.y - 0.09, 0, v.x + 0.09, v.y + 0.09, Math.max(0.5, (v.height || 3) * 0.4));
+    const crown = q ? ellipsoid(v.x, v.y, q.zc, q.R, q.RZ)
+      : ellipsoid(v.x, v.y, Math.max(0.5, (v.height || 3)) * 0.7, Math.max(0.5, (v.height || 3) * 0.25), Math.max(0.4, (v.height || 3) * 0.2));
+    const extra = q ? { species:q.name, sci:q.sci, plantKind:q.kind, height:v.height, trunk:q.T, crownRadius:+q.R.toFixed(2), density:v.density }
+      : { species:String(v.type || 'tree'), height:v.height || 3 };
+    if (trunk.length) add('plant', nm + ' trunk', 'AA-PLANTING', trunk, Object.assign({ mat:'AA_Trunk' }, extra));
+    add('plant', nm + ' crown', 'AA-PLANTING', crown, Object.assign({ mat:'AA_Leaf' }, extra));
   });
+  /* the real ground under the model: the Copernicus grid where derived */
+  if (EXPORT_TERRAIN && EXPORT_TERRAIN.h && EXPORT_TERRAIN.h.length) {
+    const TN = EXPORT_TERRAIN.n, TS = EXPORT_TERRAIN.step, TE = (TN - 1) * TS / 2;
+    const bb = (G.rot - 180) * RAD, cb = Math.cos(bb), sb = Math.sin(bb);
+    const PW = (E, N) => [E * cb - N * sb, E * sb + N * cb];
+    const HH = (a, c) => EXPORT_TERRAIN.h[c * TN + a];
+    const tf = [];
+    for (let jj = 0; jj < TN - 1; jj++) for (let ii = 0; ii < TN - 1; ii++) {
+      const E0 = -TE + ii * TS, N0 = -TE + jj * TS;
+      const p00 = PW(E0, N0), p10 = PW(E0 + TS, N0), p11 = PW(E0 + TS, N0 + TS), p01 = PW(E0, N0 + TS);
+      tf.push([[[p00[0], p00[1], HH(ii, jj)], [p10[0], p10[1], HH(ii + 1, jj)], [p11[0], p11[1], HH(ii + 1, jj + 1)], [p01[0], p01[1], HH(ii, jj + 1)]], [0, 0, 1]]);
+    }
+    add('terrain', 'Terrain (Copernicus DEM grid)', 'AA-TERRAIN', tf, { mat:'AA_Terrain', grid:TN + 'x' + TN + ' at ' + TS + ' m' });
+  }
 
   /* a north arrow on the ground, for the tools that do not read north */
   const R0 = Math.hypot(L, D) / 2 + 3;
@@ -14105,7 +14145,7 @@ function toDecisionsJSON() {
   const colourOf = f => f ? { name:f.en, pt:f.pt, class:f.cls, absorptance:FINISH_ALPHA[f.cls], albedo:+(1 - FINISH_ALPHA[f.cls]).toFixed(2) } : null;
   const scores = {};
   for (const k in SCORES) { try { scores[k] = SCORES[k](); } catch (err) { scores[k] = null; } }
-  ['site', 'roof', 'openings', 'ventilation'].forEach(k => { if (!(k in scores)) scores[k] = 'open this tab to score it'; });
+  ['site', 'roof', 'openings', 'ventilation', 'visualization'].forEach(k => { if (!(k in scores)) scores[k] = 'open this tab to score it'; });
   return JSON.stringify({
     app:APP.name, version:APP.version, exported:new Date().toISOString(),
     site:{ place:S.place, nuts:S.nuts, lat:S.lat, lon:S.lon, alt:S.alt, use:S.use, operation:S.operation,
@@ -14173,6 +14213,11 @@ document.addEventListener('click', ev => { const m = $('#cadMenu'); if (m && !m.
    is noted, and the file is re-imported). Nothing is uploaded either way. */
 let STUDY = null;
 let RENDER_PROMPT = '';
+/* What the Render tab last dressed the model in, plain data for the exporters:
+   wall/roof keys, colours and Construction-Advisor keys, plus the zone read. */
+let RENDER_MATS = { wall:null, roof:null, zone:null };
+/* Real ground for the exporters, whichever tab derived it first. */
+let EXPORT_TERRAIN = null;
 function studyJSON() {
   const S = STATE.site, C = STATE.clim;
   return JSON.stringify({
@@ -16391,6 +16436,12 @@ Object.assign(PT, {
   "Hidden by your agreement": "Escondidos de acordo",
   /* render on Render */
   "Render": "Renderização",
+  "Visualization": "Visualização",
+  "Study": "Estudo",
+  "B&W Render": "Render P&B",
+  "Visualization view": "Vista — Visualização",
+  "The dressed massing in its ground, under the chosen sun.": "A volumetria vestida no seu terreno, sob o sol escolhido.",
+  "bw": "P&B",
   "Render view": "Vista renderizada",
   "The dressed massing in its ground, under the prompted sun.": "A volumetria vestida no seu terreno, sob o sol do prompt.",
   "Prompt": "Prompt",
@@ -16998,7 +17049,7 @@ Object.assign(PT_HINT, {
   'vent-face':
     'A câmara orbita o modelo: ↺ e ↻ rodam-no 45°, ▲ e ▼ inclinam-no 15°, Topo olha a direito para baixo como uma planta, Barlavento coloca-se de onde vem o vento, e De lado ao vento põe-se de perfil em relação a ele, baixa, para se verem as camadas a subir sobre a cobertura e a descer para o lado de sotavento. Repor volta ao canto sudoeste que os outros separadores usam. Árvores, muros e o escoamento lêem-se do seu lugar no local, não da vista: rodar a câmara só muda o que se vê.',
   'render-how':
-    'O prompt veste a volumetria desenhada no Local, com a cobertura do Telhado e a plantação da Ventilação — <b>paredes</b> (cal, tijolo, pedra, madeira, betão, cortiça, vidro), <b>cobertura</b> (telha, ardósia, zinco, colmo, ajardinada), <b>luz</b> (da alvorada à noite) e <b>acabamento</b> (foto, aquarela, maqueta, esquisso). A vista depende de todos os separadores: a planta, quebras e pátio do Local, inclinação, platibanda, beirado, chaminé e colectores do Telhado, vidro, portas, palas, brises e estufa das Aberturas, plantação, muros e vizinhos da Ventilação — mude qualquer um e este modelo acompanha na visita seguinte. O que o separador não souber pintar diz de volta sob o prompt. O brief leva a mesma cena a um estúdio de imagem para as renderizações mais livres.',
+    'Escolha os acabamentos de parede e cobertura nas caixas — cada acabamento veste a volumetria de forma fotorrealista, e a leitura confirma o que o modelo veste. A oferta são três acabamentos: <b>Estudo</b> (o modelo em cartão branco), <b>Render</b> (a cores) e <b>Render P&B</b> (a preto e branco). A vista depende de todos os separadores: a planta, quebras e pátio do Local, inclinação, platibanda, beirado, chaminé e colectores do Telhado, vidro, portas, palas, brises e estufa das Aberturas, plantação, muros e vizinhos da Ventilação — mude qualquer um e este modelo acompanha na visita seguinte. O brief leva a mesma cena a um estúdio de imagem para as renderizações mais livres.',
   'vent-terrain':
     'O terreno aberto (plano) trava menos o vento; o terreno partido e montanhoso abriga mais (expoente da lei de potência 0,14–0,28). A exposição multiplica de novo: abrigada 0,6, moderada 1,0, exposta 1,4 (Olgyay, pp.37–40; DeKay & Brown, Estratégia 85). A classe de terreno e os doze ventos dominantes mensais derivam destas coordenadas automaticamente à entrada (reanálise ERA5 via Open-Meteo — como a consulta de altitude, só as coordenadas saem do navegador); o botão repete-a. O desenho vai mais longe: uma malha regular de 240 m de alturas do terreno é buscada para o local e desenhada sob o modelo com o seu baixo e alto, e cada linha de vento acompanha-a — subindo uma elevação, assentando numa depressão — para o juízo de exposição se ler contra a geografia real. A malha é o MDT Copernicus edição 2021 (GLO-90, resolução de 90 m, https://doi.org/10.5270/ESA-c5d3d65), servido pelo Open-Meteo sob licença livre — o mesmo modelo de elevação por trás da consulta de altitude. A exposição continua manual: lê a envolvente imediata, que nenhum produto em grelha vê.',
   'vent-air':
