@@ -13570,43 +13570,33 @@ style === 'sketch' ? '#EFEBE0'
        windows and the caption all print in black and white */
     if (style === 'bw') { ctx.save(); ctx.globalCompositeOperation = 'saturation'; ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
   };
-  function renderBrief() {
-    const sun = sunNow(), style = styleNow();
-    const L = [];
-    L.push('Architecture Advisor PT — render brief (v' + APP.version + ')');
-    L.push('site: ' + (S.place || S.nuts) + ', ' + fmt(Math.abs(lat), 3) + '° ' + (lat < 0 ? 'S' : 'N') + ' ' + fmt(Math.abs(lon), 3) + '° ' + (lon < 0 ? 'W' : 'E') + ', alt ' + fmt(S.alt, 0) + ' m · Köppen ' + STATE.clim.k.code);
-    L.push('model: bar ' + fmt(G.L, 1) + ' × ' + fmt(G.D, 1) + ' m, ' + G.fl + ' storey(s) × ' + fmt(G.fh, 1) + ' m, main facade ' + fmt(G.rot, 0) + '°, form ' + (G.form || 'rect')
-      + ' · roof ' + ['flat', 'shed', 'gable', 'hip'][RF.n] + (RF.n === 0 ? '' : ' ' + RF.th + '°'));
-    L.push('openings WWR: S ' + fmt(OPEN.S.wwr, 2) + ' N ' + fmt(OPEN.N.wwr, 2) + ' E ' + fmt(OPEN.E.wwr, 2) + ' W ' + fmt(OPEN.W.wwr, 2)
-      + (SUNSP && SUNSP.on ? ' · sunspace on ' + SUNSP.face : '') + ' · planting ' + SCENE.veg.length + ', walls ' + SCENE.walls.length);
-    const mm = rMinMax();
-    L.push('ground: ' + (rGrid && mm ? '240 m grid, low ' + fmt(mm.lo, 0) + ' m, high +' + fmt(mm.hi, 0) + ' m vs site' : 'flat (no grid derived)'));
-    L.push('look: walls ' + (look.wall ? look.wall.key + (acName(look.wall) ? ' [Archicad: ' + acName(look.wall) + ']' : '') : 'site finish') + ', roof ' + (look.roof ? look.roof.key + (acName(look.roof) ? ' [Archicad: ' + acName(look.roof) + ']' : '') : 'site finish')
-      + ', 21 Jun ' + fmt(hour, 1) + ' h solar (alt ' + fmt(sun.alt, 0) + '°, azi ' + fmt(sun.azi, 0) + '°), sky ' + (look.sky ? look.sky.key : 'site') + ', finish ' + style + (nightNow() ? ', night' : ''));
-    L.push('prompt: ' + prompt);
-    {
-      const z = caZone();
-      const av = o => {
-        if (!o || !CA_MATS) return 'unchecked';
-        const e = caEntryFor(o.key), a = caAvailable(e);
-        if (e.kind === 'absent') return 'not in library — verify locally';
-        return a === true ? 'stocked here (' + (e.keys.join('/') || e.kind) + ')' : a === false ? 'scarce here — verify supply' : 'unchecked';
-      };
-      L.push('availability (Construction Advisor, web' + (z ? ', zone ' + z : '') + '): walls ' + av(look.wall) + ' · roof ' + av(look.roof));
-      {
-        const ph = o => {
-          if (!o || !AC_BM[o.key]) return 'no_building-material_match';
-          const b = AC_BM[o.key];
-          return b.bm + (b.lam === null ? ' (thermal unset in source project)' : ' λ' + b.lam + ' ρ' + b.rho);
-        };
-        L.push('physics (Archicad 29 on this Mac, Tapir 2026-10-04): walls ' + ph(look.wall) + ' · roof ' + ph(look.roof));
-      }
-    }
-    if (showNb) L.push('surroundings: ' + nbRender().length + ' neighbour prisms as transparent tip (OpenStreetMap)');
-    if (look.unknown.length) L.push('unparsed: ' + look.unknown.join(', '));
-    L.push('camera: azimuth ' + fmt(CAM.az, 0) + '°, elevation ' + fmt(CAM.el, 0) + '°');
-    return L.join('\n');
+  /* The v2 brief: one versioned JSON contract for the canvas engine, the
+     Blender bundle and the Spark advisor — same model, same sun, same
+     materials, no contradictions. */
+  function renderBriefData() {
+    const sun = sunNow(), mm = rMinMax(), style = styleNow();
+    const matOf = which => {
+      const o = which === 'wall' ? look.wall : look.roof;
+      if (!o) return { source:'site finish' };
+      const m = which === 'wall' ? RENDER_MATS.wall : RENDER_MATS.roof;
+      return { key:o.key, color:m ? m.color : null, archicad:acName(o), constructionAdvisor:m ? m.ca : [] };
+    };
+    return {
+      app:APP.name, briefVersion:2, exported:new Date().toISOString(),
+      site:{ place:S.place || S.nuts, nuts:S.nuts, lat:+S.lat.toFixed(4), lon:+S.lon.toFixed(4), alt:+S.alt, koppen:STATE.clim.k.code },
+      model:{ length:G.L, depth:G.D, rotation:G.rot, floors:G.fl, floorHeight:G.fh, form:G.form || 'rect',
+        roof:{ type:['flat', 'shed', 'gable', 'hip'][RF.n], pitch:RF.n === 0 ? 0 : RF.th },
+        openings:{ S:+OPEN.S.wwr.toFixed(2), N:+OPEN.N.wwr.toFixed(2), E:+OPEN.E.wwr.toFixed(2), W:+OPEN.W.wwr.toFixed(2) },
+        sunspace:SUNSP && SUNSP.on ? SUNSP.face : null, planting:SCENE.veg.length, gardenWalls:SCENE.walls.length },
+      look:{ walls:matOf('wall'), roof:matOf('roof'), sky:look.sky ? look.sky.key : 'site', finish:style, night:nightNow() },
+      sun:{ day:'21 Jun', hour:+hour.toFixed(1), altitude:+sun.alt.toFixed(1), azimuth:+sun.azi.toFixed(1) },
+      camera:RENDER_MATS.cam || null,
+      ground:rGrid && mm ? { grid:rGrid.n + 'x' + rGrid.n + ' at ' + rGrid.step + ' m', low:+mm.lo.toFixed(1), high:+mm.hi.toFixed(1) } : { grid:null },
+      surroundings:showNb ? nbRender().length : 0,
+      prompt
+    };
   }
+  function renderBrief() { return JSON.stringify(renderBriefData(), null, 2); }
   function renderCSV() {
     const sun = sunNow(), mm = rMinMax();
     const rows = [['Parameter', 'Value'],
@@ -13699,7 +13689,10 @@ style === 'sketch' ? '#EFEBE0'
     RENDER_MATS = {
       wall:look.wall ? { key:look.wall.key, color:wallBase(), ca:caEntryFor(look.wall.key).keys } : null,
       roof:look.roof ? { key:look.roof.key, color:roofBase(), ca:caEntryFor(look.roof.key).keys } : null,
-      zone:caZone()
+      zone:caZone(), wallKey:look.wall ? look.wall.key : null, roofKey:look.roof ? look.roof.key : null,
+      sky:look.sky ? look.sky.key : null, finish:styleNow(), night:nightNow(),
+      sun:{ hour:+hour.toFixed(1), alt:+sun.alt.toFixed(1), azi:+sun.azi.toFixed(1) },
+      cam:{ az:+CAM.az.toFixed(1), el:+CAM.el.toFixed(1) }
     };
     pillLook.textContent = (look.wall ? matName(look.wall) : t('site finish')) + ' · ' + (look.roof ? matName(look.roof) : t('site finish'))
       + ' · ' + t('sun') + ' ' + fmt(sun.alt, 0) + '° · ' + t(styleNow())
@@ -13708,6 +13701,80 @@ style === 'sketch' ? '#EFEBE0'
     if (renderPanel) renderPanel.draw();
     benchStage(stage);
   }
+  /* ---- Spark advisor (optional, key-held): Muse Spark reads the current
+     view plus the v2 brief and answers STRICT JSON with a score and
+     parameter moves — text in, text out, the model never leaves the
+     student's key control. Nothing runs without a key. */
+  props.appendChild(el('div', { class:'gh', text:'Spark advisor' }));
+  const sparkBox = props.appendChild(el('div', { class:'controls' }));
+  const sparkKey = el('input', { type:'password' });
+  sparkKey.placeholder = t('OpenRouter key (stays in this browser)');
+  sparkKey.style.cssText = 'font:inherit;font-size:12px;width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px';
+  try { sparkKey.value = localStorage.getItem('arca-spark-key') || ''; } catch (e) {}
+  const sparkBtn = el('button', { class:'btn', text:'Ask Spark for a better look' });
+  const sparkNote = el('div', { class:'hint', text:'' });
+  const sparkAdvice = el('div', { class:'facts' });
+  const sparkApply = el('button', { class:'btn solid', text:'Apply the moves', title:'Apply the advised sun, materials and finish' });
+  sparkApply.style.display = 'none';
+  sparkBox.appendChild(sparkKey); sparkBox.appendChild(sparkBtn);
+  props.appendChild(sparkNote); props.appendChild(sparkAdvice); props.appendChild(sparkApply);
+  let sparkMoves = null;
+  sparkBtn.onclick = async () => {
+    const key = sparkKey.value.trim();
+    if (!key) { sparkNote.textContent = t('Paste an OpenRouter key first — billed to you, nothing else leaves the browser.'); return; }
+    try { localStorage.setItem('arca-spark-key', key); } catch (e) {}
+    sparkBtn.disabled = true; sparkApply.style.display = 'none'; sparkAdvice.innerHTML = '';
+    sparkNote.textContent = t('Asking Spark…');
+    refreshRender();
+    try {
+      const png = renderPanel.canvas.toDataURL('image/png');
+      const brief = renderBriefData();
+      const wallKeys = RENDER_WALLS.map(o => o.key).join('/'), roofKeys = RENDER_ROOFS.map(o => o.key).join('/');
+      const sys = 'You are a rendering art-director for a bioclimatic teaching app. The image shows its current 3D view; the JSON carries the exact model, materials, sun and camera. Reply with NOTHING but strict JSON: {"score_0_10":n,"moves":[{"op":op,"value":v}],"note":"one sentence"}. Allowed ops only: {"op":"sun_hour","value":5-22}, {"op":"wall","value":"one of ' + wallKeys + '"}, {"op":"roof","value":"one of ' + roofKeys + '"}, {"op":"style","value":"clay/photo/bw"}. At most 4 moves, each genuinely improving light or materials for this house and climate.';
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + key },
+        body:JSON.stringify({ model:'meta/muse-spark-1.3', max_tokens:500,
+          messages:[{ role:'system', content:sys },
+            { role:'user', content:[{ type:'text', text:'Model JSON: ' + JSON.stringify(brief) }, { type:'image_url', image_url:{ url:png } }] }] })
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const js = await r.json();
+      const txt = (js.choices && js.choices[0] && js.choices[0].message && js.choices[0].message.content) || '';
+      const adv = JSON.parse(String(txt).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim());
+      if (!adv || !Array.isArray(adv.moves)) throw new Error('shape');
+      sparkMoves = adv.moves.filter(m => m && typeof m.op === 'string').slice(0, 4);
+      sparkAdvice.innerHTML = '';
+      const row = (k, v) => { const d = el('div', { class:'fact' }, [el('span', { text:k })]); const b = el('b', {}); b.textContent = v; d.appendChild(b); sparkAdvice.appendChild(d); };
+      row(t('Score') + ' /10', String(adv.score_0_10 != null ? adv.score_0_10 : '–'));
+      sparkMoves.forEach(m => row(String(m.op), String(m.value)));
+      if (adv.note) sparkNote.textContent = String(adv.note);
+      else sparkNote.textContent = t('Advice ready — apply it or keep judging by eye.');
+      sparkApply.style.display = sparkMoves.length ? '' : 'none';
+    } catch (e) {
+      sparkNote.textContent = t('Spark did not answer — check the key and the connection, then retry.');
+    }
+    sparkBtn.disabled = false;
+  };
+  sparkApply.onclick = () => {
+    if (!sparkMoves) return;
+    sparkMoves.forEach(m => {
+      try {
+        if (m.op === 'sun_hour' && isFinite(+m.value)) {
+          hour = clamp(+m.value, 5, 22); hourTouched = true;
+          hourCtl.range.value = hour; hourCtl.out.textContent = fmt(hour, 1) + ' h';
+        } else if (m.op === 'wall' || m.op === 'roof') {
+          const list = m.op === 'wall' ? RENDER_WALLS : RENDER_ROOFS;
+          const o = list.find(q => q.key === String(m.value));
+          if (o) setPromptMaterial(m.op, o);
+        } else if (m.op === 'style' && ['clay', 'photo', 'bw'].indexOf(String(m.value)) >= 0) {
+          styleLock = String(m.value); styleTouched = true; syncStyleCtl();
+        }
+      } catch (e) {}
+    });
+    refreshRender();
+    toast('Applied — judge the new look by eye');
+  };
+
   KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showNb, cam:{ az:CAM.az, el:CAM.el } }; });
   host._refresh = () => { renderCam.sync(); refreshRender(); };
   const rcv = renderPanel.canvas;
@@ -14134,7 +14201,7 @@ const cadStem = () => slugify(sitePrefix() + 'architecture-advisor-pt') || 'arch
 /** DXF, AutoCAD R12 flavour: one 3DFACE per triangle or quad, on layers. */
 function toDXF(els) {
   const layers = { 'AA-WALLS':8, 'AA-GLAZING':5, 'AA-ROOF':1, 'AA-FLOOR':9, 'AA-SHADING':30, 'AA-SUNSPACE':4, 'AA-SOLAR':150,
-    'AA-SITE-WALLS':6, 'AA-PLANTING':3, 'AA-NORTH':7 };
+    'AA-SITE-WALLS':6, 'AA-PLANTING':3, 'AA-TERRAIN':2, 'AA-NORTH':7 };
   const o = ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '6', '0', 'ENDSEC',
     '0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', String(Object.keys(layers).length)];
   Object.keys(layers).forEach(n => o.push('0', 'LAYER', '2', n, '70', '0', '62', String(layers[n]), '6', 'CONTINUOUS'));
@@ -14152,16 +14219,51 @@ function toDXF(els) {
   return o.join('\r\n') + '\r\n';
 }
 
-/** Wavefront OBJ: one object per element, grouped by layer, n-gon faces. */
-function toOBJ(els) {
+/** The material library the exporters share: the Render tab's dressed
+    finishes where it dressed them, site finishes elsewhere. */
+const hexRgb = h => { const s = String(h || '').replace('#', ''); const v = [0, 2, 4].map(i => parseInt(s.slice(i, i + 2), 16)); return v.map(x => isFinite(x) ? +(x / 255).toFixed(3) : 0.8); };
+const MAT_BY_LAYER = { 'AA-WALLS':'AA_Wall', 'AA-ROOF':'AA_Roof', 'AA-GLAZING':'AA_Glass', 'AA-GELOSIA':'AA_Glass', 'AA-SOLAR':'AA_Solar', 'AA-TERRAIN':'AA_Terrain', 'AA-PLANTING':'AA_Leaf', 'AA-FLOOR':'AA_Slab', 'AA-SHADING':'AA_Shade', 'AA-SUNSPACE':'AA_Glass', 'AA-SITE-WALLS':'AA_Wall', 'AA-BALCONY':'AA_Slab', 'AA-NORTH':'AA_Default' };
+function exportMats() {
+  const W = RENDER_MATS.wall, R = RENDER_MATS.roof;
+  const wf = (typeof finishOf === 'function' && MASS) ? finishOf(MASS.col) : null;
+  const rf = (typeof finishOf === 'function' && ROOF) ? finishOf(ROOF.col) : null;
+  const desc = (m, fb) => m ? (m.key + (m.ca && m.ca.length ? ' (' + m.ca.join('/') + ')' : '')) : fb;
+  return [
+    { name:'AA_Wall', color:hexRgb(W ? W.color : wf ? wf.hex : '#D9D2C2'), desc:'walls — ' + desc(W, 'site finish') },
+    { name:'AA_Roof', color:hexRgb(R ? R.color : rf ? rf.hex : '#8F7A68'), desc:'roof — ' + desc(R, 'site finish') },
+    { name:'AA_Glass', color:[0.74, 0.84, 0.91], trans:0.45, desc:'glazing + sunspace' },
+    { name:'AA_Solar', color:[0.12, 0.23, 0.54], desc:'PV + thermal collectors' },
+    { name:'AA_Terrain', color:[0.79, 0.71, 0.55], desc:'Copernicus DEM grid' },
+    { name:'AA_Leaf', color:[0.29, 0.42, 0.23], desc:'crowns' },
+    { name:'AA_Trunk', color:[0.42, 0.29, 0.23], desc:'trunks' },
+    { name:'AA_Slab', color:[0.78, 0.78, 0.78], desc:'floors + balcony slabs' },
+    { name:'AA_Shade', color:[0.6, 0.58, 0.54], desc:'overhangs, fins, devices' },
+    { name:'AA_Default', color:[0.8, 0.8, 0.8], desc:'all other elements' }
+  ];
+}
+/** Wavefront OBJ: one object per element, grouped by layer, n-gon faces,
+    each under its material from the shared library. */
+function toOBJ(els, mtlName) {
   const o = ['# ' + APP.name + ' ' + APP.version + ' — ' + (STATE.site.place || STATE.site.nuts),
     '# metres, Z up, Y north; plan turned as set on Site'];
-  let base = 1;
+  if (mtlName) o.push('mtllib ' + mtlName);
+  let base = 1, cur = '';
   els.forEach(e => {
+    const m = e.mat || MAT_BY_LAYER[e.layer] || 'AA_Default';
+    if (m !== cur) { cur = m; o.push('usemtl ' + m); }
     o.push('o ' + e.name.replace(/\s+/g, '_'), 'g ' + e.layer);
     const idx = [];
     e.faces.forEach(poly => { idx.push(poly.map((p, k) => base + k)); poly.forEach(p => o.push('v ' + cadNum(p[0]) + ' ' + cadNum(p[1]) + ' ' + cadNum(p[2]))); base += poly.length; });
     idx.forEach(f => o.push('f ' + f.join(' ')));
+  });
+  return o.join('\n') + '\n';
+}
+/** The companion material library for the OBJ above. */
+function toMTL() {
+  const o = ['# ' + APP.name + ' material library'];
+  exportMats().forEach(m => {
+    o.push('newmtl ' + m.name, '# ' + m.desc, 'Kd ' + m.color.join(' '));
+    if (m.trans) o.push('d ' + +(1 - m.trans).toFixed(3));
   });
   return o.join('\n') + '\n';
 }
@@ -14196,7 +14298,7 @@ function toIFC(els) {
   e('IFCRELAGGREGATES(' + guid() + ',$,$,$,' + project + ',(' + site + '))');
   e('IFCRELAGGREGATES(' + guid() + ',$,$,$,' + site + ',(' + bld + '))');
   e('IFCRELAGGREGATES(' + guid() + ',$,$,$,' + bld + ',(' + storey + '))');
-  const inStorey = [], onSite = [];
+  const inStorey = [], onSite = [], matAssoc = [];
   els.forEach(x => {
     if (x.kind === 'north') return;   // IFC carries north in its context
     const pts = [], tris = [];
@@ -14219,9 +14321,13 @@ function toIFC(els) {
       : x.kind === 'solar' ? e('IFCSOLARDEVICE(' + head + '$,' + pl2 + ',' + shape + ',$,.' + x.solarType + '.)')
       : e('IFCBUILDINGELEMENTPROXY(' + head + "'Sunspace'," + pl2 + ',' + shape + ',$,.USERDEFINED.)');
     (onSiteKind ? onSite : inStorey).push(ent);
+    matAssoc.push([x.mat || MAT_BY_LAYER[x.layer] || 'AA_Default', ent]);
   });
   if (inStorey.length) e('IFCRELCONTAINEDINSPATIALSTRUCTURE(' + guid() + ',$,$,$,(' + inStorey.join(',') + '),' + storey + ')');
   if (onSite.length) e('IFCRELCONTAINEDINSPATIALSTRUCTURE(' + guid() + ',$,$,$,(' + onSite.join(',') + '),' + site + ')');
+  const matIds = {};
+  exportMats().forEach(m => { matIds[m.name] = e('IFCMATERIAL(' + guid() + ',$,' + str(m.name) + ',' + str(m.desc) + ')'); });
+  matAssoc.forEach(([m, ent]) => { if (matIds[m]) e('IFCRELASSOCIATESMATERIAL(' + guid() + ',$,$,$,(' + ent + '),' + matIds[m] + ')'); });
   const stamp = new Date().toISOString().slice(0, 19);
   return ['ISO-10303-21;', 'HEADER;', "FILE_DESCRIPTION(('ViewDefinition [ReferenceView]'),'2;1');",
     'FILE_NAME(' + str(cadStem() + '.ifc') + ",'" + stamp + "',(''),(''),'','" + APP.name + ' ' + APP.version + "','');",
@@ -14251,7 +14357,9 @@ function toDecisionsJSON() {
         parapet:ROOF.par && ROOF.par.on ? { height:+ROOF.par.h.toFixed(2) } : null,         beirado:ROOF.bei && ROOF.bei.on ? { projection:+ROOF.bei.d.toFixed(2), gables:ROOF.bei.ends !== false } : null,
         chimney:ROOF.chim && ROOF.chim.on ? { family:ROOF.chim.fam, x:+ROOF.chim.x.toFixed(2), y:+ROOF.chim.y.toFixed(2), heightAboveRoof:isFinite(+ROOF.chim.h) ? +ROOF.chim.h : null, widthEW:+chimFoot(ROOF.chim).x.toFixed(2), widthSN:+chimFoot(ROOF.chim).y.toFixed(2), sidePitch:isFinite(+ROOF.chim.taper) ? +ROOF.chim.taper : null } : null, roofColour:colourOf(rfin),
         solar:solStudy(ROOF.sol)},
-      openings:OPEN, sunspace:SUNSP, roofWindows:RWIN, render:{ prompt:RENDER_PROMPT },
+      openings:OPEN, sunspace:SUNSP, roofWindows:RWIN,
+      render:{ prompt:RENDER_PROMPT,
+        materials:RENDER_MATS.wall || RENDER_MATS.roof ? { walls:RENDER_MATS.wall, roof:RENDER_MATS.roof, zone:RENDER_MATS.zone } : null },
       planting:SCENE.veg.map(v => { const q = SCENE.plant ? SCENE.plant(v) : null;
         return { species:q ? q.name : v.type, sci:q ? q.sci : null, x:v.x, y:v.y, height:v.height, trunk:v.trunk, canopy:v.canopy, density:v.density }; }),
       detachedWalls:SCENE.walls
@@ -14260,13 +14368,165 @@ function toDecisionsJSON() {
   }, null, 2);
 }
 
+/* The Blender bundle: one .py script carrying the exact OBJ, the wall and
+   roof photographs, the material table, the sun, the sky and a camera.
+   Blender 3-4, run the script, press F12: Cycles path-traces the student's
+   own model - the photorealism answer that stays offline and free. */
+const jsPyStr = s => "r'''" + String(s).replace(/'''/g, "\\'\\'\\'") + "'''";
+function blenderBundle() {
+  const els = exportModel(), stem = cadStem();
+  const obj = toOBJ(els);
+  const mats = exportMats();
+  const photos = {};
+  [['AA_Wall', RENDER_MATS.wall], ['AA_Roof', RENDER_MATS.roof]].forEach(([m, w]) => {
+    const k = w && w.ca && w.ca[0];
+    if (k && CA_MATS && CA_MATS.photos[k]) photos[m] = CA_MATS.photos[k].split(',')[1] || CA_MATS.photos[k];
+  });
+  const S = STATE.site;
+  const sun = (RENDER_MATS.sun && isFinite(RENDER_MATS.sun.alt)) ? RENDER_MATS.sun
+    : (() => { try { const sp = sunPos(172, 15, S.lat, S.lon, S.lon / 15); return { hour:15, alt:sp.alt, azi:sp.azi }; } catch (e) { return { hour:15, alt:45, azi:180 }; } })();
+  const PY = [
+    "# AA Blender bundle - open Blender 3 or 4, run this script, press F12.",
+    "# Exact model, sun, sky, camera and photo materials arrive set up.",
+    "import bpy, base64, os, tempfile, math",
+    "OBJ = " + jsPyStr(obj),
+    "PHOTOS = " + jsPyStr(JSON.stringify(photos)),
+    "MATS = " + jsPyStr(JSON.stringify(mats)),
+    "SUN = " + jsPyStr(JSON.stringify(sun)),
+    "SIZE = " + jsPyStr(JSON.stringify({ L:MASS.L, D:MASS.D, H:+(MASS.fl * MASS.fh).toFixed(2) })),
+    "def main():",
+    "    import mathutils, json",
+    "    mats = {m['name']: m for m in json.loads(MATS)}",
+    "    photos = json.loads(PHOTOS)",
+    "    sun = json.loads(SUN)",
+    "    size = json.loads(SIZE)",
+    "    tmp = tempfile.mkdtemp(prefix='arca_')",
+    "    obj_path = os.path.join(tmp, 'model.obj')",
+    "    open(obj_path, 'w', encoding='utf-8').write(OBJ)",
+    "    before = set(bpy.data.objects)",
+    "    bpy.ops.object.select_all(action='SELECT')",
+    "    bpy.ops.object.delete(use_global=False)",
+    "    try:",
+    "        bpy.ops.wm.obj_import(filepath=obj_path)",
+    "    except Exception:",
+    "        bpy.ops.import_scene.obj(filepath=obj_path)",
+    "    new_obs = [o for o in bpy.data.objects if o not in before and o.type == 'MESH']",
+    "    matimg = {}",
+    "    for mname, b64 in photos.items():",
+    "        try:",
+    "            p = os.path.join(tmp, mname + '.jpg')",
+    "            open(p, 'wb').write(base64.b64decode(b64))",
+    "            matimg[mname] = bpy.data.images.load(p).name",
+    "        except Exception:",
+    "            pass",
+    "    def get_mat(mname, photo_of):",
+    "        mat = bpy.data.materials.new(mname)",
+    "        mat.use_nodes = True",
+    "        bsdf = mat.node_tree.nodes.get('Principled BSDF')",
+    "        col = mats.get(mname, {}).get('color', [0.8, 0.8, 0.8])",
+    "        if photo_of and photo_of in matimg:",
+    "            tex = mat.node_tree.nodes.new('ShaderNodeTexImage')",
+    "            tex.image = bpy.data.images[matimg[photo_of]]",
+    "            try: mat.node_tree.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])",
+    "            except Exception: pass",
+    "        else:",
+    "            try: bsdf.inputs['Base Color'].default_value = (col[0], col[1], col[2], 1.0)",
+    "            except Exception: pass",
+    "        try: bsdf.inputs['Roughness'].default_value = 0.8",
+    "        except Exception: pass",
+    "        return mat",
+    "    wallm = get_mat('AA_Wall', 'AA_Wall' if 'AA_Wall' in matimg else None)",
+    "    roofm = get_mat('AA_Roof', 'AA_Roof' if 'AA_Roof' in matimg else None)",
+    "    def mat_for(ob):",
+    "        n = ob.name.lower()",
+    "        if 'trunk' in n: return 'AA_Trunk'",
+    "        if 'crown' in n or 'plant' in n: return 'AA_Leaf'",
+    "        if 'window' in n or 'sunspace' in n or 'glass' in n: return 'AA_Glass'",
+    "        if 'roof' in n: return 'AA_Roof'",
+    "        if 'terrain' in n: return 'AA_Terrain'",
+    "        if 'solar' in n or 'collector' in n or ' pv' in n or n.startswith('pv'): return 'AA_Solar'",
+    "        if 'slab' in n or 'floor' in n or 'balcony' in n or 'parapet' in n: return 'AA_Slab'",
+    "        if 'shading' in n or 'overhang' in n or 'fin' in n or 'louvre' in n or 'device' in n: return 'AA_Shade'",
+    "        if 'wall' in n or 'chimney' in n: return 'AA_Wall'",
+    "        return 'AA_Default'",
+    "    lib = {'AA_Wall': wallm, 'AA_Roof': roofm}",
+    "    for ob in new_obs:",
+    "        mn = mat_for(ob)",
+    "        if mn not in lib: lib[mn] = get_mat(mn, mn if mn in matimg else None)",
+    "        try:",
+    "            ob.data.materials.clear()",
+    "            ob.data.materials.append(lib[mn])",
+    "        except Exception: pass",
+    "    alt = math.radians(sun.get('alt', 45)); azi = math.radians(sun.get('azi', 180))",
+    "    d = mathutils.Vector((math.sin(azi) * math.cos(alt), math.cos(azi) * math.cos(alt), math.sin(alt)))",
+    "    sun_data = bpy.data.lights.new('Arca Sun', 'SUN')",
+    "    try: sun_data.energy = 5.0",
+    "    except Exception: pass",
+    "    try: sun_data.angle = math.radians(2.0)",
+    "    except Exception: pass",
+    "    sun_ob = bpy.data.objects.new('Arca Sun', sun_data)",
+    "    bpy.context.collection.objects.link(sun_ob)",
+    "    sun_ob.rotation_euler = (-d).to_track_quat('-Z', 'Y').to_euler()",
+    "    world = bpy.context.scene.world",
+    "    if not world:",
+    "        world = bpy.data.worlds.new('Arca World')",
+    "        bpy.context.scene.world = world",
+    "    world.use_nodes = True",
+    "    bg = world.node_tree.nodes.get('Background')",
+    "    if not bg: bg = world.node_tree.nodes.new('ShaderNodeBackground')",
+    "    a = sun.get('alt', 45)",
+    "    sky = (0.45, 0.62, 0.85, 1) if a > 30 else (0.85, 0.72, 0.6, 1) if a > 5 else ((0.2, 0.22, 0.35, 1) if a > -2 else (0.03, 0.04, 0.08, 1))",
+    "    try: bg.inputs['Color'].default_value = sky",
+    "    except Exception: pass",
+    "    try: bg.inputs['Strength'].default_value = 1.0 if a > 0 else 0.4",
+    "    except Exception: pass",
+    "    dist = 2.4 * max(size['L'], size['D'], size['H'] * 2)",
+    "    tgt = (0, 0, size['H'] * 0.4)",
+    "    pos = (tgt[0] - dist * 0.7, tgt[1] - dist * 0.7, tgt[2] + dist * 0.55)",
+    "    cam_data = bpy.data.cameras.new('Arca Camera')",
+    "    try: cam_data.lens = 35",
+    "    except Exception: pass",
+    "    cam_ob = bpy.data.objects.new('Arca Camera', cam_data)",
+    "    bpy.context.collection.objects.link(cam_ob)",
+    "    cam_ob.location = pos",
+    "    cam_ob.rotation_euler = (mathutils.Vector((tgt[0] - pos[0], tgt[1] - pos[1], tgt[2] - pos[2]))).to_track_quat('-Z', 'Y').to_euler()",
+    "    try: bpy.context.scene.camera = cam_ob",
+    "    except Exception: pass",
+    "    sc = bpy.context.scene",
+    "    try: sc.render.engine = 'CYCLES'",
+    "    except Exception: pass",
+    "    try: sc.cycles.samples = 128",
+    "    except Exception: pass",
+    "    try: sc.cycles.device = 'CPU'",
+    "    except Exception: pass",
+    "    sc.render.resolution_x = 1920",
+    "    sc.render.resolution_y = 1080",
+    "    sc.render.resolution_percentage = 100",
+    "    try: sc.render.filepath = os.path.join(os.path.expanduser('~'), 'arca-render.png')",
+    "    except Exception: pass",
+    "    print('ARCA BUNDLE READY - press F12 to path-trace')",
+    "main()"
+  ];
+  return PY.join('\n') + '\n';
+}
+
 function cadDownload(kind) {
   if (!STATE.site || !MASS) return;
   const els = exportModel(), stem = cadStem();
+  if (kind === 'blendpy') {
+    download(new Blob([blenderBundle()], { type:'text/x-python;charset=utf-8' }), stem + '-blender.py');
+    toast(t('Exported') + ' ' + stem + '-blender.py');
+    return;
+  }
+  if (kind === 'obj') {
+    download(new Blob([toOBJ(els, stem + '.mtl')], { type:'text/plain;charset=utf-8' }), stem + '.obj');
+    download(new Blob([toMTL()], { type:'text/plain;charset=utf-8' }), stem + '.mtl');
+    toast(t('Exported') + ' ' + stem + '.obj + .mtl');
+    return;
+  }
   const pack = {
     ifc:() => [toIFC(els), 'application/x-step', '.ifc'],
     dxf:() => [toDXF(els), 'application/dxf', '.dxf'],
-    obj:() => [toOBJ(els), 'text/plain', '.obj'],
     json:() => [toDecisionsJSON(), 'application/json', '-decisions.json']
   }[kind]();
   download(new Blob([pack[0]], { type:pack[1] + ';charset=utf-8' }), stem + pack[2]);
@@ -14282,10 +14542,11 @@ function toggleCadMenu(ev) {
   if (sv) sv.remove();
   const m = el('div', { class:'cadmenu', id:'cadMenu' });
   m.appendChild(el('h5', { text:'Take the model into CAD' }));
-  [['IFC', 'ifc', 'Revit, ArchiCAD — open the file directly; walls, windows, roof, shading and trees arrive as typed elements'],
+  [['IFC', 'ifc', 'Revit, ArchiCAD — open the file directly; walls, windows, roof, shading, trees and terrain arrive as typed elements with materials'],
    ['DXF', 'dxf', 'SketchUp Pro, Rhino, Revit (Import CAD), ArchiCAD (Merge) — 3D faces on AA- layers'],
-   ['OBJ', 'obj', 'Rhino, then Grasshopper — one object per element, grouped by layer'],
-   ['JSON', 'json', 'Every decision and every score — the record for the studio, or parameters for Grasshopper']]
+   ['OBJ', 'obj', 'Rhino, then Grasshopper — one object per element, grouped by layer, with a material library'],
+   ['JSON', 'json', 'Every decision and every score — the record for the studio, or parameters for Grasshopper'],
+   ['Blender', 'blendpy', 'Blender 3–4 — a ready script: exact model, sun, sky, camera and photo materials; run it, press F12']] 
     .forEach(([lab, k, note]) => m.appendChild(el('div', { class:'row' }, [
       el('button', { class:'btn solid', type:'button', text:lab, onclick:() => cadDownload(k) }), el('span', { text:note })])));
   m.appendChild(el('p', { text:'Metres, Z up, Y north, the plan turned as set on Site. Massing surfaces — walls, window cuts, roof, overhangs, fins, sunspace, detached walls and planting — not wall assemblies. Planting and walls come from Ventilation.' }));
@@ -16570,6 +16831,16 @@ Object.assign(PT, {
   "whitewashed walls, clay tile roof, afternoon sun, photorealistic": "paredes de cal, telhado de telha, sol da tarde, fotorrealista",
   "Ground in view: low {} m, high +{} m (240 m grid).": "Terreno à vista: baixo {} m, alto +{} m (malha de 240 m).",
   "Surrounding buildings": "Edifícios vizinhos",
+  "Spark advisor": "Consultor Spark",
+  "OpenRouter key (stays in this browser)": "Chave OpenRouter (fica neste navegador)",
+  "Ask Spark for a better look": "Pedir melhor aspeto ao Spark",
+  "Apply the moves": "Aplicar as mudanças",
+  "Paste an OpenRouter key first — billed to you, nothing else leaves the browser.": "Cole primeiro uma chave OpenRouter — faturada a si, mais nada sai do navegador.",
+  "Asking Spark…": "A perguntar ao Spark…",
+  "Advice ready — apply it or keep judging by eye.": "Conselho pronto — aplique ou continue a julgar a olho.",
+  "Spark did not answer — check the key and the connection, then retry.": "O Spark não respondeu — verifique a chave e a ligação e tente de novo.",
+  "Score": "Nota",
+  "Applied — judge the new look by eye": "Aplicado — julgue o novo aspeto a olho",
   "Popular here": "Popular aqui",
   "Wall finishes": "Acabamentos de parede",
   "Roof finishes": "Acabamentos de cobertura",
