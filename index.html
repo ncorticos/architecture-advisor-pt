@@ -13050,10 +13050,11 @@ function buildRender(host) {
         fill:night ? '#FFD27A' : style === 'clay' ? '#C9CFD2' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : '#BCD6E8',
         glass:true, d:g.q.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / 4 }));
     });
-    /* entrance doors: where Openings sets a door unit, else the main facade —
-       a recess, a leaf with grooves and a handle, a stone step */
+    /* entrance doors: only where Openings sets a door unit — never invented.
+       No door units, no doors: an all-window house is a legitimate state,
+       and a missing entrance is worth noticing. */
     ['S', 'N', 'E', 'W'].forEach(f => {
-      const has = f === 'S' || (OPEN[f] && OPEN[f].units && OPEN[f].units.some(u => u.on && u.door));
+      const has = OPEN[f] && OPEN[f].units && OPEN[f].units.some(u => u.on && u.door);
       if (!has) return;
       const segs = M.pl.segs.filter(sg => segFace(sg) === f && wallSeen(sg.n));
       if (!segs.length) return;
