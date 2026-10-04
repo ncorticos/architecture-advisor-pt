@@ -14546,7 +14546,7 @@ function toggleCadMenu(ev) {
    ['DXF', 'dxf', 'SketchUp Pro, Rhino, Revit (Import CAD), ArchiCAD (Merge) — 3D faces on AA- layers'],
    ['OBJ', 'obj', 'Rhino, then Grasshopper — one object per element, grouped by layer, with a material library'],
    ['JSON', 'json', 'Every decision and every score — the record for the studio, or parameters for Grasshopper'],
-   ['Blender', 'blendpy', 'Blender 3–4 — a ready script: exact model, sun, sky, camera and photo materials; run it, press F12']] 
+   ['Blender', 'blendpy', 'Blender 3–4 — a ready script: exact model, sun, sky, camera and photo materials; run it, press F12 (advanced: Blender\u2019s MCP server lets an LLM drive Blender conversationally instead — local setup with keys, blender.org/lab/mcp-server)']] 
     .forEach(([lab, k, note]) => m.appendChild(el('div', { class:'row' }, [
       el('button', { class:'btn solid', type:'button', text:lab, onclick:() => cadDownload(k) }), el('span', { text:note })])));
   m.appendChild(el('p', { text:'Metres, Z up, Y north, the plan turned as set on Site. Massing surfaces — walls, window cuts, roof, overhangs, fins, sunspace, detached walls and planting — not wall assemblies. Planting and walls come from Ventilation.' }));
