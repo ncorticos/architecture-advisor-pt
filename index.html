@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AA PT - Bioclimatic Design</title>
+<title>AA PT—Bioclimatic Design</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%23000'/%3E%3Ctext x='24' y='43' font-family='Helvetica, Arial, sans-serif' font-size='26' font-weight='700' fill='%230EA64E' text-anchor='middle'%3EA%3C/text%3E%3Ctext x='40' y='43' font-family='Helvetica, Arial, sans-serif' font-size='26' font-weight='700' fill='%23E23A3A' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E">
 <style>
 :root{
@@ -12574,6 +12574,55 @@ const renderRegionFor = nuts => {
   const r = RENDER_REGION[key];
   return { key, wall:RENDER_WALLS.find(o => o.key === r[0]), roof:RENDER_ROOFS.find(o => o.key === r[1]), note:r[2] };
 };
+/* Render finishes against the Construction Advisor's material library —
+   read over the web, never bundled: zone availability (MAT_ZONE), names
+   (MATERIALS) and photographs (MAT_PHOTO) come straight from its published
+   page, so the two applications cannot drift apart on what is stocked
+   where. Fetched once per session; without network the check stays mute. */
+let CA_MATS = null, CA_MATS_REQ = null;
+function caMaterials(done) {
+  if (CA_MATS !== null) { try { done(CA_MATS); } catch (e) {} return; }
+  if (CA_MATS_REQ) { CA_MATS_REQ.push(done); return; }
+  CA_MATS_REQ = [done];
+  const finish = d => { CA_MATS = d; const q = CA_MATS_REQ; CA_MATS_REQ = null; q.forEach(f => { try { f(d); } catch (e) {} }); };
+  const ctrl = {};
+  try { if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ctrl.signal = AbortSignal.timeout(45000); } catch (e) {}
+  fetch('https://ncorticos.github.io/construction-advisor-pt/', ctrl).then(r => { if (!r.ok) throw new Error('ca'); return r.text(); })
+    .then(html => {
+      const get = (re, i) => { const m = html.match(re); return m ? m[i] : null; };
+      const mz = get(/const MAT_ZONE = \{([\s\S]*?)\};/, 1), sz = get(/const SITE_ZONE_OF = \{([\s\S]*?)\};/, 1);
+      if (!mz || !sz) throw new Error('format');
+      const pairs = (body, quoted) => {
+        const o = {};
+        const re = quoted ? /'([^']+)'\s*:\s*'([^']+)'/g : /([A-Za-z0-9_]+)\s*:\s*\[([^\]]*)\]/g;
+        body.replace(re, (m, k, v) => {
+          o[k] = quoted ? [v] : v.replace(/'/g, '').split(',').map(s => s.trim()).filter(Boolean);
+          return '';
+        });
+        return o;
+      };
+      const names = {};
+      html.replace(/\{ key:'([a-z0-9]+)'[^}]*?name:'([^']+)'/g, (m, k, n) => { names[k] = n; return ''; });
+      const photos = {};
+      ['reboco', 'tijolom', 'pedrag', 'pedrac', 'pedrab', 'madeirad', 'madeirae', 'betao', 'icb', 'ceramico', 'pedran', 'aco'].forEach(k => {
+        const m = html.match(new RegExp('"' + k + '":\\{"img":"(data:image/[^"]+)"'));
+        if (m) photos[k] = m[1];
+      });
+      if (!Object.keys(photos).length) throw new Error('photos');
+      finish({ zones:pairs(mz, false), siteZones:pairs(sz, true), names, photos });
+    })
+    .catch(() => finish(null));
+}
+/* This tab's finishes against that library: fixed keys, one key per zone
+   for stone and timber, and the honest gaps — limewash, glass, thatch, a
+   green or white roof capping are not stocked materials there. */
+const RENDER_CA = {
+  whitewash:null, plaster:['reboco'], brick:['tijolom'],
+  stone:{ Norte:['pedrag'], Centro:['pedrag'], Sul:['pedrac'], Madeira:['pedrab'], Açores:['pedrab'] },
+  timber:{ Norte:['madeirad'], Centro:['madeirad'], Sul:[], Madeira:[], Açores:['madeirae'] },
+  concrete:['betao'], cork:['icb'], glass:'industrial',
+  tile:['ceramico'], slate:['pedran'], metal:['aco'], thatch:null, green:null, white:'finish'
+};
 /* ------------------------------------------------------------- 7. RENDER --
    The model in its terrain, rendered from a prompt. The student describes
    the finish they want — materials, light, finish — and the tab assesses
@@ -12819,27 +12868,107 @@ function buildRender(host) {
     prompt = ta.value; RENDER_PROMPT = prompt; promptTouched = true;
     applyPrompt(true); refreshRender();
   }
+  /* Finish presets, render-house style: photographic thumbnails, not colour
+     squares — the Construction Advisor's own material photographs where it
+     stocks the finish, a procedural thumbnail otherwise. The dot tells the
+     local story: green stocked here, amber to verify, grey unchecked. */
+  const caZone = () => (CA_MATS && CA_MATS.siteZones[S.nuts] ? CA_MATS.siteZones[S.nuts][0] : null);
+  const caEntryFor = rkey => {
+    const m = RENDER_CA[rkey];
+    if (m === null || m === undefined) return { kind:'absent', keys:[] };
+    if (typeof m === 'string') return { kind:m, keys:[] };
+    if (Array.isArray(m)) return { kind:'fixed', keys:m };
+    const z = caZone();
+    return { kind:'zoned', keys:(z && m[z]) || [] };
+  };
+  const caAvailable = e => {
+    if (!CA_MATS || e.kind === 'absent') return null;
+    if (e.kind === 'industrial' || e.kind === 'finish') return true;
+    const z = caZone();
+    return z ? e.keys.some(k => (CA_MATS.zones[k] || []).indexOf(z) >= 0 || (CA_MATS.zones[k] || []).indexOf('Nationwide') >= 0) : null;
+  };
+  const caPhotoFor = rkey => {
+    if (!CA_MATS) return null;
+    const k = caEntryFor(rkey).keys[0];
+    return (k && CA_MATS.photos[k]) || null;
+  };
+  const caNameFor = rkey => {
+    if (!CA_MATS) return null;
+    const k = caEntryFor(rkey).keys[0];
+    return (k && CA_MATS.names[k]) || null;
+  };
+  function matThumb(cv, key, base) {
+    const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height;
+    let s = 7;
+    const R = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    g.fillStyle = base; g.fillRect(0, 0, W2, H2);
+    if (key === 'glass') {
+      const gr = g.createLinearGradient(0, 0, W2, H2);
+      gr.addColorStop(0, '#cfe0ee'); gr.addColorStop(0.5, '#9fc4de'); gr.addColorStop(1, '#d7e7f2');
+      g.fillStyle = gr; g.fillRect(0, 0, W2, H2);
+      g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(W2 * 0.12, H2); g.lineTo(W2 * 0.55, 0); g.stroke();
+    } else if (key === 'thatch') {
+      g.strokeStyle = 'rgba(70,50,20,.4)'; g.lineWidth = 1;
+      for (let i = 0; i < 46; i++) { const x = R() * W2; g.beginPath(); g.moveTo(x, R() * H2); g.lineTo(x + (R() - 0.5) * 5, R() * H2); g.stroke(); }
+    } else if (key === 'green') {
+      g.fillStyle = 'rgba(30,70,30,.3)';
+      for (let i = 0; i < 70; i++) { g.beginPath(); g.arc(R() * W2, R() * H2, 1 + R() * 2, 0, 6.284); g.fill(); }
+    } else {
+      g.fillStyle = 'rgba(20,23,26,.07)';
+      for (let i = 0; i < 46; i++) { g.beginPath(); g.arc(R() * W2, R() * H2, 0.8 + R() * 1.2, 0, 6.284); g.fill(); }
+    }
+  }
   function presetGroup(label, list, cat) {
     rail.appendChild(el('div', { class:'gh', text:label }));
     const box = rail.appendChild(el('div', { class:'controls' }));
     box.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px';
     const regKey = (cat === 'wall' ? reg0.wall : reg0.roof).key;
     list.forEach(o => {
-      const b = el('button', { class:'btn small', title:o.key === regKey ? t('Popular here') : o.key });
-      const sw = el('span', {});
-      sw.style.cssText = 'display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px;border:1px solid rgba(20,23,26,.35);background:' + o.c;
-      b.appendChild(sw);
-      b.appendChild(document.createTextNode((o.key === regKey ? '★ ' : '') + matName(o)));
+      const b = el('button', { class:'btn small preset', title:o.key === regKey ? t('Popular here') : o.key });
+      b.style.cssText = 'display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:5px';
+      const frame = el('span', {});
+      frame.style.cssText = 'display:block;width:100%;height:30px;border-radius:4px;overflow:hidden;border:1px solid rgba(20,23,26,.2);background:' + o.c;
+      const dot = el('span', {});
+      dot.style.cssText = 'display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:0;background:#a8afb5';
+      const lab = el('span', {});
+      lab.style.cssText = 'font-size:11px;line-height:1.25';
+      lab.appendChild(dot);
+      lab.appendChild(document.createTextNode((o.key === regKey ? '★ ' : '') + matName(o)));
+      b.appendChild(frame); b.appendChild(lab);
       b.onclick = () => setPromptMaterial(cat, o);
       box.appendChild(b);
-      presetSyncs.push({ b, cat, key:o.key });
+      presetSyncs.push({ b, cat, key:o.key, frame, dot });
     });
   }
   presetGroup('Wall finishes', RENDER_WALLS, 'wall');
   presetGroup('Roof finishes', RENDER_ROOFS, 'roof');
   function syncPresets() {
     const wk = look.wall ? look.wall.key : null, rk = look.roof ? look.roof.key : null;
-    presetSyncs.forEach(s => s.b.classList.toggle('solid', (s.cat === 'wall' ? wk : rk) === s.key));
+    presetSyncs.forEach(s => {
+      s.b.classList.toggle('solid', (s.cat === 'wall' ? wk : rk) === s.key);
+      const photo = caPhotoFor(s.key);
+      if (photo && !s.frame.dataset.ph) {
+        s.frame.dataset.ph = s.key;
+        s.frame.innerHTML = '';
+        const im = el('img', { src:photo, alt:s.key });
+        im.style.cssText = 'display:block;width:100%;height:30px;object-fit:cover';
+        s.frame.appendChild(im);
+      } else if (!photo && !s.frame.dataset.pv) {
+        s.frame.dataset.pv = s.key;
+        const cv = document.createElement('canvas');
+        cv.width = 68; cv.height = 44;
+        cv.style.cssText = 'display:block;width:100%;height:30px';
+        s.frame.appendChild(cv);
+        try {
+          matThumb(cv, s.key, (s.cat === 'wall' ? RENDER_WALLS : RENDER_ROOFS).find(o => o.key === s.key).c);
+        } catch (e) {}
+      }
+      const e = caEntryFor(s.key), av = caAvailable(e);
+      s.dot.style.background = av === true ? '#16A34A' : av === false ? '#D97706' : '#a8afb5';
+      s.b.title = av === true ? t('Stocked here') + (e.keys[0] ? ' — ' + e.keys[0] : '')
+        : av === false ? t('Not stocked here — verify supply') : t('Availability unchecked');
+    });
   }
   rail.appendChild(el('div', { class:'gh', text:'Sun' }));
   const sunBox = rail.appendChild(el('div', { class:'controls' }));
@@ -13356,6 +13485,16 @@ function buildRender(host) {
     L.push('look: walls ' + (look.wall ? look.wall.key : 'site finish') + ', roof ' + (look.roof ? look.roof.key : 'site finish')
       + ', 21 Jun ' + fmt(hour, 1) + ' h solar (alt ' + fmt(sun.alt, 0) + '°, azi ' + fmt(sun.azi, 0) + '°), sky ' + (look.sky ? look.sky.key : 'site') + ', finish ' + style + (nightNow() ? ', night' : ''));
     L.push('prompt: ' + prompt);
+    {
+      const z = caZone();
+      const av = o => {
+        if (!o || !CA_MATS) return 'unchecked';
+        const e = caEntryFor(o.key), a = caAvailable(e);
+        if (e.kind === 'absent') return 'not in library — verify locally';
+        return a === true ? 'stocked here (' + (e.keys.join('/') || e.kind) + ')' : a === false ? 'scarce here — verify supply' : 'unchecked';
+      };
+      L.push('availability (Construction Advisor, web' + (z ? ', zone ' + z : '') + '): walls ' + av(look.wall) + ' · roof ' + av(look.roof));
+    }
     if (showNb) L.push('surroundings: ' + nbRender().length + ' neighbour prisms as transparent tip (OpenStreetMap)');
     if (look.unknown.length) L.push('unparsed: ' + look.unknown.join(', '));
     L.push('camera: azimuth ' + fmt(CAM.az, 0) + '°, elevation ' + fmt(CAM.el, 0) + '°');
@@ -13367,6 +13506,8 @@ function buildRender(host) {
       ['Prompt', prompt],
       ['Wall material', look.wall ? look.wall.key : 'site finish (' + (MASS.col || 'none') + ')'],
       ['Roof material', look.roof ? look.roof.key : 'site finish (' + (ROOF.col || 'none') + ')'],
+      ['Wall availability (Construction Advisor, web)', look.wall ? (caAvailable(caEntryFor(look.wall.key)) !== false ? 'stocked/available' : 'scarce — verify supply') : ''],
+      ['Roof availability (Construction Advisor, web)', look.roof ? (caAvailable(caEntryFor(look.roof.key)) !== false ? 'stocked/available' : 'scarce — verify supply') : ''],
       ['Solar hour', +hour.toFixed(1)], ['Sun altitude (°)', +sun.alt.toFixed(1)], ['Sun azimuth (°)', +sun.azi.toFixed(1)],
       ['Sky', look.sky ? look.sky.key : 'site'], ['Finish', styleNow()], ['Night', nightNow() ? 'yes' : 'no'],
       ['Terrain grid', rGrid ? rGrid.n + '×' + rGrid.n + ' at ' + rGrid.step + ' m' : 'none'],
@@ -13392,6 +13533,28 @@ function buildRender(host) {
     chip(t('Solar hour') + ': ' + fmt(hour, 1) + ' h', !!(look.time || hourTouched));
     chip(t('Finish') + ': ' + t(styleNow()), !!(look.style || styleLock !== 'auto'));
     if (look.unknown.length) chip(t('Not painted') + ': ' + look.unknown.join(', '), false);
+    /* local availability, read live from the Construction Advisor: green
+       is stocked in this zone, amber travels or is absent — verify it */
+    const availNote = o => {
+      if (!o) return null;
+      const e = caEntryFor(o.key), av = caAvailable(e);
+      if (!CA_MATS) return { txt:t('Availability unchecked — offline or still loading'), ok:null };
+      if (e.kind === 'absent') {
+        const z = caZone();
+        return { txt:t('Not in the Construction Advisor library — verify locally') + (z ? ' (' + z + ')' : ''), ok:null };
+      }
+      if (av === true) return { txt:(e.keys[0] ? t('Stocked here') + ' (' + e.keys[0] + (CA_MATS.names[e.keys[0]] ? ' — ' + CA_MATS.names[e.keys[0]] : '') + ')' : t('Available here')), ok:true };
+      if (av === false) {
+        const z = caZone(), have = e.keys.map(k => k + ' ' + (CA_MATS.zones[k] || []).join('/')).join(', ');
+        return { txt:t('Scarce here') + (z ? ' (' + z + ')' : '') + (have ? ' — ' + t('rooted in') + ' ' + have : '') + '. ' + t('Confirm with local suppliers'), ok:false };
+      }
+      return null;
+    };
+    [look.wall, look.roof].forEach(o => {
+      const n = availNote(o);
+      if (n) chip(n.txt, n.ok === true);
+    });
+    syncPresets();
     lookSlot.innerHTML = '';
     const rows = [[t('Wall material'), look.wall ? matName(look.wall) : t('site finish') + ' (' + (MASS.col || '—') + ')'],
       [t('Roof material'), look.roof ? matName(look.roof) : t('site finish') + ' (' + (ROOF.col || '—') + ')'],
@@ -13465,6 +13628,9 @@ function buildRender(host) {
   refreshReading();
   refreshRender();
   if (!rGrid) fetchRenderTerrain();
+  /* material availability, web-only: the Construction Advisor's library,
+     fetched once per session — the thumbs and dots fill in on arrival */
+  caMaterials(() => refreshRender());
 }
 /* Name a parsed material in the interface language for the reading line. */
 const RENDER_PTNAME = { whitewash:'cal', plaster:'reboco', brick:'tijolo', stone:'pedra', timber:'madeira', concrete:'betão', cork:'cortiça', glass:'vidro',
@@ -15496,7 +15662,7 @@ window.addEventListener('resize', () => {
 
 const subtitleFor = () => LANG === 'pt' ? 'Desenho Bioclimático' : 'Bioclimatic Design';
 /** The browser tab, construction-advisor style: AAPT — place. */
-function siteTitle() { return APP.tag + ' - ' + (STATE.site ? (STATE.site.place || STATE.site.nuts) : subtitleFor()); }
+function siteTitle() { return APP.tag + '—' + (STATE.site ? (STATE.site.place || STATE.site.nuts) : subtitleFor()); }
 
 $('#btnReload').addEventListener('click', () => {
   $('#app').hidden = true;
@@ -16263,6 +16429,18 @@ Object.assign(PT, {
   "whitewashed walls, clay tile roof, afternoon sun, photorealistic": "paredes de cal, telhado de telha, sol da tarde, fotorrealista",
   "Ground in view: low {} m, high +{} m (240 m grid).": "Terreno à vista: baixo {} m, alto +{} m (malha de 240 m).",
   "Surrounding buildings": "Edifícios vizinhos",
+  "Popular here": "Popular aqui",
+  "Wall finishes": "Acabamentos de parede",
+  "Roof finishes": "Acabamentos de cobertura",
+  "Stocked here": "Disponível aqui",
+  "Not stocked here — verify supply": "Não disponível aqui — verifique o fornecimento",
+  "Availability unchecked": "Disponibilidade por verificar",
+  "Availability unchecked — offline or still loading": "Disponibilidade por verificar — sem rede ou ainda a carregar",
+  "Not in the Construction Advisor library — verify locally": "Fora da biblioteca do Construction Advisor — verifique localmente",
+  "Available here": "Disponível aqui",
+  "Scarce here": "Escasso aqui",
+  "rooted in": "enraizado em",
+  "Confirm with local suppliers": "Confirme com fornecedores locais",
   "avenue": "avenida",
   "terrain low": "baixo",
   "terrain high": "alto",
