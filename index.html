@@ -9359,6 +9359,10 @@ function buildVentilation(host) {
     : !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const VEGETATION = SCENE.veg;   // {type, height, density, x, y} — shared, see SCENE
   const WALLS = SCENE.walls;      // {x, y, along:'x'|'y', height, length}
+  /* Surrounding buildings for this redraw, in the plan's own metres with
+     their ground and top above the site — refreshed wherever the wind is
+     rebuilt, read by the scores, the streamlines and the drawing alike. */
+  let NBV = [];
   /* Monthly wind, direction FROM in degrees plus speed at 10 m: the pattern
      the blue arrows draw and the pair scores are weighted by. Set per month
      below; default north at 3 m/s until judged. */
@@ -10324,8 +10328,53 @@ function buildVentilation(host) {
       the most it can cut the wind in its lee (a solid wall 0.8; foliage by
       its density — porous screens cut less but shelter further); Lmax the
       distance, in heights, at which its shelter has died away. */
+  /* Surrounding buildings from the Environment tab's OpenStreetMap fetch,
+     carried into the plan's frame for the wind: the same footprints the
+     neighbourhood view draws, minus the one the design replaces. Each
+     lends its perimeter to the scores, its bulk to the streamlines and its
+     prism to the drawing. Heights are the mapped ones (tagged, storeys at
+     3 m, else an assumed two); tops ride the terrain under them. */
+  const nbRef = () => (ENV.plot || { lat:S.lat, lon:S.lon });
+  const nbVent = () => {
+    if (!ENV.nb || !NB.list.length) return [];
+    const ref = nbRef(), cl = Math.cos(ref.lat * RAD), b = betaV();
+    const cb = Math.cos(b), sb = Math.sin(b), boxes = planModel(G).boxes, out = [];
+    NB.list.forEach(bd => {
+      const p = bd.ll.map(q => {
+        const E = (q[1] - ref.lon) * 111320 * cl, N = (q[0] - ref.lat) * 111320;
+        return [E * cb - N * sb, E * sb + N * cb];
+      });
+      const bb = [Infinity, Infinity, -Infinity, -Infinity];
+      p.forEach(q => { if (q[0] < bb[0]) bb[0] = q[0]; if (q[1] < bb[1]) bb[1] = q[1]; if (q[0] > bb[2]) bb[2] = q[0]; if (q[1] > bb[3]) bb[3] = q[1]; });
+      if (bb[0] > 120 || bb[2] < -120 || bb[1] > 120 || bb[3] < -120) return;
+      if (inPoly(0, 0, p)) return;
+      if (boxes.some(r => r.some(q => inPoly(q[0], q[1], p)) || p.some(q => q[0] > r[0] && q[0] < r[2] && q[1] > r[1] && q[1] < r[3]))) return;
+      const cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, ground = terraAt(cx, cy), h = Math.max(1, bd.h);
+      out.push({ poly:p, bb, cx, cy, ground, h, top:ground + h, how:bd.how,
+        dist:Math.hypot(cx, cy), r:Math.max(0.5, (bb[2] - bb[0] + bb[3] - bb[1]) / 4) });
+    });
+    out.sort((x, y) => x.dist - y.dist);
+    return out.slice(0, 48);
+  };
   const obstacles = () => {
     const out = [];
+    /* neighbours first: solid lee like the building's own (fresh list —
+       the scores may run before the drawing rebuilds its cache) */
+    nbVent().forEach(nb => {
+      const P = nb.poly, per = [];
+      let L = 0;
+      const lens = P.map((q, i) => { const r = P[(i + 1) % P.length]; return Math.hypot(r[0] - q[0], r[1] - q[1]); });
+      L = lens.reduce((a, x) => a + x, 0);
+      const n = Math.max(4, Math.min(24, Math.round(L / 1.5)));
+      let acc = 0, tgt = 0, k = 0;
+      for (let s = 0; s < n; s++) {
+        tgt = L * (s + 0.5) / n;
+        while (k < P.length - 1 && acc + lens[k] < tgt) { acc += lens[k]; k++; }
+        const f = lens[k] > 1e-9 ? (tgt - acc) / lens[k] : 0, a = P[k], c = P[(k + 1) % P.length];
+        per.push([a[0] + (c[0] - a[0]) * clamp(f, 0, 1), a[1] + (c[1] - a[1]) * clamp(f, 0, 1)]);
+      }
+      out.push({ ref:nb, pts:per, r:nb.r, h:Math.max(0.5, nb.top), R0:0.7, Lmax:20, F0:0 });
+    });
     VEGETATION.forEach(v => {
       const bush = specOf(v.type).kind === 'bush', d = v.density != null ? v.density : 0.6;
       out.push({ ref:v, pts:[[v.x, v.y]], r:Math.max(0.4, canopyOf(v) * spreadOf(v)), h:Math.max(0.3, v.height),
@@ -10574,6 +10623,14 @@ function buildVentilation(host) {
   const deriveStatus = el('span', { class:'fieldstatus', text:'' });
   siteBox.appendChild(el('div', { class:'rgroup' }, [deriveBtn, deriveStatus]));
   siteBox.appendChild(expoPill);
+  const cNb = checkCtl('Neighbouring buildings', ENV.nb, v => {
+    ENV.nb = v;
+    if (v) wantNeighbours(nbRef(), () => refresh());
+    refresh();
+  });
+  siteBox.appendChild(cNb);
+  const nbStatus = el('span', { class:'fieldstatus', text:'' });
+  siteBox.appendChild(nbStatus);
   if (exposureState !== 'idle') setExposure(exposureState);   // as judged before the pages were rebuilt
   let derivedRelief = K0 ? K0.derivedRelief : null, derivedWindSrc = K0 ? K0.derivedWindSrc : '';
   KEEPERS.push(() => { KEEP.vent = { lat, lon, cam:{ az:CAM.az, el:CAM.el }, terrainKey, windKey, showShadow, showAir, showTerrain, terrainGrid, airAnim, windMonths:windMonths.slice(), windTouched,
@@ -11022,6 +11079,7 @@ function buildVentilation(host) {
     const toA = (wm.dir + 180) % 360;
     const [tx, ty] = localDir(toA);
     const V0 = Math.max(0, eaveWind());
+    NBV = nbVent();
     const midH = clamp(h0live() * 0.55, 1.0, 2.6);
     const pp = planParts(G);
     const R = 1.45;
@@ -11052,6 +11110,15 @@ function buildVentilation(host) {
       boxes.push({ r, cx: w.x, cy: w.y, h:w.height,
         au: Math.max(...cs.map(q => Math.abs(q[0] * tx + q[1] * ty)), 0.15),
         bw: Math.max(...cs.map(q => Math.abs(-q[0] * ty + q[1] * tx)), 0.15) });
+    });
+    /* Surrounding buildings steer like any other solid, on their own
+       footprint: extents are footprint-relative for the same reason as
+       the walls' above. */
+    NBV.forEach(nb => {
+      const cs = nb.poly.map(q => [q[0] - nb.cx, q[1] - nb.cy]);
+      boxes.push({ r:nb.bb, cx:nb.cx, cy:nb.cy, h:nb.top,
+        au:Math.max(...cs.map(q => Math.abs(q[0] * tx + q[1] * ty)), 0.5),
+        bw:Math.max(...cs.map(q => Math.abs(-q[0] * ty + q[1] * tx)), 0.5) });
     });
     /* A crown at a layer's height is a porous disc (bleed, never blocked); a
        clear stem alone is a thin one; above it all is free air — each
@@ -11228,7 +11295,7 @@ function buildVentilation(host) {
     const a = L.pts[lo], b = L.pts[hi];
     return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f,
       sf: a.sf + (b.sf - a.sf) * f, z: (a.z == null ? 0 : a.z) + ((b.z == null ? 0 : b.z) - (a.z == null ? 0 : a.z)) * f,
-      dx: (b.x - a.x) / sp, dy: (b.y - a.y) / sp };
+      dx: (b.x - a.x) / sp, dy: (b.y - a.y) / sp, bh: !!((f < 0.5 ? a.bh : b.bh)) };
   };
   const draw = () => { if (ventPanel) ventPanel.draw(); };
   const renderVent = (ctx, W, H) => {
@@ -11454,6 +11521,21 @@ function buildVentilation(host) {
     });
     const depthV = it => it.pts.reduce((a2, q) => a2 + camDepth(q[0], q[1], q[2]), 0) / it.pts.length - (it.dev ? 0.01 : 0);
     const pathV = pts3 => { ctx.beginPath(); pts3.forEach((q, i) => { const p2 = proj(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath(); };
+    /* surrounding buildings as translucent prisms on their ground, inside
+       the same depth order so near ones cover and far ones hide */
+    NBV.forEach(nb => {
+      const ring = nb.poly, top = nb.top;
+      const tpts = ring.map(q => [q[0], q[1], top]);
+      items.push({ pts:tpts, fill:'rgba(148,158,168,.45)',
+        d:tpts.reduce((a2, q) => a2 + camDepth(q[0], q[1], q[2]), 0) / tpts.length });
+      for (let i = 0; i < ring.length; i++) {
+        const a2 = ring[i], b2 = ring[(i + 1) % ring.length];
+        const q = [[a2[0], a2[1], terraAt(a2[0], a2[1]) + 0.05], [b2[0], b2[1], terraAt(b2[0], b2[1]) + 0.05],
+          [b2[0], b2[1], top], [a2[0], a2[1], top]];
+        items.push({ pts:q, fill:'rgba(130,140,150,.38)',
+          d:q.reduce((s2, r) => s2 + camDepth(r[0], r[1], r[2]), 0) / 4 });
+      }
+    });
     pushImportFaces(items);
     pushChimPar(items, M);
     items.sort((p1, q1) => roofWallOrder(p1, q1) || ((q1.d === undefined ? depthV(q1) : q1.d) - (p1.d === undefined ? depthV(p1) : p1.d))).forEach(it => {
@@ -11619,6 +11701,11 @@ function buildVentilation(host) {
     };
     const topAt = (x, y) => {
       let top = hAt(x, y);
+      for (const nb of NBV) {
+        if (nb.top <= top) continue;
+        if (x > nb.bb[0] - 0.2 && x < nb.bb[2] + 0.2 && y > nb.bb[1] - 0.2 && y < nb.bb[3] + 0.2
+          && inPoly(x, y, nb.poly)) top = nb.top;
+      }
       for (const v of VEGETATION) {
         const sp = specOf(v.type);
         if (!sp) continue;
@@ -11730,6 +11817,9 @@ function buildVentilation(host) {
     const behindHouse = (x, y, z) => {
       const hz0 = hAt(x, y);
       if (hz0 > -1e8 && z < hz0 + 0.15) return true;
+      for (const nb of NBV) {
+        if (z < nb.top + 0.15 && x > nb.bb[0] && x < nb.bb[2] && y > nb.bb[1] && y < nb.bb[3] && inPoly(x, y, nb.poly)) return true;
+      }
       const sP = x * AX.d[0] + y * AX.d[1];
       if (sP <= hsMin + 0.3 || AX.te > 40) return false;
       const tMax = Math.min(30, sP - hsMin + 1);
@@ -11740,6 +11830,24 @@ function buildVentilation(host) {
       return false;
     };
     ventAir.behind = behindHouse;
+    /* A hill between the point and the camera hides it exactly like the
+       house does — without this, lines on the far slope draw over the
+       hill they run behind and read as dragging through the ground. The
+       ground is smooth, so the march runs coarse; anything above the
+       grid's own high point cannot be hidden. Done once per redraw into
+       the points themselves, so the live dots reuse it for free. */
+    const terrainHides = (x, y, z) => {
+      if (!terrOn || AX.te > 40 || z > terrMM.hi + 2) return false;
+      for (let t = 1; t < 160; t += 1.5) {
+        if (z + t * AX.te < terraAt(x + t * AX.c[0], y + t * AX.c[1]) - 0.15) return true;
+      }
+      return false;
+    };
+    ventAir.lines.forEach(L => L.pts.forEach(p => {
+      if (!showAir) { p.bh = false; return; }
+      const zz = p.z == null ? ventAir.midH : p.z;
+      p.bh = behindHouse(p.x, p.y, zz) || terrainHides(p.x, p.y, zz);
+    }));
     let airSolid = 0, airDash = 0;
 
     /* ---- summer cross-ventilation paths through opposite pairs ---- */
@@ -11759,7 +11867,7 @@ function buildVentilation(host) {
           const al = 0.45 + 0.4 * Math.min(1, sm / 1.2);
           const az = a.z == null ? midH : a.z, bz = b.z == null ? midH : b.z;
           const A = proj(a.x, a.y, az), B = proj(b.x, b.y, bz);
-          const hid = behindHouse(a.x, a.y, az) || behindHouse(b.x, b.y, bz);
+          const hid = !!a.bh || !!b.bh;
           if (hid) airDash++; else airSolid++;
           stroke(ctx, 'rgba(' + cc[0] + ',' + cc[1] + ',' + cc[2] + ',' + al.toFixed(2) + ')', 1.6, hid ? [6, 4] : null);
           seg(ctx, A[0], A[1], B[0], B[1]);
@@ -11769,13 +11877,14 @@ function buildVentilation(host) {
           const z0 = q0.z == null ? midH : q0.z, z1 = q1.z == null ? midH : q1.z;
           const A = proj(q0.x, q0.y, z0), B = proj(q1.x, q1.y, z1);
           const an = Math.atan2(B[1] - A[1], B[0] - A[0]), hl = 8;
-          const hid = behindHouse(q1.x, q1.y, z1), ac = speedRGB(q1.sf);
+          const hid = !!q1.bh, ac = speedRGB(q1.sf);
           stroke(ctx, 'rgba(' + ac[0] + ',' + ac[1] + ',' + ac[2] + ',.8)', 1.6, hid ? [6, 4] : null);
           seg(ctx, B[0], B[1], B[0] - hl * Math.cos(an - 0.45), B[1] - hl * Math.sin(an - 0.45));
           seg(ctx, B[0], B[1], B[0] - hl * Math.cos(an + 0.45), B[1] - hl * Math.sin(an + 0.45));
         });
       });
       window.__arcaAir3d = { maxZ: +airMaxZ.toFixed(2), dash: airDash, solid: airSolid, lines: ventAir.lines.length, eddies: eddyCount, ridge: +ridge.toFixed(2), midH: +layH.toFixed(2) };
+      window.__arcaVentT = terraAt;
       const lp = proj(vx * (R + 1.4), vy * (R + 1.4), midH), wtxt = monthSetName() + ' ' + dirName() + ' ' + fmt(wm.spd, 1) + ' m/s' + (tuneTxt() ? ' *' : '');
       const lx = clamp(lp[0], 70, W - 170), ly = clamp(lp[1], 60, H - 44);
       ctx.fillStyle = 'rgba(250,251,249,.9)'; ctx.font = FM(10); const lw = ctx.measureText(wtxt).width;
@@ -11874,6 +11983,8 @@ function buildVentilation(host) {
     rows.push(['Latitude (°)', +lat.toFixed(3)], ['Longitude (°)', +lon.toFixed(3)], ['Altitude (m)', +(S.alt || 0)]);
     rows.push(['Air density (kg/m³)', +airDensity().toFixed(3)]);
     rows.push(['Terrain', terrainKey], ['Wind exposure', windKey]);
+    rows.push(['Neighbouring buildings (OpenStreetMap)', ENV.nb ? NBV.length + ' within 120 m' : 'off']);
+    if (ENV.nb && NBV.length) rows.push(['  of which with assumed heights', NBV.filter(n => n.how === 'assumed').length]);
     {
       const mm = terraMinMax();
       if (terrainGrid && mm) rows.push(['Terrain grid (regular, m across)', terrainGrid.n + '×' + terrainGrid.n + ' at ' + terrainGrid.step + ' m'],
@@ -11977,7 +12088,7 @@ function buildVentilation(host) {
         p.s = (p.s + ventAir.V0 * q0.sf * dt) % L.len;
         const q = airPointAt(L, p.s);
         const qz = q.z == null ? ventAir.midH : q.z;
-        if (ventAir.behind && ventAir.behind(q.x, q.y, qz)) return;
+        if (q.bh) return;
         const sp = projF(FR, q.x, q.y, qz);
         const rr = 1.5 + 1.4 * Math.min(1, q.sf);
         const dc = speedRGB(q.sf);
@@ -12282,6 +12393,8 @@ function buildVentilation(host) {
     syncPlantEd();
     syncWindCtls();
     vegCount.textContent = VEGETATION.length + '/10';
+    nbStatus.textContent = !ENV.nb ? t('Neighbours off — switch them on for the wind to meet them.')
+      : NBV.length ? t(NBV.length + ' neighbours shape the wind (OpenStreetMap)') : t('No mapped neighbours here — the wind meets the garden alone.');
     placeHint.textContent = (plantArmed ? ' planting ' + plantArmed + ' — click open ground' : '') + (wallArmed ? ' placing wall — click open ground' : '');
     const sn = sunPos(SH.doy, SH.h, lat, lon, tz);
     liveLine.innerHTML = '';
@@ -12307,6 +12420,9 @@ function buildVentilation(host) {
   /* Monthly wind should never sit on placeholder values while the site has
      coordinates: derive on entry, once per mount — the button re-runs it. */
   deriveFromSite();
+  /* Surrounding buildings for the wind: asked once per spot at most — the
+     fetch guards itself and serves the store first. */
+  if (ENV.nb) wantNeighbours(nbRef(), () => refresh());
 }
 /* ------------------------------------------------------------- 7. RENDER --
    The model in its terrain, rendered from a prompt. The student describes
@@ -15631,6 +15747,9 @@ Object.assign(PT, {
   "Show sun shadows": "Mostrar sombras do sol",
   "Show cross-ventilation paths": "Mostrar percursos de ventilação transversal",
   "Show terrain relief": "Mostrar relevo do terreno",
+  "Neighbours off — switch them on for the wind to meet them.": "Vizinhos desligados — ligue-os para o vento os encontrar.",
+  "{} neighbours shape the wind (OpenStreetMap)": "{} vizinhos moldam o vento (OpenStreetMap)",
+  "No mapped neighbours here — the wind meets the garden alone.": "Sem vizinhos mapeados aqui — o vento encontra só o jardim.",
   /* render on Render */
   "Render": "Renderização",
   "Render view": "Vista renderizada",
