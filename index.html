@@ -11318,8 +11318,20 @@ function buildVentilation(host) {
       });
       return [x, y];
     };
-    const lead = Math.max(7, 1.6 * maxAu), trail = Math.max(9, 2.2 * maxAu);
-    const across = maxBw + Math.max(4, maxBw);
+    /* Tracers gather round the model for studying, not across the whole
+       mapped city: the house, the garden planting and the garden walls set
+       the span. The neighbours still steer every line through their boxes,
+       wakes and eddies — the tracers just start where the student looks. */
+    let hAu = 0.5, hBw = 0.5;
+    const hreach = (x, y) => {
+      const u = x * tx + y * ty, w = -x * ty + y * tx;
+      hAu = Math.max(hAu, Math.abs(u) + 2); hBw = Math.max(hBw, Math.abs(w) + 2);
+    };
+    pp.pos.forEach(r => [[r[0], r[1]], [r[2], r[3]]].forEach(q => hreach(q[0], q[1])));
+    VEGETATION.forEach(v => hreach(v.x, v.y));
+    WALLS.forEach(w => { const hw = w.length / 2; hreach(w.x - hw, w.y - hw); hreach(w.x + hw, w.y + hw); });
+    const lead = Math.max(7, 1.6 * hAu), trail = Math.max(9, 2.2 * hAu);
+    const across = hBw + Math.max(4, hBw);
     /* Wide sites spread thirteen lines paper-thin (a 5 m wake box can fall
        between two lines and read null), so the count grows with the span to
        keep ~2.5 m lateral spacing. The reseed signature already keys on the
@@ -12865,7 +12877,7 @@ function buildRender(host) {
     onclick: () => fetchRenderTerrain() }));
   const terrSlot = props.appendChild(el('div', { class:'hint' }));
   host.appendChild(hint('render-how',
-    'The prompt dresses the massing drawn on Site, roofed on Roof and planted on Ventilation — <b>walls</b> (whitewash, brick, stone, timber, concrete, cork, glass), <b>roof</b> (tile, slate, metal, thatch, green), <b>light</b> (dawn to night) and <b>finish</b> (photo, watercolor, clay, sketch). What the tab cannot paint it says back under the prompt. The brief carries the same scene to an image studio for the freer renders.'));
+    'The prompt dresses the massing drawn on Site, roofed on Roof and planted on Ventilation — <b>walls</b> (whitewash, brick, stone, timber, concrete, cork, glass), <b>roof</b> (tile, slate, metal, thatch, green), <b>light</b> (dawn to night) and <b>finish</b> (photo, watercolor, clay, sketch). The view is downstream of every tab: the plan, breaks and patio from Site, pitch, parapet, eaves, chimney and collectors from Roof, glass, doors, overhangs, fins and sunspace from Openings and Shadowing, planting, walls and neighbours from Ventilation — change any of them and this model follows on the next visit. What the tab cannot paint it says back under the prompt. The brief carries the same scene to an image studio for the freer renders.'));
   function fallbackCopy(txt, done) {
     const f = el('textarea', { style:'position:fixed;opacity:0' });
     f.value = txt; document.body.appendChild(f); f.select();
@@ -13166,6 +13178,85 @@ function buildRender(host) {
       ctx.fillStyle = g; ctx.fillRect(0, yT, W + 1, (yB - yT) * 0.14 + 1);
       ctx.restore();
     };
+    /* ---- everything else the other tabs decide: devices, parapet,
+       chimney, balconies, collectors — the render is downstream of all of
+       them, never a model of its own ---- */
+    const dc = q => q.reduce((a2, r) => a2 + depthOf(r[0], r[1], r[2]), 0) / q.length;
+    const devCol = style === 'clay' ? '#CFCCC2' : '#9A938A';
+    wins.forEach(o => {
+      const f = o.w.f, oo = OPEN[f];
+      if (!oo || !wallSeen(o.sg.n)) return;
+      const sg = o.sg, w = o.w;
+      const u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2;
+      const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
+      if (oo.ovD > 0) w.rows.forEach(r => {
+        const v1 = Math.min(r.head, H0);
+        const a0 = onWall(sg, u0 - (oo.ovL || 0), v1), b0 = onWall(sg, u1 + (oo.ovR || 0), v1);
+        const a = off(a0, oo.ovD), b = off(b0, oo.ovD);
+        items.push({ pts:[a0, b0, b, a], fill:devCol, d:dc([a0, b0, b, a]) });
+      });
+      if (oo.finD > 0 && oo.finN > 0) {
+        const sides = oo.finSide === 'left' ? [u0] : oo.finSide === 'right' ? [u1] : [u0, u1];
+        w.rows.forEach(r => {
+          const v0 = r.sill, v1 = Math.min(r.head, H0);
+          sides.forEach(uu => {
+            const p0 = onWall(sg, uu, v0), p1 = onWall(sg, uu, v1);
+            const q = [p0, off(p0, oo.finD), off(p1, oo.finD), p1];
+            items.push({ pts:q, fill:devCol, d:dc(q) });
+          });
+        });
+      }
+    });
+    if (RF.par && RF.par.on && RF.n === 0) {
+      const ph = Math.max(0.2, +RF.par.h || 0.6);
+      M.pl.segs.forEach(sg => {
+        const nx = sg.n[0], ny = sg.n[1], a = sg.a, b = sg.b;
+        const o1 = [a[0] + nx * 0.09, a[1] + ny * 0.09], o2 = [b[0] + nx * 0.09, b[1] + ny * 0.09];
+        const i1 = [a[0] - nx * 0.09, a[1] - ny * 0.09], i2 = [b[0] - nx * 0.09, b[1] - ny * 0.09];
+        const q = [[o1[0], o1[1], H0], [o2[0], o2[1], H0], [o2[0], o2[1], H0 + ph], [o1[0], o1[1], H0 + ph]];
+        const t2 = [[o1[0], o1[1], H0 + ph], [o2[0], o2[1], H0 + ph], [i2[0], i2[1], H0 + ph], [i1[0], i1[1], H0 + ph]];
+        const base = style === 'clay' ? '#E4E1D8' : wallBase();
+        items.push({ pts:q, fill:shadeHex(base, night ? 0.3 : 0.85), d:dc(q) });
+        items.push({ pts:t2, fill:shadeHex(base, night ? 0.32 : 1), d:dc(t2) });
+      });
+    }
+    if (RF.chim && RF.chim.on && isFinite(+RF.chim.x) && isFinite(+RF.chim.y)) {
+      try {
+        const zx = M.zAt(+RF.chim.x, +RF.chim.y);
+        if (zx !== null && isFinite(zx)) {
+          const ft = chimFoot(RF.chim), hx = ft.x / 2, hy = ft.y / 2;
+          const hTop = zx + chimEffH(RF.chim), cx0 = +RF.chim.x, cy0 = +RF.chim.y;
+          const corners = [[cx0 - hx, cy0 - hy], [cx0 + hx, cy0 - hy], [cx0 + hx, cy0 + hy], [cx0 - hx, cy0 + hy]];
+          const chBase = style === 'clay' ? '#E4E1D8' : wallBase();
+          for (let i = 0; i < 4; i++) {
+            const a = corners[i], b = corners[(i + 1) % 4];
+            const q = [[a[0], a[1], zx - 0.1], [b[0], b[1], zx - 0.1], [b[0], b[1], hTop], [a[0], a[1], hTop]];
+            items.push({ pts:q, fill:shadeHex(chBase, night ? 0.3 : 0.85), d:dc(q) });
+          }
+          const cap = [[cx0 - hx - 0.08, cy0 - hy - 0.08, hTop], [cx0 + hx + 0.08, cy0 - hy - 0.08, hTop],
+            [cx0 + hx + 0.08, cy0 + hy + 0.08, hTop], [cx0 - hx - 0.08, cy0 + hy + 0.08, hTop]];
+          items.push({ pts:cap, fill:shadeHex(chBase, night ? 0.32 : 1), d:dc(cap) });
+        }
+      } catch (e) {}
+    }
+    try {
+      const BS = balcScene(G);
+      (BS.solids || []).forEach(sl => {
+        if (!sl.pts || sl.pts.length < 3) return;
+        items.push({ pts:sl.pts, fill:style === 'clay' ? '#D5D2CA' : 'rgba(190,185,175,.92)', d:dc(sl.pts) });
+      });
+    } catch (e) {}
+    ['pv', 'thermal'].forEach(t => {
+      const key = t === 'pv' ? 'pv' : 'th';
+      const o = RF.sol && RF.sol[key];
+      if (!o || !o.on) return;
+      try {
+        const opt = solarOptimum(S, t, G.rot, C.t);
+        const fld = solarField(G, RF, S.lat, opt.tilt, Object.assign({ tech:t }, o));
+        if (!fld || !fld.fits) return;
+        fld.mods.forEach(mo => items.push({ pts:mo.q, fill:style === 'clay' ? '#C9CFD2' : t === 'pv' ? '#1E3A8A' : '#22262B', d:dc(mo.q) }));
+      } catch (e) {}
+    });
     items.sort((a, b) => b.d - a.d);
     const kpx = CAM_K * s;
     items.forEach(it => {
@@ -16728,7 +16819,7 @@ Object.assign(PT_HINT, {
   'vent-face':
     'A câmara orbita o modelo: ↺ e ↻ rodam-no 45°, ▲ e ▼ inclinam-no 15°, Topo olha a direito para baixo como uma planta, Barlavento coloca-se de onde vem o vento, e De lado ao vento põe-se de perfil em relação a ele, baixa, para se verem as camadas a subir sobre a cobertura e a descer para o lado de sotavento. Repor volta ao canto sudoeste que os outros separadores usam. Árvores, muros e o escoamento lêem-se do seu lugar no local, não da vista: rodar a câmara só muda o que se vê.',
   'render-how':
-    'O prompt veste a volumetria desenhada no Local, com a cobertura do Telhado e a plantação da Ventilação — <b>paredes</b> (cal, tijolo, pedra, madeira, betão, cortiça, vidro), <b>cobertura</b> (telha, ardósia, zinco, colmo, ajardinada), <b>luz</b> (da alvorada à noite) e <b>acabamento</b> (foto, aquarela, maqueta, esquisso). O que o separador não souber pintar diz de volta sob o prompt. O brief leva a mesma cena a um estúdio de imagem para as renderizações mais livres.',
+    'O prompt veste a volumetria desenhada no Local, com a cobertura do Telhado e a plantação da Ventilação — <b>paredes</b> (cal, tijolo, pedra, madeira, betão, cortiça, vidro), <b>cobertura</b> (telha, ardósia, zinco, colmo, ajardinada), <b>luz</b> (da alvorada à noite) e <b>acabamento</b> (foto, aquarela, maqueta, esquisso). A vista depende de todos os separadores: a planta, quebras e pátio do Local, inclinação, platibanda, beirado, chaminé e colectores do Telhado, vidro, portas, palas, brises e estufa das Aberturas, plantação, muros e vizinhos da Ventilação — mude qualquer um e este modelo acompanha na visita seguinte. O que o separador não souber pintar diz de volta sob o prompt. O brief leva a mesma cena a um estúdio de imagem para as renderizações mais livres.',
   'vent-terrain':
     'O terreno aberto (plano) trava menos o vento; o terreno partido e montanhoso abriga mais (expoente da lei de potência 0,14–0,28). A exposição multiplica de novo: abrigada 0,6, moderada 1,0, exposta 1,4 (Olgyay, pp.37–40; DeKay & Brown, Estratégia 85). A classe de terreno e os doze ventos dominantes mensais derivam destas coordenadas automaticamente à entrada (reanálise ERA5 via Open-Meteo — como a consulta de altitude, só as coordenadas saem do navegador); o botão repete-a. O desenho vai mais longe: uma malha regular de 240 m de alturas do terreno é buscada para o local e desenhada sob o modelo com o seu baixo e alto, e cada linha de vento acompanha-a — subindo uma elevação, assentando numa depressão — para o juízo de exposição se ler contra a geografia real. A malha é o MDT Copernicus edição 2021 (GLO-90, resolução de 90 m, https://doi.org/10.5270/ESA-c5d3d65), servido pelo Open-Meteo sob licença livre — o mesmo modelo de elevação por trás da consulta de altitude. A exposição continua manual: lê a envolvente imediata, que nenhum produto em grelha vê.',
   'vent-air':
