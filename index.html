@@ -13209,7 +13209,9 @@ style === 'sketch' ? '#EFEBE0'
       if (!wallSeen(sg.n)) return;
       const wpts = [onWall(sg, 0, 0), onWall(sg, sg.len, 0)].concat(wl.prof.slice().reverse().map(q => onWall(sg, q[0], q[1])));
       const base = wallBase();
-      items.push({ pts:wpts, fill:shadeHex(base, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:wpts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / wpts.length, mat:look.wall ? look.wall.key : 'site', wallSg:sg });
+      const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
+      items.push({ pts:wpts, fill:shadeHex(base, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:wpts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / wpts.length, mat:look.wall ? look.wall.key : 'site', wallSg:sg,
+        uv:wpts.map(q => [(q[0] - sg.a[0]) * tu[0] + (q[1] - sg.a[1]) * tu[1], q[2]]) });
     });
     M.pieces.forEach(pc => {
       const f = pc.f;
@@ -13217,7 +13219,7 @@ style === 'sketch' ? '#EFEBE0'
       const pts = pc.poly.map(q => [q[0], q[1], M.zOf(f, q[0], q[1])]);
       const base = roofBase();
       const fk = 0.6 + 0.4 * Math.max(0, -f.a * sunL[0] - f.b * sunL[1]) * (0.3 + 0.7 * sinA);
-      items.push({ pts, fill:shadeHex(base, night ? 0.32 : fk), sh:night ? 0.32 : fk, d:pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / pts.length, mat:look.roof ? look.roof.key : 'site', roof:true });
+      items.push({ pts, fill:shadeHex(base, night ? 0.32 : fk), sh:night ? 0.32 : fk, d:pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / pts.length, mat:look.roof ? look.roof.key : 'site', roof:true, uv:pts.map(q => [q[0], q[1]]) });
     });
     /* glass: each wall's windows, a breath off the face */
     const wins = M.pl.segs.map(sg => ({ sg, w:segWindow(sg, G) })).filter(o => o.w);
@@ -13303,7 +13305,32 @@ style === 'sketch' ? '#EFEBE0'
        contact shade that grounds the walls */
     const hSeed = (x, y) => ((Math.round(x * 13.7) * 73856093) ^ (Math.round(y * 17.3) * 19349663)) >>> 0;
     const hRnd = s => () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const dressFace = (c, key, fill) => {
+    const dressFace = (c, key, fill, uvm) => {
+      /* face-aligned courses: a least-squares affine from the face's own
+         metres to the screen — exact for these planar faces, so brick
+         follows each wall instead of the screen, even round corners */
+      let Mx = null;
+      if (uvm && uvm.length === c.length && uvm.length >= 3) {
+        let Suu = 0, Suv = 0, Su = 0, Svv = 0, Sv = 0, n = uvm.length;
+        let Sxu = 0, Sxv = 0, Sx = 0, Syu = 0, Syv = 0, Sy = 0;
+        uvm.forEach((q, i) => { const u = q[0], v = q[1], p = c[i];
+          Suu += u * u; Suv += u * v; Su += u; Svv += v * v; Sv += v;
+          Sxu += p[0] * u; Sxv += p[0] * v; Sx += p[0]; Syu += p[1] * u; Syv += p[1] * v; Sy += p[1]; });
+        const det = Suu * (Svv * n - Sv * Sv) - Suv * (Suv * n - Su * Sv) + Su * (Suv * Sv - Svv * Su);
+        if (Math.abs(det) > 1e-9) {
+          const ax = (Sxu * (Svv * n - Sv * Sv) - Suv * (Sxv * n - Sx * Sv) + Su * (Sxv * Sv - Svv * Sx)) / det;
+          const bx = (Suu * (Sxv * n - Sx * Sv) - Sxu * (Suv * n - Su * Sv) + Su * (Suv * Sx - Sxv * Su)) / det;
+          const cx = (Suu * (Svv * Sx - Sxv * Sv) - Suv * (Suv * Sx - Sxv * Su) + Sxu * (Suv * Sv - Svv * Su)) / det;
+          const ay = (Syu * (Svv * n - Sv * Sv) - Suv * (Syv * n - Sy * Sv) + Su * (Syv * Sv - Svv * Sy)) / det;
+          const by = (Suu * (Syv * n - Sy * Sv) - Syu * (Suv * n - Su * Sv) + Su * (Suv * Sy - Syv * Su)) / det;
+          const cy = (Suu * (Svv * Sy - Syv * Sv) - Suv * (Suv * Sy - Syv * Su) + Syu * (Suv * Sv - Svv * Su)) / det;
+          Mx = (u, v) => [ax * u + bx * v + cx, ay * u + by * v + cy];
+        }
+      }
+      const segM = (u0, v0, u1, v1) => { const p = Mx(u0, v0), q = Mx(u1, v1); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); };
+      const quadM = (u0, v0, u1, v1, st) => { const p = [Mx(u0, v0), Mx(u1, v0), Mx(u1, v1), Mx(u0, v1)]; ctx.fillStyle = st; ctx.beginPath(); p.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath(); ctx.fill(); };
+      const ub = uvm ? [Math.min(...uvm.map(q => q[0])), Math.max(...uvm.map(q => q[0])), Math.min(...uvm.map(q => q[1])), Math.max(...uvm.map(q => q[1]))] : null;
+      const pxm = Mx ? Math.hypot(Mx(1, 0)[0] - Mx(0, 0)[0], Mx(1, 0)[1] - Mx(0, 0)[1]) : kpx;
       /* blended finishes: every unit filled on its own tone, like the
          Blender brick/mortar mix — no two bricks share a colour */
       const fm = String(fill || '').match(/(\d+),\s*(\d+),\s*(\d+)/);
@@ -13320,11 +13347,13 @@ style === 'sketch' ? '#EFEBE0'
       const rnd = hRnd(hSeed(x0 + y0, x1 - y1));
       const rows = (m, a) => {
         ctx.strokeStyle = 'rgba(20,23,26,' + a + ')'; ctx.lineWidth = 1;
-        for (let yy = y0 + m * kpx * rnd(); yy < y1; yy += m * kpx) { ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x1, yy); ctx.stroke(); }
+        if (!Mx || !ub) return;
+        for (let vv = ub[2] + m * rnd(); vv < ub[3]; vv += m) segM(ub[0], vv, ub[1], vv);
       };
       const cols = (m, a) => {
         ctx.strokeStyle = 'rgba(20,23,26,' + a + ')'; ctx.lineWidth = 1;
-        for (let xx = x0 + m * kpx * rnd(); xx < x1; xx += m * kpx) { ctx.beginPath(); ctx.moveTo(xx, y0); ctx.lineTo(xx, y1); ctx.stroke(); }
+        if (!Mx || !ub) return;
+        for (let uu = ub[0] + m * rnd(); uu < ub[1]; uu += m) segM(uu, ub[2], uu, ub[3]);
       };
       const speck = (n, a, col) => {
         ctx.fillStyle = col || 'rgba(20,23,26,' + a + ')';
@@ -13332,22 +13361,20 @@ style === 'sketch' ? '#EFEBE0'
       };
       const joints = (rm, vm, a) => {
         rows(rm, a);
+        if (!Mx || !ub) return;
         let ri = 0;
         ctx.strokeStyle = 'rgba(20,23,26,' + (a * 0.6) + ')';
-        for (let yy = y0; yy < y1; yy += rm * kpx, ri++) {
-          for (let xx = x0 + (ri % 2 ? vm / 2 : 0) * kpx; xx < x1; xx += vm * kpx) {
-            ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx, Math.min(y1, yy + rm * kpx)); ctx.stroke();
-          }
+        for (let vv = ub[2]; vv < ub[3]; vv += rm, ri++) {
+          for (let uu = ub[0] + (ri % 2 ? vm / 2 : 0); uu < ub[1]; uu += vm) segM(uu, vv, uu, Math.min(ub[3], vv + rm));
         }
       };
       const units = (rw, rh, jf) => {
-        if (!fbase || rw * kpx < 4 || rh * kpx < 3) { joints(0.6, 0.6, 0.16); return; }
+        if (!Mx || !ub || !fbase || rw * pxm < 4 || rh * pxm < 3) { joints(0.6, 0.6, 0.16); return; }
         ctx.fillStyle = tone(0.55); ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
         let ri = 0;
-        for (let yy = y0; yy < y1; yy += rh * kpx, ri++) {
-          for (let xx = x0 + (ri % 2 ? rw / 2 : 0) * kpx; xx < x1; xx += rw * kpx) {
-            ctx.fillStyle = tone(0.88 + rnd() * (jf || 0.28));
-            ctx.fillRect(xx + 0.5, yy + 0.5, rw * kpx - 1, rh * kpx - 1);
+        for (let vv = ub[2]; vv < ub[3]; vv += rh, ri++) {
+          for (let uu = ub[0] + (ri % 2 ? rw / 2 : 0); uu < ub[1]; uu += rw) {
+            quadM(uu + 0.01, vv + 0.01, Math.min(ub[1], uu + rw) - 0.01, Math.min(ub[3], vv + rh) - 0.01, tone(0.88 + rnd() * (jf || 0.28)));
           }
         }
       };
@@ -13359,11 +13386,8 @@ style === 'sketch' ? '#EFEBE0'
         }
       };
       const battens = (m, a) => {
-        if (!fbase || m * kpx < 3) { cols(m, a); return; }
-        for (let xx = x0; xx < x1; xx += m * kpx) {
-          ctx.fillStyle = tone(0.9 + rnd() * 0.25);
-          ctx.fillRect(xx, y0, m * kpx, y1 - y0);
-        }
+        if (!Mx || !ub || !fbase || m * pxm < 3) { cols(m, a); return; }
+        for (let uu = ub[0]; uu < ub[1]; uu += m) quadM(uu, ub[2], Math.min(ub[1], uu + m), ub[3], tone(0.9 + rnd() * 0.25));
         cols(m, a);
       };
       if (key === 'brick') units(0.6, 0.3);
@@ -13548,7 +13572,7 @@ style === 'sketch' ? '#EFEBE0'
       }
       if (photoDone && it.wallSg && !night) shadeFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])));
       if (style === 'photo' && !night && !photoDone && !it.glass && !it.blob && !it.nbTip && !it.door && it.mat && it.mat !== 'site') {
-        dressFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])), it.mat, it.fill);
+        dressFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])), it.mat, it.fill, it.uv);
         if (it.wallSg) shadeFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])));
       }
       if (style === 'photo' && it.win) {
