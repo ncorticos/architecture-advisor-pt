@@ -13368,6 +13368,18 @@ style === 'sketch' ? '#EFEBE0'
         if (!Mx || !ub) return;
         for (let uu = ub[0] + m * rnd(); uu < ub[1]; uu += m) segM(uu, ub[2], uu, ub[3]);
       };
+      const ties = (su, sv, a, r) => {
+        if (!Mx || !ub) return;
+        ctx.fillStyle = 'rgba(20,23,26,' + a + ')';
+        for (let vv = ub[2] + sv / 2; vv < ub[3]; vv += sv) for (let uu = ub[0] + su / 2; uu < ub[1]; uu += su) {
+          const q = Mx(uu, vv);
+          ctx.beginPath(); ctx.arc(q[0], q[1], r, 0, 6.284); ctx.fill();
+        }
+      };
+      const wash = (r, g, b, a) => {
+        ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+        ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      };
       const speck = (n, a, col) => {
         ctx.fillStyle = col || 'rgba(20,23,26,' + a + ')';
         for (let i = 0; i < n; i++) { ctx.beginPath(); ctx.arc(x0 + rnd() * (x1 - x0), y0 + rnd() * (y1 - y0), 0.7 + rnd(), 0, 6.284); ctx.fill(); }
@@ -13406,7 +13418,7 @@ style === 'sketch' ? '#EFEBE0'
       if (key === 'brick') units(0.6, 0.3);
       else if (key === 'stone') units(0.9, 0.45, 0.35);
       else if (key === 'timber') battens(0.18, 0.16);
-      else if (key === 'concrete') { blotches(22, 3, 14, 0.1); speck(130, 0.07); rows(0.6, 0.12); }
+      else if (key === 'concrete') { blotches(24, 4, 16, 0.09); speck(120, 0.06); rows(1.2, 0.08); ties(1.2, 0.6, 0.14, 1.6); wash(110, 125, 145, 0.07); }
       else if (key === 'whitewash' || key === 'plaster') { blotches(10, 8, 30, 0.07); speck(70, 0.045); }
       else if (key === 'cork') blotches(26, 3, 10, 0.12);
       else if (key === 'tile') units(0.36, 0.35);
