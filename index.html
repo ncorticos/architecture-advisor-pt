@@ -12735,15 +12735,19 @@ const AC_BM = {
   metal:{ bm:'Titanium Zinc', lam:110, rho:7200 }
 };
 /* This tab's finishes against that library: fixed keys, one key per zone
-   for timber, and the honest gaps — limewash, schist, glass, thatch, a
-   green or white roof capping are not stocked materials there. Each stone
+   for timber, and the honest gaps — limewash, schist, thatch, a green or
+   white roof capping are not stocked materials there; glazing and doors
+   are industrial products, available everywhere. Each stone
    is its own finish now, so granite away from the granite country reads
    amber, as it should. */
 const RENDER_CA = {
   whitewash:null, plaster:['reboco'], azulejo:['ceramico'], brick:['tijolom'],
   stone:['pedrag'], schist:null, limestone:['pedrac'], basalt:['pedrab'], earth:['taipa'],
   timber:{ Norte:['madeirad'], Centro:['madeirad'], Sul:[], Madeira:[], Açores:['madeirae'] },
-  cork:['icb'], concrete:['betao'], corten:['aco'], glass:'industrial',
+  relief:['ceramico'], pastilha:['ceramico'], slip:['ceramico'],
+  cork:['icb'], concrete:['betao'], corten:['aco'],
+  clear:'industrial', tinted:'industrial', reflective:'industrial', frosted:'industrial',
+  dtimber:'industrial', dgreen:'industrial', dblue:'industrial', dred:'industrial', dmetal:'industrial', dglass:'industrial',
   tile:['ceramico'], canudo:['ceramico'], slate:['pedran'], metal:['aco'], gravel:['seixo'],
   green:null, white:'finish', thatch:null
 };
@@ -12756,11 +12760,12 @@ const RENDER_CA = {
    paint: one press copies the view, the model and the prompt as a render
    brief for an image studio of the student's choosing. */
 /* The palette is the Portuguese one, general enough for any studio brief:
-   the renders and the azulejo, brick, the four building stones of the
-   country (granite, schist, limestone, basalt), rammed earth, timber,
-   cork, concrete, weathering steel and glass on the walls; the Lusa and
-   the barrel tile, slate, zinc, gravel, sedum, a white membrane and thatch
-   on the roof. c is the mean colour of the finish's own texture (the flat
+   the renders, the façade ceramics (azulejo, relief tile, pastilha mosaic,
+   glazed slip), brick, the four building stones of the country (granite,
+   schist, limestone, basalt), rammed earth, timber, cork, concrete and
+   weathering steel on the walls; the Lusa and the barrel tile, slate,
+   zinc, gravel, sedum, a white membrane and thatch on the roof; and the
+   openings apart — four glazings and six doors. c is the mean colour of the finish's own texture (the flat
    fill, the exporters' albedo); mod its module, the size the texture is
    drawn to; bk the words that find it among Blendkit's free materials,
    for the student who carries the model on into Blender. */
@@ -12770,6 +12775,12 @@ const RENDER_WALLS = [
   { key:'plaster', c:'#E6CEAB', ac:'Stucco - Beige Rough', bk:'stucco plaster beige', words:['plaster', 'reboco', 'stucco', 'estuque'] },
   { key:'azulejo', c:'#BDC4CF', bk:'portuguese azulejo tiles', mod:{ en:'0.14 m tiles', pt:'azulejos de 0,14 m' },
     words:['azulejo', 'azulejos', 'azulejaria'] },
+  { key:'relief', c:'#386851', bk:'relief ceramic tiles green glazed', mod:{ en:'0.14 m relief tiles', pt:'azulejos de relevo de 0,14 m' },
+    words:['relief tile', 'azulejo de relevo', 'relevo'] },
+  { key:'pastilha', c:'#6F8BA8', bk:'blue mosaic tiles', mod:{ en:'25 mm mosaic', pt:'pastilha de 25 mm' },
+    words:['mosaic', 'pastilha', 'pastilhas', 'mosaico'] },
+  { key:'slip', c:'#C9C2B2', bk:'glazed brick tiles', mod:{ en:'0.24 × 0.06 m glazed slips', pt:'plaquetas vidradas de 0,24 × 0,06 m' },
+    words:['glazed brick', 'brick slip', 'plaqueta', 'plaquetas', 'plaqueta vidrada'] },
   { key:'brick', c:'#955842', ac:'Brick - Running Bond', bk:'red brick wall', mod:{ en:'0.22 × 0.07 m bricks, 0.08 m course', pt:'tijolos de 0,22 × 0,07 m, fiada de 0,08 m' },
     words:['brick', 'tijolo', 'tijoleira'] },
   { key:'stone', c:'#A29C90', ac:'Stone - Granite Gray', bk:'granite stone wall', mod:{ en:'granite ashlar, 0.26–0.48 m courses', pt:'cantaria de granito, fiadas de 0,26–0,48 m' },
@@ -12789,8 +12800,7 @@ const RENDER_WALLS = [
   { key:'concrete', c:'#B8B49C', ac:'Concrete - 02', bk:'board formed concrete', mod:{ en:'1.20 × 0.60 m formwork', pt:'cofragem de 1,20 × 0,60 m' },
     words:['concrete', 'betao', 'betão', 'concreto'] },
   { key:'corten', c:'#783D23', bk:'corten rusted steel', mod:{ en:'1.00 m cassettes', pt:'painéis de 1,00 m' },
-    words:['corten', 'cor-ten', 'weathering steel', 'aco corten', 'aço corten'] },
-  { key:'glass', c:'#84ADF9', ac:'Glass - Blue', bk:'architectural glass', words:['glass', 'vidro', 'glazed', 'envidracado'] }
+    words:['corten', 'cor-ten', 'weathering steel', 'aco corten', 'aço corten'] }
 ];
 const RENDER_ROOFS = [
   { key:'tile', c:'#A45E41', ac:'Roof Tiles - Spanish 01', bk:'terracotta roof tiles', mod:{ en:'Lusa tile 0.21 × 0.38 m, ≈ 12.5 per m²', pt:'telha lusa 0,21 × 0,38 m, ≈ 12,5 por m²' },
@@ -12808,9 +12818,38 @@ const RENDER_ROOFS = [
     words:['white roof', 'cobertura branca'] },
   { key:'thatch', c:'#545049', bk:'thatch roof straw', words:['thatch', 'colmo', 'palha'] }
 ];
-/* Blendkit's free material gallery, searched by the finish's own words. */
-const blendkitURL = o => 'https://www.blendkit.com/?query=' + encodeURIComponent(o.bk || o.words[0]).replace(/%20/g, '+')
-  + '+category_subtree%3Amaterial+is_free%3Atrue';
+/* The openings, their own card: the glazing every window and the
+   sunspace wear, and the door leaf wherever Openings sets a door. label
+   is the short name on the pick box; the words carry the noun. */
+const RENDER_GLASS = [
+  { key:'clear', c:'#BCD6E8', streak:0.65, bk:'clear glass', label:{ en:'clear', pt:'incolor' },
+    words:['clear glass', 'glass', 'glazing', 'glazed', 'vidro', 'vidro incolor', 'vidro simples', 'envidracado'] },
+  { key:'tinted', c:'#8197A8', streak:0.45, bk:'tinted glass', label:{ en:'solar control', pt:'controlo solar' },
+    words:['tinted glass', 'solar control glass', 'vidro de controlo solar', 'vidro colorido', 'vidro fumado'] },
+  { key:'reflective', c:'#A9C3D6', streak:0.9, bk:'reflective mirror glass', label:{ en:'reflective', pt:'espelhado' },
+    words:['reflective glass', 'mirror glass', 'vidro espelhado', 'vidro reflectante', 'vidro refletor'] },
+  { key:'frosted', c:'#DCE3E6', streak:0, bk:'frosted glass', label:{ en:'frosted', pt:'fosco' },
+    words:['frosted glass', 'obscured glass', 'vidro fosco', 'vidro martelado', 'vidro translucido'] }
+];
+const RENDER_DOORS = [
+  { key:'dtimber', c:'#845534', bk:'wooden door', bkCat:'model', label:{ en:'timber', pt:'madeira' },
+    words:['timber door', 'wooden door', 'porta de madeira'] },
+  { key:'dgreen', c:'#2B543D', bk:'green painted wooden door', bkCat:'model', label:{ en:'green', pt:'verde' },
+    words:['green door', 'porta verde'] },
+  { key:'dblue', c:'#2F5A92', bk:'blue painted door', bkCat:'model', label:{ en:'blue', pt:'azul' },
+    words:['blue door', 'porta azul'] },
+  { key:'dred', c:'#732723', bk:'red wooden door', bkCat:'model', label:{ en:'ox-blood', pt:'sangue-de-boi' },
+    words:['ox-blood door', 'red door', 'porta vermelha', 'porta sangue de boi', 'sangue-de-boi'] },
+  { key:'dmetal', c:'#3B4045', bk:'modern metal entrance door', bkCat:'model', label:{ en:'metal', pt:'metálica' },
+    words:['metal door', 'steel door', 'porta metalica', 'porta metálica', 'porta de aco'] },
+  { key:'dglass', c:'#7E8E9B', bk:'glass entrance door', bkCat:'model', label:{ en:'glass', pt:'vidro' },
+    words:['glass door', 'porta de vidro', 'porta envidracada'] }
+];
+/* Blendkit's gallery, searched by the finish's own words — the query the
+   Blendkit add-on itself builds (asset-gallery?query=…+category_subtree:…);
+   its materials are all free. Doors are models there, not materials. */
+const blendkitURL = o => 'https://www.blendkit.com/asset-gallery?query=' + encodeURIComponent(o.bk || o.words[0]).replace(/%20/g, '+')
+  + '+category_subtree%3A' + (o.bkCat || 'material');
 /* Face photographs: true PBR diffuse maps from Poly Haven (CC0), 512px, fetched
    2026-10-04 for the finishes a photograph carries best — whitewash (also the
    grain of the plaster), brick, timber, thatch — and concrete: rough_concrete
@@ -13198,6 +13237,93 @@ const TEXGEN = (() => {
       return { c, h:0.012 * dome, ao:0.75 + 0.25 * dome };
     }, 1.1);
   };
+  /* azulejo de relevo: 14 cm relief tiles under one deep green glaze, a
+     raised lozenge and corner rounds that close across four tiles; the
+     glaze pools darker in the hollows */
+  R.relief = () => {
+    const W = 0.56, H = 0.56, T = 0.14, glaze = [58, 112, 86];
+    return run(W, H, (x, y, u, v) => {
+      const i = Math.floor(x / T), j = Math.floor(y / T), lx = x / T - i, ly = y / T - j;
+      const ed = Math.min(lx, 1 - lx, ly, 1 - ly) * T;
+      if (ed < 0.001) return { c:[190, 186, 176], h:-0.002, ao:0.8 };
+      const dia = Math.abs(lx - 0.5) + Math.abs(ly - 0.5), cr = Math.hypot(Math.min(lx, 1 - lx), Math.min(ly, 1 - ly));
+      const rel = 0.8 * ss(0.3, 0.26, dia) + 0.8 * ss(0.24, 0.2, cr) + 0.3 * ss(0.03, 0.08, ed / T);
+      let s = mul(glaze, 0.78 + 0.32 * rel + 0.06 * (hash(i, j, 71) - 0.5));
+      s = mul(s, 0.96 + 0.06 * fbm(u, v, 20, 20, 3, 73));
+      return { c:s, h:0.0025 * rel, ao:0.9 + 0.1 * ss(0.001, 0.003, ed) };
+    }, 2.5);
+  };
+  /* pastilha: the 25 mm ceramic mosaic of the 1950s-70s façades, a mix
+     of blues on 3 mm joints */
+  R.pastilha = () => {
+    const W = 0.56, H = 0.56, m = 0.028, n = Math.round(W / m);
+    const pal = [[64, 104, 156], [88, 134, 182], [88, 134, 182], [120, 160, 196], [204, 214, 222], [52, 86, 132]];
+    return run(W, H, (x, y, u, v) => {
+      const i = Math.floor(x / m), j = Math.floor(y / m), lx = x - i * m, ly = y - j * m;
+      const ed = Math.min(lx, m - lx, ly, m - ly);
+      if (ed < 0.0015) return { c:[196, 194, 186], h:-0.001, ao:0.85 };
+      const a = md(i, n), b = md(j, n);
+      let s = mul(pal[Math.floor(hash(a, b, 91) * pal.length)], 0.92 + 0.12 * hash(a, b, 93));
+      s = mul(s, 1 + 0.08 * ss(0.7, 0, (lx + ly) / (2 * m)));
+      return { c:s, h:0.0008 * ss(0.0015, 0.004, ed), ao:0.9 + 0.1 * ss(0.0015, 0.004, ed) };
+    }, 2);
+  };
+  /* plaqueta vidrada: glazed brick slips, 0.24 x 0.0625 m modules in
+     stretcher bond, cream glaze catching the light on each top edge */
+  R.slip = () => {
+    const W = 0.96, H = 0.5, mw = 0.24, mh = 0.0625;
+    return run(W, H, (x, y, u, v) => {
+      const row = Math.floor(y / mh), xo = md(x - (row % 2 ? mw / 2 : 0), W), col = Math.floor(xo / mw);
+      const lx = xo - col * mw, ly = y - row * mh, ed = Math.min(lx, mw - lx, ly, mh - ly);
+      if (ed < 0.004) return { c:[168, 164, 156], h:-0.003, ao:0.75 };
+      const id = row * 13 + col;
+      let s = mix([232, 226, 210], [212, 200, 176], hash(id, 1, 81));
+      s = mul(s, (0.95 + 0.06 * fbm(u, v, 30, 16, 2, 83)) * (1 + 0.06 * ss(0.5, 0, ly / mh)));
+      return { c:s, h:0.001 * ss(0.004, 0.008, ed), ao:0.88 + 0.12 * ss(0.004, 0.008, ed) };
+    }, 1.5);
+  };
+  /* doors: one 0.9 x 2.1 m leaf drawn whole — the painter stretches it
+     over the leaf the model opens. Painted doors are panelled
+     (almofadadas): stiles and rails framing four raised panels. */
+  const DW = 0.9, DH = 2.1;
+  const panelled = paint => () => run(DW, DH, (x, y, u, v) => {
+    const inX = x > 0.12 && x < DW - 0.12 && !(x > 0.42 && x < 0.48), up = y > 0.12 && y < 1.02, lo = y > 1.14 && y < 1.88;
+    let h = 0;
+    if (inX && (up || lo)) {
+      const px0 = x < 0.45 ? 0.12 : 0.48, px1 = x < 0.45 ? 0.42 : DW - 0.12, py0 = up ? 0.12 : 1.14, py1 = up ? 1.02 : 1.88;
+      h = -0.006 + 0.012 * ss(0, 0.04, Math.min(x - px0, px1 - x, y - py0, py1 - y));
+    }
+    let s = mul(paint, 0.94 + 0.08 * fbm(u, v, 6, 14, 3, 151));
+    s = mix(s, [150, 132, 110], ss(0.78, 0.88, fbm(u, v, 20, 40, 3, 153)) * 0.18);
+    return { c:s, h };
+  }, 2.2);
+  R.dgreen = panelled([44, 86, 62]);
+  R.dblue = panelled([48, 92, 150]);
+  R.dred = panelled([118, 40, 36]);
+  /* porta de tabuado: natural timber, 0.15 m boards, grain up the board */
+  R.dtimber = () => run(DW, DH, (x, y, u, v) => {
+    const b = Math.floor(x / 0.15), lx = x - b * 0.15;
+    if (lx < 0.003) return { c:[52, 34, 22], h:-0.003, ao:0.7 };
+    const g = fbm(u + hash(b, 1, 161), v, 40, 3, 4, 163);
+    const s = mul(mix([150, 98, 60], [118, 74, 44], hash(b, 2, 161) * 0.7), 0.86 + 0.24 * g);
+    return { c:s, h:0.001 * g };
+  }, 1.2);
+  /* flush anthracite steel, 0.3 m grooves and a stainless pull bar */
+  R.dmetal = () => run(DW, DH, (x, y, u, v) => {
+    let s = mul([58, 63, 68], 0.96 + 0.06 * fbm(u, v, 60, 4, 2, 171)), h = 0;
+    if (Math.abs(md(y, 0.3) - 0.15) > 0.147) { s = mul(s, 0.7); h = -0.001; }
+    if (Math.abs(x - 0.76) < 0.016 && y > 0.6 && y < 1.6) { s = [186, 188, 186]; h = 0.01; }
+    return { c:s, h };
+  }, 1.5);
+  /* glazed door: slim anthracite aluminium frame, sky in the glass */
+  R.dglass = () => run(DW, DH, (x, y, u, v) => {
+    if (x < 0.07 || x > DW - 0.07 || y < 0.07 || y > DH - 0.16) return { c:mul([60, 64, 68], 0.95 + 0.06 * fbm(u, v, 4, 20, 2, 181)), h:0.006 };
+    let s = mix([176, 198, 214], [112, 132, 150], ss(0.07, DH - 0.16, y));
+    const k = (x - 0.07) * 1.6 - (y - 0.4);
+    if (Math.abs(k) < 0.05 || Math.abs(k - 0.3) < 0.02) s = mix(s, [236, 242, 246], 0.6);
+    if (Math.abs(x - 0.76) < 0.012 && y > 0.7 && y < 1.5) s = [190, 192, 190];
+    return { c:s, h:0 };
+  }, 1);
   const make = (key, res) => { if (!R[key]) return null; RES = res || 512; try { return R[key](); } finally { RES = 512; } };
   return { make, has:key => !!R[key] };
 })();
@@ -13303,6 +13429,15 @@ function matThumbInto(cv, key) {
     im.src = PH_TEX[ph.src];
     return true;
   }
+  if (TEXGEN.has(key) && key.charAt(0) === 'd' && RENDER_DOORS.some(o => o.key === key)) {
+    /* a door is shown whole, standing in a pale wall */
+    const o = TEXGEN.make(key, 192);
+    if (!o) return false;
+    g.fillStyle = '#E7E3DA'; g.fillRect(0, 0, cv.width, cv.height);
+    const h = cv.height - 6, w = h * o.W / o.H;
+    g.drawImage(texFromGen(o), (cv.width - w) / 2, 3, w, h);
+    return true;
+  }
   if (TEXGEN.has(key)) { const o = TEXGEN.make(key, 192); if (o) { paint(texFromGen(o), o.W, o.H); return true; } }
   return false;
 }
@@ -13333,27 +13468,36 @@ const RENDER_NOUN = ['wall', 'walls', 'roof', 'roofs', 'sun', 'house', 'building
     rest is reported back as not yet understood. Single words match whole
     tokens (so "afternoon" never reads as "noon"); only multi-word finishes
     match as phrases. */
+const renderFamilies = () => ({ wall:RENDER_WALLS, roof:RENDER_ROOFS, glass:RENDER_GLASS, door:RENDER_DOORS,
+  time:RENDER_TIMES, sky:RENDER_SKIES, style:RENDER_STYLES });
+/* Every family reads the prompt with the other families' phrases blanked
+   out (same length, so indices hold): "timber door" is never a timber
+   wall, "white roof" never a whitewash, "relief tile" never a roof. */
+function maskRenderPhrases(low, family) {
+  const fams = renderFamilies(), ph = [];
+  for (const f in fams) if (f !== family) fams[f].forEach(o => o.words.forEach(w => { const pw = plainName(w); if (/[\s-]/.test(pw)) ph.push(pw); }));
+  ph.sort((a, b) => b.length - a.length);
+  return ph.reduce((acc, p) => acc.split(p).join(' '.repeat(p.length)), low);
+}
 function parseRenderPrompt(str) {
-  const norm = plainName(str || '');
-  const toks = norm.replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
-  const hit = (list, w) => {
-    const pw = plainName(w);
-    return pw.indexOf(' ') >= 0 || pw.indexOf('-') >= 0 ? norm.indexOf(pw) >= 0 : toks.indexOf(pw) >= 0;
-  };
-  const found = list => {
+  const norm0 = plainName(str || ''), fams = renderFamilies();
+  const found = family => {
+    const norm = maskRenderPhrases(norm0, family);
+    const toks = norm.replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
     let best = null, bl = 0;
-    for (const o of list) for (const w of o.words) {
-      const n = plainName(w).length;
-      if (n > bl && hit(list, w)) { best = o; bl = n; }
+    for (const o of fams[family]) for (const w of o.words) {
+      const pw = plainName(w), n = pw.length;
+      if (n > bl && (pw.indexOf(' ') >= 0 || pw.indexOf('-') >= 0 ? norm.indexOf(pw) >= 0 : toks.indexOf(pw) >= 0)) { best = o; bl = n; }
     }
     return best;
   };
-  const wall = found(RENDER_WALLS), roof = found(RENDER_ROOFS), time = found(RENDER_TIMES);
-  const sky = found(RENDER_SKIES), style = found(RENDER_STYLES);
+  const norm = norm0;
+  const wall = found('wall'), roof = found('roof'), glass = found('glass'), door = found('door'), time = found('time');
+  const sky = found('sky'), style = found('style');
   /* words spent inside a matched phrase ("green" in "green roof") are
      understood — never reported back as unknown */
   const used = {};
-  [wall, roof, time, sky, style].forEach(o => {
+  [wall, roof, glass, door, time, sky, style].forEach(o => {
     if (!o) return;
     o.words.forEach(w => {
       const pw = plainName(w);
@@ -13361,7 +13505,7 @@ function parseRenderPrompt(str) {
     });
   });
   const vocab = {};
-  [RENDER_WALLS, RENDER_ROOFS, RENDER_TIMES, RENDER_SKIES, RENDER_STYLES].forEach(l => l.forEach(o => o.words.forEach(w => { vocab[plainName(w)] = 1; })));
+  Object.values(fams).forEach(l => l.forEach(o => o.words.forEach(w => { vocab[plainName(w)] = 1; })));
   const unknown = [];
   String(str || '').toLowerCase().replace(/[^a-zà-ÿ0-9\s-]/g, ' ').split(/[\s-]+/)
     .forEach(w => {
@@ -13369,7 +13513,7 @@ function parseRenderPrompt(str) {
       if (w.length < 4 || used[w] || RENDER_STOP.indexOf(w) >= 0 || RENDER_NOUN.indexOf(w) >= 0 || vocab[w] || unknown.indexOf(w) >= 0) return;
       if (unknown.length < 6) unknown.push(w);
     });
-  return { wall, roof, time, sky, style, unknown };
+  return { wall, roof, glass, door, time, sky, style, unknown };
 }
 function buildRender(host) {
   const S = STATE.site, C = STATE.clim;
@@ -13510,12 +13654,13 @@ function buildRender(host) {
      popular finish wears a star. Picking rewrites the prompt, so the study
      file, the brief and the reading all stay truthful. */
   const presetSyncs = [];
+  const listOf = cat => renderFamilies()[cat];
   function setPromptMaterial(cat, entry) {
-    const lists = cat === 'wall' ? RENDER_WALLS : RENDER_ROOFS;
+    const lists = listOf(cat);
     /* the finish already named gives way — its longest word found in the
        prompt, so "barrel tile" goes whole, never leaving "barrel" behind */
     const src = String(prompt);
-    const low = src.split('').map(ch => ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()[0] || ch).join('');
+    const low = maskRenderPhrases(src.split('').map(ch => ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()[0] || ch).join(''), cat);
     const words = [];
     lists.forEach(o => o.words.forEach(w => words.push(plainName(w))));
     words.sort((a, b) => b.length - a.length);
@@ -13524,10 +13669,11 @@ function buildRender(host) {
       const m = new RegExp('(^|[^a-z0-9])' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z0-9])').exec(low);
       if (m) { at = m.index + m[1].length; len = w.length; was = w; break; }
     }
-    const tag = /\s(roof|walls?)$/.test(entry.words[0]) ? entry.words[0] : entry.words[0] + (cat === 'wall' ? ' walls' : ' roof');
-    const put = /\s(roof|walls?)$/.test(was) ? tag : entry.words[0];
+    const NOUN = /\s(roof|walls?|door|glass)$/;
+    const tag = NOUN.test(entry.words[0]) ? entry.words[0] : entry.words[0] + (cat === 'wall' ? ' walls' : ' roof');
+    const put = NOUN.test(was) ? tag : entry.words[0];
     let rest = at >= 0 ? src.slice(at + len) : '';
-    const noun = put.match(/\s(roof|walls?)$/);
+    const noun = put.match(NOUN);
     if (noun) rest = rest.replace(new RegExp('^\\s+' + noun[1] + '\\b', 'i'), '');
     prompt = (at >= 0 ? src.slice(0, at) + put + rest : (src.replace(/\s+$/, '') + ', ' + tag)).slice(0, 500);
     RENDER_PROMPT = prompt; promptTouched = true;
@@ -13562,12 +13708,19 @@ function buildRender(host) {
     let s = 7;
     const R = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     g.fillStyle = base; g.fillRect(0, 0, W2, H2);
-    if (key === 'glass') {
+    const gz = RENDER_GLASS.find(o => o.key === key);
+    if (gz) {
       const gr = g.createLinearGradient(0, 0, W2, H2);
-      gr.addColorStop(0, '#cfe0ee'); gr.addColorStop(0.5, '#9fc4de'); gr.addColorStop(1, '#d7e7f2');
+      gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(0.5, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(255,255,255,.3)');
       g.fillStyle = gr; g.fillRect(0, 0, W2, H2);
-      g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(W2 * 0.12, H2); g.lineTo(W2 * 0.55, 0); g.stroke();
+      if (gz.streak) {
+        g.strokeStyle = 'rgba(255,255,255,' + gz.streak + ')'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(W2 * 0.12, H2); g.lineTo(W2 * 0.55, 0); g.stroke();
+        if (gz.streak > 0.8) { g.lineWidth = 1.5; g.beginPath(); g.moveTo(W2 * 0.3, H2); g.lineTo(W2 * 0.73, 0); g.stroke(); }
+      } else {
+        g.fillStyle = 'rgba(255,255,255,.25)';
+        for (let i = 0; i < 90; i++) { g.beginPath(); g.arc(R() * W2, R() * H2, 0.6 + R(), 0, 6.284); g.fill(); }
+      }
     } else if (key === 'thatch') {
       g.strokeStyle = 'rgba(70,50,20,.4)'; g.lineWidth = 1;
       for (let i = 0; i < 46; i++) { const x = R() * W2; g.beginPath(); g.moveTo(x, R() * H2); g.lineTo(x + (R() - 0.5) * 5, R() * H2); g.stroke(); }
@@ -13579,11 +13732,20 @@ function buildRender(host) {
       for (let i = 0; i < 46; i++) { g.beginPath(); g.arc(R() * W2, R() * H2, 0.8 + R() * 1.2, 0, 6.284); g.fill(); }
     }
   }
-  function presetGroup(label, list, cat) {
-    rail.appendChild(el('div', { class:'gh', text:label }));
-    const box = rail.appendChild(el('div', { class:'controls' }));
+  /* one card per family; the openings card holds two, glass and doors,
+     each under its own small heading */
+  function presetGroup(label, list, cat, card) {
+    let box;
+    if (card) {
+      const sub = card.appendChild(el('div', { text:label }));
+      sub.style.cssText = 'font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#6B7280;margin:' + (card.children.length > 1 ? '8px' : '0') + ' 2px 4px';
+      box = card.appendChild(el('div', {}));
+    } else {
+      rail.appendChild(el('div', { class:'gh', text:label }));
+      box = rail.appendChild(el('div', { class:'controls' }));
+    }
     box.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px';
-    const regKey = (cat === 'wall' ? reg0.wall : reg0.roof).key;
+    const regKey = cat === 'wall' ? reg0.wall.key : cat === 'roof' ? reg0.roof.key : null;
     list.forEach(o => {
       const b = el('button', { class:'btn small preset', title:o.key === regKey ? t('Popular here') : o.key });
       b.dataset.key = o.key;
@@ -13595,7 +13757,7 @@ function buildRender(host) {
       const lab = el('span', {});
       lab.style.cssText = 'font-size:11px;line-height:1.25';
       lab.appendChild(dot);
-      lab.appendChild(document.createTextNode((o.key === regKey ? '★ ' : '') + matName(o)));
+      lab.appendChild(document.createTextNode((o.key === regKey ? '★ ' : '') + (o.label ? (LANG === 'pt' ? o.label.pt : o.label.en) : matName(o))));
       b.appendChild(frame); b.appendChild(lab);
       b.onclick = () => setPromptMaterial(cat, o);
       box.appendChild(b);
@@ -13604,17 +13766,20 @@ function buildRender(host) {
   }
   presetGroup('Wall finishes', RENDER_WALLS, 'wall');
   presetGroup('Roof finishes', RENDER_ROOFS, 'roof');
+  rail.appendChild(el('div', { class:'gh', text:'Openings' }));
+  const openCard = rail.appendChild(el('div', { class:'controls' }));
+  presetGroup('Glass', RENDER_GLASS, 'glass', openCard);
+  presetGroup('Doors', RENDER_DOORS, 'door', openCard);
   function syncPresets() {
-    const wk = look.wall ? look.wall.key : null, rk = look.roof ? look.roof.key : null;
     presetSyncs.forEach(s => {
-      s.b.classList.toggle('solid', (s.cat === 'wall' ? wk : rk) === s.key);
+      s.b.classList.toggle('solid', !!look[s.cat] && look[s.cat].key === s.key);
       if (!s.frame.dataset.pv) {
         s.frame.dataset.pv = s.key;
         const cv = document.createElement('canvas');
         cv.width = 192; cv.height = 60;
         cv.style.cssText = 'display:block;width:100%;height:30px;object-fit:cover';
         s.frame.appendChild(cv);
-        const base = (s.cat === 'wall' ? RENDER_WALLS : RENDER_ROOFS).find(o => o.key === s.key).c;
+        const base = listOf(s.cat).find(o => o.key === s.key).c;
         thumbLater(() => { if (!matThumbInto(cv, s.key)) matThumb(cv, s.key, base); });
       }
       const e = caEntryFor(s.key), av = caAvailable(e);
@@ -13664,7 +13829,7 @@ function buildRender(host) {
     onclick: () => fetchRenderTerrain() }));
   const terrSlot = props.appendChild(el('div', { class:'hint' }));
   host.appendChild(hint('render-how',
-    'Pick wall and roof finishes from the boxes — a Portuguese palette: renders and azulejo, brick, granite, schist, limestone, basalt, rammed earth, timber, cork, concrete, corten and glass on the walls; Lusa and barrel tile, slate, zinc, gravel, sedum, a white membrane and thatch on the roof. Every finish dresses the massing at its true module (a 0.21 m Lusa tile, a 0.08 m brick course, a 0.14 m azulejo — named in the Look panel), drawn to measure or from a calibrated Poly Haven photograph (CC0); the Look panel also names its Archicad 29 surface twin where one exists and links the same finish among Blendkit\u2019s free materials for the Blender render. The reading confirms what the model wears. The offer is three finishes: <b>Study</b> (the white card model), <b>Render</b> (full colour) and <b>B&W Render</b> (black and white). The view is downstream of every tab: the plan, breaks and patio from Site, pitch, parapet, eaves, chimney and collectors from Roof, glass, doors, overhangs, fins and sunspace from Openings and Shadowing, planting, walls and neighbours from Ventilation — change any of them and this model follows on the next visit. The brief carries the same scene to an image studio for the freer renders.'));
+    'Pick wall and roof finishes from the boxes — a Portuguese palette: renders, the façade ceramics (azulejo, relief tile, pastilha mosaic, glazed slip), brick, granite, schist, limestone, basalt, rammed earth, timber, cork, concrete and corten on the walls; Lusa and barrel tile, slate, zinc, gravel, sedum, a white membrane and thatch on the roof; and an Openings card for the glazing (clear, solar control, reflective, frosted) and the door leaf (timber, green, blue, ox-blood, metal, glass) — doors show wherever Openings and Shadowing sets one. Every finish dresses the massing at its true module (a 0.21 m Lusa tile, a 0.08 m brick course, a 0.14 m azulejo — named in the Look panel), drawn to measure or from a calibrated Poly Haven photograph (CC0); the Look panel also names its Archicad 29 surface twin where one exists and links the same finish among Blendkit\u2019s free materials for the Blender render. The reading confirms what the model wears. The offer is three finishes: <b>Study</b> (the white card model), <b>Render</b> (full colour) and <b>B&W Render</b> (black and white). The view is downstream of every tab: the plan, breaks and patio from Site, pitch, parapet, eaves, chimney and collectors from Roof, glass, doors, overhangs, fins and sunspace from Openings and Shadowing, planting, walls and neighbours from Ventilation — change any of them and this model follows on the next visit. The brief carries the same scene to an image studio for the freer renders.'));
   function fallbackCopy(txt, done) {
     const f = el('textarea', { style:'position:fixed;opacity:0' });
     f.value = txt; document.body.appendChild(f); f.select();
@@ -13808,6 +13973,9 @@ style === 'sketch' ? '#EFEBE0'
       poly(hull.map(q => [q[0], q[1], (terrOn ? rTerraAt(q[0], q[1]) : 0) + 0.06]),
         night ? 'rgba(0,0,0,.30)' : 'rgba(20,23,26,.22)', null, 1);
     }
+    /* the openings card: the glazing on every pane, the door leaf finish */
+    const glassC = () => look.glass ? look.glass.c : '#BCD6E8';
+    const hexA = (hex, a) => { const v = parseInt(String(hex).slice(1), 16); return 'rgba(' + (v >> 16) + ',' + ((v >> 8) & 255) + ',' + (v & 255) + ',' + a + ')'; };
     /* faces + billboard crowns, far to near */
     const items = [];
     const wallSeen = n => n[0] * ax.c[0] + n[1] * ax.c[1] > 1e-6;
@@ -13849,7 +14017,7 @@ style === 'sketch' ? '#EFEBE0'
         gl.push({ q:[off(onWall(sg, u0, v0), 0.07), off(onWall(sg, u1, v0), 0.07), off(onWall(sg, u1, v1), 0.07), off(onWall(sg, u0, v1), 0.07)], u0, u1, v0, v1 });
       });
       gl.forEach(g => items.push({ pts:g.q, win:{ sg, u0:g.u0, u1:g.u1, v0:g.v0, v1:g.v1 },
-        fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : '#BCD6E8',
+        fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(),
         glass:true, d:g.q.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / 4 }));
     });
     /* entrance doors: only where Openings sets a door unit — never invented.
@@ -13881,7 +14049,7 @@ style === 'sketch' ? '#EFEBE0'
         const push = p => [p[0] + sg.n[0] * SUNSP.depth, p[1] + sg.n[1] * SUNSP.depth, p[2]];
         const outA = push(inA), outB = push(inB);
         const oh = (p, z) => [p[0], p[1], z];
-        items.push({ pts:[outA, outB, oh(outB, hgt), oh(outA, hgt)], fill:night ? 'rgba(255,210,122,.85)' : 'rgba(150,185,210,.5)', glass:true,
+        items.push({ pts:[outA, outB, oh(outB, hgt), oh(outA, hgt)], fill:night ? 'rgba(255,210,122,.85)' : hexA(glassC(), 0.5), glass:true,
           d:depthOf((outA[0] + outB[0]) / 2, (outA[1] + outB[1]) / 2, hgt / 2) });
       }
     }
@@ -14221,11 +14389,22 @@ style === 'sketch' ? '#EFEBE0'
       }
       if (it.door && style !== 'sketch') {
         const dr = it.door, sg = dr.sg, n = sg.n;
-        const leaf = [[dr.uc - dr.dw / 2 + 0.07, 0.06], [dr.uc + dr.dw / 2 - 0.07, 0.06], [dr.uc + dr.dw / 2 - 0.07, dr.dh - 0.05], [dr.uc - dr.dw / 2 + 0.07, dr.dh - 0.05]]
-          .map(([u, v]) => { const p = onWall(sg, u, v); return proj(FR, p[0] + n[0] * 0.12, p[1] + n[1] * 0.12, p[2]); });
+        const leaf3 = [[dr.uc - dr.dw / 2 + 0.07, 0.06], [dr.uc + dr.dw / 2 - 0.07, 0.06], [dr.uc + dr.dw / 2 - 0.07, dr.dh - 0.05], [dr.uc - dr.dw / 2 + 0.07, dr.dh - 0.05]]
+          .map(([u, v]) => { const p = onWall(sg, u, v); return [p[0] + n[0] * 0.12, p[1] + n[1] * 0.12, p[2]]; });
+        const leaf = leaf3.map(p => proj(FR, p[0], p[1], p[2]));
         ctx.beginPath(); leaf.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
-        ctx.fillStyle = night ? '#3A3E42' : '#44584E'; ctx.fill();
-        if (dressed && !night) {
+        ctx.fillStyle = night ? '#3A3E42' : look.door ? look.door.c : '#44584E'; ctx.fill();
+        /* the chosen door finish, drawn whole over the leaf */
+        let doorDone = false;
+        if (dressed && !night && look.door) {
+          const tx = matTex(look.door.key, refreshRender), lw = dr.dw - 0.14, lh = dr.dh - 0.11;
+          if (tx) doorDone = paintTexFace({ pts:leaf3, uv:[[0, lh], [lw, lh], [lw, 0], [0, 0]], mat:'door:' + look.door.key, sh:faceK(n) },
+            { mips:tx.mips, tw:lw, th:lh });
+        }
+        if (doorDone && ['dmetal', 'dglass'].indexOf(look.door.key) < 0) {
+          ctx.fillStyle = '#C8C8C0'; ctx.beginPath(); ctx.arc(leaf[1][0] - 4, (leaf[1][1] + leaf[2][1]) / 2, 1.8, 0, 6.284); ctx.fill();
+        }
+        if (dressed && !night && !doorDone) {
           stroke(ctx, 'rgba(0,0,0,.35)', 1);
           [0.35, 0.65].forEach(f => {
             seg(ctx, leaf[0][0] + (leaf[3][0] - leaf[0][0]) * f, leaf[0][1] + (leaf[3][1] - leaf[0][1]) * f,
@@ -14245,10 +14424,12 @@ style === 'sketch' ? '#EFEBE0'
         ctx.fillStyle = night ? 'rgba(140,140,135,.7)' : '#CFCBC0'; ctx.fill();
         stroke(ctx, 'rgba(20,23,26,.4)', 1); ctx.stroke();
       }
-      if (it.glass && !night && dressed) {   // a sky streak across the pane
+      const streak = look.glass ? look.glass.streak : 0.65;
+      if (it.glass && !night && dressed && streak) {   // a sky streak across the pane — none in frosted glass
         const p0 = proj(FR, it.pts[0][0], it.pts[0][1], it.pts[0][2]), p2 = proj(FR, it.pts[2][0], it.pts[2][1], it.pts[2][2]);
-        stroke(ctx, 'rgba(255,255,255,.65)', 1.4);
+        stroke(ctx, 'rgba(255,255,255,' + streak + ')', 1.4);
         seg(ctx, p0[0] + (p2[0] - p0[0]) * 0.25, p0[1] + (p2[1] - p0[1]) * 0.55, p0[0] + (p2[0] - p0[0]) * 0.55, p0[1] + (p2[1] - p0[1]) * 0.2);
+        if (streak > 0.8) seg(ctx, p0[0] + (p2[0] - p0[0]) * 0.45, p0[1] + (p2[1] - p0[1]) * 0.6, p0[0] + (p2[0] - p0[0]) * 0.7, p0[1] + (p2[1] - p0[1]) * 0.32);
       }
       if (it.glass && night) {
         const c = it.pts.map(q => proj(FR, q[0], q[1], q[2]));
@@ -14282,7 +14463,8 @@ style === 'sketch' ? '#EFEBE0'
         roof:{ type:['flat', 'shed', 'gable', 'hip'][RF.n], pitch:RF.n === 0 ? 0 : RF.th },
         openings:{ S:+OPEN.S.wwr.toFixed(2), N:+OPEN.N.wwr.toFixed(2), E:+OPEN.E.wwr.toFixed(2), W:+OPEN.W.wwr.toFixed(2) },
         sunspace:SUNSP && SUNSP.on ? SUNSP.face : null, planting:SCENE.veg.length, gardenWalls:SCENE.walls.length },
-      look:{ walls:matOf('wall'), roof:matOf('roof'), sky:look.sky ? look.sky.key : 'site', finish:style, night:nightNow() },
+      look:{ walls:matOf('wall'), roof:matOf('roof'), glazing:look.glass ? look.glass.key : 'clear', door:look.door ? look.door.key : null,
+        sky:look.sky ? look.sky.key : 'site', finish:style, night:nightNow() },
       sun:{ day:'21 Jun', hour:+hour.toFixed(1), altitude:+sun.alt.toFixed(1), azimuth:+sun.azi.toFixed(1) },
       camera:RENDER_MATS.cam || null,
       ground:rGrid && mm ? { grid:rGrid.n + 'x' + rGrid.n + ' at ' + rGrid.step + ' m', low:+mm.lo.toFixed(1), high:+mm.hi.toFixed(1) } : { grid:null },
@@ -14301,6 +14483,7 @@ style === 'sketch' ? '#EFEBE0'
       ['Wall physics (Archicad 29, Tapir)', look.wall && AC_BM[look.wall.key] ? AC_BM[look.wall.key].bm + (AC_BM[look.wall.key].lam === null ? ' (unset)' : ' λ' + AC_BM[look.wall.key].lam + ' ρ' + AC_BM[look.wall.key].rho) : ''], 
       ['Roof availability (Construction Advisor, web)', look.roof ? (caAvailable(caEntryFor(look.roof.key)) !== false ? 'stocked/available' : 'scarce — verify supply') : ''],
       ['Roof physics (Archicad 29, Tapir)', look.roof && AC_BM[look.roof.key] ? AC_BM[look.roof.key].bm + (AC_BM[look.roof.key].lam === null ? ' (unset)' : ' λ' + AC_BM[look.roof.key].lam + ' ρ' + AC_BM[look.roof.key].rho) : ''],
+      ['Glazing', look.glass ? look.glass.key : 'clear (default)'], ['Door', look.door ? look.door.key : 'default'],
       ['Solar hour', +hour.toFixed(1)], ['Sun altitude (°)', +sun.alt.toFixed(1)], ['Sun azimuth (°)', +sun.azi.toFixed(1)],
       ['Sky', look.sky ? look.sky.key : 'site'], ['Finish', styleNow()], ['Night', nightNow() ? 'yes' : 'no'],
       ['Terrain grid', rGrid ? rGrid.n + '×' + rGrid.n + ' at ' + rGrid.step + ' m' : 'none'],
@@ -14347,10 +14530,13 @@ style === 'sketch' ? '#EFEBE0'
       const n = availNote(o);
       if (n) chip(n.txt, n.ok === true);
     });
+    if (look.door && !['S', 'N', 'E', 'W'].some(f => OPEN[f] && OPEN[f].units && OPEN[f].units.some(u => u.on && u.door)))
+      chip(t('No door in the model — add one in Openings and Shadowing'), false);
     syncPresets();
     lookSlot.innerHTML = '';
     const rows = [[t('Wall material'), look.wall ? matName(look.wall) + (acName(look.wall) ? ' — Archicad: ' + acName(look.wall) : '') : t('site finish') + ' (' + (MASS.col || '—') + ')'],
       [t('Roof material'), look.roof ? matName(look.roof) + (acName(look.roof) ? ' — Archicad: ' + acName(look.roof) : '') : t('site finish') + ' (' + (ROOF.col || '—') + ')'],
+      [t('Glass'), look.glass ? matName(look.glass) : '—'], [t('Door'), look.door ? matName(look.door) : '—'],
       [t('Solar hour'), fmt(hour, 1) + ' h'], [t('Finish'), t(styleNow())]];
     const modOf = o => o && o.mod ? (LANG === 'pt' ? o.mod.pt : o.mod.en) : null;
     if (modOf(look.wall)) rows.splice(1, 0, [t('Wall module'), modOf(look.wall)]);
@@ -14361,10 +14547,10 @@ style === 'sketch' ? '#EFEBE0'
     });
     /* the same finishes among Blendkit's free materials, for the render
        carried on in Blender: drop the find on AA_Wall or AA_Roof */
-    if (look.wall || look.roof) {
+    if (look.wall || look.roof || look.glass || look.door) {
       const d = el('div', { class:'fact' }, [el('span', { text:t('Blendkit (free)') })]);
       const b = el('b', {});
-      [look.wall, look.roof].filter(Boolean).forEach((o, i) => {
+      [look.wall, look.roof, look.glass, look.door].filter(Boolean).forEach((o, i) => {
         if (i) b.appendChild(document.createTextNode(' · '));
         b.appendChild(el('a', { href:blendkitURL(o), target:'_blank', rel:'noopener', text:matName(o) + ' ↗',
           title:t('Search Blendkit for') + ' “' + (o.bk || o.words[0]) + '”' }));
@@ -14398,6 +14584,7 @@ style === 'sketch' ? '#EFEBE0'
     RENDER_MATS = {
       wall:look.wall ? { key:look.wall.key, color:wallBase(), ca:caEntryFor(look.wall.key).keys } : null,
       roof:look.roof ? { key:look.roof.key, color:roofBase(), ca:caEntryFor(look.roof.key).keys } : null,
+      glass:look.glass ? { key:look.glass.key, color:look.glass.c } : null, door:look.door ? { key:look.door.key, color:look.door.c } : null,
       zone:caZone(), wallKey:look.wall ? look.wall.key : null, roofKey:look.roof ? look.roof.key : null,
       sky:look.sky ? look.sky.key : null, finish:styleNow(), night:nightNow(),
       sun:{ hour:+hour.toFixed(1), alt:+sun.alt.toFixed(1), azi:+sun.azi.toFixed(1) },
@@ -14518,8 +14705,11 @@ style === 'sketch' ? '#EFEBE0'
   caMaterials(() => refreshRender());
 }
 /* Name a parsed material in the interface language for the reading line. */
-const RENDER_PTNAME = { whitewash:'cal', plaster:'reboco', azulejo:'azulejo', brick:'tijolo', stone:'granito', schist:'xisto', limestone:'calcário',
-  basalt:'basalto', earth:'taipa', timber:'madeira', cork:'cortiça', concrete:'betão', corten:'aço corten', glass:'vidro',
+const RENDER_PTNAME = { whitewash:'cal', plaster:'reboco', azulejo:'azulejo', relief:'azulejo de relevo', pastilha:'pastilha', slip:'plaqueta vidrada',
+  brick:'tijolo', stone:'granito', schist:'xisto', limestone:'calcário',
+  basalt:'basalto', earth:'taipa', timber:'madeira', cork:'cortiça', concrete:'betão', corten:'aço corten',
+  clear:'vidro incolor', tinted:'vidro de controlo solar', reflective:'vidro espelhado', frosted:'vidro fosco',
+  dtimber:'porta de madeira', dgreen:'porta verde', dblue:'porta azul', dred:'porta sangue-de-boi', dmetal:'porta metálica', dglass:'porta de vidro',
   tile:'telha lusa', canudo:'telha de canudo', slate:'ardósia', metal:'zinco', gravel:'seixo', green:'ajardinada', white:'branca', thatch:'colmo' };
 /* --------------------------------------------------------------- 8. BOOT -- */
 const TABS = [
@@ -14943,7 +15133,8 @@ function exportMats() {
   return [
     { name:'AA_Wall', color:hexRgb(W ? W.color : wf ? wf.hex : '#D9D2C2'), desc:'walls — ' + desc(W, 'site finish') },
     { name:'AA_Roof', color:hexRgb(R ? R.color : rf ? rf.hex : '#8F7A68'), desc:'roof — ' + desc(R, 'site finish') },
-    { name:'AA_Glass', color:[0.74, 0.84, 0.91], trans:0.45, desc:'glazing + sunspace' },
+    { name:'AA_Glass', color:RENDER_MATS.glass ? hexRgb(RENDER_MATS.glass.color) : [0.74, 0.84, 0.91], trans:RENDER_MATS.glass && RENDER_MATS.glass.key === 'frosted' ? 0.2 : 0.45,
+      desc:'glazing + sunspace — ' + (RENDER_MATS.glass ? RENDER_MATS.glass.key : 'clear') },
     { name:'AA_Solar', color:[0.12, 0.23, 0.54], desc:'PV + thermal collectors' },
     { name:'AA_Terrain', color:[0.79, 0.71, 0.55], desc:'Copernicus DEM grid' },
     { name:'AA_Leaf', color:[0.29, 0.42, 0.23], desc:'crowns' },
@@ -15090,13 +15281,15 @@ function blenderBundle() {
   const obj = toOBJ(els);
   const mats = exportMats();
   const PROC = { brick:'brick', tile:'brick', canudo:'brick', azulejo:'brick', plaster:'noise', whitewash:'noise', concrete:'noise', stone:'noise',
-    schist:'noise', limestone:'noise', basalt:'noise', earth:'bands', timber:'bands', metal:'metal', corten:'noise', glass:'glass', cork:'noise',
+    relief:'brick', pastilha:'brick', slip:'brick',
+    schist:'noise', limestone:'noise', basalt:'noise', earth:'bands', timber:'bands', metal:'metal', corten:'noise', cork:'noise',
     slate:'noise', gravel:'noise', thatch:'bands', green:'noise', white:'noise' };
   const wallKey = RENDER_MATS.wall ? RENDER_MATS.wall.key : null, roofKey = RENDER_MATS.roof ? RENDER_MATS.roof.key : null;
   /* Blendkit's free library is the photoreal upgrade in Blender: the
      script names, per slot, the search that finds the finish there */
   const bkFor = (list, k) => { const o = list.find(x => x.key === k); return o ? (o.bk || o.words[0]) : null; };
-  const bks = { AA_Wall:bkFor(RENDER_WALLS, wallKey), AA_Roof:bkFor(RENDER_ROOFS, roofKey) };
+  const bks = { AA_Wall:bkFor(RENDER_WALLS, wallKey), AA_Roof:bkFor(RENDER_ROOFS, roofKey),
+    AA_Glass:RENDER_MATS.glass ? bkFor(RENDER_GLASS, RENDER_MATS.glass.key) : null };
   const procs = { AA_Wall:PROC[wallKey] || 'noise', AA_Roof:PROC[roofKey] || 'noise',
     AA_Glass:'glass', AA_Terrain:'noise', AA_Leaf:'flat', AA_Trunk:'flat', AA_Slab:'noise', AA_Shade:'flat', AA_Solar:'flat', AA_Default:'flat' };
   const S = STATE.site;
@@ -17593,6 +17786,11 @@ Object.assign(PT, {
   "Popular here": "Popular aqui",
   "Wall finishes": "Acabamentos de parede",
   "Wall module": "Módulo da parede",
+  "Openings": "Aberturas",
+  "Glass": "Vidro",
+  "Doors": "Portas",
+  "Door": "Porta",
+  "No door in the model — add one in Openings and Shadowing": "Sem porta no modelo — acrescente uma em Aberturas e Sombreamento",
   "Roof module": "Módulo da cobertura",
   "Blendkit (free)": "Blendkit (grátis)",
   "Search Blendkit for": "Procurar no Blendkit",
@@ -18166,7 +18364,7 @@ Object.assign(PT_HINT, {
   'vent-face':
     'A câmara orbita o modelo: ↺ e ↻ rodam-no 45°, ▲ e ▼ inclinam-no 15°, Topo olha a direito para baixo como uma planta, Barlavento coloca-se de onde vem o vento, e De lado ao vento põe-se de perfil em relação a ele, baixa, para se verem as camadas a subir sobre a cobertura e a descer para o lado de sotavento. Repor volta ao canto sudoeste que os outros separadores usam. Árvores, muros e o escoamento lêem-se do seu lugar no local, não da vista: rodar a câmara só muda o que se vê.',
   'render-how':
-    'Escolha os acabamentos de parede e cobertura nas caixas — uma paleta portuguesa: rebocos e azulejo, tijolo, granito, xisto, calcário, basalto, taipa, madeira, cortiça, betão, aço corten e vidro nas paredes; telha lusa e de canudo, ardósia, zinco, seixo, sedum, membrana branca e colmo na cobertura. Cada acabamento veste a volumetria no seu módulo real (telha lusa de 0,21 m, fiada de tijolo de 0,08 m, azulejo de 0,14 m — indicado no painel Aspeto), desenhado à medida ou a partir de uma fotografia Poly Haven calibrada (CC0); o painel Aspeto nomeia também a superfície gémea do Archicad 29, quando existe, e liga o mesmo acabamento aos materiais grátis do Blendkit para o render em Blender. A leitura confirma o que o modelo veste. A oferta são três acabamentos: <b>Estudo</b> (o modelo em cartão branco), <b>Render</b> (a cores) e <b>Render P&B</b> (a preto e branco). A vista depende de todos os separadores: a planta, quebras e pátio do Local, inclinação, platibanda, beirado, chaminé e colectores do Telhado, vidro, portas, palas, brises e estufa das Aberturas, plantação, muros e vizinhos da Ventilação — mude qualquer um e este modelo acompanha na visita seguinte. O brief leva a mesma cena a um estúdio de imagem para as renderizações mais livres.',
+    'Escolha os acabamentos de parede e cobertura nas caixas — uma paleta portuguesa: rebocos, as cerâmicas de fachada (azulejo, azulejo de relevo, pastilha, plaqueta vidrada), tijolo, granito, xisto, calcário, basalto, taipa, madeira, cortiça, betão e aço corten nas paredes; telha lusa e de canudo, ardósia, zinco, seixo, sedum, membrana branca e colmo na cobertura; e um cartão de Aberturas para o vidro (incolor, controlo solar, espelhado, fosco) e a folha da porta (madeira, verde, azul, sangue-de-boi, metálica, vidro) — as portas aparecem onde Aberturas e Sombreamento as define. Cada acabamento veste a volumetria no seu módulo real (telha lusa de 0,21 m, fiada de tijolo de 0,08 m, azulejo de 0,14 m — indicado no painel Aspeto), desenhado à medida ou a partir de uma fotografia Poly Haven calibrada (CC0); o painel Aspeto nomeia também a superfície gémea do Archicad 29, quando existe, e liga o mesmo acabamento aos materiais grátis do Blendkit para o render em Blender. A leitura confirma o que o modelo veste. A oferta são três acabamentos: <b>Estudo</b> (o modelo em cartão branco), <b>Render</b> (a cores) e <b>Render P&B</b> (a preto e branco). A vista depende de todos os separadores: a planta, quebras e pátio do Local, inclinação, platibanda, beirado, chaminé e colectores do Telhado, vidro, portas, palas, brises e estufa das Aberturas, plantação, muros e vizinhos da Ventilação — mude qualquer um e este modelo acompanha na visita seguinte. O brief leva a mesma cena a um estúdio de imagem para as renderizações mais livres.',
   'vent-terrain':
     'O terreno aberto (plano) trava menos o vento; o terreno partido e montanhoso abriga mais (expoente da lei de potência 0,14–0,28). A exposição multiplica de novo: abrigada 0,6, moderada 1,0, exposta 1,4 (Olgyay, pp.37–40; DeKay & Brown, Estratégia 85). A classe de terreno e os doze ventos dominantes mensais derivam destas coordenadas automaticamente à entrada (reanálise ERA5 via Open-Meteo — como a consulta de altitude, só as coordenadas saem do navegador); o botão repete-a. O desenho vai mais longe: uma malha regular de 240 m de alturas do terreno é buscada para o local e desenhada sob o modelo com o seu baixo e alto, e cada linha de vento acompanha-a — subindo uma elevação, assentando numa depressão — para o juízo de exposição se ler contra a geografia real. A malha é o MDT Copernicus edição 2021 (GLO-90, resolução de 90 m, https://doi.org/10.5270/ESA-c5d3d65), servido pelo Open-Meteo sob licença livre — o mesmo modelo de elevação por trás da consulta de altitude. A exposição continua manual: lê a envolvente imediata, que nenhum produto em grelha vê.',
   'vent-air':
