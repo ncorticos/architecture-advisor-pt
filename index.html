@@ -13406,7 +13406,7 @@ style === 'sketch' ? '#EFEBE0'
       if (key === 'brick') units(0.6, 0.3);
       else if (key === 'stone') units(0.9, 0.45, 0.35);
       else if (key === 'timber') battens(0.18, 0.16);
-      else if (key === 'concrete') { blotches(18, 2, 10, 0.08); speck(110, 0.06); }
+      else if (key === 'concrete') { blotches(22, 3, 14, 0.1); speck(130, 0.07); rows(0.6, 0.12); }
       else if (key === 'whitewash' || key === 'plaster') { blotches(10, 8, 30, 0.07); speck(70, 0.045); }
       else if (key === 'cork') blotches(26, 3, 10, 0.12);
       else if (key === 'tile') units(0.36, 0.35);
@@ -13539,11 +13539,12 @@ style === 'sketch' ? '#EFEBE0'
       const P = it.pts.map(q => proj(FR, q[0], q[1], q[2]));
       if (P.length < 3) return false;
       let uv;
+      const tw = it.mat === 'concrete' ? 1.2 : TEXW, th = it.mat === 'concrete' ? 1.2 : TEXH;
       if (it.wallSg) {
         const sg = it.wallSg, dx = sg.b[0] - sg.a[0], dy = sg.b[1] - sg.a[1], L = sg.len || 1;
-        uv = it.pts.map(q => [((q[0] - sg.a[0]) * dx + (q[1] - sg.a[1]) * dy) / L / TEXW * img.width, q[2] / TEXH * img.height]);
+        uv = it.pts.map(q => [((q[0] - sg.a[0]) * dx + (q[1] - sg.a[1]) * dy) / L / tw * img.width, q[2] / th * img.height]);
       } else {
-        uv = it.pts.map(q => [q[0] / TEXW * img.width, q[1] / TEXH * img.height]);
+        uv = it.pts.map(q => [q[0] / tw * img.width, q[1] / th * img.height]);
       }
       for (let i = 1; i + 1 < P.length; i++) {
         const A = [P[0], P[i], P[i + 1]], B = [uv[0], uv[i], uv[i + 1]];
@@ -13583,6 +13584,7 @@ style === 'sketch' ? '#EFEBE0'
         const img = acPhotoImg(it.mat);
         if (img) photoDone = paintPhotoFace(it, img);
       }
+      if (photoDone && it.mat === 'concrete' && it.wallSg && !night) dressFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])), it.mat, it.fill, it.uv);
       if (photoDone && it.wallSg && !night) shadeFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])));
       if (style === 'photo' && !night && !photoDone && !it.glass && !it.blob && !it.nbTip && !it.door && it.mat && it.mat !== 'site') {
         dressFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])), it.mat, it.fill, it.uv);
