@@ -7317,6 +7317,8 @@ function buildRoof(host) {
     const M = roofModel(G, RF), bb = M.pl.bbox;
     return { x0:bb[0] + 0.3, x1:bb[2] - 0.3, y0:bb[1] + 0.3, y1:bb[3] - 0.3 };
   };
+  /** Roof under a chimney position: inside the walls and with a surface. */
+  const chimDrawable = (M, x, y) => M.pl.inside(x, y) && M.zAt(x, y) !== null;
   function buildChimUI() {
     chimBox.innerHTML = '';
     chimXCtl = chimYCtl = null;
@@ -7329,6 +7331,16 @@ function buildRoof(host) {
           buildChimUI(); roofDraw();
         } }));
       return;
+    }
+    /* Heal a stranded chimney (plan edited under it, void under the
+       sliders): with no roof under it the chimney is never drawn — move
+       it back to the highest roof instead of leaving it invisible. */
+    {
+      const Mh = roofModel(G, RF);
+      if (!chimDrawable(Mh, +ch.x, +ch.y)) {
+        const at = placeChimney(Mh);
+        if (at) { RF.chim.x = at.x; RF.chim.y = at.y; }
+      }
     }
     const styles = chimneyList(STATE.site.nuts);
     if (styles.length > 1) {
@@ -7375,9 +7387,9 @@ function buildRoof(host) {
       } }));
     const sp = chimSpan();
     chimXCtl = rangeCtl('Metres from the west face', Math.min(sp.x0, sp.x1), Math.max(sp.x0, sp.x1), 0.1, clamp(ch.x, sp.x0, sp.x1),
-      v => { RF.chim.x = +v.toFixed(2); roofDraw(); }, v => fmt(v, 1) + ' m');
+      v => { const nx = +v.toFixed(2); if (!chimDrawable(roofModel(G, RF), nx, +RF.chim.y)) { chimXCtl.range.value = RF.chim.x; chimXCtl.out.textContent = fmt(RF.chim.x, 1) + ' m'; toast(t('No roof there \u2014 the chimney stays where it stands')); return; } RF.chim.x = nx; roofDraw(); }, v => fmt(v, 1) + ' m');
     chimYCtl = rangeCtl('Metres from the south face', Math.min(sp.y0, sp.y1), Math.max(sp.y0, sp.y1), 0.1, clamp(ch.y, sp.y0, sp.y1),
-      v => { RF.chim.y = +v.toFixed(2); roofDraw(); }, v => fmt(v, 1) + ' m');
+      v => { const ny = +v.toFixed(2); if (!chimDrawable(roofModel(G, RF), +RF.chim.x, ny)) { chimYCtl.range.value = RF.chim.y; chimYCtl.out.textContent = fmt(RF.chim.y, 1) + ' m'; toast(t('No roof there \u2014 the chimney stays where it stands')); return; } RF.chim.y = ny; roofDraw(); }, v => fmt(v, 1) + ' m');
     chimBox.appendChild(chimXCtl); chimBox.appendChild(chimYCtl);
     chimBox.appendChild(el('button', { class:'btn small', text:'× ' + t('Remove'), title:t('Take the chimney away'),
       onclick:() => { RF.chim = null; buildChimUI(); roofDraw(); } }));
@@ -16981,6 +16993,7 @@ Object.assign(PT, {
   "+ Add chimney": "+ Acrescentar chaminé",
   "Raise the region’s chimney where the roof is highest": "Levantar a chaminé da região onde a cobertura é mais alta",
   "Take the chimney away": "Retirar a chaminé",
+  "No roof there — the chimney stays where it stands": "Aí não há cobertura — a chaminé fica onde está",
   "Simple pot": "Pote simples",
   "A plain washed stack with one pot — every region builds one.": "Um simples fuste caiado com um pote — todas as regiões constroem um.",
   "To the rule": "Para a regra",
