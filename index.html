@@ -13631,6 +13631,8 @@ function buildRender(host) {
      OpenStreetMap footprints, hinted as massing only — their final render
      appearance is still to be decided, so they stay deliberately plain. */
   let showNb = !!(K0 && K0.showNb);
+  let embas = !!(K0 && K0.embas), cant = !!(K0 && K0.cant);
+  const saveStone = () => { KEEP.visualization = Object.assign(KEEP.visualization || {}, { embas, cant }); };
   /* terrain: the ventilation grid where this browser already derived it,
      else a grid of our own over the same service — only coordinates leave */
   let rGrid = KEEP.vent && KEEP.vent.terrainGrid ? KEEP.vent.terrainGrid : null;
@@ -13702,6 +13704,8 @@ function buildRender(host) {
   }
 
   /* ---- the look the prompt resolves to ---- */
+  const STONE_C = (RENDER_WALLS.find(o => o.key === 'stone') || {}).c || '#A29C90';
+  const LIME_C = (RENDER_WALLS.find(o => o.key === 'limestone') || {}).c || '#D8CEBD';
   const wallBase = () => {
     if (look.wall) return look.wall.c;
     const f = finishOf(MASS.col);
@@ -13859,6 +13863,11 @@ function buildRender(host) {
   const openCard = rail.appendChild(el('div', { class:'controls' }));
   presetGroup('Glass', RENDER_GLASS, 'glass', openCard);
   presetGroup('Doors', RENDER_DOORS, 'door', openCard);
+  rail.appendChild(el('div', { class:'gh', text:'Stone details' }));
+  const stoneBox = rail.appendChild(el('div', { class:'controls' }));
+  const embasCtl = checkCtl('Stone base \u00b7 1 m', embas, v => { embas = v; saveStone(); refreshRender(); });
+  const cantCtl = checkCtl('Window and door frames \u00b7 0.20 m', cant, v => { cant = v; saveStone(); refreshRender(); });
+  stoneBox.appendChild(embasCtl); stoneBox.appendChild(cantCtl);
   function syncPresets() {
     presetSyncs.forEach(s => {
       s.b.classList.toggle('solid', !!look[s.cat] && look[s.cat].key === s.key);
@@ -14070,6 +14079,22 @@ style === 'sketch' ? '#EFEBE0'
     const wallSeen = n => n[0] * ax.c[0] + n[1] * ax.c[1] > 1e-6;
     const onWall = (sg, u, v) => [sg.a[0] + (sg.b[0] - sg.a[0]) * u / sg.len, sg.a[1] + (sg.b[1] - sg.a[1]) * u / sg.len, v];
     const faceK = n => 0.55 + 0.45 * Math.max(0, n[0] * sunL[0] + n[1] * sunL[1]) * (0.3 + 0.7 * sinA);
+    /* a stone frame ring round an opening: 0.20 m sandstone-silhouette strips,
+       proud of the wall, clipped to it — the bottom side drops out by itself
+       where the opening meets the ground, as on doors */
+    const frameRing = (sg, a, b, v0, v1, mat, base) => {
+      const W = 0.2, oa = Math.max(0, a - W), ob = Math.min(sg.len, b + W), ov0 = Math.max(0, v0 - W), ov1 = v1 + W;
+      const strips = [[oa, a, ov0, ov1], [b, ob, ov0, ov1], [a, b, ov0, v0], [a, b, v1, ov1]];
+      const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
+      const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
+      const out = [];
+      strips.forEach(([x0, x1, y0, y1]) => {
+        if (x1 - x0 < 0.02 || y1 - y0 < 0.02) return;
+        const q = [off(onWall(sg, x0, y0), 0.02), off(onWall(sg, x1, y0), 0.02), off(onWall(sg, x1, y1), 0.02), off(onWall(sg, x0, y1), 0.02)];
+        out.push({ pts:q, fill:shadeHex(base, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4, mat, wallSg:sg, uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) });
+      });
+      return out;
+    };
     M.walls.forEach(wl => {
       const sg = wl.sg;
       if (!wallSeen(sg.n)) return;
@@ -14078,6 +14103,15 @@ style === 'sketch' ? '#EFEBE0'
       const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
       items.push({ pts:wpts, fill:shadeHex(base, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:wpts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / wpts.length, mat:look.wall ? look.wall.key : 'site', wallSg:sg,
         uv:wpts.map(q => [(q[0] - sg.a[0]) * tu[0] + (q[1] - sg.a[1]) * tu[1], -q[2]]) });
+    });
+    if (embas) M.pl.segs.forEach(sg => {
+      if (!wallSeen(sg.n)) return;
+      const eh = Math.min(1, H0);
+      if (eh < 0.2) return;
+      const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
+      const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
+      const q = [off(onWall(sg, 0, 0), 0.03), off(onWall(sg, sg.len, 0), 0.03), off(onWall(sg, sg.len, eh), 0.03), off(onWall(sg, 0, eh), 0.03)];
+      items.push({ pts:q, fill:shadeHex(STONE_C, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4, mat:'stone', wallSg:sg, uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) });
     });
     M.pieces.forEach(pc => {
       const f = pc.f;
@@ -14108,6 +14142,7 @@ style === 'sketch' ? '#EFEBE0'
       gl.forEach(g => items.push({ pts:g.q, win:{ sg, u0:g.u0, u1:g.u1, v0:g.v0, v1:g.v1 },
         fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(),
         glass:true, d:g.q.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / 4 }));
+      if (cant) gl.forEach(g => frameRing(sg, g.u0, g.u1, g.v0, g.v1, 'limestone', LIME_C).forEach(q => items.push(q)));
     });
     /* entrance doors: only where Openings sets a door unit — never invented.
        No door units, no doors: an all-window house is a legitimate state,
@@ -14128,6 +14163,7 @@ style === 'sketch' ? '#EFEBE0'
       items.push({ pts:q, door:{ sg, uc, dw, dh },
         fill:'#2E3236',
         d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4 });
+      if (cant) frameRing(sg, uc - dw / 2, uc + dw / 2, 0.02, dh, 'limestone', LIME_C).forEach(q2 => items.push(q2));
     });
     /* sunspace as a glass box on its facade */
     if (SUNSP && SUNSP.on) {
@@ -14573,6 +14609,7 @@ style === 'sketch' ? '#EFEBE0'
       ['Roof availability (Construction Advisor, web)', look.roof ? (caAvailable(caEntryFor(look.roof.key)) !== false ? 'stocked/available' : 'scarce — verify supply') : ''],
       ['Roof physics (Archicad 29, Tapir)', look.roof && AC_BM[look.roof.key] ? AC_BM[look.roof.key].bm + (AC_BM[look.roof.key].lam === null ? ' (unset)' : ' λ' + AC_BM[look.roof.key].lam + ' ρ' + AC_BM[look.roof.key].rho) : ''],
       ['Glazing', look.glass ? look.glass.key : 'clear (default)'], ['Door', look.door ? look.door.key : 'default'],
+      ['Stone base (embasamento)', embas ? 'stone, 1 m' : 'off'], ['Stone window/door frames (cantaria)', cant ? 'limestone, 0.20 m' : 'off'],
       ['Solar hour', +hour.toFixed(1)], ['Sun altitude (°)', +sun.alt.toFixed(1)], ['Sun azimuth (°)', +sun.azi.toFixed(1)],
       ['Sky', look.sky ? look.sky.key : 'site'], ['Finish', styleNow()], ['Night', nightNow() ? 'yes' : 'no'],
       ['Terrain grid', rGrid ? rGrid.n + '×' + rGrid.n + ' at ' + rGrid.step + ' m' : 'none'],
@@ -14597,6 +14634,7 @@ style === 'sketch' ? '#EFEBE0'
     chip(t('Roof material') + ': ' + (look.roof ? matName(look.roof) : t('site finish')), !!look.roof);
     chip(t('Solar hour') + ': ' + fmt(hour, 1) + ' h', !!(look.time || hourTouched));
     chip(t('Finish') + ': ' + t(styleNow()), !!(look.style || styleLock !== 'auto'));
+    if (embas || cant) chip(t('Stone details') + ': ' + [embas ? t('stone base') : null, cant ? t('stone frames') : null].filter(Boolean).join(' + '), true);
     if (look.unknown.length) chip(t('Not painted') + ': ' + look.unknown.join(', '), false);
     /* local availability, read live from the Construction Advisor: green
        is stocked in this zone, amber travels or is absent — verify it */
@@ -14627,6 +14665,7 @@ style === 'sketch' ? '#EFEBE0'
       [t('Roof material'), look.roof ? matName(look.roof) + (acName(look.roof) ? ' — Archicad: ' + acName(look.roof) : '') : t('site finish') + ' (' + (ROOF.col || '—') + ')'],
       [t('Glass'), look.glass ? matName(look.glass) : '—'], [t('Door'), look.door ? matName(look.door) : '—'],
       [t('Solar hour'), fmt(hour, 1) + ' h'], [t('Finish'), t(styleNow())]];
+    if (embas || cant) rows.push([t('Stone details'), [embas ? t('stone base') + ' \u00b7 1 m' : null, cant ? t('stone frames') + ' \u00b7 0.20 m' : null].filter(Boolean).join(' + ')]);
     const modOf = o => o && o.mod ? (LANG === 'pt' ? o.mod.pt : o.mod.en) : null;
     if (modOf(look.wall)) rows.splice(1, 0, [t('Wall module'), modOf(look.wall)]);
     if (modOf(look.roof)) rows.splice(rows.findIndex(r => r[0] === t('Roof material')) + 1, 0, [t('Roof module'), modOf(look.roof)]);
@@ -14673,13 +14712,13 @@ style === 'sketch' ? '#EFEBE0'
     RENDER_MATS = {
       wall:look.wall ? { key:look.wall.key, color:wallBase(), ca:caEntryFor(look.wall.key).keys } : null,
       roof:look.roof ? { key:look.roof.key, color:roofBase(), ca:caEntryFor(look.roof.key).keys } : null,
-      glass:look.glass ? { key:look.glass.key, color:look.glass.c } : null, door:look.door ? { key:look.door.key, color:look.door.c } : null,
+      glass:look.glass ? { key:look.glass.key, color:look.glass.c } : null, door:look.door ? { key:look.door.key, color:look.door.c } : null, stone:{ base:embas, trim:cant },
       zone:caZone(), wallKey:look.wall ? look.wall.key : null, roofKey:look.roof ? look.roof.key : null,
       sky:look.sky ? look.sky.key : null, finish:styleNow(), night:nightNow(),
       sun:{ hour:+hour.toFixed(1), alt:+sun.alt.toFixed(1), azi:+sun.azi.toFixed(1) },
       cam:{ az:+CAM.az.toFixed(1), el:+CAM.el.toFixed(1) }
     };
-    pillLook.textContent = (look.wall ? matName(look.wall) : t('site finish')) + ' · ' + (look.roof ? matName(look.roof) : t('site finish'))
+    pillLook.textContent = (look.wall ? matName(look.wall) : t('site finish')) + ' · ' + (look.roof ? matName(look.roof) : t('site finish')) + (embas ? ' · ' + t('stone base') : '') + (cant ? ' · ' + t('stone frames') : '')
       + ' · ' + t('sun') + ' ' + fmt(sun.alt, 0) + '° · ' + t(styleNow())
       + (look.unknown.length ? ' · ' + t('not painted') + ': ' + look.unknown.join(', ') : '');
     renderCam.sync();
@@ -14760,7 +14799,7 @@ style === 'sketch' ? '#EFEBE0'
     toast('Applied — judge the new look by eye');
   };
 
-  KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showNb, cam:{ az:CAM.az, el:CAM.el } }; });
+  KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showNb, embas, cant, cam:{ az:CAM.az, el:CAM.el } }; });
   host._refresh = () => { renderCam.sync(); refreshRender(); };
   const rcv = renderPanel.canvas;
   rcv.style.touchAction = 'none';
@@ -15016,6 +15055,13 @@ function exportModel() {
             if (w1 - w0 < 0.1) return;
             holes.push([c0, c1, w0, w1]);
             windowAndShading(P, n, along, (c0 + c1) / 2, c1 - c0, w0, w1, OPEN[f], f, tag + (rows.length > 1 ? ' floor ' + k : '') + (pieces.length > 1 ? ' ' + String.fromCharCode(97 + j) : '') + (units.length > 1 ? '·U' + (i + 1) : '') + (isDoor ? ' door' : isGel ? ' brick ventilation' : ''), sg.len, isGel ? 'brick ventilation' : '', sp.ui);
+            if (((RENDER_MATS.stone || {}).trim || (KEEP.visualization || {}).cant)) {
+              const W2 = 0.2, oa = Math.max(0, c0 - W2), ob = Math.min(sg.len, c1 + W2), ov0 = Math.max(0, w0 - W2), ov1 = w1 + W2;
+              const fr = [[oa, c0, ov0, ov1], [c1, ob, ov0, ov1], [c0, c1, ov0, w0], [c0, c1, w1, ov1]]
+                .filter(([x0, x1, y0, y1]) => x1 - x0 > 0.02 && y1 - y0 > 0.02)
+                .map(([x0, x1, y0, y1]) => [[P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)], n]);
+              if (fr.length) add('trim', tag + ' frame', 'AA-STONE', fr, { mat:'AA_Stone' });
+            }
           });
         });
         /* the fins stand where the student put them along the device span —
@@ -15049,6 +15095,14 @@ function exportModel() {
     const facing = COMPASS8_EN[Math.round(((G.rot + { S:0, N:180, E:270, W:90 }[f]) % 360) / 45) % 8];
     add('wall', tag + ' wall (faces ' + facing + ')', 'AA-WALLS', faces, { facade:f, finish:finishOf(G.col), mat:'AA_Wall' });
   });
+  if (((RENDER_MATS.stone || {}).base || (KEEP.visualization || {}).embas)) planModel(G).segs.forEach(sg => {
+      const eh = Math.min(1, H0);
+      if (eh < 0.2 || sg.len < 0.4) return;
+      const ux = (sg.b[0] - sg.a[0]) / sg.len, uy = (sg.b[1] - sg.a[1]) / sg.len, n = [sg.n[0], sg.n[1], 0];
+      const P = (u, v) => [sg.a[0] + ux * u + n[0] * 0.03, sg.a[1] + uy * u + n[1] * 0.03, v];
+      const Q = (u, v) => [sg.a[0] + ux * u, sg.a[1] + uy * u, v];
+      add('trim', 'Stone base (embasamento)', 'AA-STONE', [[[P(0, 0), P(sg.len, 0), P(sg.len, eh), P(0, eh)], n], [[Q(0, eh), Q(sg.len, eh), P(sg.len, eh), P(0, eh)], [0, 0, 1]]], { mat:'AA_Stone' });
+    });
   if (RM.steps.length) add('wall', 'Roof step walls', 'AA-WALLS', RM.steps.reduce((acc, st) => {
     const P = (u, z) => st.ax === 'x' ? [st.a[0], st.a[1] + u, z] : [st.a[0] + u, st.a[1], z], n = [st.n[0], st.n[1], 0];
     for (let k = 1; k < st.prof.length; k++) {
@@ -15192,7 +15246,7 @@ const cadStem = () => slugify(sitePrefix() + 'architecture-advisor-pt') || 'arch
 /** DXF, AutoCAD R12 flavour: one 3DFACE per triangle or quad, on layers. */
 function toDXF(els) {
   const layers = { 'AA-WALLS':8, 'AA-GLAZING':5, 'AA-ROOF':1, 'AA-FLOOR':9, 'AA-SHADING':30, 'AA-SUNSPACE':4, 'AA-SOLAR':150,
-    'AA-SITE-WALLS':6, 'AA-PLANTING':3, 'AA-TERRAIN':2, 'AA-NORTH':7 };
+    'AA-SITE-WALLS':6, 'AA-PLANTING':3, 'AA-TERRAIN':2, 'AA-STONE':20, 'AA-NORTH':7 };
   const o = ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '6', '0', 'ENDSEC',
     '0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', String(Object.keys(layers).length)];
   Object.keys(layers).forEach(n => o.push('0', 'LAYER', '2', n, '70', '0', '62', String(layers[n]), '6', 'CONTINUOUS'));
@@ -15213,7 +15267,7 @@ function toDXF(els) {
 /** The material library the exporters share: the Render tab's dressed
     finishes where it dressed them, site finishes elsewhere. */
 const hexRgb = h => { const s = String(h || '').replace('#', ''); const v = [0, 2, 4].map(i => parseInt(s.slice(i, i + 2), 16)); return v.map(x => isFinite(x) ? +(x / 255).toFixed(3) : 0.8); };
-const MAT_BY_LAYER = { 'AA-WALLS':'AA_Wall', 'AA-ROOF':'AA_Roof', 'AA-GLAZING':'AA_Glass', 'AA-GELOSIA':'AA_Glass', 'AA-SOLAR':'AA_Solar', 'AA-TERRAIN':'AA_Terrain', 'AA-PLANTING':'AA_Leaf', 'AA-FLOOR':'AA_Slab', 'AA-SHADING':'AA_Shade', 'AA-SUNSPACE':'AA_Glass', 'AA-SITE-WALLS':'AA_Wall', 'AA-BALCONY':'AA_Slab', 'AA-NORTH':'AA_Default' };
+const MAT_BY_LAYER = { 'AA-WALLS':'AA_Wall', 'AA-ROOF':'AA_Roof', 'AA-GLAZING':'AA_Glass', 'AA-GELOSIA':'AA_Glass', 'AA-SOLAR':'AA_Solar', 'AA-TERRAIN':'AA_Terrain', 'AA-PLANTING':'AA_Leaf', 'AA-FLOOR':'AA_Slab', 'AA-SHADING':'AA_Shade', 'AA-SUNSPACE':'AA_Glass', 'AA-SITE-WALLS':'AA_Wall', 'AA-BALCONY':'AA_Slab', 'AA-STONE':'AA_Stone', 'AA-NORTH':'AA_Default' };
 function exportMats() {
   const W = RENDER_MATS.wall, R = RENDER_MATS.roof;
   const wf = (typeof finishOf === 'function' && MASS) ? finishOf(MASS.col) : null;
@@ -15230,6 +15284,7 @@ function exportMats() {
     { name:'AA_Trunk', color:[0.42, 0.29, 0.23], desc:'trunks' },
     { name:'AA_Slab', color:[0.78, 0.78, 0.78], desc:'floors + balcony slabs' },
     { name:'AA_Shade', color:[0.6, 0.58, 0.54], desc:'overhangs, fins, devices' },
+    { name:'AA_Stone', color:hexRgb('#A29C90'), desc:'stone base (embasamento) and window/door frames (cantaria)' },
     { name:'AA_Default', color:[0.8, 0.8, 0.8], desc:'all other elements' }
   ];
 }
@@ -15378,9 +15433,9 @@ function blenderBundle() {
      script names, per slot, the search that finds the finish there */
   const bkFor = (list, k) => { const o = list.find(x => x.key === k); return o ? (o.bk || o.words[0]) : null; };
   const bks = { AA_Wall:bkFor(RENDER_WALLS, wallKey), AA_Roof:bkFor(RENDER_ROOFS, roofKey),
-    AA_Glass:RENDER_MATS.glass ? bkFor(RENDER_GLASS, RENDER_MATS.glass.key) : null };
+    AA_Glass:RENDER_MATS.glass ? bkFor(RENDER_GLASS, RENDER_MATS.glass.key) : null, AA_Stone:bkFor(RENDER_WALLS, 'stone') };
   const procs = { AA_Wall:PROC[wallKey] || 'noise', AA_Roof:PROC[roofKey] || 'noise',
-    AA_Glass:'glass', AA_Terrain:'noise', AA_Leaf:'flat', AA_Trunk:'flat', AA_Slab:'noise', AA_Shade:'flat', AA_Solar:'flat', AA_Default:'flat' };
+    AA_Glass:'glass', AA_Stone:'noise', AA_Terrain:'noise', AA_Leaf:'flat', AA_Trunk:'flat', AA_Slab:'noise', AA_Shade:'flat', AA_Solar:'flat', AA_Default:'flat' };
   const S = STATE.site;
   const sun = (RENDER_MATS.sun && isFinite(RENDER_MATS.sun.alt)) ? RENDER_MATS.sun
     : (() => { try { const sp = sunPos(172, 15, S.lat, S.lon, S.lon / 15); return { hour:15, alt:sp.alt, azi:sp.azi }; } catch (e) { return { hour:15, alt:45, azi:180 }; } })();
@@ -17835,6 +17890,11 @@ Object.assign(PT, {
   "Not painted": "Por pintar",
   "not painted": "por pintar",
   "Wall material": "Material das paredes",
+  "Stone details": "Detalhes em pedra",
+  "Stone base \u00b7 1 m": "Embasamento \u00b7 1 m",
+  "Window and door frames \u00b7 0.20 m": "Cantaria de v\u00e3os \u00b7 0,20 m",
+  "stone base": "embasamento",
+  "stone frames": "cantaria",
   "Roof material": "Material da cobertura",
   "Solar hour": "Hora solar",
   "site finish": "acabamento do local",
