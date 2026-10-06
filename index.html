@@ -3307,7 +3307,9 @@ function roofModel(G, RF) {
   const zones = zones0.map(z => ({ n:z.n, th:z.n === 0 ? 0 : z.th, t:Math.tan((z.n === 0 ? 0 : z.th) * RAD),
     a0:S0 + clamp(z.f0, 0, 1) * SL, a1:S0 + clamp(z.f1, 0, 1) * SL }));
   const parKey = RF.par && RF.par.on ? '|par' + (+RF.par.h || 0.6).toFixed(2) : '';
-  const bei = RF.bei && RF.bei.on ? clamp(+RF.bei.d || 0, 0, 1) : 0;
+  /* a parapet roof has no overhang: the eaves stay set but hidden while
+     the parapet stands on the walls, never poking out beneath it */
+  const bei = RF.bei && RF.bei.on && !(RF.par && RF.par.on) ? clamp(+RF.bei.d || 0, 0, 1) : 0;
   const beiEnds = !RF.bei || RF.bei.ends !== false;
   const beiKey = bei > 0 ? '|bei' + bei.toFixed(2) + (beiEnds ? '' : '|nog') : '';
   const key = pl.key + '|' + H0 + '|' + axis + '|' + zones0.map(z => [z.f0, z.f1, z.n, z.th].join(',')).join(';') + parKey + beiKey;
@@ -3522,24 +3524,47 @@ function roofModel(G, RF) {
   const topZi = zoneArea.reduce((p, q, k) => q > zoneArea[p] ? k : p, 0);
   const topT = zones[topZi].t, topTh = zones[topZi].th, topN = zones[topZi].n;
   const mixed = new Set(strips.map(s => s.n + ':' + s.th)).size > 1;
-  /* a parapet: every outline wall carried up by its height — envelope too */
+  /* a parapet: every outline wall carried up by its height — envelope too.
+     A 20 cm wall: the outer face on the wall's own line, the inner face
+     and the cap mitred at every corner — the inner line shortened by the
+     thickness where the outline turns in, lengthened where it turns out —
+     so the ring closes on itself and no two strips cross at a corner. */
   let paras = [], paraArea = 0;
   if (RF.par && RF.par.on) {
-    const ph = clamp(+RF.par.h || 0.6, 0.2, 1.5), pt = 0.2;   // a 20 cm wall: outer face, inner face, cap
+    const ph = clamp(+RF.par.h || 0.6, 0.2, 1.5), pt = 0.2;
+    const near = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
+    const mitre = (sg, P0) => {
+      const nb = pl.segs.find(o => o !== sg && (near(o.a, P0) || near(o.b, P0)));
+      if (!nb) return 0;
+      const far = near(nb.a, P0) ? nb.b : nb.a, Lb = Math.hypot(far[0] - P0[0], far[1] - P0[1]) || 1;
+      const dn = ((far[0] - P0[0]) * sg.n[0] + (far[1] - P0[1]) * sg.n[1]) / Lb;
+      return dn < -0.5 ? pt : dn > 0.5 ? -pt : 0;
+    };
     walls.forEach(wl => {
       const sg = wl.sg, L = sg.len, ux = (sg.b[0] - sg.a[0]) / L, uy = (sg.b[1] - sg.a[1]) / L;
-      const nx = sg.n[0], ny = sg.n[1];
+      const nx = sg.n[0], ny = sg.n[1], pr = wl.prof;
       const P = (u, z) => [sg.a[0] + ux * u, sg.a[1] + uy * u, z];
       const Q = (u, z) => [sg.a[0] + ux * u - nx * pt, sg.a[1] + uy * u - ny * pt, z];
-      wl.prof.forEach((q, k) => {
+      const zOn = u => {
+        if (u <= pr[0][0]) return pr[0][1];
+        for (let k = 1; k < pr.length; k++) if (u <= pr[k][0]) { const p0 = pr[k - 1], q = pr[k], t = (u - p0[0]) / Math.max(1e-9, q[0] - p0[0]); return p0[1] + (q[1] - p0[1]) * t; }
+        return pr[pr.length - 1][1];
+      };
+      const uS = mitre(sg, sg.a), uE = L - mitre(sg, sg.b);
+      const inner = [[uS, zOn(uS)]].concat(pr.filter(q => q[0] > uS + 1e-6 && q[0] < uE - 1e-6), [[uE, zOn(uE)]]);
+      const top = p => [p[0], p[1], p[2] + ph];
+      pr.forEach((q, k) => {
         if (!k) return;
-        const p0 = wl.prof[k - 1], a = P(p0[0], p0[1]), b = P(q[0], q[1]);
-        const a2 = [a[0], a[1], a[2] + ph], b2 = [b[0], b[1], b[2] + ph];
-        const c = Q(p0[0], p0[1]), d = Q(q[0], q[1]);
-        const c2 = [c[0], c[1], c[2] + ph], d2 = [d[0], d[1], d[2] + ph];
-        paras.push({ sg, quad:[a, b, b2, a2] });
-        paras.push({ sg, quad:[d, c, c2, d2] });
-        paras.push({ sg, quad:[a2, b2, d2, c2] });
+        const p0 = pr[k - 1], a = P(p0[0], p0[1]), b = P(q[0], q[1]);
+        paras.push({ sg, kind:'out', quad:[a, b, top(b), top(a)] });
+        /* the cap over this run of the profile, its inner edge clipped to the mitred line */
+        const i0 = k === 1 ? uS : Math.max(uS, p0[0]), i1 = k === pr.length - 1 ? uE : Math.min(uE, q[0]);
+        if (i1 > i0 + 1e-6) paras.push({ sg, kind:'cap', quad:[top(a), top(b), top(Q(i1, zOn(i1))), top(Q(i0, zOn(i0)))] });
+      });
+      inner.forEach((q, k) => {
+        if (!k) return;
+        const p0 = inner[k - 1], c = Q(p0[0], p0[1]), d = Q(q[0], q[1]);
+        paras.push({ sg, kind:'in', quad:[d, c, top(c), top(d)] });
       });
       paraArea += sg.len * (2 * ph + pt);
     });
@@ -4330,7 +4355,8 @@ const camDepth = (A, x, y, z) => (x * A.d[0] + y * A.d[1]) * A.ce - (z || 0) * A
       stack that dips below the plane (behind the ridge, under a taller
       wing) keeps its depth order and is covered, as it should be. */
   function chimRoofOrder(p, q) {
-    const c = p.chim ? p : q.chim ? q : null;
+    /* a parapet stands on the roof's edge the same way */
+    const c = (p.chim || p.par) ? p : (q.chim || q.par) ? q : null;
     if (!c) return 0;
     const s = c === p ? q : p;
     if (!isRoofFace(s)) return 0;
@@ -7388,7 +7414,7 @@ function buildRoof(host) {
     const on = !!(RF.par && RF.par.on);
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
       RF.par = { on:v === 1, h:RF.par && isFinite(+RF.par.h) ? +RF.par.h : 0.6 };
-      buildParUI(); roofDraw();
+      buildParUI(); buildBeiUI(); roofDraw();
     });
     parBox.appendChild(tgl);
     if (on) {
@@ -7408,6 +7434,7 @@ function buildRoof(host) {
       buildBeiUI(); roofDraw();
     });
     beiBox.appendChild(tgl);
+    if (on && RF.par && RF.par.on) beiBox.appendChild(el('p', { class:'hint', text:'Hidden while the parapet is on: a parapet roof has no overhang.' }));
     if (on) {
       beiDCtl = rangeCtl('Projection', 0, 1, 0.05, +RF.bei.d || 0.15, v => { RF.bei.d = v; roofDraw(); }, v => fmt(v, 2) + ' m');
       beiBox.appendChild(beiDCtl);
@@ -7833,7 +7860,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       return csvRows([['Parameter', 'Value'],
       ['Roof (largest part)', ['flat', 'shed', 'gable', 'hip'][RF.n]], ['Pitch (°)', RF.n === 0 ? 0 : RF.th],
       ['Roof parts', RF.zones.map((z, i) => 'ABC'[i] + ':' + ['flat', 'shed', 'gable', 'hip'][z.n] + (z.n === 0 ? '' : ' ' + z.th + '°')).join(' | ')],
-      ['Parapet', RF.par && RF.par.on ? fmt(RF.par.h, 2) + ' m' : 'none'],       ['Eaves', RF.bei && RF.bei.on ? fmt(RF.bei.d, 2) + ' m' + (RF.bei.ends !== false ? '' : ' · flush gables') : 'none'],
+      ['Parapet', RF.par && RF.par.on ? fmt(RF.par.h, 2) + ' m' : 'none'],       ['Eaves', RF.bei && RF.bei.on ? (RF.par && RF.par.on ? 'hidden under the parapet' : fmt(RF.bei.d, 2) + ' m' + (RF.bei.ends !== false ? '' : ' · flush gables')) : 'none'],
       ['Chimney', RF.chim && RF.chim.on ? CHIMNEY_FAM[RF.chim.fam].name + ' at ' + fmt(RF.chim.x, 1) + ', ' + fmt(RF.chim.y, 1) + ' m · ' + fmt(chimEffH(RF.chim), 2) + ' m above roof' : 'none'],
       ['Plan form (from Site)', (G.form || 'rect') + (G.patio && G.patio.on && G.patio.ok !== false ? ' + patio' : '')],
       ['Winter solar ideal (°)', +idealW.toFixed(0)],
@@ -8756,7 +8783,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
        window it spans, as far above the head as its slab; a loggia round the
        window is an overhang at its ceiling and a fin at each closed side */
     const rects = [], us = faceUnits(f);
-    const MmE = Mod(), H0E = MmE.H0, beiE = (RF.bei && RF.bei.on) ? clamp(+RF.bei.d || 0, 0, 1) : 0;
+    const MmE = Mod(), H0E = MmE.H0, beiE = (RF.bei && RF.bei.on && !(RF.par && RF.par.on)) ? clamp(+RF.bei.d || 0, 0, 1) : 0;
     winsOf(f).forEach(x => x.w.rows.forEach((r, k) => {
       const head = Math.min(r.head, h0()), u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
       glassSpans(f, u0, u1, x.sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
@@ -8842,7 +8869,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
   /** Do balconies set on Site stand on this side? */
   const balcOnFace = f => balcGeo(G).ok.some(B => segFace(B.sg) === f);
   function eaveOnFace(f) {
-    if (!(RF.bei && RF.bei.on)) return false;
+    if (!(RF.bei && RF.bei.on) || (RF.par && RF.par.on)) return false;
     const MmE = Mod(), bei = clamp(+RF.bei.d || 0, 0, 1);
     if (!(bei > 0)) return false;
     const ws = winsOf(f);
@@ -13371,6 +13398,19 @@ const TEXGEN = (() => {
       return { c:s, h:0.001 * ss(0.004, 0.008, ed), ao:0.88 + 0.12 * ss(0.004, 0.008, ed) };
     }, 1.5);
   };
+  /* gelosia: the perforated brick screen of brick ventilation — 0.22 m
+     bricks on edge, half a brick of air between them, every other course
+     shifted, the voids in shadow */
+  R.gelosia = () => {
+    const W = 0.66, H = 0.3, bw = 0.22, bh = 0.075;
+    return run(W, H, (x, y, u, v) => {
+      const row = Math.floor(y / bh), ly = y - row * bh, xo = md(x - (row % 2 ? 0.165 : 0), 0.33);
+      if (xo > bw || ly < 0.008) return { c:[46, 28, 20], h:-0.03, ao:0.6 };
+      const id = row * 7 + Math.floor(md(x - (row % 2 ? 0.165 : 0), W) / 0.33);
+      const c = mul(mix([176, 96, 60], [150, 78, 50], hash(id, 1, 201)), 0.92 + 0.12 * fbm(u, v, 30, 14, 2, 203));
+      return { c, h:0.004 * ss(0, 0.01, Math.min(xo, bw - xo)), ao:0.85 + 0.15 * ss(0, 0.01, Math.min(xo, bw - xo)) };
+    }, 1.5);
+  };
   /* doors: one 0.9 x 2.1 m leaf drawn whole — the painter stretches it
      over the leaf the model opens. Painted doors are panelled
      (almofadadas): stiles and rails framing four raised panels. */
@@ -14082,9 +14122,16 @@ style === 'sketch' ? '#EFEBE0'
     /* a stone frame ring round an opening: 0.20 m sandstone-silhouette strips,
        proud of the wall, clipped to it — the bottom side drops out by itself
        where the opening meets the ground, as on doors */
-    const frameRing = (sg, a, b, v0, v1, mat, base) => {
+    /* what stands on a wall — the stone base, the frames, the glass, the
+       doors — paints straight after that wall, in that order: a face's
+       centroid says nothing about a 1 m base at its foot, which centroid
+       depth would bury behind the wall it is fixed to */
+    const wallD = new Map();
+    const onWallLayer = (sg, layer, it) => { const wd = wallD.get(sg); if (wd !== undefined) it.d = wd - 1e-4 * layer; return it; };
+    const cdep = q => q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / q.length;
+    const frameRing = (sg, a, b, v0, v1, mat, base, door) => {
       const W = 0.2, oa = Math.max(0, a - W), ob = Math.min(sg.len, b + W), ov0 = Math.max(0, v0 - W), ov1 = v1 + W;
-      const strips = [[oa, a, ov0, ov1], [b, ob, ov0, ov1], [a, b, ov0, v0], [a, b, v1, ov1]];
+      const strips = [[oa, a, door ? v0 : ov0, ov1], [b, ob, door ? v0 : ov0, ov1], [a, b, v1, ov1]].concat(door ? [] : [[a, b, ov0, v0]]);
       const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
       const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
       const out = [];
@@ -14101,7 +14148,9 @@ style === 'sketch' ? '#EFEBE0'
       const wpts = [onWall(sg, 0, 0), onWall(sg, sg.len, 0)].concat(wl.prof.slice().reverse().map(q => onWall(sg, q[0], q[1])));
       const base = wallBase();
       const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
-      items.push({ pts:wpts, fill:shadeHex(base, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:wpts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / wpts.length, mat:look.wall ? look.wall.key : 'site', wallSg:sg,
+      const wDep = wpts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / wpts.length;
+      wallD.set(sg, wDep);
+      items.push({ pts:wpts, fill:shadeHex(base, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:wDep, mat:look.wall ? look.wall.key : 'site', wallSg:sg,
         uv:wpts.map(q => [(q[0] - sg.a[0]) * tu[0] + (q[1] - sg.a[1]) * tu[1], -q[2]]) });
     });
     if (embas) M.pl.segs.forEach(sg => {
@@ -14111,7 +14160,7 @@ style === 'sketch' ? '#EFEBE0'
       const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
       const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
       const q = [off(onWall(sg, 0, 0), 0.03), off(onWall(sg, sg.len, 0), 0.03), off(onWall(sg, sg.len, eh), 0.03), off(onWall(sg, 0, eh), 0.03)];
-      items.push({ pts:q, fill:shadeHex(STONE_C, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4, mat:'stone', wallSg:sg, uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) });
+      items.push(onWallLayer(sg, 1, { pts:q, fill:shadeHex(STONE_C, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4, mat:'stone', wallSg:sg, uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) }));
     });
     M.pieces.forEach(pc => {
       const f = pc.f;
@@ -14128,42 +14177,40 @@ style === 'sketch' ? '#EFEBE0'
         : pts.map(q => [q[0], q[1]]);
       items.push({ pts, fill:shadeHex(base, night ? 0.32 : fk), sh:night ? 0.32 : fk, d:pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / pts.length, mat:look.roof ? look.roof.key : 'site', roof:true, uv:ruv });
     });
-    /* glass: each wall's windows, a breath off the face */
+    /* the openings as Openings and Shadowing lays them, and the export
+       with it (glassSpans, unitSpanV, doorSpanV): every switched-on window
+       of every wall at its own place, width, sill and height, doors
+       standing on their floor, brick ventilation where it is set — each
+       with its stone frame when the frames are on */
     const wins = M.pl.segs.map(sg => ({ sg, w:segWindow(sg, G) })).filter(o => o.w);
     wins.forEach(o => {
       if (!wallSeen(o.sg.n)) return;
-      const sg = o.sg, w = o.w, gl = [];
-      const u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2;
-      w.rows.forEach(r => {
-        const v0 = r.sill, v1 = Math.min(r.head, H0);
-        const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
-        gl.push({ q:[off(onWall(sg, u0, v0), 0.07), off(onWall(sg, u1, v0), 0.07), off(onWall(sg, u1, v1), 0.07), off(onWall(sg, u0, v1), 0.07)], u0, u1, v0, v1 });
-      });
-      gl.forEach(g => items.push({ pts:g.q, win:{ sg, u0:g.u0, u1:g.u1, v0:g.v0, v1:g.v1 },
-        fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(),
-        glass:true, d:g.q.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / 4 }));
-      if (cant) gl.forEach(g => frameRing(sg, g.u0, g.u1, g.v0, g.v1, 'limestone', LIME_C).forEach(q => items.push(q)));
-    });
-    /* entrance doors: only where Openings sets a door unit — never invented.
-       No door units, no doors: an all-window house is a legitimate state,
-       and a missing entrance is worth noticing. */
-    ['S', 'N', 'E', 'W'].forEach(f => {
-      const has = OPEN[f] && OPEN[f].units && OPEN[f].units.some(u => u.on && u.door);
-      if (!has) return;
-      const segs = M.pl.segs.filter(sg => segFace(sg) === f && wallSeen(sg.n));
-      if (!segs.length) return;
-      const sg = segs.reduce((a, b) => a.len > b.len ? a : b);
-      const dw = 1.05, dh = Math.min(2.2, H0 - 0.4);
-      if (dh < 1.6) return;
-      /* off-centre on purpose: the window band owns the middle of the wall */
-      const uc = clamp(sg.len * 0.22, dw, sg.len - dw);
+      const sg = o.sg, w = o.w, f = w.f, us = faceUnits(f), u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2;
       const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
-      const q = [off(onWall(sg, uc - dw / 2, 0.02), 0.06), off(onWall(sg, uc + dw / 2, 0.02), 0.06),
-        off(onWall(sg, uc + dw / 2, dh), 0.06), off(onWall(sg, uc - dw / 2, dh), 0.06)];
-      items.push({ pts:q, door:{ sg, uc, dw, dh },
-        fill:'#2E3236',
-        d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4 });
-      if (cant) frameRing(sg, uc - dw / 2, uc + dw / 2, 0.02, dh, 'limestone', LIME_C).forEach(q2 => items.push(q2));
+      const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
+      const rect = (a, b, v0, v1, d) => [off(onWall(sg, a, v0), d), off(onWall(sg, b, v0), d), off(onWall(sg, b, v1), d), off(onWall(sg, a, v1), d)];
+      glassSpans(f, u0, u1, sg.len).forEach(sp => {
+        const u = us[sp.ui];
+        if (!sp.on || !u || sp.b - sp.a < 0.05) return;
+        w.rows.forEach((r, k) => {
+          const head = Math.min(r.head, H0), vv = u.door ? doorSpanV(u, head, k, G.fh) : unitSpanV(u, r.sill, head, k, G.fh);
+          const v0 = vv[0], v1 = Math.min(vv[1], H0), a = sp.a, b = sp.b;
+          if (v1 - v0 < 0.1) return;
+          if (u.door) {
+            const q = rect(a, b, v0, v1, 0.06);
+            items.push(onWallLayer(sg, 3, { pts:q, door:{ sg, u0:a, u1:b, v0, v1 }, fill:'#2E3236', d:cdep(q) }));
+          } else if (u.gel) {
+            const q = rect(a, b, v0, v1, 0.05), k2 = night ? 0.3 : faceK(sg.n);
+            items.push(onWallLayer(sg, 3, { pts:q, fill:shadeHex('#B0603C', k2), sh:k2, mat:'gelosia', wallSg:sg, gel:true, d:cdep(q),
+              uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) }));
+          } else {
+            const q = rect(a, b, v0, v1, 0.07);
+            items.push(onWallLayer(sg, 3, { pts:q, win:{ sg, u0:a, u1:b, v0, v1 },
+              fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(), glass:true, d:cdep(q) }));
+          }
+          if (cant) frameRing(sg, a, b, v0, v1, 'limestone', LIME_C, !!u.door).forEach(q2 => items.push(onWallLayer(sg, 2, q2)));
+        });
+      });
     });
     /* sunspace as a glass box on its facade */
     if (SUNSP && SUNSP.on) {
@@ -14356,46 +14403,47 @@ style === 'sketch' ? '#EFEBE0'
     wins.forEach(o => {
       const f = o.w.f, oo = OPEN[f];
       if (!oo || !wallSeen(o.sg.n)) return;
-      const sg = o.sg, w = o.w;
-      const u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2;
+      const sg = o.sg, w = o.w, u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2;
       const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
-      if (oo.ovD > 0) w.rows.forEach(r => {
-        const v1 = Math.min(r.head, H0);
-        const a0 = onWall(sg, u0 - (oo.ovL || 0), v1), b0 = onWall(sg, u1 + (oo.ovR || 0), v1);
-        const a = off(a0, oo.ovD), b = off(b0, oo.ovD);
-        items.push({ pts:[a0, b0, b, a], fill:devCol, d:dc([a0, b0, b, a]) });
-      });
-      if (oo.finD > 0 && oo.finN > 0) {
-        const sides = oo.finSide === 'left' ? [u0] : oo.finSide === 'right' ? [u1] : [u0, u1];
-        w.rows.forEach(r => {
-          const v0 = r.sill, v1 = Math.min(r.head, H0);
-          sides.forEach(uu => {
-            const p0 = onWall(sg, uu, v0), p1 = onWall(sg, uu, v1);
-            const q = [p0, off(p0, oo.finD), off(p1, oo.finD), p1];
-            items.push({ pts:q, fill:devCol, d:dc(q) });
-          });
+      /* the selected window alone when one is selected, else the whole
+         switched-on glass, padded by the chosen extra width — as Openings,
+         Ventilation and the export place them */
+      const sel = devSelUI(f), scS = sel >= 0 ? selSpanB(f, sg, u0, u1, sel) : null;
+      if (sel >= 0 && !scS) return;
+      const fx = scS ? devSpanPad(f, sg, scS[0], scS[1]) : devSpanH(f, sg, u0, u1);
+      w.rows.forEach((r, k) => {
+        let v0 = r.sill, v1 = Math.min(r.head, H0);
+        if (sel >= 0) { const su = faceUnits(f)[sel], vv = su.door ? doorSpanV(su, v1, k, G.fh) : unitSpanV(su, r.sill, v1, k, G.fh); v0 = vv[0]; v1 = Math.min(vv[1], H0); }
+        if (oo.ovD > 0) ((oo.ovN || 1) <= 1 ? [v1] : Array.from({ length:oo.ovN }, (_, i) => v0 + (v1 - v0) * (i / (oo.ovN - 1)))).forEach(vt => {
+          const a0 = onWall(sg, fx[0], vt), b0 = onWall(sg, fx[1], vt), q = [a0, b0, off(b0, oo.ovD), off(a0, oo.ovD)];
+          items.push({ pts:q, fill:devCol, d:dc(q) });
         });
-      }
-    });
-    if (RF.par && RF.par.on && RF.n === 0) {
-      const ph = Math.max(0.2, +RF.par.h || 0.6);
-      M.pl.segs.forEach(sg => {
-        const nx = sg.n[0], ny = sg.n[1], a = sg.a, b = sg.b;
-        const o1 = [a[0] + nx * 0.09, a[1] + ny * 0.09], o2 = [b[0] + nx * 0.09, b[1] + ny * 0.09];
-        const i1 = [a[0] - nx * 0.09, a[1] - ny * 0.09], i2 = [b[0] - nx * 0.09, b[1] - ny * 0.09];
-        const q = [[o1[0], o1[1], H0], [o2[0], o2[1], H0], [o2[0], o2[1], H0 + ph], [o1[0], o1[1], H0 + ph]];
-        const t2 = [[o1[0], o1[1], H0 + ph], [o2[0], o2[1], H0 + ph], [i2[0], i2[1], H0 + ph], [i1[0], i1[1], H0 + ph]];
-        const base = wallBase();
-        items.push({ pts:q, fill:shadeHex(base, night ? 0.3 : 0.85), d:dc(q) });
-        items.push({ pts:t2, fill:shadeHex(base, night ? 0.32 : 1), d:dc(t2) });
+        if (oo.finD > 0 && oo.finN > 0) faceFins(f).map(t2 => fx[0] + t2 * (fx[1] - fx[0])).forEach(uu => {
+          const p0 = onWall(sg, uu, v0), p1 = onWall(sg, uu, v1), q = [p0, off(p0, oo.finD), off(p1, oo.finD), p1];
+          items.push({ pts:q, fill:devCol, d:dc(q) });
+        });
       });
-    }
+    });
+    /* the parapet the Roof tab builds — on a gable as on a flat roof, its
+       corners mitred — the outer face dressed as the wall it continues,
+       the inner face in the wall's colour, a pale stone coping on top */
+    if (RF.par && RF.par.on && M.paras) M.paras.forEach(pp => {
+      const sg = pp.sg, q = pp.quad;
+      if (pp.kind === 'out' && !wallSeen(sg.n)) return;
+      if (pp.kind === 'in' && !wallSeen([-sg.n[0], -sg.n[1]])) return;
+      if (pp.kind === 'cap') { items.push({ pts:q, fill:shadeHex('#DAD5CB', night ? 0.32 : 1), par:true, d:dc(q) }); return; }
+      const k2 = night ? 0.3 : faceK(pp.kind === 'out' ? sg.n : [-sg.n[0], -sg.n[1]]) * (style === 'watercolor' ? 0.92 : 1);
+      const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
+      items.push({ pts:q, fill:shadeHex(wallBase(), k2), sh:k2, par:true, d:dc(q),
+        mat:pp.kind === 'out' && look.wall ? look.wall.key : null, wallSg:pp.kind === 'out' ? sg : null,
+        uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) });
+    });
     if (RF.chim && RF.chim.on && isFinite(+RF.chim.x) && isFinite(+RF.chim.y)) {
       try {
         const zx = M.zAt(+RF.chim.x, +RF.chim.y);
         if (zx !== null && isFinite(zx)) {
           chimneyFaces(RF.chim.fam, +RF.chim.x, +RF.chim.y, zx, chimEffH(RF.chim), chimFoot(RF.chim), chimTaper(RF.chim), (qx, qy) => M.zAt(qx, qy))
-            .forEach(f => items.push({ pts:f.pts, fill:f.fill, d:dc(f.pts) }));
+            .forEach(f => items.push({ pts:f.pts, fill:f.fill, chim:true, d:dc(f.pts) }));
         }
       } catch (e) {}
     }
@@ -14463,7 +14511,18 @@ style === 'sketch' ? '#EFEBE0'
       ctx.restore();
       return true;
     };
-    items.sort((a, b) => b.d - a.d);
+    /* a chimney or a parapet stands on a roof plane: where the camera looks
+       down on that plane it paints first and they over it, whatever their
+       centroids say — the rule the other tabs keep (chimRoofOrder) */
+    const standsOn = (st, rf) => {
+      const pl = facePlane(rf);
+      return !!pl && pl[2] > 1e-6 && st.pts.every(v => v[0] * pl[0] + v[1] * pl[1] + v[2] * pl[2] > pl[3] - 0.02);
+    };
+    items.sort((a, b) => {
+      if ((a.chim || a.par) && b.roof && standsOn(a, b)) return 1;
+      if ((b.chim || b.par) && a.roof && standsOn(b, a)) return -1;
+      return b.d - a.d;
+    });
     const kpx = CAM_K * s;
     items.forEach(it => {
       if (it.blob) {
@@ -14487,7 +14546,7 @@ style === 'sketch' ? '#EFEBE0'
         if (tex) photoDone = paintTexFace(it, tex);
       }
       if (photoDone && it.mat === 'concrete' && it.wallSg && !night) dressFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])), it.mat, it.fill, it.uv);
-      if (photoDone && it.wallSg && !night) shadeFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])));
+      if (photoDone && it.wallSg && !night && !it.par && !it.gel) shadeFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])));
       if (dressed && !night && !photoDone && !it.glass && !it.blob && !it.nbTip && !it.door && it.mat && it.mat !== 'site') {
         dressFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])), it.mat, it.fill, it.uv);
         if (it.wallSg) shadeFace(it.pts.map(q => proj(FR, q[0], q[1], q[2])));
@@ -14514,7 +14573,7 @@ style === 'sketch' ? '#EFEBE0'
       }
       if (it.door && style !== 'sketch') {
         const dr = it.door, sg = dr.sg, n = sg.n;
-        const leaf3 = [[dr.uc - dr.dw / 2 + 0.07, 0.06], [dr.uc + dr.dw / 2 - 0.07, 0.06], [dr.uc + dr.dw / 2 - 0.07, dr.dh - 0.05], [dr.uc - dr.dw / 2 + 0.07, dr.dh - 0.05]]
+        const leaf3 = [[dr.u0 + 0.07, dr.v0 + 0.04], [dr.u1 - 0.07, dr.v0 + 0.04], [dr.u1 - 0.07, dr.v1 - 0.05], [dr.u0 + 0.07, dr.v1 - 0.05]]
           .map(([u, v]) => { const p = onWall(sg, u, v); return [p[0] + n[0] * 0.12, p[1] + n[1] * 0.12, p[2]]; });
         const leaf = leaf3.map(p => proj(FR, p[0], p[1], p[2]));
         ctx.beginPath(); leaf.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
@@ -14522,9 +14581,10 @@ style === 'sketch' ? '#EFEBE0'
         /* the chosen door finish, drawn whole over the leaf */
         let doorDone = false;
         if (dressed && !night && look.door) {
-          const tx = matTex(look.door.key, refreshRender), lw = dr.dw - 0.14, lh = dr.dh - 0.11;
-          if (tx) doorDone = paintTexFace({ pts:leaf3, uv:[[0, lh], [lw, lh], [lw, 0], [0, 0]], mat:'door:' + look.door.key, sh:faceK(n) },
-            { mips:tx.mips, tw:lw, th:lh });
+          /* a wide opening takes as many 0.9 m leaves as fit, side by side */
+          const tx = matTex(look.door.key, refreshRender), lw = dr.u1 - dr.u0 - 0.14, lh = dr.v1 - dr.v0 - 0.09, nl = Math.max(1, Math.round(lw / 0.9));
+          if (tx && lw > 0.1 && lh > 0.1) doorDone = paintTexFace({ pts:leaf3, uv:[[0, lh], [lw, lh], [lw, 0], [0, 0]], mat:'door:' + look.door.key, sh:faceK(n) },
+            { mips:tx.mips, tw:lw / nl, th:lh });
         }
         if (doorDone && ['dmetal', 'dglass'].indexOf(look.door.key) < 0) {
           ctx.fillStyle = '#C8C8C0'; ctx.beginPath(); ctx.arc(leaf[1][0] - 4, (leaf[1][1] + leaf[2][1]) / 2, 1.8, 0, 6.284); ctx.fill();
@@ -14538,16 +14598,18 @@ style === 'sketch' ? '#EFEBE0'
           ctx.fillStyle = '#C8C8C0'; ctx.beginPath(); ctx.arc(leaf[1][0] - 4, (leaf[1][1] + leaf[2][1]) / 2, 1.8, 0, 6.284); ctx.fill();
         }
         if (night) {
-          const tq = [[dr.uc - dr.dw / 2, dr.dh + 0.05], [dr.uc + dr.dw / 2, dr.dh + 0.05], [dr.uc + dr.dw / 2, dr.dh + 0.35], [dr.uc - dr.dw / 2, dr.dh + 0.35]]
+          const tq = [[dr.u0, dr.v1 + 0.05], [dr.u1, dr.v1 + 0.05], [dr.u1, Math.min(H0, dr.v1 + 0.35)], [dr.u0, Math.min(H0, dr.v1 + 0.35)]]
             .map(([u, v]) => { const p = onWall(sg, u, v); return proj(FR, p[0] + n[0] * 0.09, p[1] + n[1] * 0.09, p[2]); });
           ctx.beginPath(); tq.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
           ctx.fillStyle = 'rgba(255,205,120,.85)'; ctx.fill();
         }
-        const st = [[dr.uc - dr.dw / 2 - 0.25, 0.06], [dr.uc + dr.dw / 2 + 0.25, 0.06], [dr.uc + dr.dw / 2 + 0.25, 0.5], [dr.uc - dr.dw / 2 - 0.25, 0.5]]
-          .map(([u, o]) => { const p = onWall(sg, u, 0); return proj(FR, p[0] + n[0] * o, p[1] + n[1] * o, 0.02); });
-        ctx.beginPath(); st.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
-        ctx.fillStyle = night ? 'rgba(140,140,135,.7)' : '#CFCBC0'; ctx.fill();
-        stroke(ctx, 'rgba(20,23,26,.4)', 1); ctx.stroke();
+        if (dr.v0 < 0.3) {   // the doorstep, at ground level only
+          const st = [[dr.u0 - 0.25, 0.06], [dr.u1 + 0.25, 0.06], [dr.u1 + 0.25, 0.5], [dr.u0 - 0.25, 0.5]]
+            .map(([u, o]) => { const p = onWall(sg, u, 0); return proj(FR, p[0] + n[0] * o, p[1] + n[1] * o, 0.02); });
+          ctx.beginPath(); st.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
+          ctx.fillStyle = night ? 'rgba(140,140,135,.7)' : '#CFCBC0'; ctx.fill();
+          stroke(ctx, 'rgba(20,23,26,.4)', 1); ctx.stroke();
+        }
       }
       const streak = look.glass ? look.glass.streak : 0.65;
       if (it.glass && !night && dressed && streak) {   // a sky streak across the pane — none in frosted glass
@@ -17935,6 +17997,7 @@ Object.assign(PT, {
   "Popular here": "Popular aqui",
   "Wall finishes": "Acabamentos de parede",
   "Wall module": "Módulo da parede",
+  "Hidden while the parapet is on: a parapet roof has no overhang.": "Oculto com a platibanda ligada: uma cobertura com platibanda não tem beirado.",
   "Openings": "Aberturas",
   "Glass": "Vidro",
   "Doors": "Portas",
