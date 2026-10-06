@@ -8169,7 +8169,7 @@ function buildOpenings(host) {
   const lat = S.lat, lon = S.lon, tz = lon / 15;
   const G = MASS, RF = ROOF;
   pageHead(host, 'Openings and Shadowing',
-    'Glazing for each facade and shading for each window, sized against the plan fixed on Site and the roof fixed on Roof — this tab cannot change either. Choosing a facade turns the model to face it, so you can drag its window directly; the compass shows which way is which. Click a window to select it — drag its black node to push it along the wall and up or down, drag its corners to size it on its own without touching its neighbours, and dress it alone with an overhang and fins; drag a fin dot to stand it where the shade belongs, double-click it to open or close it, double-click bare wall to plant a new one clear of the others. Any unit turns into a glazed door or a gelosia breeze-block from its row. Drag it onto another facade to move it there, or step it across with the arrows on its row.');
+    'Glazing for each facade and shading for each window, sized against the plan fixed on Site and the roof fixed on Roof — this tab cannot change either. Choosing a facade turns the model to face it, so you can drag its window directly; the compass shows which way is which. Click a window to select it — drag its black node to push it along the wall and up or down, drag its corners to size it on its own without touching its neighbours, and dress it alone with an overhang and fins; drag a fin dot to stand it where the shade belongs, double-click it to open or close it, double-click bare wall to plant a new one clear of the others. Any unit turns into a glazed door or a brick ventilation block from its row. Drag it onto another facade to move it there, or step it across with the arrows on its row.');
 
   const h0 = () => G.fl * G.fh;   // read live: the tab outlives changes made on Site
   const Mod = () => roofModel(G, RF);   // the worked volume from Site and Roof, cached
@@ -8332,13 +8332,13 @@ function buildOpenings(host) {
         const sillEff = us[i].door ? 0.05 : unitSpanV(us[i], sill0, head0, 0, G.fh)[0];
         r.m.textContent = fmt(q.w, 2) + ' m · ' + fmt(q.area, 2) + ' m² · '
           + (!us[i].on ? '–' : String(Math.round(100 * (clamp(2 * H / Math.max(1, depth), 0, 1) + clamp(q.w / 2.4, 0, 1)) / 2)))
-          + (us[i].on && us[i].door ? ' · ' + t('door') : us[i].on && us[i].gel ? ' · ' + t('gelosia') : '')
+          + (us[i].on && us[i].door ? ' · ' + t('door') : us[i].on && us[i].gel ? ' · ' + t('brick ventilation') : '')
           + (us[i].on ? ' · ' + t('sill') + ' ' + fmt(sillEff, 2) + ' m' : '');
       });
     };
     faceUnits(curFace).forEach((u, i) => {
       const chk = checkCtl('W' + (i + 1), u.on, v => { u.on = v; updateTexts(); refreshOpenings(); });
-      const gel = el('button', { class:'btn small' + (u.gel ? ' solid' : ''), text:t('gelosia'), title:t('A breeze-block panel instead of glass: ventilated, no view'),
+      const gel = el('button', { class:'btn small' + (u.gel ? ' solid' : ''), text:t('brick ventilation'), title:t('A breeze-block panel instead of glass: ventilated, no view'),
         'aria-pressed':String(!!u.gel), onclick:() => { u.gel = !u.gel; if (u.gel) u.door = false; buildUnitUI(); refreshOpenings(); } });
       const dor = el('button', { class:'btn small' + (u.door ? ' solid' : ''), text:t('door'), title:t('A door beside, not instead: lone glass splits into window + door; otherwise this opening converts'),
         'aria-pressed':String(!!u.door), onclick:() => {
@@ -8987,7 +8987,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       const o = OPEN[curFace];
       const sh = ((o.ovD > 0 || o.finD > 0 || balcOnFace(curFace)) && faceUnits(curFace).some(u => u.on)) ? shadeEffectiveness(curFace, 172).pct : null;
       const nW = winCount(curFace);
-      label(ctx, t(faceName[curFace]) + ' · ' + t('faces') + ' ' + faceDir(curFace) + ' · WWR ' + fmt(facadeNumbers(curFace).eff * 100, 0) + '% · ' + nW + ' ' + t(nW === 1 ? 'window' : 'windows') + (gelCount(curFace) > 0 ? ' · ' + gelCount(curFace) + ' ' + t('gelosia') : '')
+      label(ctx, t(faceName[curFace]) + ' · ' + t('faces') + ' ' + faceDir(curFace) + ' · WWR ' + fmt(facadeNumbers(curFace).eff * 100, 0) + '% · ' + nW + ' ' + t(nW === 1 ? 'window' : 'windows') + (gelCount(curFace) > 0 ? ' · ' + gelCount(curFace) + ' ' + t('brick ventilation') : '')
         + (sh !== null ? ' · ' + t('shading') + ' ' + fmt(sh, 0) + '%' : ''),
         8, narrow ? 72 : 12, CH.ink2, FM(narrow ? 9.5 : 11), 'left', 'middle');
       const GREEN = '#16A34A';
@@ -9013,7 +9013,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
         fn.per.forEach((q, i) => {
           const on = faceUnits(f)[i] && faceUnits(f)[i].on;
           const shi = !on ? '' : Math.round(100 * (clamp(2 * H / Math.max(1, depth), 0, 1) + clamp(q.w / 2.4, 0, 1)) / 2);
-          rows.push([faceName[f] + ' window ' + (i + 1) + ' (' + fmt(q.w, 1) + ' m)' + (q.door && on ? ' · door' : q.gel && on ? ' · gelosia' : ''), on ? 'on' : 'off', '',
+          rows.push([faceName[f] + ' window ' + (i + 1) + ' (' + fmt(q.w, 1) + ' m)' + (q.door && on ? ' · door' : q.gel && on ? ' · brick ventilation' : ''), on ? 'on' : 'off', '',
             +q.area.toFixed(2), '', q.door && on ? '0.05' : fmt(unitSpanV(q, o.sillZ, o.headZ, 0, G.fh)[0], 2), q.door && on ? fmt(o.headZ, 2) : fmt(unitSpanV(q, o.sillZ, o.headZ, 0, G.fh)[1], 2), '', '', '', '', '', '', '', shi]);
         }); });
       rows.push(['Sunspace', SUNSP.on ? SUNSP.face : 'off', '', '', '', '', '', fmt(SUNSP.depth, 2), '', '', '', '', '', fmt(SUNSP.widthFrac, 2)]);
@@ -14138,7 +14138,7 @@ function exportModel() {
     const uLeftIsB = (along[0] * n[1] + along[1] * -n[0]) > 0;
     const x0 = Math.max(0, u0 - (uLeftIsB ? (o.ovR || 0) : (o.ovL || 0))), x1 = Math.min(segLen === undefined ? u1 + 1 : segLen, u1 + (uLeftIsB ? (o.ovL || 0) : (o.ovR || 0)));
     const off = (p, d) => [p[0] + n[0] * d, p[1] + n[1] * d, p[2]];
-    add('window', tag + ' window' + (gk ? ' ' + gk : ''), gk === 'gelosia' ? 'AA-GELOSIA' : 'AA-GLAZING', [[[P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)], n]], { width:ww, height:v1 - v0, wwr:o.wwr, facade:f, mat:'AA_Glass' });
+    add('window', tag + ' window' + (gk ? ' ' + gk : ''), gk === 'brick ventilation' ? 'AA-GELOSIA' : 'AA-GLAZING', [[[P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)], n]], { width:ww, height:v1 - v0, wwr:o.wwr, facade:f, mat:'AA_Glass' });
     if (devOK && o.ovD > 0) {
       const vs = o.ovN <= 1 ? [v1] : Array.from({ length:o.ovN }, (_, i) => v0 + (v1 - v0) * (i / (o.ovN - 1)));
       vs.forEach((vt, i) => add('shading', tag + (o.ovN > 1 ? ' louvre ' + (i + 1) : ' overhang'), 'AA-SHADING',
@@ -14199,7 +14199,7 @@ function exportModel() {
             const w0 = uvx[0], w1 = uvx[1];
             if (w1 - w0 < 0.1) return;
             holes.push([c0, c1, w0, w1]);
-            windowAndShading(P, n, along, (c0 + c1) / 2, c1 - c0, w0, w1, OPEN[f], f, tag + (rows.length > 1 ? ' floor ' + k : '') + (pieces.length > 1 ? ' ' + String.fromCharCode(97 + j) : '') + (units.length > 1 ? '·U' + (i + 1) : '') + (isDoor ? ' door' : isGel ? ' gelosia' : ''), sg.len, isGel ? 'gelosia' : '', sp.ui);
+            windowAndShading(P, n, along, (c0 + c1) / 2, c1 - c0, w0, w1, OPEN[f], f, tag + (rows.length > 1 ? ' floor ' + k : '') + (pieces.length > 1 ? ' ' + String.fromCharCode(97 + j) : '') + (units.length > 1 ? '·U' + (i + 1) : '') + (isDoor ? ' door' : isGel ? ' brick ventilation' : ''), sg.len, isGel ? 'brick ventilation' : '', sp.ui);
           });
         });
         /* the fins stand where the student put them along the device span —
@@ -17188,7 +17188,7 @@ Object.assign(PT, {
   "L {} × H {} m": "L {} × A {} m",
   "Sill height": "Altura do peitoril",
   "sill": "peitoril",
-  "gelosia": "gelosia",
+  "brick ventilation": "gelosia",
   "A breeze-block panel instead of glass: ventilated, no view": "Um painel de blocos vazados em vez de vidro: ventilado, sem vista",
   "Head height": "Altura da verga",
   "Below the recommended range": "Abaixo do intervalo recomendado",
