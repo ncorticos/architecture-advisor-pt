@@ -3822,7 +3822,7 @@ function faceUnits(f) {
   if (!Array.isArray(o.units)) o.units = [{ on:true, frac:1, off:0 }];
   o.units = o.units.filter(w => w && isFinite(+w.frac) && +w.frac > 0).slice(0, 6);
   /* an emptied side stays empty: no glass, honest zeros everywhere */
-  o.units.forEach(w => { w.on = w.on !== false; w.frac = +w.frac; w.off = isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0; w.up = isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0; w.gel = !!w.gel && !w.door; });
+  o.units.forEach(w => { w.on = w.on !== false; w.frac = +w.frac; w.off = isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0; w.up = isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0; w.gel = !!w.gel && !w.door; w.ht = isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined; w.sl = isFinite(+w.sl) ? Math.max(-0.5, Math.min(2.5, +w.sl)) : undefined; });
   if (!(o.sel >= 0) || o.sel >= o.units.length) o.sel = -1;
   return o.units;
 }
@@ -3842,6 +3842,42 @@ function shiftRow(v0, v1, k, fh, up) {
   const lo = k * fh, hi = Math.max(lo + h, (k + 1) * fh - 0.05);
   const a0 = Math.min(Math.max(v0 + uu, lo), Math.max(lo, hi - h));
   return [a0, a0 + h];
+}
+/** A window's vertical span on storey k with its own size: the band's
+    sill-to-head slid by the unit's lift like shiftRow, except a window
+    resized on its own keeps its own sill and height (u.sl/u.ht, written by
+    dragging its own corners while selected) and its neighbours keep the
+    band's. Doors always stand on the floor. */
+function unitSpanV(u, sill, head, k, fh) {
+  if (!u || (!isFinite(+u.ht) && !isFinite(+u.sl))) return shiftRow(sill, head, k, fh, u && u.up);
+  const hBand = Math.max(0.05, head - sill);
+  const hh = isFinite(+u.ht) && +u.ht >= 0.1 ? +u.ht : hBand;
+  const ss = isFinite(+u.sl) ? +u.sl : sill;
+  return shiftRow(ss, ss + hh, k, fh, u.up);
+}
+/** The selected window's index when it is switched on, else -1: overhangs
+    and fins dress that window only. With no selection the whole
+    switched-on glass keeps them, as before. */
+function devSelUI(f) {
+  const o = OPEN[f];
+  if (!o || !(o.sel >= 0)) return -1;
+  const u = faceUnits(f)[o.sel];
+  return (u && u.on) ? o.sel : -1;
+}
+/** The selected window's glass interval on one wall, or null where it has
+    no switched-on glass there. */
+function selSpanB(f, sg, bw0, bw1, ui) {
+  const sp = glassSpans(f, bw0, bw1, sg.len).filter(s => s.ui === ui && s.on && s.b - s.a > 0.05);
+  return sp.length ? [Math.min(...sp.map(s => s.a)), Math.max(...sp.map(s => s.b))] : null;
+}
+/** Pad a glass interval with the chosen extra width on each viewer end —
+    the slab-and-fins half of devSpanH, usable on any interval. */
+function devSpanPad(f, sg, gA, gB) {
+  const o = OPEN[f] || {};
+  const tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len;
+  const uLeftIsB = (tx * sg.n[1] + ty * -sg.n[0]) > 0;
+  return [Math.max(0, gA - (uLeftIsB ? (o.ovR || 0) : (o.ovL || 0))),
+    Math.min(sg.len, gB + (uLeftIsB ? (o.ovL || 0) : (o.ovR || 0)))];
 }
 /** The device span of one wall: the switched-on glass as laid, plus the
     chosen extra width on each viewer end — the slab and the fins live
@@ -8133,7 +8169,7 @@ function buildOpenings(host) {
   const lat = S.lat, lon = S.lon, tz = lon / 15;
   const G = MASS, RF = ROOF;
   pageHead(host, 'Openings and Shadowing',
-    'Glazing, overhangs and fins for each facade, sized against the plan fixed on Site and the roof fixed on Roof — this tab cannot change either. Choosing a facade turns the model to face it, so you can drag its window directly; the compass shows which way is which. Click a window to select it — drag its black node to push it along the wall and up or down, drag a fin dot to stand it where the shade belongs, double-click it to open or close it, double-click bare wall to plant a new one. Any unit turns into a glazed door or a gelosia breeze-block from its row. Drag it onto another facade to move it there, or step it across with the arrows on its row.');
+    'Glazing for each facade and shading for each window, sized against the plan fixed on Site and the roof fixed on Roof — this tab cannot change either. Choosing a facade turns the model to face it, so you can drag its window directly; the compass shows which way is which. Click a window to select it — drag its black node to push it along the wall and up or down, drag its corners to size it on its own without touching its neighbours, and dress it alone with an overhang and fins; drag a fin dot to stand it where the shade belongs, double-click it to open or close it, double-click bare wall to plant a new one clear of the others. Any unit turns into a glazed door or a gelosia breeze-block from its row. Drag it onto another facade to move it there, or step it across with the arrows on its row.');
 
   const h0 = () => G.fl * G.fh;   // read live: the tab outlives changes made on Site
   const Mod = () => roofModel(G, RF);   // the worked volume from Site and Roof, cached
@@ -8293,7 +8329,7 @@ function buildOpenings(host) {
       const sill0 = r0 ? r0.sill : 0, head0 = r0 ? Math.min(r0.head, h0()) : 0;
       rows.forEach((r, i) => {
         const q = fn.per[i];
-        const sillEff = us[i].door ? 0.05 : shiftRow(sill0, head0, 0, G.fh, us[i].up)[0];
+        const sillEff = us[i].door ? 0.05 : unitSpanV(us[i], sill0, head0, 0, G.fh)[0];
         r.m.textContent = fmt(q.w, 2) + ' m · ' + fmt(q.area, 2) + ' m² · '
           + (!us[i].on ? '–' : String(Math.round(100 * (clamp(2 * H / Math.max(1, depth), 0, 1) + clamp(q.w / 2.4, 0, 1)) / 2)))
           + (us[i].on && us[i].door ? ' · ' + t('door') : us[i].on && us[i].gel ? ' · ' + t('gelosia') : '')
@@ -8346,7 +8382,10 @@ function buildOpenings(host) {
       const r = { m:el('div', { class:'hint' }) };
       const mvL = el('button', { class:'btn small', text:'\u2039', title:t('Move window to the previous face'), 'aria-label':t('Move window to the previous face'), onclick:() => stepFace(i, -1) });
       const mvR = el('button', { class:'btn small', text:'\u203A', title:t('Move window to the next face'), 'aria-label':t('Move window to the next face'), onclick:() => stepFace(i, 1) });
-      const line = el('div', { class:OPEN[curFace].sel === i ? 'urow sel' : 'urow' }, OPEN[curFace].sel === i ? [chk, dor, gel, mvL, mvR, r.m] : [chk, dor, gel, r.m]);
+      const own = (u.ht !== undefined || u.sl !== undefined) ? el('button', { class:'btn small', text:'\u27F2', title:t('Back to the side\u2019s sill and head'), 'aria-label':t('Back to the side\u2019s sill and head'), onclick:() => { u.ht = undefined; u.sl = undefined; buildUnitUI(); refreshOpenings(); } }) : null;
+      const btns = OPEN[curFace].sel === i ? [chk, dor, gel, mvL, mvR, r.m] : [chk, dor, gel, r.m];
+      if (own) btns.push(own);
+      const line = el('div', { class:OPEN[curFace].sel === i ? 'urow sel' : 'urow' }, btns);
       rows.push(r);
       unitBox.appendChild(line);
       unitBox.appendChild(sh);
@@ -8361,10 +8400,14 @@ function buildOpenings(host) {
     const plus = el('button', { class:'btn small', text:'+', title:t('One window more'), 'aria-label':t('One window more'), onclick:() => {
       const us = faceUnits(curFace);
       if (us.length > 5) return;
-      let bi = 0;
-      us.forEach((q, j) => { if (q.frac > us[bi].frac) bi = j; });
-      if (!us.length) us.push({ on:true, frac:0.25, off:0 });
-      else { us.splice(bi + 1, 0, { on:us[bi].on, frac:us[bi].frac / 2, off:us[bi].off || 0 }); us[bi].frac /= 2; }
+      const sgg = refWall(curFace), bnd = sgg && segWindow(sgg, G);
+      if (sgg && !bnd) { OPEN[curFace].wwr = 0.15; toast(t('Glass started at 15% to receive it')); }
+      const band0 = sgg && segWindow(sgg, G);
+      const bandW0 = band0 ? band0.w : 0;
+      if (!us.length) us.push({ on:true, frac:0.25, off:0, up:0 });
+      else if (bandW0 > 0) us.push({ on:true, frac:clamp(1.2 / bandW0, 0.05, 0.5), off:0, up:0 });
+      else us.push({ on:true, frac:0.25, off:0, up:0 });
+      OPEN[curFace].sel = us.length - 1;
       OPEN[curFace].laid = true;
       buildUnitUI(); refreshOpenings();
     } });
@@ -8376,7 +8419,7 @@ function buildOpenings(host) {
     updateTexts();
   }
   buildUnitUI();
-  props.appendChild(el('div', { class:'gh', text:'Shading devices' }));
+  props.appendChild(el('div', { class:'gh', text:'Shading devices · selected window' }));
   props.appendChild(controls([cOvD, cOvN, cOvL, cOvR, cFinD, cFinN, cFinSide]));
 
   const pillWWR = el('span', { class:'pill ok' });
@@ -8540,8 +8583,14 @@ function buildOpenings(host) {
     /* the devices shade the glass wherever the student pushed it, not
        just the band it was born in */
     const bw0 = w.uc - w.w / 2, bw1 = w.uc + w.w / 2;
-    const dSpan = glassSpans(w.f, bw0, bw1, sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05);
-    const dx = devSpanH(w.f, sg, bw0, bw1), dx0 = dx[0], dx1 = dx[1];
+    const allSpans = glassSpans(w.f, bw0, bw1, sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05);
+    const selUiW = devSelUI(w.f);
+    const selB = selUiW >= 0 ? selSpanB(w.f, sg, bw0, bw1, selUiW) : null;
+    const useSelW = selUiW >= 0 && selB;
+    const dSpan = useSelW ? allSpans.filter(sp => sp.ui === selUiW) : allSpans;
+    const gAW = dSpan.length ? Math.min(...dSpan.map(s => s.a)) : bw0;
+    const gBW = dSpan.length ? Math.max(...dSpan.map(s => s.b)) : bw1;
+    const dx = devSpanPad(w.f, sg, gAW, gBW), dx0 = dx[0], dx1 = dx[1];
     /* the devices shade the facade as composed — band plus wherever the
        glass was pushed, up or along — not where the band was born */
     let dv0 = Infinity, dv1 = -Infinity;
@@ -8550,7 +8599,7 @@ function buildOpenings(host) {
       if (!dSpan.length) { dv0 = Math.min(dv0, r.sill); dv1 = Math.max(dv1, rt1); }
       dSpan.forEach(sp => {
         const u = uus && uus[sp.ui];
-        const vv = u && u.door ? [k * G.fh + 0.05, rt1] : shiftRow(r.sill, rt1, k, G.fh, u && u.up);
+        const vv = u && u.door ? [k * G.fh + 0.05, rt1] : unitSpanV(u, r.sill, rt1, k, G.fh);
         dv0 = Math.min(dv0, vv[0]); dv1 = Math.max(dv1, vv[1]);
       });
     });
@@ -8567,7 +8616,7 @@ function buildOpenings(host) {
       glassSpans(w.f, rect.u0, rect.u1, sg.len).forEach(sp => {
         if (!sp.on || sp.b - sp.a < 0.05) return;
         const uu = uus && uus[sp.ui];
-        const uv = uu && uu.door ? [floor + 0.05, rect.v1] : shiftRow(rect.v0, rect.v1, k, G.fh, uu && uu.up);
+        const uv = uu && uu.door ? [floor + 0.05, rect.v1] : unitSpanV(uu, rect.v0, rect.v1, k, G.fh);
         const v0 = uv[0], v1 = uv[1];
         if (v1 - v0 < 0.1) return;
         const quad = [onWall(sg, sp.a, v0), onWall(sg, sp.b, v0), onWall(sg, sp.b, v1), onWall(sg, sp.a, v1)];
@@ -8585,7 +8634,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
   function facadeNumbers(f) {
     const ws = winsOf(f), o = OPEN[f], us = faceUnits(f);
     const wall = ws.reduce((a, x) => a + x.w.glass / (o.wwr || 1), 0);
-    const per = us.map(u => ({ area:0, w:0, on:!!u.on, frac:u.frac, door:!!u.door, up:u.up || 0, gel:!!u.gel }));
+    const per = us.map(u => ({ area:0, w:0, on:!!u.on, frac:u.frac, door:!!u.door, up:u.up || 0, gel:!!u.gel, ht:u.ht, sl:u.sl }));
     let builtUnion = 0;
     ws.forEach(x => {
       const u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2, spans = glassSpans(f, u0, u1, x.sg.len);
@@ -8595,7 +8644,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
         spans.forEach(sp => {
           const u = us[sp.ui];
           if (!u.on) return;
-          const h = u.door ? hTop - (k * G.fh + 0.05) : shiftRow(r.sill, hTop, k, G.fh, u.up)[1] - shiftRow(r.sill, hTop, k, G.fh, u.up)[0];
+          const vvH = u.door ? [k * G.fh + 0.05, hTop] : unitSpanV(u, r.sill, hTop, k, G.fh); const h = vvH[1] - vvH[0];
           per[sp.ui].area += Math.max(0, sp.b - sp.a) * Math.max(0, h);
           if (!u.gel && h > 0 && sp.b > sp.a) ivs.push([sp.a, sp.b, h]);
         });
@@ -8638,8 +8687,8 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
     winsOf(f).forEach(x => x.w.rows.forEach((r, k) => {
       const head = Math.min(r.head, h0()), u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
       glassSpans(f, u0, u1, x.sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
-        const u = us[sp.ui], vv = u.door ? [k * G.fh + 0.05, head] : shiftRow(r.sill, head, k, G.fh, u.up);
-        const rc = { w:sp.b - sp.a, h:Math.max(0.01, vv[1] - vv[0]), ov:[], fin:[], a:sp.a, b:sp.b, sg:x.sg, u0, u1 };
+        const u = us[sp.ui], vv = u.door ? [k * G.fh + 0.05, head] : unitSpanV(u, r.sill, head, k, G.fh);
+        const rc = { w:sp.b - sp.a, h:Math.max(0.01, vv[1] - vv[0]), ov:[], fin:[], a:sp.a, b:sp.b, sg:x.sg, u0, u1, ui:sp.ui };
         bg.ok.forEach(B => {
           if (B.sg !== x.sg) return;
           const a = Math.max(sp.a, B.u0 - (B.wrap < 0 ? B.d : 0)), b2 = Math.min(sp.b, B.u1 + (B.wrap > 0 ? B.d : 0));
@@ -8669,12 +8718,13 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       let glass = 0, lit = 0;
       const sunRightAll = ((sun.azi - (wallAz + 180) + 540) % 360) - 180 > 0;
       rects.forEach(r => {
-        const dropOv = o.ovD > 0 ? Math.min(r.h, o.ovD * Math.tan(Math.max(0, profile)) * o.ovN) : 0;
+        const selUiS = devSelUI(f); const dropOv = o.ovD > 0 && (selUiS < 0 || r.ui === selUiS) ? Math.min(r.h, o.ovD * Math.tan(Math.max(0, profile)) * o.ovN) : 0;
         /* each fin shades the glass down-sun of itself, as far as its
            depth reaches — where the student put it, not a count */
         let finSh = 0;
-        if (o.finN > 0 && o.finD > 0) {
-          const fx = devSpanH(f, r.sg, r.u0, r.u1), sw = o.finD * Math.tan(Math.abs(wsa));
+        if (o.finN > 0 && o.finD > 0 && (selUiS < 0 || r.ui === selUiS)) {
+          const scSB = selUiS >= 0 ? selSpanB(f, r.sg, r.u0, r.u1, selUiS) : null;
+          const fx = scSB ? devSpanPad(f, r.sg, scSB[0], scSB[1]) : devSpanH(f, r.sg, r.u0, r.u1), sw = o.finD * Math.tan(Math.abs(wsa));
           faceFins(f).forEach(t => {
             const fp = fx[0] + t * (fx[1] - fx[0]);
             const s0 = sunRightAll ? fp - sw : fp, s1 = sunRightAll ? fp : fp + sw;
@@ -8698,7 +8748,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
         /* the spill lands on the sun's own end — morning east, evening
            west — and only that end's extension absorbs it */
         const sunRight = sunRightAll;
-        const spill = o.ovD > 0 ? Math.min(r.w, Math.max(0, o.ovD * Math.tan(Math.abs(wsa)) - (sunRight ? (o.ovR || 0) : (o.ovL || 0)))) : 0;
+        const spill = o.ovD > 0 && (selUiS < 0 || r.ui === selUiS) ? Math.min(r.w, Math.max(0, o.ovD * Math.tan(Math.abs(wsa)) - (sunRight ? (o.ovR || 0) : (o.ovL || 0)))) : 0;
         const hLit = cov * Math.max(0, r.h - Math.max(dropOv, dropB)) + (1 - cov) * Math.max(0, r.h - dropOv);
         glass += r.w * r.h; lit += Math.max(0, r.w - spill - dropFin) * hLit + spill * r.h;
       });
@@ -8778,7 +8828,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
   let openPanel = null;
   openPanel = makePanel(stage, {
     title: 'The facades in three dimensions',
-    note: 'The volume from Site under the roof from Roof; the compass marks true north. The model turns to the side selected on the left, so its windows stay in view, and turns on as you drag open ground or use the bar over it — Elevation stands square to that side. On its longest wall, drag the window’s top corner to resize every window on that side, its lower corner to open them down to the floor, the sunspace’s outer glazed corner to change its width and depth, and a roof-window row’s dot to slide it along its slope.',
+    note: 'The volume from Site under the roof from Roof; the compass marks true north. The model turns to the side selected on the left, so its windows stay in view, and turns on as you drag open ground or use the bar over it — Elevation stands square to that side. On its longest wall, drag the selected window’s top corner to resize it alone, its lower corner to set its own sill — with no window selected the corners size the whole side at once, the sunspace’s outer glazed corner to change its width and depth, and a roof-window row’s dot to slide it along its slope.',
     heightFn: w => phoneW(w) ? Math.round(w * 0.8 + 90) : Math.round(Math.max(300, Math.min(w / 1.55, roomH() - 240))),
     render(ctx, W, H) {
       const FR = openFrame(W, H), A = FR.A, Mm = Mod(), narrow = phoneW(W), bb = Mm.pl.bbox;
@@ -8964,7 +9014,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
           const on = faceUnits(f)[i] && faceUnits(f)[i].on;
           const shi = !on ? '' : Math.round(100 * (clamp(2 * H / Math.max(1, depth), 0, 1) + clamp(q.w / 2.4, 0, 1)) / 2);
           rows.push([faceName[f] + ' window ' + (i + 1) + ' (' + fmt(q.w, 1) + ' m)' + (q.door && on ? ' · door' : q.gel && on ? ' · gelosia' : ''), on ? 'on' : 'off', '',
-            +q.area.toFixed(2), '', q.door && on ? '0.05' : fmt(shiftRow(o.sillZ, o.headZ, 0, G.fh, q.up)[0], 2), fmt(o.headZ, 2), '', '', '', '', '', '', '', shi]);
+            +q.area.toFixed(2), '', q.door && on ? '0.05' : fmt(unitSpanV(q, o.sillZ, o.headZ, 0, G.fh)[0], 2), q.door && on ? fmt(o.headZ, 2) : fmt(unitSpanV(q, o.sillZ, o.headZ, 0, G.fh)[1], 2), '', '', '', '', '', '', '', shi]);
         }); });
       rows.push(['Sunspace', SUNSP.on ? SUNSP.face : 'off', '', '', '', '', '', fmt(SUNSP.depth, 2), '', '', '', '', '', fmt(SUNSP.widthFrac, 2)]);
       rows.push(['Roof window size', RW_SIZES[RWIN.size].label]);
@@ -9016,7 +9066,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       if (sp && sp.b - sp.a > 0.05) {
         uEnd = sp.b;
         if (us[fi].door) { vS = 0.05; }
-        else { const vv = shiftRow(w.sill, wv1, 0, G.fh, us[fi].up); vS = vv[0]; vT = vv[1]; }
+        else { const vv = unitSpanV(us[fi], w.sill, wv1, 0, G.fh); vS = vv[0]; vT = vv[1]; }
       }
     }
     return { sg, w, top:onWall(sg, uEnd, vT), sill:onWall(sg, uEnd, vS) };
@@ -9114,7 +9164,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       const spans = glassSpans(curFace, wh.w.uc - wh.w.w / 2, wh.w.uc + wh.w.w / 2, wh.sg.len);
       const pkv = (w2, k, u) => {
         const rt1 = Math.min(w2.rows[k].head, h0());
-        return u && u.door ? [k * G.fh + 0.05, rt1] : shiftRow(w2.rows[k].sill, rt1, k, G.fh, u && u.up);
+        return u && u.door ? [k * G.fh + 0.05, rt1] : unitSpanV(u, w2.rows[k].sill, rt1, k, G.fh);
       };
       for (let i = spans.length - 1; i >= 0; i--) {
         const sp = spans[i];
@@ -9152,6 +9202,30 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       if (!inv) return;
       /* the glass is shared by the storeys: one window this size on each */
       const nS = Math.max(1, G.fl), per = h0() / nS;
+      const wv1 = Math.min(wh.w.rows[0].head, h0());
+      const selU = (o.sel >= 0) ? faceUnits(curFace)[o.sel] : null;
+      if (selU && selU.on && kind === 'window') {
+        /* a selected window resizes on its own: width through its share, height through its own head */
+        const sp0 = glassSpans(curFace, wh.w.uc - wh.w.w / 2, wh.w.uc + wh.w.w / 2, len).filter(s => s.ui === o.sel && s.on && s.b - s.a > 0.05)[0];
+        const a0 = sp0 ? sp0.a : wh.w.uc - wh.w.w / 2;
+        selU.frac = clamp((clamp(inv.u, a0 + 0.3, len) - a0) / Math.max(0.3, wh.w.w), 0.03, 0.95);
+        const vS0 = selU.door ? 0.05 : unitSpanV(selU, wh.w.sill, wv1, 0, G.fh)[0];
+        const maxTop = nS > 1 ? per - 0.1 : h0() - 0.05;
+        selU.ht = clamp(inv.z - vS0, 0.3, Math.max(0.3, maxTop - vS0));
+        if (selU.door) selU.up = 0;
+        OPEN[curFace].laid = true;
+        buildUnitUI(); refreshOpenings();
+        return;
+      }
+      if (selU && selU.on && kind === 'sill' && !selU.door) {
+        /* a selected window opens on its own sill; its neighbours keep the band's */
+        const vT0 = unitSpanV(selU, wh.w.sill, wv1, 0, G.fh)[1];
+        selU.sl = clamp(inv.z, 0, Math.min(1.8, vT0 - 0.3));
+        OPEN[curFace].laid = true;
+        buildUnitUI(); refreshOpenings();
+        return;
+      }
+      if (selU && selU.on && kind === 'sill' && selU.door) { toast(t('Doors stand on the floor')); return; }
       if (kind === 'window') {
         o.headZ = clamp(inv.z, o.sillZ + 0.3, nS > 1 ? per - 0.1 : h0() - 0.05);
         const w = clamp(Math.abs(inv.u - len / 2) * 2, 0.6, len * 0.92);
@@ -9238,7 +9312,8 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       if (!wh2 || ui < 0 || ui >= fut.length) return;
       const r2 = ocv.getBoundingClientRect();
       const inv = invOnWall(openFrame(openPanel.W, openPanel.H), ev.clientX - r2.left, ev.clientY - r2.top, wh2.sg);
-      const dx = devSpanH(curFace, wh2.sg, wh2.w.uc - wh2.w.w / 2, wh2.w.uc + wh2.w.w / 2);
+      const scF = devSelUI(curFace) >= 0 ? selSpanB(curFace, wh2.sg, wh2.w.uc - wh2.w.w / 2, wh2.w.uc + wh2.w.w / 2, devSelUI(curFace)) : null;
+      const dx = scF ? devSpanPad(curFace, wh2.sg, scF[0], scF[1]) : devSpanH(curFace, wh2.sg, wh2.w.uc - wh2.w.w / 2, wh2.w.uc + wh2.w.w / 2);
       drag = { kind:'finmove', ui, wall:{ sg:wh2.sg }, dx, u0:inv ? inv.u : null, t0:fut[ui] };
     } else drag = { kind, wall:winHandles() };
     try { ocv.setPointerCapture(ev.pointerId); } catch (err) {}
@@ -9289,13 +9364,12 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
     if (!inv) return;
     const w = pw;
     if (!w) return;
-    let bi = 0;
-    us.forEach((q, j) => { if (q.frac > us[bi].frac) bi = j; });
-    us.splice(bi + 1, 0, { on:true, frac:us[bi].frac / 2, off:0 });
-    us[bi].frac /= 2;
-    const sp = glassSpans(curFace, w.uc - w.w / 2, w.uc + w.w / 2, psg.len)[bi + 1];
-    if (sp) us[bi + 1].off = Math.max(-30, Math.min(30, inv.u - (sp.a + sp.b) / 2));
-    OPEN[curFace].sel = bi + 1;
+    const nf = clamp(1.2 / Math.max(0.6, w.w), 0.05, 0.5);
+    us.push({ on:true, frac:nf, off:0, up:0 });
+    const ni = us.length - 1;
+    const sp = glassSpans(curFace, w.uc - w.w / 2, w.uc + w.w / 2, psg.len)[ni];
+    if (sp) us[ni].off = Math.max(-30, Math.min(30, inv.u - (sp.a + sp.b) / 2));
+    OPEN[curFace].sel = ni;
     OPEN[curFace].laid = true;
     buildUnitUI(); refreshOpenings();
     toast(t('Window planted — drag it into place'));
@@ -11616,10 +11690,12 @@ function buildVentilation(host) {
       const off = (p, d) => [p[0] + n[0] * d, p[1] + n[1] * d, p[2]];
       w.rows.forEach(r => {
         const v0 = r.sill, v1 = Math.min(r.head, H0);
-        if (o.ovD > 0) (o.ovN <= 1 ? [v1] : Array.from({ length:o.ovN }, (_, i) => v0 + (v1 - v0) * (i / (o.ovN - 1))))
-          .forEach(vt => out.push({ ov:true, pts:[onWallV(sg, u0, vt), onWallV(sg, u1, vt), off(onWallV(sg, u1, vt), o.ovD), off(onWallV(sg, u0, vt), o.ovD)] }));
-        if (o.finN > 0 && o.finD > 0) {
-          const fx = devSpanH(w.f, sg, u0, u1);
+        const selUiV = devSelUI(w.f), scV = selUiV >= 0 ? selSpanB(w.f, sg, u0, u1, selUiV) : null;
+        const aV = scV ? scV[0] : u0, bV = scV ? scV[1] : u1;
+        if (o.ovD > 0 && (selUiV < 0 || scV)) (o.ovN <= 1 ? [v1] : Array.from({ length:o.ovN }, (_, i) => v0 + (v1 - v0) * (i / (o.ovN - 1))))
+          .forEach(vt => out.push({ ov:true, pts:[onWallV(sg, aV, vt), onWallV(sg, bV, vt), off(onWallV(sg, bV, vt), o.ovD), off(onWallV(sg, aV, vt), o.ovD)] }));
+        if (o.finN > 0 && o.finD > 0 && (selUiV < 0 || scV)) {
+          const fx = scV ? devSpanPad(w.f, sg, scV[0], scV[1]) : devSpanH(w.f, sg, u0, u1);
           faceFins(w.f).map(t => fx[0] + t * (fx[1] - fx[0]))
             .forEach(uF => out.push({ ov:false, pts:[onWallV(sg, uF, v0), off(onWallV(sg, uF, v0), o.finD), off(onWallV(sg, uF, v1), o.finD), onWallV(sg, uF, v1)] }));
         }
@@ -14056,13 +14132,14 @@ function exportModel() {
   /** A window with its shading on a wall: P(u, v) a point on the wall, u
       along it, v up; n its outward normal — the same devices, by the same
       rules, on every wall. */
-  const windowAndShading = (P, n, along, uc, ww, v0, v1, o, f, tag, segLen, gk) => {
+  const windowAndShading = (P, n, along, uc, ww, v0, v1, o, f, tag, segLen, gk, ui) => {
+    const devOK = !(o.sel >= 0) || o.sel === ui;
     const u0 = uc - ww / 2, u1 = uc + ww / 2;
     const uLeftIsB = (along[0] * n[1] + along[1] * -n[0]) > 0;
     const x0 = Math.max(0, u0 - (uLeftIsB ? (o.ovR || 0) : (o.ovL || 0))), x1 = Math.min(segLen === undefined ? u1 + 1 : segLen, u1 + (uLeftIsB ? (o.ovL || 0) : (o.ovR || 0)));
     const off = (p, d) => [p[0] + n[0] * d, p[1] + n[1] * d, p[2]];
     add('window', tag + ' window' + (gk ? ' ' + gk : ''), gk === 'gelosia' ? 'AA-GELOSIA' : 'AA-GLAZING', [[[P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)], n]], { width:ww, height:v1 - v0, wwr:o.wwr, facade:f, mat:'AA_Glass' });
-    if (o.ovD > 0) {
+    if (devOK && o.ovD > 0) {
       const vs = o.ovN <= 1 ? [v1] : Array.from({ length:o.ovN }, (_, i) => v0 + (v1 - v0) * (i / (o.ovN - 1)));
       vs.forEach((vt, i) => add('shading', tag + (o.ovN > 1 ? ' louvre ' + (i + 1) : ' overhang'), 'AA-SHADING',
         [[[P(x0, vt), P(x1, vt), off(P(x1, vt), o.ovD), off(P(x0, vt), o.ovD)], up]],
@@ -14118,21 +14195,22 @@ function exportModel() {
             const c0 = Math.max(a, sp.a), c1 = Math.min(b, sp.b);
             if (c1 - c0 < 0.05) return;
             const uu = OPEN[f].units[sp.ui], isDoor = !!(uu && uu.door), isGel = !!(uu && uu.gel);
-            const uvx = isDoor ? [k * G.fh + 0.05, v1] : shiftRow(v0, v1, k, G.fh, uu && uu.up);
+            const uvx = isDoor ? [k * G.fh + 0.05, v1] : unitSpanV(uu, v0, v1, k, G.fh);
             const w0 = uvx[0], w1 = uvx[1];
             if (w1 - w0 < 0.1) return;
             holes.push([c0, c1, w0, w1]);
-            windowAndShading(P, n, along, (c0 + c1) / 2, c1 - c0, w0, w1, OPEN[f], f, tag + (rows.length > 1 ? ' floor ' + k : '') + (pieces.length > 1 ? ' ' + String.fromCharCode(97 + j) : '') + (units.length > 1 ? '·U' + (i + 1) : '') + (isDoor ? ' door' : isGel ? ' gelosia' : ''), sg.len, isGel ? 'gelosia' : '');
+            windowAndShading(P, n, along, (c0 + c1) / 2, c1 - c0, w0, w1, OPEN[f], f, tag + (rows.length > 1 ? ' floor ' + k : '') + (pieces.length > 1 ? ' ' + String.fromCharCode(97 + j) : '') + (units.length > 1 ? '·U' + (i + 1) : '') + (isDoor ? ' door' : isGel ? ' gelosia' : ''), sg.len, isGel ? 'gelosia' : '', sp.ui);
           });
         });
         /* the fins stand where the student put them along the device span —
            never inside a loggia mouth open on this row */
-        if (OPEN[f].finN > 0 && OPEN[f].finD > 0) {
-          const fx = devSpanH(f, sg, u0, u1);
+        if (OPEN[f].finN > 0 && OPEN[f].finD > 0 && (devSelUI(f) < 0 || glassSpans(f, u0, u1, sg.len).some(sp => sp.ui === devSelUI(f) && sp.on && sp.b - sp.a > 0.05))) {
+          const scE = devSelUI(f) >= 0 ? selSpanB(f, sg, u0, u1, devSelUI(f)) : null;
+          const fx = scE ? devSpanPad(f, sg, scE[0], scE[1]) : devSpanH(f, sg, u0, u1);
           let fv0 = v0, fv1 = v1;
           glassSpans(f, u0, u1, sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
             const uu = OPEN[f].units[sp.ui];
-            const vv = uu && uu.door ? [k * G.fh + 0.05, v1] : shiftRow(v0, v1, k, G.fh, uu && uu.up);
+            const vv = uu && uu.door ? [k * G.fh + 0.05, v1] : unitSpanV(uu, v0, v1, k, G.fh);
             fv0 = Math.min(fv0, vv[0]); fv1 = Math.max(fv1, vv[1]);
           });
           faceFins(f).forEach((t, i) => {
@@ -14748,8 +14826,8 @@ function applyStudy(o) {
     if (['left', 'right', 'both'].indexOf(s.finSide) >= 0) d.finSide = s.finSide;
     if (Array.isArray(s.units) && s.units.length) {
       const vu = s.units.filter(w => w && isFinite(+w.frac) && +w.frac > 0).slice(0, 6)
-        .map(w => ({ on:w.on !== false, frac:+w.frac, door:!!w.door, gel:!!w.gel, off:isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0, up:isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0 }));
-      if (vu.length) { const t = vu.reduce((a, w) => a + w.frac, 0) || 1; vu.forEach(w => { w.frac /= t; }); d.units = vu; }
+        .map(w => ({ on:w.on !== false, frac:+w.frac, door:!!w.door, gel:!!w.gel, off:isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0, up:isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0, ht:isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined, sl:isFinite(+w.sl) ? Math.max(-0.5, Math.min(2.5, +w.sl)) : undefined }));
+      if (vu.length) d.units = vu;
     }
   });
   const U0 = o.sunsp || {};
@@ -17091,6 +17169,8 @@ Object.assign(PT, {
   "moved to": "mudada para",
   "That wall cannot take a window": "Essa parede não pode levar janela",
   "Glass started at 15% to receive it": "Vidro iniciado a 15% para a receber",
+  "Doors stand on the floor": "As portas assentam no chão",
+  "Back to the side\u2019s sill and head": "Repor o peitoril e a verga do lado",
   "Move window to the previous face": "Mudar a janela para a fachada anterior",
   "Move window to the next face": "Mudar a janela para a fachada seguinte",
   "South": "Sul", "North": "Norte", "East": "Este", "West": "Oeste",
@@ -17151,8 +17231,8 @@ Object.assign(PT, {
   "Sunspace facade": "Fachada do espaço solar",
   "Sunspace width": "Largura do espaço solar",
   "The facades in three dimensions": "As fachadas em três dimensões",
-  "The volume from Site under the roof from Roof; the compass marks true north. The model turns to the side selected on the left, so its windows stay in view, and turns on as you drag open ground or use the bar over it — Elevation stands square to that side. On its longest wall, drag the window’s top corner to resize every window on that side, its lower corner to open them down to the floor, the sunspace’s outer glazed corner to change its width and depth, and a roof-window row’s dot to slide it along its slope.":
-    "O volume do Local sob a cobertura do separador Cobertura; a bússola marca o norte verdadeiro. O modelo roda para o lado escolhido à esquerda, pelo que as suas janelas ficam à vista, e continua a rodar quando arrasta o terreno livre ou usa a barra sobre ele — Alçado põe-no de frente para esse lado. Na sua parede mais comprida, arraste o canto superior da janela para redimensionar todas as janelas desse lado, o canto inferior para as abrir até ao chão, o canto envidraçado exterior do espaço solar para mudar a sua largura e profundidade, e o ponto de uma fila de janelas de cobertura para a deslizar na vertente.",
+  "The volume from Site under the roof from Roof; the compass marks true north. The model turns to the side selected on the left, so its windows stay in view, and turns on as you drag open ground or use the bar over it — Elevation stands square to that side. On its longest wall, drag the selected window’s top corner to resize it alone, its lower corner to set its own sill — with no window selected the corners size the whole side at once, the sunspace’s outer glazed corner to change its width and depth, and a roof-window row’s dot to slide it along its slope.":
+    "O volume do Local sob a cobertura do separador Cobertura; a bússola marca o norte verdadeiro. O modelo roda para o lado escolhido à esquerda, pelo que as suas janelas ficam à vista, e continua a rodar quando arrasta o terreno livre ou usa a barra sobre ele — Alçado põe-no de frente para esse lado. Na sua parede mais comprida, arraste o canto superior da janela selecionada para a redimensionar sozinha, o canto inferior para definir o seu próprio peitoril — sem janela selecionada os cantos dimensionam todo o lado de uma vez, o canto envidraçado exterior do espaço solar para mudar a sua largura e profundidade, e o ponto de uma fila de janelas de cobertura para a deslizar na vertente.",
   "shading": "sombreamento",
   "Overall glazing performance": "Desempenho global do envidraçado",
   "Fin side": "Lado dos brises",
