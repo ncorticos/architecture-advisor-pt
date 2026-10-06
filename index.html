@@ -2419,37 +2419,54 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
   const F = Object.assign({}, F0, { h:(hEff === undefined ? F0.h : hEff) });
   const tap = isFinite(+taperDeg) ? Math.max(0, +taperDeg) * RAD : 0;
   const out = [];
-  const tri = (a, b, c, fill) => {
+  /* One face for one flat surface, not a pair of triangles. Every painter
+     inks each face it fills, so a quad cut in two drew its own diagonal as
+     well as its edges, and the stack read as a web of triangles instead of
+     a box. */
+  const face = (pts, fill) => {
+    const a = pts[0], b = pts[1], c = pts[2];
     const ux = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], vx = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
     const n = [ux[1] * vx[2] - ux[2] * vx[1], ux[2] * vx[0] - ux[0] * vx[2], ux[0] * vx[1] - ux[1] * vx[0]];
     const L = Math.hypot(n[0], n[1], n[2]) || 1, nn = [n[0] / L, n[1] / L, n[2] / L];
-    out.push({ pts:[a, b, c], fill:shadeFill(fill, nn), n:nn });
+    out.push({ pts, fill:shadeFill(fill, nn), n:nn });
   };
-  const quad = (a, b, c, d, fill) => { tri(a, b, c, fill); tri(a, c, d, fill); };
+  const tri = (a, b, c, fill) => face([a, b, c], fill);
+  const quad = (a, b, c, d, fill) => face([a, b, c, d], fill);
+  /* Six faces, each wound so its normal points out of the solid: the shading
+     reads one light over the whole box instead of flipping side to side. */
   const box = (x0, y0, z1, x1, y1, z2, fill) => {
-    quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], fill);
-    quad([x0, y0, z2], [x1, y0, z2], [x1, y1, z2], [x0, y1, z2], fill);
-    quad([x0, y0, z1], [x1, y0, z1], [x1, y0, z2], [x0, y0, z2], fill);
-    quad([x0, y1, z1], [x1, y1, z1], [x1, y1, z2], [x0, y1, z2], fill);
-    quad([x0, y0, z1], [x0, y1, z1], [x0, y1, z2], [x0, y0, z2], fill);
-    quad([x1, y0, z1], [x1, y1, z1], [x1, y1, z2], [x1, y0, z2], fill);
+    quad([x0, y0, z1], [x0, y1, z1], [x1, y1, z1], [x1, y0, z1], fill);   // under
+    quad([x0, y0, z2], [x1, y0, z2], [x1, y1, z2], [x0, y1, z2], fill);   // over
+    quad([x0, y0, z1], [x1, y0, z1], [x1, y0, z2], [x0, y0, z2], fill);   // south
+    quad([x1, y1, z1], [x0, y1, z1], [x0, y1, z2], [x1, y1, z2], fill);   // north
+    quad([x0, y1, z1], [x0, y0, z1], [x0, y0, z2], [x0, y1, z2], fill);   // west
+    quad([x1, y0, z1], [x1, y1, z1], [x1, y1, z2], [x1, y0, z2], fill);   // east
   };
-  const frustum = (cx, cy, bx, by, tx, ty, z1, z2, fill) => {
-    quad([cx - bx, cy - by, z1], [cx + bx, cy - by, z1], [cx + tx, cy - ty, z2], [cx - tx, cy - ty, z2], fill);
-    quad([cx - bx, cy + by, z1], [cx + bx, cy + by, z1], [cx + tx, cy + ty, z2], [cx - tx, cy + ty, z2], fill);
-    quad([cx - bx, cy - by, z1], [cx - bx, cy + by, z1], [cx - tx, cy + ty, z2], [cx - tx, cy - ty, z2], fill);
-    quad([cx + bx, cy - by, z1], [cx + bx, cy + by, z1], [cx + tx, cy + ty, z2], [cx - tx, cy + ty, z2], fill);
-    quad([cx - bx, cy - by, z1], [cx + bx, cy - by, z1], [cx + bx, cy + by, z1], [cx - bx, cy + by, z1], fill);
-    quad([cx - tx, cy - ty, z2], [cx + tx, cy - ty, z2], [cx + tx, cy + ty, z2], [cx - tx, cy + ty, z2], fill);
+  /* The tapered shaft: each face takes its own two base corners and the two
+     top corners above them, wound outward. The east face used to close on
+     the far top corner, which drew a bow tie across the stack and left that
+     side open — the shaft read as loose triangles and you could see through
+     it from the east. */
+  const frustum = (cx, cy, bx, by, tx, ty, z1, z2, fill, noBase) => {
+    const zb = typeof z1 === 'function' ? z1 : () => z1;
+    const B = (sx, sy) => [cx + sx * bx, cy + sy * by, zb(sx, sy)], T = (sx, sy) => [cx + sx * tx, cy + sy * ty, z2];
+    quad(B(-1, -1), B(1, -1), T(1, -1), T(-1, -1), fill);   // south
+    quad(B(1, 1), B(-1, 1), T(-1, 1), T(1, 1), fill);       // north
+    quad(B(-1, 1), B(-1, -1), T(-1, -1), T(-1, 1), fill);   // west
+    quad(B(1, -1), B(1, 1), T(1, 1), T(1, -1), fill);       // east
+    if (!noBase) quad(B(-1, -1), B(-1, 1), B(1, 1), B(1, -1), fill);   // under
+    quad(T(-1, -1), T(1, -1), T(1, 1), T(-1, 1), fill);     // over
   };
   const prism = (cx, cy, r, z1, z2, fill, n) => {
     n = n || 8;
     const P = k => { const a = k / n * Math.PI * 2; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+    const cap = [];
     for (let k = 0; k < n; k++) {
       const a = P(k), b = P((k + 1) % n);
       quad([a[0], a[1], z1], [b[0], b[1], z1], [b[0], b[1], z2], [a[0], a[1], z2], fill);
+      cap.push([a[0], a[1], z2]);
     }
-    for (let k = 1; k < n - 1; k++) tri([P(0)[0], P(0)[1], z2], [P(k)[0], P(k)[1], z2], [P(k + 1)[0], P(k + 1)[1], z2], fill);
+    face(cap, fill);   // the top as one polygon, so only its rim is inked
   };
   const shaftC = F.colours[0], capC = (famKey === 'nortenha' || famKey === 'beira') ? F.colours[0] : '#EFE9DC', potC = '#C98A5E';
   const w = (foot && isFinite(+foot.y)) ? +foot.y : F.shaft, h = F.h, sw = (foot && isFinite(+foot.x)) ? +foot.x : F.shaft * (F.long || 1), skirt = F.skirt ? 0.6 : 0, capT = Math.max(0.15, F.cap || 0.15);
@@ -2463,30 +2480,19 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
       quad([a0[0], a0[1], z1], [b0[0], b0[1], z1], [b1[0], b1[1], z2], [a1[0], a1[1], z2], fill);
     }
   };
-  /* The foot follows the roof: the lowest surface under the widened shaft
-     buries the shaft on any pitch, and a flashing collar hugs the slope
-     where a level plate would float downhill. Without a surface callback
-     both fall back to the old level foot. */
+  /* The foot stands on the roof corner by corner. A level foot cut to the
+     lowest corner left most of a metre of shaft under the slope on a steep
+     pitch, and a painter can hide a face only whole, so that buried length
+     showed through the roof as dark wings — as did the flashing collar that
+     was tucked beneath it. Meeting the surface exactly needs neither: the
+     shaft lands on the slope and nothing of it is left underneath. Without
+     a surface callback the old level foot stands in. */
   const rawZ = (qx, qy) => {
     if (typeof zAtFn !== 'function') return null;
     try { const v = zAtFn(qx, qy); return isFinite(v) ? v : null; } catch (e) { return null; }
   };
-  const surfZ = (qx, qy) => { const v = rawZ(qx, qy); return v === null ? z0 : v; };
-  let zB = null;
-  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
-    const v = rawZ(x + sx * (sw / 2 + 0.14), y + sy * (w / 2 + 0.14));
-    if (v !== null) zB = zB === null ? v : Math.min(zB, v);
-  });
-  if (zB === null) zB = z0 - 0.35;
-  frustum(x, y, sw / 2, w / 2, swt / 2, wt / 2, zB - 0.05, z0 + h - skirt, shaftC);
-  const collarSide = (ix0, iy0, ix1, iy1, ox0, oy0, ox1, oy1) => {
-    quad([ix0, iy0, surfZ(ix0, iy0) - 0.16], [ix1, iy1, surfZ(ix1, iy1) - 0.16],
-      [ox1, oy1, surfZ(ox1, oy1) + 0.05], [ox0, oy0, surfZ(ox0, oy0) + 0.05], shaftC);
-  };
-  collarSide(x + sw / 2, y - w / 2, x + sw / 2, y + w / 2, x + sw / 2 + 0.14, y - w / 2 - 0.14, x + sw / 2 + 0.14, y + w / 2 + 0.14);
-  collarSide(x - sw / 2, y + w / 2, x - sw / 2, y - w / 2, x - sw / 2 - 0.14, y + w / 2 + 0.14, x - sw / 2 - 0.14, y - w / 2 - 0.14);
-  collarSide(x + sw / 2, y + w / 2, x - sw / 2, y + w / 2, x + sw / 2 + 0.14, y + w / 2 + 0.14, x - sw / 2 - 0.14, y + w / 2 + 0.14);
-  collarSide(x - sw / 2, y - w / 2, x + sw / 2, y - w / 2, x - sw / 2 - 0.14, y - w / 2 - 0.14, x + sw / 2 + 0.14, y - w / 2 - 0.14);
+  const footZ = (sx, sy) => { const v = rawZ(x + sx * sw / 2, y + sy * w / 2); return v === null ? z0 - 0.35 : v; };
+  frustum(x, y, sw / 2, w / 2, swt / 2, wt / 2, footZ, z0 + h - skirt, shaftC, typeof zAtFn === 'function');
   if (F.cone) {
     const cb = z0 + h, ch = F.cone.h, hwt = Math.min(swt, wt) / 2, cr0 = Math.min(F.cone.r, hwt + 0.05), dr = Math.min(F.drum.r, hwt), cr1 = Math.min(dr + 0.07, cr0);
     coneFrustum(x, y, cr0, cr1, cb, cb + ch, shaftC);
@@ -2510,8 +2516,8 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
         const c = -fw / 2 + (k + 0.5) * (fw / nF), a0 = c - tw / 2, b0 = c + tw / 2;
         if (s === 0) tri([x + sw / 2 + e, y + a0, fz1], [x + sw / 2 + e, y + b0, fz1], [x + sw / 2 + e, y + c, fz2], '#33302c');
         else if (s === 1) tri([x - sw / 2 - e, y + b0, fz1], [x - sw / 2 - e, y + a0, fz1], [x - sw / 2 - e, y + c, fz2], '#33302c');
-        else if (s === 2) tri([x + a0, y + w / 2 + e, fz1], [x + b0, y + w / 2 + e, fz1], [x + c, y + w / 2 + e, fz2], '#33302c');
-        else tri([x + b0, y - w / 2 - e, fz1], [x + a0, y - w / 2 - e, fz1], [x + c, y - w / 2 - e, fz2], '#33302c');
+        else if (s === 2) tri([x + b0, y + w / 2 + e, fz1], [x + a0, y + w / 2 + e, fz1], [x + c, y + w / 2 + e, fz2], '#33302c');
+        else tri([x + a0, y - w / 2 - e, fz1], [x + b0, y - w / 2 - e, fz1], [x + c, y - w / 2 - e, fz2], '#33302c');
       }
     }
   }
@@ -2521,8 +2527,7 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
     for (let k = 0; k < F.pots; k++) {
       const px = F.pots === 1 ? x : x - swt / 2 + 0.15 + k * (swt - 0.3) / Math.max(1, F.pots - 1);
       prism(px, y, 0.09, zt, zt + 0.5, potC, 8);
-      tri([px - 0.09, y, zt + 0.5], [px + 0.09, y, zt + 0.5], [px, y + 0.09, zt + 0.5], '#2b2b2e');
-      tri([px - 0.09, y, zt + 0.5], [px, y - 0.09, zt + 0.5], [px + 0.09, y, zt + 0.5], '#2b2b2e');
+      quad([px - 0.09, y, zt + 0.5], [px, y - 0.09, zt + 0.5], [px + 0.09, y, zt + 0.5], [px, y + 0.09, zt + 0.5], '#2b2b2e');
     }
   } else {
     box(x - wt / 4, y - wt / 4, zt, x + wt / 4, y + wt / 4, zt + 0.02, '#2b2b2e');
@@ -4293,11 +4298,48 @@ const camUV = (A, x, y, z) => [CAM_K * (x * A.r[0] + y * A.r[1]), CAM_K * ((x * 
 /** How far from the camera: larger is farther, for painting back to front. */
 const camDepth = (A, x, y, z) => (x * A.d[0] + y * A.d[1]) * A.ce - (z || 0) * A.se; /** A roof plane ends where its walls begin — they only ever touch —
       so with the camera above them the plane always covers the wall.
-      A fixed order for that one pair; everything else (balconies,
-      chimneys, parapets, risers, neighbours) keeps its depth order. */
+      A fixed order for that pair, and for a chimney standing on a roof
+      plane; everything else (balconies, parapets, risers, neighbours)
+      keeps its depth order. */
   function isRoofFace(f) { return !!(f.pc && !f.balc && !f.chim && !f.par && !f.import); }
   function isWallFace(f) { return !!(f.sg && !f.pc && !f.balc && !f.chim && !f.par && !f.import); }
-  function roofWallOrder(p, q) { return (isRoofFace(p) && isWallFace(q)) ? 1 : (isWallFace(p) && isRoofFace(q)) ? -1 : 0; }
+  /** The plane through a face's own points, as [a, b, c, d] meaning
+      a·x + b·y + c·z = d with c ≥ 0, so a point stands above the surface
+      where a·x + b·y + c·z > d. Read from the points themselves, so it
+      holds just as well in a turned frame, and kept on the face, which
+      lives only as long as the one painting. */
+  function facePlane(f) {
+    if (f.plane === undefined) {
+      const P = f.pts; f.plane = null;
+      for (let i = 2; i < P.length && !f.plane; i++) {
+        const u = [P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]];
+        const v = [P[i][0] - P[0][0], P[i][1] - P[0][1], P[i][2] - P[0][2]];
+        const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        const L = Math.hypot(n[0], n[1], n[2]);
+        if (L > 1e-9) { const k = (n[2] < 0 ? -1 : 1) / L; f.plane = [n[0] * k, n[1] * k, n[2] * k, (n[0] * P[0][0] + n[1] * P[0][1] + n[2] * P[0][2]) * k]; }
+      }
+    }
+    return f.plane;
+  }
+  /** A chimney is a small solid standing on a wide roof plane, and depth
+      compares their centroids: a slope running down toward the camera reads
+      as nearer than the stack upon it, paints over it, and the chimney
+      disappears at those angles of the turn. The plane decides instead — a
+      roof surface the camera looks down on can hide nothing that stands
+      above it, so it paints first and the stack over it. A face of the
+      stack that dips below the plane (behind the ridge, under a taller
+      wing) keeps its depth order and is covered, as it should be. */
+  function chimRoofOrder(p, q) {
+    const c = p.chim ? p : q.chim ? q : null;
+    if (!c) return 0;
+    const s = c === p ? q : p;
+    if (!isRoofFace(s)) return 0;
+    const pl = facePlane(s);
+    if (!pl || pl[2] < 1e-6) return 0;                // seen edge-on: nothing to tell
+    const over = c.pts.every(v => v[0] * pl[0] + v[1] * pl[1] + v[2] * pl[2] > pl[3] - 0.02);   // a foot resting on the surface still stands on it
+    return over ? (c === p ? 1 : -1) : 0;
+  }
+  function roofWallOrder(p, q) { return (isRoofFace(p) && isWallFace(q)) ? 1 : (isWallFace(p) && isRoofFace(q)) ? -1 : chimRoofOrder(p, q); }
 /** Does a face with outward normal (nx, ny, nz) turn toward the camera? */
 const camSees = (A, nx, ny, nz) => (nx * A.c[0] + ny * A.c[1]) * A.ce + (nz || 0) * A.se > 1e-6;
 /** The point of the plane O + u·U + v·V under a screen point, as [u, v],
