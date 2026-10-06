@@ -9315,7 +9315,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
   });
   ocv.addEventListener('pointermove', ev => {
     if (orbit.move(ev)) { ev.preventDefault(); return; }
-    if (!drag) { ocv.style.cursor = pick(ev.clientX, ev.clientY) ? 'move' : 'grab'; return; }
+    if (!drag) { const pkH = pick(ev.clientX, ev.clientY); ocv.style.cursor = pkH === 'window' ? 'ns-resize' : pkH === 'sill' ? 'ew-resize' : pkH ? 'move' : 'grab'; return; }
     ev.preventDefault();
     if (drag.kind === 'rw') {
       const r = ocv.getBoundingClientRect(), FR = openFrame(openPanel.W, openPanel.H), h = rowParam(drag.sl, FR, ev.clientX - r.left, ev.clientY - r.top);
