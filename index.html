@@ -9031,6 +9031,8 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
     ['Elevation', 'Square to the side under study, level: its elevation', () => set(SQ[curFace], 0)],
     ['From S', 'Stand to the true south of the building', () => set(camAzFrom(G.rot, 180), camMidEl(OCAM))],
     ['From N', 'Stand to the true north of the building', () => set(camAzFrom(G.rot, 0), camMidEl(OCAM))],
+    ['From E', 'Stand to the true east of the building', () => set(camAzFrom(G.rot, 90), camMidEl(OCAM))],
+    ['From W', 'Stand to the true west of the building', () => set(camAzFrom(G.rot, 270), camMidEl(OCAM))],
     ['Reset', 'Back to the corner view of the side under study', () => set(CORNER[curFace], ISO_EL)]], 0);
   refreshOpenings();
   /* the tab is built once; coming back to it after Site or Roof changed,
@@ -17899,6 +17901,8 @@ Object.assign(PT, {
   "Square to the end wall, level: the roof’s true pitch": "De frente para a empena, à altura dos olhos: a inclinação verdadeira da cobertura",
   "Stand to the true south of the building": "Ficar a sul verdadeiro do edifício",
   "Stand to the true north of the building": "Ficar a norte verdadeiro do edifício",
+  "Stand to the true east of the building": "Ficar a este verdadeiro do edifício",
+  "Stand to the true west of the building": "Ficar a oeste verdadeiro do edifício",
   "Square to the side under study, level: its elevation": "De frente para o lado em estudo, à altura dos olhos: o seu alçado",
   "Back to the corner view of the side under study": "Voltar à vista de canto do lado em estudo",
   "winter": "inverno",
