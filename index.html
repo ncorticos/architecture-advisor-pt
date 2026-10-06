@@ -8972,7 +8972,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
         const wbv0 = rh.w.rows[0].sill, wbv1 = Math.min(rh.w.rows[0].head, h0());
         glassSpans(curFace, rh.w.uc - rh.w.w / 2, rh.w.uc + rh.w.w / 2, rh.sg.len).forEach(sp => {
           if (!sp.on || sp.b - sp.a < 0.05) return;
-          const wu = wus[sp.ui], wv = wu && wu.door ? [wbv0, wbv1] : shiftRow(wbv0, wbv1, 0, G.fh, wu && wu.up);
+          const wu = wus[sp.ui], wv = wu && wu.door ? [wbv0, wbv1] : unitSpanV(wu, wbv0, wbv1, 0, G.fh);
           const mid = (sp.a + sp.b) / 2;
           wdot(onWall(rh.sg, mid, wv[1]), sp.ui === wsel);
           if (sp.ui === wsel) poly([onWall(rh.sg, sp.a, wv[0]), onWall(rh.sg, sp.b, wv[0]), onWall(rh.sg, sp.b, wv[1]), onWall(rh.sg, sp.a, wv[1])], 'rgba(180,83,9,0.10)', '#B45309', 2.5);
