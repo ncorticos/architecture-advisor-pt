@@ -3887,6 +3887,28 @@ function devSpanPad(f, sg, gA, gB) {
   return [Math.max(0, gA - (uLeftIsB ? (o.ovR || 0) : (o.ovL || 0))),
     Math.min(sg.len, gB + (uLeftIsB ? (o.ovL || 0) : (o.ovR || 0)))];
 }
+/** The roof eave measured past one window: march outward from the glass
+    until the roof lets go, keeping only eave-high cover — a low wing roof
+    under an upper wall is not shade. Zero where the wall stands flush, so
+    gable ends off, junctions and wings measure themselves. */
+function eaveDepth(Mm, H0, bei, sg, a, b) {
+  if (!Mm || !Mm.zAt || !(bei > 0)) return 0;
+  const dx = (sg.b[0] - sg.a[0]) / sg.len, dy = (sg.b[1] - sg.a[1]) / sg.len, n = sg.n;
+  const span = Math.max(0, b - a);
+  const us = span < 0.6 ? [(a + b) / 2] : [a + span * 0.25, (a + b) / 2, a + span * 0.75];
+  let best = Infinity;
+  for (const u of us) {
+    const wx = sg.a[0] + dx * u, wy = sg.a[1] + dy * u;
+    let edge = 0;
+    for (let t = 0.05; t <= 1.35; t += 0.05) {
+      const z = Mm.zAt(wx + n[0] * t, wy + n[1] * t);
+      if (z === null || z === undefined || z < H0 - 1.5) break;
+      edge = t;
+    }
+    if (edge < best) best = edge;
+  }
+  return best === Infinity ? 0 : Math.max(0, best - 0.025);
+}
 /** The device span of one wall: the switched-on glass as laid, plus the
     chosen extra width on each viewer end — the slab and the fins live
     here, in every tab and in export. Viewer-left is which u-end:
@@ -8435,7 +8457,7 @@ function buildOpenings(host) {
   const rwLine = el('span', { class:'pill empty' });
 
   host.appendChild(hint('open-shading',
-    'A horizontal overhang cuts the high summer sun on equator-facing glass, using the same profile-angle geometry as the roof pitch on the previous tab (Olgyay, pp.79–80; Lechner, pp.249–253). East and west glass gets low, near-level morning and evening sun that an overhang barely touches — vertical fins address it instead: Olgyay’s own shading-coefficient table gives fixed vertical fins on east/west walls about 0.31 (i.e. cutting roughly two-thirds of the unshaded gain), against about 0.20–0.25 for a continuous south overhang and 0.10–0.15 for movable horizontal louvres (pp.70–71) — fins genuinely earn their keep on the low, oblique east and west sun, west more than east once afternoon heat is added on top. Lechner still notes horizontal devices outperform fins even there, and that fins mainly suit the equator-side of an oblique facade (pp.255–259); on a due-south wall a fin fails only at the single moment the sun sits exactly perpendicular to the glass — solar noon — and keeps cutting the oblique morning and afternoon sun the rest of the day, so its contribution there can be substantial too, just covering different hours than an overhang does. Several shallower louvres or several narrower fins cut the same angle as one deep device while blocking less of the view — an eggcrate is the two stacked together, not added twice (DeKay &amp; Brown, Strategy 91, pp.248–249). Both sit directly on the opening: a single overhang rides the head, several louvres spread down across the full glazing top to bottom, and fins run left to right across whichever width is chosen — never floating clear of the window itself. In a heating-led climate a good overhang discriminates by season — cutting the high June sun while still admitting the low December sun that offsets the heating bill — so the shading score below rewards that gap rather than sheer depth: a device deep enough to block summer and winter equally scores no better than none at all.'));
+    'A horizontal overhang cuts the high summer sun on equator-facing glass, using the same profile-angle geometry as the roof pitch on the previous tab (Olgyay, pp.79–80; Lechner, pp.249–253). East and west glass gets low, near-level morning and evening sun that an overhang barely touches — vertical fins address it instead: Olgyay’s own shading-coefficient table gives fixed vertical fins on east/west walls about 0.31 (i.e. cutting roughly two-thirds of the unshaded gain), against about 0.20–0.25 for a continuous south overhang and 0.10–0.15 for movable horizontal louvres (pp.70–71) — fins genuinely earn their keep on the low, oblique east and west sun, west more than east once afternoon heat is added on top. Lechner still notes horizontal devices outperform fins even there, and that fins mainly suit the equator-side of an oblique facade (pp.255–259); on a due-south wall a fin fails only at the single moment the sun sits exactly perpendicular to the glass — solar noon — and keeps cutting the oblique morning and afternoon sun the rest of the day, so its contribution there can be substantial too, just covering different hours than an overhang does. Several shallower louvres or several narrower fins cut the same angle as one deep device while blocking less of the view — an eggcrate is the two stacked together, not added twice (DeKay &amp; Brown, Strategy 91, pp.248–249). Both sit directly on the opening: a single overhang rides the head, several louvres spread down across the full glazing top to bottom, and fins run left to right across whichever width is chosen — never floating clear of the window itself. The roof eave counts from the start as an overhang at the wall top, measured past each window — extend it too far and it also blocks the low winter sun, which the score below counts against it. In a heating-led climate a good overhang discriminates by season — cutting the high June sun while still admitting the low December sun that offsets the heating bill — so the shading score below rewards that gap rather than sheer depth: a device deep enough to block summer and winter equally scores no better than none at all.'));
 
   /* --- the sunspace, right of the model, under the shading --------------- */
   const cSunOn = checkCtl('Attach a sunspace', SUNSP.on, v => { SUNSP.on = v; refreshOpenings(); });
@@ -8692,11 +8714,14 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
        window it spans, as far above the head as its slab; a loggia round the
        window is an overhang at its ceiling and a fin at each closed side */
     const rects = [], us = faceUnits(f);
+    const MmE = Mod(), H0E = MmE.H0, beiE = (RF.bei && RF.bei.on) ? clamp(+RF.bei.d || 0, 0, 1) : 0;
     winsOf(f).forEach(x => x.w.rows.forEach((r, k) => {
       const head = Math.min(r.head, h0()), u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
       glassSpans(f, u0, u1, x.sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
         const u = us[sp.ui], vv = u.door ? doorSpanV(u, head, k, G.fh) : unitSpanV(u, r.sill, head, k, G.fh);
         const rc = { w:sp.b - sp.a, h:Math.max(0.01, vv[1] - vv[0]), ov:[], fin:[], a:sp.a, b:sp.b, sg:x.sg, u0, u1, ui:sp.ui };
+        const evD = eaveDepth(MmE, H0E, beiE, x.sg, sp.a, sp.b);
+        if (evD > 0.05) rc.ov.push({ d:evD, gap:Math.max(0, H0E - vv[1]), cover:1 });
         bg.ok.forEach(B => {
           if (B.sg !== x.sg) return;
           const a = Math.max(sp.a, B.u0 - (B.wrap < 0 ? B.d : 0)), b2 = Math.min(sp.b, B.u1 + (B.wrap > 0 ? B.d : 0));
@@ -8774,9 +8799,21 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       only. */
   /** Do balconies set on Site stand on this side? */
   const balcOnFace = f => balcGeo(G).ok.some(B => segFace(B.sg) === f);
+  function eaveOnFace(f) {
+    if (!(RF.bei && RF.bei.on)) return false;
+    const MmE = Mod(), bei = clamp(+RF.bei.d || 0, 0, 1);
+    if (!(bei > 0)) return false;
+    const ws = winsOf(f);
+    for (const x of ws) {
+      const u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
+      const sps = glassSpans(f, u0, u1, x.sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05);
+      for (const sp of sps) if (eaveDepth(MmE, MmE.H0, bei, x.sg, sp.a, sp.b) > 0.05) return true;
+    }
+    return false;
+  }
   function shadingScore(f) {
     const o = OPEN[f];
-    if ((o.ovD === 0 && o.finD === 0 && !balcOnFace(f)) || !faceUnits(f).some(u => u.on)) return null;
+    if ((o.ovD === 0 && o.finD === 0 && !balcOnFace(f) && !eaveOnFace(f)) || !faceUnits(f).some(u => u.on)) return null;
     const summer = shadeEffectiveness(f, 172).pct;
     if (!heating) return summer;
     const winter = shadeEffectiveness(f, 355).pct;
@@ -8993,7 +9030,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
 
       // the readout, and the two badges, as on Site
       const o = OPEN[curFace];
-      const sh = ((o.ovD > 0 || o.finD > 0 || balcOnFace(curFace)) && faceUnits(curFace).some(u => u.on)) ? shadeEffectiveness(curFace, 172).pct : null;
+      const sh = ((o.ovD > 0 || o.finD > 0 || balcOnFace(curFace) || eaveOnFace(curFace)) && faceUnits(curFace).some(u => u.on)) ? shadeEffectiveness(curFace, 172).pct : null;
       const nW = winCount(curFace);
       label(ctx, t(faceName[curFace]) + ' · ' + t('faces') + ' ' + faceDir(curFace) + ' · WWR ' + fmt(facadeNumbers(curFace).eff * 100, 0) + '% · ' + nW + ' ' + t(nW === 1 ? 'window' : 'windows') + (gelCount(curFace) > 0 ? ' · ' + gelCount(curFace) + ' ' + t('brick ventilation') : '')
         + (sh !== null ? ' · ' + t('shading') + ' ' + fmt(sh, 0) + '%' : ''),
