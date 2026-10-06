@@ -3855,6 +3855,14 @@ function unitSpanV(u, sill, head, k, fh) {
   const ss = isFinite(+u.sl) ? +u.sl : sill;
   return shiftRow(ss, ss + hh, k, fh, u.up);
 }
+/** A glazed door's vertical span on storey k: it always stands on the
+    floor, and a door resized by its top corner keeps its own height (u.ht)
+    instead of the band's head. */
+function doorSpanV(u, head, k, fh) {
+  const floor = k * fh + 0.05;
+  if (!u || !isFinite(+u.ht) || +u.ht < 0.1) return [floor, Math.max(floor + 0.1, head)];
+  return [floor, clamp(floor + u.ht, floor + 0.1, Math.max(floor + 0.1, (k + 1) * fh - 0.05))];
+}
 /** The selected window's index when it is switched on, else -1: overhangs
     and fins dress that window only. With no selection the whole
     switched-on glass keeps them, as before. */
@@ -8385,7 +8393,7 @@ function buildOpenings(host) {
       const own = (u.ht !== undefined || u.sl !== undefined) ? el('button', { class:'btn small', text:'\u27F2', title:t('Back to the side\u2019s sill and head'), 'aria-label':t('Back to the side\u2019s sill and head'), onclick:() => { u.ht = undefined; u.sl = undefined; buildUnitUI(); refreshOpenings(); } }) : null;
       const btns = OPEN[curFace].sel === i ? [chk, dor, gel, mvL, mvR, r.m] : [chk, dor, gel, r.m];
       if (own) btns.push(own);
-      const line = el('div', { class:OPEN[curFace].sel === i ? 'urow sel' : 'urow' }, btns);
+      const line = el('div', { class:OPEN[curFace].sel === i ? 'urow sel' : 'urow', onclick:() => { OPEN[curFace].sel = i; buildUnitUI(); refreshOpenings(); } }, btns);
       rows.push(r);
       unitBox.appendChild(line);
       unitBox.appendChild(sh);
@@ -8599,7 +8607,7 @@ function buildOpenings(host) {
       if (!dSpan.length) { dv0 = Math.min(dv0, r.sill); dv1 = Math.max(dv1, rt1); }
       dSpan.forEach(sp => {
         const u = uus && uus[sp.ui];
-        const vv = u && u.door ? [k * G.fh + 0.05, rt1] : unitSpanV(u, r.sill, rt1, k, G.fh);
+        const vv = (u && u.door) ? doorSpanV(u, rt1, k, G.fh) : unitSpanV(u, r.sill, rt1, k, G.fh);
         dv0 = Math.min(dv0, vv[0]); dv1 = Math.max(dv1, vv[1]);
       });
     });
@@ -8616,7 +8624,7 @@ function buildOpenings(host) {
       glassSpans(w.f, rect.u0, rect.u1, sg.len).forEach(sp => {
         if (!sp.on || sp.b - sp.a < 0.05) return;
         const uu = uus && uus[sp.ui];
-        const uv = uu && uu.door ? [floor + 0.05, rect.v1] : unitSpanV(uu, rect.v0, rect.v1, k, G.fh);
+        const uv = (uu && uu.door) ? doorSpanV(uu, rect.v1, k, G.fh) : unitSpanV(uu, rect.v0, rect.v1, k, G.fh);
         const v0 = uv[0], v1 = uv[1];
         if (v1 - v0 < 0.1) return;
         const quad = [onWall(sg, sp.a, v0), onWall(sg, sp.b, v0), onWall(sg, sp.b, v1), onWall(sg, sp.a, v1)];
@@ -8644,7 +8652,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
         spans.forEach(sp => {
           const u = us[sp.ui];
           if (!u.on) return;
-          const vvH = u.door ? [k * G.fh + 0.05, hTop] : unitSpanV(u, r.sill, hTop, k, G.fh); const h = vvH[1] - vvH[0];
+          const vvH = u.door ? doorSpanV(u, hTop, k, G.fh) : unitSpanV(u, r.sill, hTop, k, G.fh); const h = vvH[1] - vvH[0];
           per[sp.ui].area += Math.max(0, sp.b - sp.a) * Math.max(0, h);
           if (!u.gel && h > 0 && sp.b > sp.a) ivs.push([sp.a, sp.b, h]);
         });
@@ -8687,7 +8695,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
     winsOf(f).forEach(x => x.w.rows.forEach((r, k) => {
       const head = Math.min(r.head, h0()), u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
       glassSpans(f, u0, u1, x.sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
-        const u = us[sp.ui], vv = u.door ? [k * G.fh + 0.05, head] : unitSpanV(u, r.sill, head, k, G.fh);
+        const u = us[sp.ui], vv = u.door ? doorSpanV(u, head, k, G.fh) : unitSpanV(u, r.sill, head, k, G.fh);
         const rc = { w:sp.b - sp.a, h:Math.max(0.01, vv[1] - vv[0]), ov:[], fin:[], a:sp.a, b:sp.b, sg:x.sg, u0, u1, ui:sp.ui };
         bg.ok.forEach(B => {
           if (B.sg !== x.sg) return;
@@ -8972,7 +8980,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
         const wbv0 = rh.w.rows[0].sill, wbv1 = Math.min(rh.w.rows[0].head, h0());
         glassSpans(curFace, rh.w.uc - rh.w.w / 2, rh.w.uc + rh.w.w / 2, rh.sg.len).forEach(sp => {
           if (!sp.on || sp.b - sp.a < 0.05) return;
-          const wu = wus[sp.ui], wv = wu && wu.door ? [wbv0, wbv1] : unitSpanV(wu, wbv0, wbv1, 0, G.fh);
+          const wu = wus[sp.ui], wv = (wu && wu.door) ? doorSpanV(wu, wbv1, 0, G.fh) : unitSpanV(wu, wbv0, wbv1, 0, G.fh);
           const mid = (sp.a + sp.b) / 2;
           wdot(onWall(rh.sg, mid, wv[1]), sp.ui === wsel);
           if (sp.ui === wsel) poly([onWall(rh.sg, sp.a, wv[0]), onWall(rh.sg, sp.b, wv[0]), onWall(rh.sg, sp.b, wv[1]), onWall(rh.sg, sp.a, wv[1])], 'rgba(180,83,9,0.10)', '#B45309', 2.5);
@@ -9014,7 +9022,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
           const on = faceUnits(f)[i] && faceUnits(f)[i].on;
           const shi = !on ? '' : Math.round(100 * (clamp(2 * H / Math.max(1, depth), 0, 1) + clamp(q.w / 2.4, 0, 1)) / 2);
           rows.push([faceName[f] + ' window ' + (i + 1) + ' (' + fmt(q.w, 1) + ' m)' + (q.door && on ? ' · door' : q.gel && on ? ' · brick ventilation' : ''), on ? 'on' : 'off', '',
-            +q.area.toFixed(2), '', q.door && on ? '0.05' : fmt(unitSpanV(q, o.sillZ, o.headZ, 0, G.fh)[0], 2), q.door && on ? fmt(o.headZ, 2) : fmt(unitSpanV(q, o.sillZ, o.headZ, 0, G.fh)[1], 2), '', '', '', '', '', '', '', shi]);
+            +q.area.toFixed(2), '', q.door && on ? '0.05' : fmt(unitSpanV(q, o.sillZ, o.headZ, 0, G.fh)[0], 2), q.door && on ? fmt(doorSpanV(q, o.headZ, 0, G.fh)[1], 2) : fmt(unitSpanV(q, o.sillZ, o.headZ, 0, G.fh)[1], 2), '', '', '', '', '', '', '', shi]);
         }); });
       rows.push(['Sunspace', SUNSP.on ? SUNSP.face : 'off', '', '', '', '', '', fmt(SUNSP.depth, 2), '', '', '', '', '', fmt(SUNSP.widthFrac, 2)]);
       rows.push(['Roof window size', RW_SIZES[RWIN.size].label]);
@@ -9067,7 +9075,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       const sp = glassSpans(curFace, w.uc - w.w / 2, w.uc + w.w / 2, sg.len).filter(s => s.ui === fi)[0];
       if (sp && sp.b - sp.a > 0.05) {
         uEnd = sp.b;
-        if (us[fi].door) { vS = 0.05; }
+        if (us[fi].door) { vS = 0.05; vT = doorSpanV(us[fi], wv1, 0, G.fh)[1]; }
         else { const vv = unitSpanV(us[fi], w.sill, wv1, 0, G.fh); vS = vv[0]; vT = vv[1]; }
       }
     }
@@ -9166,7 +9174,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       const spans = glassSpans(curFace, wh.w.uc - wh.w.w / 2, wh.w.uc + wh.w.w / 2, wh.sg.len);
       const pkv = (w2, k, u) => {
         const rt1 = Math.min(w2.rows[k].head, h0());
-        return u && u.door ? [k * G.fh + 0.05, rt1] : unitSpanV(u, w2.rows[k].sill, rt1, k, G.fh);
+        return (u && u.door) ? doorSpanV(u, rt1, k, G.fh) : unitSpanV(u, w2.rows[k].sill, rt1, k, G.fh);
       };
       for (let i = spans.length - 1; i >= 0; i--) {
         const sp = spans[i];
@@ -14924,7 +14932,7 @@ function exportModel() {
             const c0 = Math.max(a, sp.a), c1 = Math.min(b, sp.b);
             if (c1 - c0 < 0.05) return;
             const uu = OPEN[f].units[sp.ui], isDoor = !!(uu && uu.door), isGel = !!(uu && uu.gel);
-            const uvx = isDoor ? [k * G.fh + 0.05, v1] : unitSpanV(uu, v0, v1, k, G.fh);
+            const uvx = isDoor ? doorSpanV(uu, v1, k, G.fh) : unitSpanV(uu, v0, v1, k, G.fh);
             const w0 = uvx[0], w1 = uvx[1];
             if (w1 - w0 < 0.1) return;
             holes.push([c0, c1, w0, w1]);
@@ -14939,7 +14947,7 @@ function exportModel() {
           let fv0 = v0, fv1 = v1;
           glassSpans(f, u0, u1, sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
             const uu = OPEN[f].units[sp.ui];
-            const vv = uu && uu.door ? [k * G.fh + 0.05, v1] : unitSpanV(uu, v0, v1, k, G.fh);
+            const vv = (uu && uu.door) ? doorSpanV(uu, v1, k, G.fh) : unitSpanV(uu, v0, v1, k, G.fh);
             fv0 = Math.min(fv0, vv[0]); fv1 = Math.max(fv1, vv[1]);
           });
           faceFins(f).forEach((t, i) => {
