@@ -14424,7 +14424,15 @@ style === 'sketch' ? '#EFEBE0'
       ctx.restore();
       return true;
     };
-    items.sort((a, b) => b.d - a.d);
+    /* A roof plane and the wall under it only ever touch, and where the
+       beirado runs the plane oversails the wall — so with the camera above
+       them the plane is always the nearer of the two, whatever their
+       centroids say. Every other painter settles that pair with
+       roofWallOrder; this one sorted on depth alone, and a long facade whose
+       centroid came out nearer than the slope's painted over its own eave,
+       which then read as a roof tucked under the wall. */
+    const roofOverWall = (p, q) => (p.roof && q.wallSg) ? 1 : (p.wallSg && q.roof) ? -1 : 0;
+    items.sort((a, b) => roofOverWall(a, b) || b.d - a.d);
     const kpx = CAM_K * s;
     items.forEach(it => {
       if (it.blob) {
