@@ -12866,7 +12866,7 @@ const RENDER_WALLS = [
     words:['azulejo', 'azulejos', 'azulejaria'] },
   { key:'relief', c:'#386851', bk:'relief ceramic tiles green glazed', mod:{ en:'0.14 m relief tiles', pt:'azulejos de relevo de 0,14 m' },
     words:['relief tile', 'azulejo de relevo', 'relevo'] },
-  { key:'pastilha', c:'#6F8BA8', bk:'blue mosaic tiles', mod:{ en:'25 mm mosaic', pt:'pastilha de 25 mm' },
+  { key:'pastilha', c:'#6F8BA8', bk:'blue mosaic tiles', mod:{ en:'50 mm mosaic', pt:'pastilha de 50 mm' },
     words:['mosaic', 'pastilha', 'pastilhas', 'mosaico'] },
   { key:'slip', c:'#C9C2B2', bk:'glazed brick tiles', mod:{ en:'0.24 × 0.06 m glazed slips', pt:'plaquetas vidradas de 0,24 × 0,06 m' },
     words:['glazed brick', 'brick slip', 'plaqueta', 'plaquetas', 'plaqueta vidrada'] },
@@ -13342,10 +13342,10 @@ const TEXGEN = (() => {
       return { c:s, h:0.0025 * rel, ao:0.9 + 0.1 * ss(0.001, 0.003, ed) };
     }, 2.5);
   };
-  /* pastilha: the 25 mm ceramic mosaic of the 1950s-70s façades, a mix
+  /* pastilha: the 50 mm ceramic mosaic of the 1950s-70s façades, a mix
      of blues on 3 mm joints */
   R.pastilha = () => {
-    const W = 0.56, H = 0.56, m = 0.028, n = Math.round(W / m);
+    const W = 0.56, H = 0.56, m = 0.056, n = Math.round(W / m);
     const pal = [[64, 104, 156], [88, 134, 182], [88, 134, 182], [120, 160, 196], [204, 214, 222], [52, 86, 132]];
     return run(W, H, (x, y, u, v) => {
       const i = Math.floor(x / m), j = Math.floor(y / m), lx = x - i * m, ly = y - j * m;
