@@ -2534,22 +2534,6 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
   }
   return out;
 }
-/** The parapet as triangles following each outline wall's own top profile,
-    h metres above it. */
-function parapetFaces(M, h) {
-  const out = [];
-  M.walls.forEach(wl => {
-    const sg = wl.sg, L = sg.len, ux = (sg.b[0] - sg.a[0]) / L, uy = (sg.b[1] - sg.a[1]) / L;
-    const P = (u, z) => [sg.a[0] + ux * u, sg.a[1] + uy * u, z];
-    const pr = wl.prof, n = [sg.n[0], sg.n[1], 0];
-    for (let k = 1; k < pr.length; k++) {
-      const a = P(pr[k - 1][0], pr[k - 1][1]), b = P(pr[k][0], pr[k][1]);
-      const a2 = [a[0], a[1], a[2] + h], b2 = [b[0], b[1], b[2] + h];
-      out.push({ pts:[a, b, b2], fill:shadeFill('#E9E5DD', n), n }, { pts:[a, b2, a2], fill:shadeFill('#E9E5DD', n), n });
-    }
-  });
-  return out;
-}
 /** The chimney's height above its own roof surface: the student's slider,
     or the family's own measure. */
 function chimEffH(ch) {
@@ -3531,15 +3515,23 @@ function roofModel(G, RF) {
       const nx = sg.n[0], ny = sg.n[1];
       const P = (u, z) => [sg.a[0] + ux * u, sg.a[1] + uy * u, z];
       const Q = (u, z) => [sg.a[0] + ux * u - nx * pt, sg.a[1] + uy * u - ny * pt, z];
+      /* Each face carries the way it faces, so the painters can shade it:
+         a parapet drawn in one flat colour reads as a ribbon of ink rather
+         than a wall, since its street face, its roof face and its coping
+         are then told apart only by the lines between them. The two ends
+         close the run, so a corner never shows its inside. */
+      const last = wl.prof.length - 1;
       wl.prof.forEach((q, k) => {
         if (!k) return;
         const p0 = wl.prof[k - 1], a = P(p0[0], p0[1]), b = P(q[0], q[1]);
         const a2 = [a[0], a[1], a[2] + ph], b2 = [b[0], b[1], b[2] + ph];
         const c = Q(p0[0], p0[1]), d = Q(q[0], q[1]);
         const c2 = [c[0], c[1], c[2] + ph], d2 = [d[0], d[1], d[2] + ph];
-        paras.push({ sg, quad:[a, b, b2, a2] });
-        paras.push({ sg, quad:[d, c, c2, d2] });
-        paras.push({ sg, quad:[a2, b2, d2, c2] });
+        paras.push({ sg, quad:[a, b, b2, a2], side:'face' });    // the street face
+        paras.push({ sg, quad:[d, c, c2, d2], side:'back' });    // the face toward the roof
+        paras.push({ sg, quad:[a2, b2, d2, c2], side:'cap' });   // the coping
+        if (k === 1) paras.push({ sg, quad:[a, a2, c2, c], side:'end' });
+        if (k === last) paras.push({ sg, quad:[b, d, d2, b2], side:'end' });
       });
       paraArea += sg.len * (2 * ph + pt);
     });
@@ -4147,11 +4139,16 @@ function pushImportFaces(arr, map) {
   if (!IMPORT.active || !IMPORT.show.length) return;
   for (const t of IMPORT.show) arr.push({ pts:map ? t.map(map) : t, fill:IMPFILL, import:true });
 }
+/** The platibanda's four kinds of face, a step apart in the one cream the
+    parapet is rendered in: the coping catches the sky, the face toward the
+    roof sits in its own shade. Drawn in one flat colour the three read as a
+    ribbon told apart only by the ink between them. */
+const PAR_TONE = { face:'#E9E5DD', back:'#D8D3C9', cap:'#F4F1EA', end:'#E1DCD3' };
 /** The parapet and the chimney into any building painter's face list
     (plan-local metres; map translates, as the Environmental view does). */
 function pushChimPar(arr, M, map) {
   if (!M) return;
-  if (ROOF.par && ROOF.par.on && M.paras) M.paras.forEach(pp => arr.push({ pts:map ? pp.quad.map(map) : pp.quad, fill:'#E9E5DD', par:1 }));
+  if (ROOF.par && ROOF.par.on && M.paras) M.paras.forEach(pp => arr.push({ pts:map ? pp.quad.map(map) : pp.quad, fill:PAR_TONE[pp.side] || PAR_TONE.face, par:1 }));
   const ch = ROOF.chim;
   if (ch && ch.on && isFinite(+ch.x) && isFinite(+ch.y) && M.pl.inside(+ch.x, +ch.y)) {
     const z = M.zAt(+ch.x, +ch.y);
