@@ -3299,19 +3299,41 @@ function roofZones(G, RF) {
   RF.zones.forEach(z => { z.th = z.n === 0 ? 0 : z.th; });
   return RF.zones;
 }
+/** Where a gable part's ridge stands across its width, 0–1 from the main
+    facade (0.5 the even gable): kept between 0.2 and 0.8, and so that the
+    second slope stays between 5° and 75°. */
+function ridgeFrac(z) {
+  const t = Math.tan((z.th || 30) * RAD), T1 = Math.tan(75 * RAD), T0 = Math.tan(5 * RAD);
+  const r = isFinite(+z.rg) && +z.rg > 0 ? +z.rg : 0.5;
+  return Math.round(clamp(r, Math.max(0.2, T0 / (t + T0)), Math.min(0.8, T1 / (t + T1))) * 1000) / 1000;
+}
+/** The second slope's pitch, in degrees, for a part with its ridge at rg. */
+const rearPitch = (th, rg) => Math.atan(Math.tan(th * RAD) * rg / (1 - rg)) / RAD;
+/** A gable part's ridge point in world metres: halfway along its ridge, at
+    cross position c (its own when omitted), at the ridge's height. */
+function ridgePoint(M, R, c) {
+  const m = (R.a0 + R.a1) / 2, cc = c === undefined ? R.c : c;
+  return R.alongX ? [m, cc, R.z] : [cc, m, R.z];
+}
 function roofModel(G, RF) {
   const pl = planModel(G), H0 = G.fl * G.fh;
   const zones0 = roofZones(G, RF);
   const bb = pl.bbox, spanX = bb[2] - bb[0], spanY = bb[3] - bb[1];
   const axis = spanX >= spanY ? 'x' : 'y', S0 = axis === 'x' ? bb[0] : bb[1], SL = axis === 'x' ? spanX : spanY;
+  /* a gable's ridge stands at rg of the way across, from the main facade
+     (or from the left, where the part's main ridge runs front to back):
+     0.5 the even gable, other
+     values a ridge pushed aside — the first slope keeps the part's pitch,
+     the second takes what the ridge's height over its own run gives */
   const zones = zones0.map(z => ({ n:z.n, th:z.n === 0 ? 0 : z.th, t:Math.tan((z.n === 0 ? 0 : z.th) * RAD),
+    rg:z.n === 2 ? ridgeFrac(z) : 0.5,
     a0:S0 + clamp(z.f0, 0, 1) * SL, a1:S0 + clamp(z.f1, 0, 1) * SL }));
   const parKey = RF.par && RF.par.on ? '|par' + (+RF.par.h || 0.6).toFixed(2) : '';
   /* with a parapet the eave reads as a cornice under it: set either way */
   const bei = RF.bei && RF.bei.on ? clamp(+RF.bei.d || 0, 0, 1) : 0;
   const beiEnds = !RF.bei || RF.bei.ends !== false;
   const beiKey = bei > 0 ? '|bei' + bei.toFixed(2) + (beiEnds ? '' : '|nog') : '';
-  const key = pl.key + '|' + H0 + '|' + axis + '|' + zones0.map(z => [z.f0, z.f1, z.n, z.th].join(',')).join(';') + parKey + beiKey;
+  const key = pl.key + '|' + H0 + '|' + axis + '|' + zones0.map(z => [z.f0, z.f1, z.n, z.th, z.n === 2 ? ridgeFrac(z) : ''].join(',')).join(';') + parKey + beiKey;
   if (ROOF_CACHE.key === key) return ROOF_CACHE.val;
   /* each maximal rectangle cut into strips, one per zone it meets — a flat
      açoteia over one part, a pitched roof over the next */
@@ -3323,9 +3345,9 @@ function roofModel(G, RF) {
       const a0 = Math.max(lo, z.a0), a1 = Math.min(hi, z.a1);
       if (a1 - a0 < 1e-6) return;
       covered = true;
-      strips.push({ r:axis === 'x' ? [a0, r[1], a1, r[3]] : [r[0], a0, r[2], a1], box:r, zi, n:z.n, th:z.th, t:z.t });
+      strips.push({ r:axis === 'x' ? [a0, r[1], a1, r[3]] : [r[0], a0, r[2], a1], box:r, zi, n:z.n, th:z.th, t:z.t, rg:z.rg });
     });
-    if (!covered) strips.push({ r:r.slice(), box:r, zi:0, n:zones[0].n, th:zones[0].th, t:zones[0].t });
+    if (!covered) strips.push({ r:r.slice(), box:r, zi:0, n:zones[0].n, th:zones[0].th, t:zones[0].t, rg:zones[0].rg });
   });
   /* Does another rectangle of the plan run across this strip's end — the
      corner a wing shares with the bar, or a courtyard's corner? A sibling
@@ -3356,10 +3378,30 @@ function roofModel(G, RF) {
     /* a gable stands only at a free end; an end another wing runs across
        is hipped, so wings meet in hips and valleys — a courtyard's roof
        runs round it unbroken — and no gable end pokes up at a corner */
-    if (n === 2) return (x1 - x0) >= (y1 - y0) ? [sd.y0, sd.y1].concat(['x0', 'x1'].filter(k => endCovered(s, k)).map(k => sd[k]))
-                                             : [sd.x0, sd.x1].concat(['y0', 'y1'].filter(k => endCovered(s, k)).map(k => sd[k]));
+    if (n === 2) {
+      const alongX = (x1 - x0) >= (y1 - y0);
+      /* the part's main ridge — the way its largest gable runs — may stand
+         aside: the far slope steepens or flattens to meet it at the same
+         height; a wing's ridge running across it stays even */
+      if (alongX === mainAlongX[s.zi]) {
+        s.ridge = { r0:s.r.slice(), alongX, c:alongX ? y0 + s.rg * (y1 - y0) : x0 + s.rg * (x1 - x0), w:alongX ? y1 - y0 : x1 - x0 };
+        if (Math.abs(s.rg - 0.5) > 1e-3) {
+          const k = alongX ? 'y1' : 'x1', tb = s.t * s.rg / (1 - s.rg);
+          sd[k] = Object.assign({}, sd[k], { t:tb, th:Math.atan(tb) / RAD, key:sd[k].key + '@' + tb.toFixed(4) });
+        }
+      }
+      return alongX ? [sd.y0, sd.y1].concat(['x0', 'x1'].filter(k => endCovered(s, k)).map(k => sd[k]))
+                    : [sd.x0, sd.x1].concat(['y0', 'y1'].filter(k => endCovered(s, k)).map(k => sd[k]));
+    }
     return [sd.y0, sd.y1, sd.x0, sd.x1];
   };
+  /* which way each gable part's largest strip runs: its main ridge */
+  const mainAlongX = zones.map((z, zi) => {
+    const g = strips.filter(s => s.zi === zi && s.n === 2);
+    if (!g.length) return null;
+    const big = g.reduce((p, q) => (q.r[2] - q.r[0]) * (q.r[3] - q.r[1]) > (p.r[2] - p.r[0]) * (p.r[3] - p.r[1]) + 1e-9 ? q : p);
+    return (big.r[2] - big.r[0]) >= (big.r[3] - big.r[1]);
+  });
   strips.forEach(s => { s.BF = facesOf(s); });
   /* the beirado: each strip's rectangle grows past the wall on its free
      sides only — never across a wing junction or a division seam — while
@@ -3392,9 +3434,10 @@ function roofModel(G, RF) {
     strips.forEach(s => {
       const r = s.r;
       if (x < r[0] - 1e-9 || x > r[2] + 1e-9 || y < r[1] - 1e-9 || y > r[3] + 1e-9) return;
+      /* each plane at its own pitch: the roof is the lowest of them */
       let v = Infinity, kf = null;
-      s.BF.forEach(f => { const d = f.a * x + f.b * y + f.c; if (d < v - 1e-9) { v = d; kf = f; } });
-      const h = s.t * v;
+      s.BF.forEach(f => { const d = f.t * (f.a * x + f.b * y + f.c); if (d < v - 1e-9) { v = d; kf = f; } });
+      const h = v;
       if (h > best + 1e-9) { best = h; k = kf.key; pf = kf; }
     });
     return k === null ? null : { d:best, key:k, f:pf };
@@ -3404,14 +3447,14 @@ function roofModel(G, RF) {
     const r = s.r;
     s.BF.forEach(f => {
       let P = [[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]];
-      s.BF.forEach(g => { if (g !== f) P = P.length > 2 ? clipHalf(P, (g.a - f.a) * s.t, (g.b - f.b) * s.t, (g.c - f.c) * s.t) : P; });
+      s.BF.forEach(g => { if (g !== f) P = P.length > 2 ? clipHalf(P, g.t * g.a - f.t * f.a, g.t * g.b - f.t * f.b, g.t * g.c - f.t * f.c) : P; });
       if (P.length < 3 || Math.abs(polyArea(P)) < 1e-6) return;
       let parts = [P];
       strips.forEach((s2, j) => {
         if (j === i) return;
         const r2 = s2.r, tie = j < i ? -1e-9 : 1e-9;
         const hs = [{ a:1, b:0, c:-r2[0], th:0 }, { a:-1, b:0, c:r2[2], th:0 }, { a:0, b:1, c:-r2[1], th:0 }, { a:0, b:-1, c:r2[3], th:0 }]
-          .concat(s2.BF.map(g => ({ a:s2.t * g.a - s.t * f.a, b:s2.t * g.b - s.t * f.b, c:s2.t * g.c - s.t * f.c, th:tie })));
+          .concat(s2.BF.map(g => ({ a:g.t * g.a - f.t * f.a, b:g.t * g.b - f.t * f.b, c:g.t * g.c - f.t * f.c, th:tie })));
         parts = parts.reduce((acc, Q) => acc.concat(subtractConvex(Q, hs)), []);
       });
       parts.forEach(Q => pieces.push({ key:f.key, f, poly:Q, area:Math.abs(polyArea(Q)) }));
@@ -3568,8 +3611,18 @@ function roofModel(G, RF) {
       paraArea += sg.len * (2 * ph + pt);
     });
   }
-  const val = { key, pl, H0, t:topT, th:topTh, n:topN, pieces, walls, steps, paras, paraArea, at, zOf, roofArea, roofVol, ridge,
-    zones:zones.map((z, zi) => ({ n:z.n, th:z.th, area:zoneArea[zi] || 0, a0:z.a0, a1:z.a1 })),
+  /* each gable part's ridge that may be pushed aside: its widest strip
+     running with the long side, the ridge's line across it and height */
+  const ridges = zones.map((z, zi) => {
+    const ss = strips.filter(s => s.zi === zi && s.ridge);
+    if (z.n !== 2 || !ss.length) return null;
+    const ar = q => (q.ridge.r0[2] - q.ridge.r0[0]) * (q.ridge.r0[3] - q.ridge.r0[1]);
+    const s = ss.reduce((p, q) => ar(q) > ar(p) + 1e-9 ? q : p), r0 = s.ridge.r0, ax = s.ridge.alongX;
+    return { zi, alongX:ax, a0:ax ? r0[0] : r0[1], a1:ax ? r0[2] : r0[3], c0:ax ? r0[1] : r0[0], w:s.ridge.w,
+      c:s.ridge.c, z:H0 + z.t * z.rg * s.ridge.w, rg:z.rg, th:z.th, rear:rearPitch(z.th, z.rg) };
+  });
+  const val = { key, pl, H0, t:topT, th:topTh, n:topN, pieces, walls, steps, paras, paraArea, at, zOf, roofArea, roofVol, ridge, ridges,
+    zones:zones.map((z, zi) => ({ n:z.n, th:z.th, rg:z.rg, rear:z.n === 2 ? rearPitch(z.th, z.rg) : z.th, area:zoneArea[zi] || 0, a0:z.a0, a1:z.a1 })),
     mixed, axis, flats:strips.filter(s => s.n === 0).map(s => s.r),
     zAt:(x, y) => { const r0 = at(x, y); return r0 ? H0 + r0.d : null; },
     wallArea:walls.reduce((a, w) => a + w.area, 0) + steps.reduce((a, st) => a + st.area, 0) };
@@ -3830,8 +3883,11 @@ function sunspaceWall(pl, f) {
   return pl.segs.filter(q => segFace(q) === f).reduce((p, q) => !p || reach(q) > reach(p) + 1e-6 || (Math.abs(reach(q) - reach(p)) < 1e-6 && q.len > p.len) ? q : p, null);
 }
 /** A pushed-out stretch of eave (a canopy over exterior space) resolved onto
-    its wall: facade + plan point in, wall interval + depth out. */
-function canopySpanFor(segs, c) {
+    its wall: facade + plan point in, wall interval + depth out. Its root
+    hangs 0.15 m under the eave line (H0); a pitch falls it outward, the
+    outer edge kept 2.0 m above the ground (p is the pitch as built). */
+const CANOPY_CLEAR = 2.0;
+function canopySpanFor(segs, c, H0) {
   if (!c || typeof c !== 'object') return null;
   const f = ['S', 'N', 'E', 'W'].indexOf(c.f) >= 0 ? c.f : 'S';
   const cands = segs.filter(sg => segFace(sg) === f && sg.len >= 1);
@@ -3846,7 +3902,18 @@ function canopySpanFor(segs, c) {
   }
   const w = clamp(+c.w || 3, 1, 8), w2 = Math.min(w, sg.len);
   const u0 = clamp(bu - w2 / 2, 0, Math.max(0, sg.len - w2)), u1 = Math.min(sg.len, u0 + w2);
-  return { sg, u0, u1, d:clamp(+c.d || 1.5, 0.6, 4) };
+  const d = clamp(+c.d || 1.5, 0.6, 4), z0 = (isFinite(+H0) ? +H0 : 3) - 0.15;
+  const dz = Math.min(d * Math.tan(clamp(+c.p || 0, 0, 45) * RAD), Math.max(0, z0 - CANOPY_CLEAR));
+  return { sg, u0, u1, d, z0, z1:z0 - dz, p:Math.atan2(dz, d) / RAD };
+}
+/** The canopy's plate in world metres: P(u, v) along the wall and out from
+    it, falling with the pitch; its four corners, its move node (mid outer
+    edge) and its width node (the outer corner at u1). */
+function canopyPts(hit) {
+  const sg = hit.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, n = sg.n;
+  const P = (u, v) => [sg.a[0] + tx * u + n[0] * v, sg.a[1] + ty * u + n[1] * v, hit.z0 - (hit.z0 - hit.z1) * v / hit.d];
+  return { P, quad:[P(hit.u0, 0), P(hit.u1, 0), P(hit.u1, hit.d), P(hit.u0, hit.d)],
+    mid:P((hit.u0 + hit.u1) / 2, hit.d), end:P(hit.u1, hit.d) };
 }
 /** Local facade key of an outline wall, from its outward normal. */
 const segFace = sg => sg.n[1] < 0 ? 'S' : sg.n[1] > 0 ? 'N' : sg.n[0] > 0 ? 'E' : 'W';
@@ -7350,7 +7417,33 @@ function buildRoof(host) {
   rail.appendChild(el('div', { class:'gh', text:'Roof parts' }));
   const zoneBox = rail.appendChild(el('div'));
   const divBox = rail.appendChild(el('div'));
-  let zonePitchCtls = [];
+  let zonePitchCtls = [], zoneRidgeCtls = [], ridgeSays = [];
+  /** Push part zi's ridge to rg of the way across, keeping its height: the
+      first slope's pitch follows (kept 10–60°, as its slider), the second
+      takes the rest (kept 5–75°); outside that the ridge stops. */
+  function setRidge(zi, rg, hKeep) {
+    const M = roofModel(G, RF), R = M.ridges[zi], rz = RF.zones[zi];
+    if (!R || !rz || rz.n !== 2) return;
+    /* a drag holds the height it started from, so rounding never creeps */
+    const h = hKeep > 0 ? hKeep : R.z - M.H0, w = R.w, tn = d => Math.tan(d * RAD);
+    if (!(h > 0) || !(w > 0)) return;
+    const lo = Math.max(0.2, h / (w * tn(60)), 1 - h / (w * tn(5))), hi = Math.min(0.8, h / (w * tn(10)), 1 - h / (w * tn(75)));
+    if (lo > hi) return;
+    const r = clamp(rg, lo, hi);
+    rz.rg = Math.round(r * 1000) / 1000;
+    rz.th = Math.round(Math.atan(h / (rz.rg * w)) / RAD * 10) / 10;
+    syncRoofTop();
+  }
+  /** Part zi's two slopes in words, under its ridge slider. */
+  function sayRidge(zi) {
+    const p = ridgeSays[zi], rz = RF.zones[zi];
+    if (!p || !rz || rz.n !== 2) return;
+    const M = roofModel(G, RF), R = M.ridges[zi];
+    if (!R) return;
+    p.textContent = R.alongX
+      ? t('Slope to the main facade') + ' ' + fmt(R.th, 0) + '° · ' + t('to the rear') + ' ' + fmt(R.rear, 0) + '°'
+      : t('Left slope') + ' ' + fmt(R.th, 0) + '° · ' + t('right slope') + ' ' + fmt(R.rear, 0) + '°';
+  }
   const spanM = (M, i) => { const s0 = M.axis === 'x' ? M.pl.bbox[0] : M.pl.bbox[1];
     return fmt(M.zones[i].a0 - s0, 1) + '–' + fmt(M.zones[i].a1 - s0, 1) + ' m'; };
   function setDiv(k, metres) {
@@ -7365,7 +7458,7 @@ function buildRoof(host) {
     const M = roofModel(G, RF);
     const along = M.axis === 'x' ? t('along the length') : t('along the depth');
     zoneBox.innerHTML = ''; divBox.innerHTML = '';
-    zonePitchCtls = [];
+    zonePitchCtls = []; zoneRidgeCtls = []; ridgeSays = [];
     M.zones.forEach((z, i) => {
       const rz = RF.zones[i], head = el('div', { class:'gh' });
       head.innerHTML = t('Part') + ' ' + 'ABC'[i] + ' · ' + spanM(M, i) + ' ' + along;
@@ -7374,10 +7467,26 @@ function buildRoof(host) {
         rz.n = v; if (v === 0) rz.th = 0; else if (!rz.th) rz.th = 30;
         syncRoofTop(); buildRoofUI(); roofDraw();
       });
-      const cPz = rangeCtl('Pitch', 10, 60, 1, rz.n === 0 ? 30 : rz.th, v => { rz.th = v; syncRoofTop(); roofDraw(); }, v => fmt(v, 0) + '°');
+      const cPz = rangeCtl('Pitch', 10, 60, 1, rz.n === 0 ? 30 : rz.th, v => {
+        rz.th = v; syncRoofTop();
+        if (zoneRidgeCtls[i]) syncCtl(zoneRidgeCtls[i], Math.round(ridgeFrac(rz) * 100), w => fmt(w, 0) + '%');
+        sayRidge(i); roofDraw();
+      }, v => fmt(v, 0) + '°');
       cPz.range.disabled = rz.n === 0;
       zonePitchCtls[i] = cPz;
       zoneBox.appendChild(controls([cT, cPz]));
+      /* a gable's ridge, pushed aside: its height kept, both slopes re-pitched */
+      if (rz.n === 2 && M.ridges[i]) {
+        const cRg = rangeCtl('Ridge position', 20, 80, 1, Math.round(M.ridges[i].rg * 100), v => {
+          setRidge(i, v / 100);
+          syncCtl(cPz, rz.th, w => fmt(w, 0) + '°');
+          sayRidge(i); roofDraw();
+        }, v => fmt(v, 0) + '%');
+        zoneRidgeCtls[i] = cRg;
+        zoneBox.appendChild(cRg);
+        ridgeSays[i] = zoneBox.appendChild(el('p', { class:'hint' }));
+        sayRidge(i);
+      }
       if (M.zones.length > 1) zoneBox.appendChild(el('button', { class:'btn small', text:'× ' + t('Remove') + ' ' + t('Part').toLowerCase() + ' ' + 'ABC'[i],
         title:t('Merge this part into its neighbour'), onclick:() => {
           if (i > 0) RF.zones[i - 1].f1 = rz.f1; else RF.zones[1].f0 = rz.f0;
@@ -7401,7 +7510,7 @@ function buildRoof(host) {
         let bi = 0;
         M2.zones.forEach((z, i) => { if (z.a1 - z.a0 > M2.zones[bi].a1 - M2.zones[bi].a0) bi = i; });
         const w = RF.zones[bi], mid = (w.f0 + w.f1) / 2;
-        RF.zones.splice(bi + 1, 0, { f0:mid, f1:w.f1, n:w.n, th:w.th });
+        RF.zones.splice(bi + 1, 0, Object.assign({ f0:mid, f1:w.f1, n:w.n, th:w.th }, w.rg !== undefined ? { rg:w.rg } : {}));
         w.f1 = mid;
         syncRoofTop(); buildRoofUI(); roofDraw();
       } });
@@ -7411,8 +7520,8 @@ function buildRoof(host) {
       title:t('Swap every part’s type and pitch with its mirror image'), onclick:() => {
         const zs = RF.zones, n = zs.length;
         for (let i = 0; i < Math.floor(n / 2); i++) {
-          const a = zs[i], b = zs[n - 1 - i], nn = a.n, tt = a.th;
-          a.n = b.n; a.th = b.th; b.n = nn; b.th = tt;
+          const a = zs[i], b = zs[n - 1 - i], nn = a.n, tt = a.th, rr = a.rg;
+          a.n = b.n; a.th = b.th; a.rg = b.rg; b.n = nn; b.th = tt; b.rg = rr;
         }
         syncRoofTop(); buildRoofUI(); roofDraw();
       } }));
@@ -7465,10 +7574,17 @@ function buildRoof(host) {
   buildBeiUI();
   rail.appendChild(el('div', { class:'gh', text:'Eave canopy' }));
   const canBox = rail.appendChild(el('div'));
-  let canWCtl = null, canDCtl = null;
+  let canWCtl = null, canDCtl = null, canPCtl = null, canSays = null;
+  /** The canopy as built, in words: its pitch and the outer edge's height. */
+  const canopyWords = () => {
+    const hit = canopySpanFor(roofModel(G, RF).pl.segs, RF.bei && RF.bei.canopy, G.fl * G.fh);
+    if (!canSays || !hit) return;
+    const held = (+RF.bei.canopy.p || 0) > hit.p + 0.05;
+    canSays.textContent = t('Outer edge') + ' ' + fmt(hit.z1, 2) + ' m ' + t('above the ground') + (held ? ' · ' + t('pitch held at') + ' ' + fmt(hit.p, 0) + '° ' + t('to keep it 2.0 m clear') : '');
+  };
   function buildCanopyUI() {
     canBox.innerHTML = '';
-    canWCtl = canDCtl = null;
+    canWCtl = canDCtl = canPCtl = canSays = null;
     const on = !!(RF.bei && RF.bei.canopy);
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
       if (v === 1) {
@@ -7478,7 +7594,7 @@ function buildRoof(host) {
         const pick = all.filter(sg => segFace(sg) === 'S');
         const sg = (pick.length ? pick : all).reduce((p, q) => q.len > p.len ? q : p, all[0]);
         if (!sg) return;
-        RF.bei.canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5 };
+        RF.bei.canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:0 };
       } else if (RF.bei) RF.bei.canopy = null;
       buildCanopyUI(); roofDraw();
     });
@@ -7486,9 +7602,12 @@ function buildRoof(host) {
     if (!on) return;
     const c = RF.bei.canopy;
     canWCtl = rangeCtl('Canopy width', 1, 8, 0.1, clamp(+c.w || 3, 1, 8), v => { c.w = +v.toFixed(1); roofDraw(); }, v => fmt(v, 1) + ' m');
-    canDCtl = rangeCtl('Canopy depth', 0.6, 4, 0.05, clamp(+c.d || 1.5, 0.6, 4), v => { c.d = +v.toFixed(2); roofDraw(); }, v => fmt(v, 2) + ' m');
-    canBox.appendChild(canWCtl); canBox.appendChild(canDCtl);
-    canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space — drag its node along the wall and outward.' }));
+    canDCtl = rangeCtl('Canopy depth', 0.6, 4, 0.05, clamp(+c.d || 1.5, 0.6, 4), v => { c.d = +v.toFixed(2); canopyWords(); roofDraw(); }, v => fmt(v, 2) + ' m');
+    canPCtl = rangeCtl('Canopy pitch', 0, 45, 1, clamp(+c.p || 0, 0, 45), v => { c.p = Math.round(v); canopyWords(); roofDraw(); }, v => fmt(v, 0) + '°');
+    canBox.appendChild(canWCtl); canBox.appendChild(canDCtl); canBox.appendChild(canPCtl);
+    canSays = canBox.appendChild(el('p', { class:'hint' }));
+    canopyWords();
+    canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level.' }));
   }
   buildCanopyUI();
   rail.appendChild(el('div', { class:'gh', text:'Chimney' }));
@@ -7627,6 +7746,17 @@ function buildRoof(host) {
      ground or presses the bar over the model. */
   const RCAM = CAMS.roof;
   const projF = (FR, x, y, z) => { const q = camUV(FR.A, x, y, z); return [FR.cx + q[0] * FR.s, FR.cy - q[1] * FR.s]; };
+  /** A ridge point on screen: on its ridge, or — where it would sit on the
+      pitch point, as seen along the ridge — floated clear above it, as the
+      chimney's dot floats over its crown. */
+  function ridgeScreen(FR, M, R) {
+    const p = ridgePoint(M, R), q = projF(FR, p[0], p[1], p[2]), gg = FR.gg;
+    if (gg) {
+      const hp = projF(FR, gg.x, gg.y, FR.H0 + (gg.t || M.t) * gg.run);
+      if (Math.hypot(q[0] - hp[0], q[1] - hp[1]) < 20) return { q:[q[0], q[1] - 28] };
+    }
+    return { q };
+  }
   /** The pitch point and its gauge: the highest corner of the collecting
       plane (or, without one, of the largest pitched plane) — the west end of
       a level ridge — and the eave point straight down its fall. */
@@ -7674,7 +7804,7 @@ function buildRoof(host) {
 
   roofPanel = makePanel(stage, {
     title: 'The roof in three dimensions',
-    note: 'The plan from Site under its roof, from the south-west corner until you turn it: drag open ground to go round it or to look from higher or lower, or use the bar over it. Drag the black point to re-pitch the roof — the green gauge draws each ideal pitch; stand the slope parallel to a ray to take it. Drag the amber point to size the collector field.',
+    note: 'The plan from Site under its roof, from the south-west corner until you turn it: drag open ground to go round it or to look from higher or lower, or use the bar over it. Drag the black point to re-pitch the roof — the green gauge draws each ideal pitch; stand the slope parallel to a ray to take it. Drag the amber point to size the collector field. Push the white diamond on a gable’s ridge across to stand the ridge aside: it keeps its height, and the two slopes take their own pitches.',
     heightFn: w => phoneW(w) ? Math.round(w * 0.95 + 150) : Math.round(Math.max(300, Math.min(w / 1.55, roomH() - 252))),
     render(ctx, W, H) {
       const FR = roofFrame(W, H), narrow = phoneW(W), M = FR.M, pl = M.pl, H0 = FR.H0, bb = pl.bbox;
@@ -7755,21 +7885,44 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
         }
       }
       /* the eave canopy: one pushed-out stretch of eave over exterior space */
-      { const Mc = roofModel(G, RF), cpHit = canopySpanFor(Mc.pl.segs, RF.bei && RF.bei.canopy);
+      /* where the nodes stand on the canvas, for the page's own checks */
+      const nodesOut = { canopy:null, ridge:[] };
+      let canopyTag = null;
+      { const cpHit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, H0);
         if (cpHit) {
-          const sg = cpHit.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, nz = sg.n, zc = Mc.H0 - 0.15;
-          const P = (u, v) => [sg.a[0] + tx * u + nz[0] * v, sg.a[1] + ty * u + nz[1] * v, zc];
-          const q = [P(cpHit.u0, 0), P(cpHit.u1, 0), P(cpHit.u1, cpHit.d), P(cpHit.u0, cpHit.d)];
-          const pq = q.map(p => proj(p[0], p[1], p[2]));
+          const CP = canopyPts(cpHit);
+          const pq = CP.quad.map(p => proj(p[0], p[1], p[2]));
           ctx.beginPath(); pq.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
           ctx.fillStyle = 'rgba(217,119,6,.22)'; ctx.fill();
           stroke(ctx, '#D97706', 1.4); ctx.stroke();
-          const m = proj(sg.a[0] + tx * (cpHit.u0 + cpHit.u1) / 2 + nz[0] * cpHit.d, sg.a[1] + ty * (cpHit.u0 + cpHit.u1) / 2 + nz[1] * cpHit.d, zc);
+          /* the round node moves it (along the wall, outward); the square
+             one at its end widens it */
+          const m = proj(...CP.mid);
           ctx.beginPath(); ctx.arc(m[0], m[1], 7, 0, 6.284); ctx.fillStyle = '#fff'; ctx.fill();
           stroke(ctx, '#D97706', 2); ctx.stroke();
           ctx.fillStyle = '#D97706'; ctx.beginPath(); ctx.arc(m[0], m[1], 2.5, 0, 6.284); ctx.fill();
+          const e = proj(...CP.end);
+          ctx.fillStyle = '#fff'; ctx.fillRect(e[0] - 6, e[1] - 6, 12, 12);
+          stroke(ctx, '#D97706', 2); ctx.strokeRect(e[0] - 6, e[1] - 6, 12, 12);
+          ctx.fillStyle = '#D97706'; ctx.fillRect(e[0] - 2.5, e[1] - 2.5, 5, 5);
+          desk.block(m[0] - 9, m[1] - 9, m[0] + 9, m[1] + 9); desk.block(e[0] - 9, e[1] - 9, e[0] + 9, e[1] + 9);
+          nodesOut.canopy = { mid:m, end:e };
+          /* a pitched canopy says its pitch: in this view a fall reads as depth */
+          if (cpHit.p >= 0.5) canopyTag = { txt:t('canopy') + ' ' + fmt(cpHit.p, 0) + '°', a:proj(...CP.quad[3]), b:proj(...CP.quad[2]) };
         }
       }
+      /* each gable part's ridge point, a white diamond halfway along the
+         ridge: push it across to stand the ridge aside */
+      M.ridges.forEach(R => {
+        if (!R) return;
+        const q = ridgeScreen(FR, M, R).q;
+        ctx.beginPath(); ctx.moveTo(q[0], q[1] - 8); ctx.lineTo(q[0] + 8, q[1]); ctx.lineTo(q[0], q[1] + 8); ctx.lineTo(q[0] - 8, q[1]); ctx.closePath();
+        ctx.fillStyle = '#fff'; ctx.fill(); stroke(ctx, CH.ink, 1.8); ctx.stroke();
+        ctx.fillStyle = CH.ink; ctx.beginPath(); ctx.arc(q[0], q[1], 2.6, 0, 6.284); ctx.fill();
+        desk.block(q[0] - 10, q[1] - 10, q[0] + 10, q[1] + 10);
+        nodesOut.ridge.push(q);
+      });
+      window.__roofNodes = nodesOut;
       /* the divisions between roof parts, draggable along the longest side */
       M.zones.slice(1).forEach(z => {
         const cx = M.axis === 'x' ? z.a0 : bb[0], cy = M.axis === 'x' ? bb[1] : z.a0;
@@ -7839,13 +7992,15 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hp[0], hp[1], 8, 0, 6.284); ctx.fill();
         ctx.fillStyle = CH.ink; ctx.beginPath(); ctx.arc(hp[0], hp[1], 4.5, 0, 6.284); ctx.fill();
         desk.block(hp[0] - 10, hp[1] - 10, hp[0] + 10, hp[1] + 10);
+        nodesOut.pitch = hp;
       }
 
       // the readout: the roof's geometry, and the field's size
       const ff = formFactor(G, RF), ca = collectArea(M);
       const rf = FM(narrow ? 9 : 11), ry = narrow ? 112 : 12;
       const pnR = pitchNow();
-      const readoutOf = full => (pnR ? 'θ ' + fmt(pnR.th, 0) + '° · ' : t('Flat') + ' · ') + t('roof') + ' ' + fmt(M.roofArea, 0) + ' m²'
+      const rgTop = M.ridges[M.zones.reduce((p, q, i) => q.area > M.zones[p].area ? i : p, 0)];
+      const readoutOf = full => (pnR ? 'θ ' + (rgTop && Math.abs(rgTop.rg - 0.5) > 1e-3 ? fmt(rgTop.th, 0) + '°/' + fmt(rgTop.rear, 0) : fmt(pnR.th, 0)) + '° · ' : t('Flat') + ' · ') + t('roof') + ' ' + fmt(M.roofArea, 0) + ' m²'
         + (ca > 0 && full ? ' · ' + t('slope facing the main facade') + ' ' + fmt(ca, 0) + ' m²' : '')
         + ' · ' + t('ridge') + ' ' + fmt(M.ridge, 1) + ' m · FF ' + fmt(ff.ff, 2) + (hitTag && full ? ' · = ' + t(hitTag) + ' ideal' : '');
       // the long form while it clears the badges on the right, the short one where the model is narrower
@@ -7912,6 +8067,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
             desk.place(txt, [[A[0], A[1] - 14, 'center'], [A[0] + 10, A[1] - 6, 'left'], [A[0] - 10, A[1] - 6, 'right']], CH.ink2, FM(10)); }
         }
       }
+      if (canopyTag) desk.place(canopyTag.txt, desk.beside(canopyTag.txt, FM(10), canopyTag.a, canopyTag.b, proj((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2, H0), [0.5, 0.3, 0.7], 4, 2), '#B45309', FM(10));
       gaugeTags.forEach(g => {
         desk.place(g.txt, [[g.p[0] - 7, g.p[1], 'right'], [g.p[0] + 7, g.p[1], 'left'], [g.p[0], g.p[1] - 11, 'center'], [g.p[0], g.p[1] + 11, 'center'],
           [g.p[0] - 7, g.p[1] - 10, 'right'], [g.p[0] + 7, g.p[1] - 10, 'left']], '#15803d', F(9));
@@ -7921,9 +8077,11 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       const M = roofModel(G, RF), pn = pitchNow(), ff = formFactor(G, RF);
       return csvRows([['Parameter', 'Value'],
       ['Roof (largest part)', ['flat', 'shed', 'gable', 'hip'][RF.n]], ['Pitch (°)', RF.n === 0 ? 0 : RF.th],
-      ['Roof parts', RF.zones.map((z, i) => 'ABC'[i] + ':' + ['flat', 'shed', 'gable', 'hip'][z.n] + (z.n === 0 ? '' : ' ' + z.th + '°')).join(' | ')],
+      ['Roof parts', RF.zones.map((z, i) => 'ABC'[i] + ':' + ['flat', 'shed', 'gable', 'hip'][z.n] + (z.n === 0 ? '' : ' ' + z.th + '°')
+        + (M.ridges[i] && Math.abs(M.ridges[i].rg - 0.5) > 1e-3 ? '/' + fmt(M.ridges[i].rear, 1) + '° · ridge at ' + Math.round(M.ridges[i].rg * 100) + '%' : '')).join(' | ')],
       ['Parapet', RF.par && RF.par.on ? fmt(RF.par.h, 2) + ' m' : 'none'],       ['Eaves', RF.bei && RF.bei.on ? fmt(RF.bei.d, 2) + ' m' + (RF.bei.ends !== false ? '' : ' · flush gables') + (RF.par && RF.par.on ? ' · as cornice under the parapet' : '') : 'none'],
-      ['Eave canopy', RF.bei && RF.bei.canopy ? RF.bei.canopy.f + ' · ' + fmt(RF.bei.canopy.w, 1) + ' × ' + fmt(RF.bei.canopy.d, 2) + ' m' : 'none'],
+      ['Eave canopy', (() => { const cH = RF.bei && RF.bei.canopy ? canopySpanFor(M.pl.segs, RF.bei.canopy, M.H0) : null;
+        return cH ? RF.bei.canopy.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '° · outer edge ' + fmt(cH.z1, 2) + ' m' : 'none'; })()],
       ['Chimney', RF.chim && RF.chim.on ? CHIMNEY_FAM[RF.chim.fam].name + ' at ' + fmt(RF.chim.x, 1) + ', ' + fmt(RF.chim.y, 1) + ' m · ' + fmt(chimEffH(RF.chim), 2) + ' m above roof' : 'none'],
       ['Plan form (from Site)', (G.form || 'rect') + (G.patio && G.patio.on && G.patio.ok !== false ? ' + patio' : '')],
       ['Winter solar ideal (°)', +idealW.toFixed(0)],
@@ -8019,7 +8177,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     rail.appendChild(el('div', { class:'keys', text:nm }));
     rail.appendChild(el('div', { class:'rgroup' }, [tgl, cc, cr]));
   });
-  rail.appendChild(el('div', { class:'keys', text:t('Drag the black point to re-pitch the roof, the amber point at a field corner to size that field, a field itself to move it.') }));
+  rail.appendChild(el('div', { class:'keys', text:t('Drag the black point to re-pitch the roof, the white diamond on the ridge across to stand it aside, the amber point at a field corner to size that field, a field itself to move it.') }));
   function refreshSolar() {
     syncField();
     const facing = COMPASS8[Math.round(slopeAz() / 45) % 8];
@@ -8100,10 +8258,18 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     const z = ((FR.cy - (clientY - r.top)) / (FR.s * CAM_K) - (gg.x * A.d[0] + gg.y * A.d[1]) * A.se) / A.ce;
     const M0 = roofModel(G, RF), zi = zoneIndexAt(M0, gg.x, gg.y), rz = RF.zones[zi];
     if (!rz || rz.n === 0) return;   // a flat part has no pitch to drag — give it slopes in the list first
-    rz.th = Math.round(clamp(Math.atan2(z - FR.H0, Math.max(0.5, gg.run)) / RAD, 10, 60));
+    const np = Math.atan2(z - FR.H0, Math.max(0.5, gg.run)) / RAD, rgz = rz.n === 2 ? ridgeFrac(rz) : 0.5;
+    /* on a gable whose ridge stands aside, the point may ride the second
+       slope (where no slope faces the main facade): its pitch is set there,
+       and the part's own pitch follows from the ridge's place */
+    if (rz.n === 2 && Math.abs(rgz - 0.5) > 1e-3 && Math.abs((gg.th || 0) - rz.th) > 0.05)
+      rz.th = Math.round(clamp(Math.atan(Math.tan(clamp(np, 5, 75) * RAD) * (1 - rgz) / rgz) / RAD, 10, 60) * 10) / 10;
+    else rz.th = Math.round(clamp(np, 10, 60));
     syncRoofTop();
     const c = zonePitchCtls[zi];
     if (c) syncCtl(c, rz.th, v => fmt(v, 0) + '°');
+    if (zoneRidgeCtls[zi]) syncCtl(zoneRidgeCtls[zi], Math.round(ridgeFrac(rz) * 100), v => fmt(v, 0) + '%');
+    sayRidge(zi);
     roofDraw();
   };
   let rdrag = false, fdrag = false, ddiv = -1, movedrag = null;
@@ -8244,9 +8410,10 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       rcv.style.cursor = 'grabbing';
       return;
     }
-    if (canopyAt(ev.clientX, ev.clientY)) {
+    const cn = canopyAt(ev.clientX, ev.clientY);
+    if (cn) {
       ev.preventDefault();
-      cdrag = true;
+      cdrag = cn;
       try { rcv.setPointerCapture(ev.pointerId); } catch (err) {}
       rcv.style.cursor = 'grabbing';
       return;
@@ -8268,6 +8435,15 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       rcv.style.cursor = 'ew-resize';
       return;
     }
+    const rk = ridgeAt(ev.clientX, ev.clientY);
+    if (rk >= 0) {
+      ev.preventDefault();
+      const M0 = roofModel(G, RF);
+      rgdrag = { zi:rk, h:M0.ridges[rk].z - M0.H0, rg0:M0.ridges[rk].rg, sx:ev.clientX, sy:ev.clientY };
+      try { rcv.setPointerCapture(ev.pointerId); } catch (err) {}
+      rcv.style.cursor = 'grabbing';
+      return;
+    }
     ev.preventDefault();
     if (nearSlope(ev.clientX, ev.clientY)) rdrag = true;
     else orbit.start(ev);
@@ -8280,51 +8456,113 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     if (movedrag) { ev.preventDefault(); doFieldMove(ev.clientX, ev.clientY); return; }
     if (chdrag) { ev.preventDefault(); doChimDrag(ev.clientX, ev.clientY); return; }
     if (cdrag) { ev.preventDefault(); doCanopyDrag(ev.clientX, ev.clientY); return; }
+    if (rgdrag) { ev.preventDefault(); doRidgeDrag(ev.clientX, ev.clientY); return; }
     if (ddiv >= 0) { ev.preventDefault(); doDivDrag(ev.clientX, ev.clientY); return; }
     if (!rdrag) {
-      rcv.style.cursor = canopyAt(ev.clientX, ev.clientY) ? 'move' : fieldAt(ev.clientX, ev.clientY) ? 'move' : fieldBodyAt(ev.clientX, ev.clientY) ? 'move' : chimHandleAt(ev.clientX, ev.clientY) ? 'move' : divHandleAt(ev.clientX, ev.clientY) >= 0 ? 'ew-resize' : nearSlope(ev.clientX, ev.clientY) ? 'ns-resize' : 'grab';
+      const cnH = canopyAt(ev.clientX, ev.clientY), rgH = cnH ? -1 : ridgeAt(ev.clientX, ev.clientY);
+      rcv.style.cursor = cnH === 'width' ? 'ew-resize' : cnH ? 'move' : rgH >= 0 ? 'move' : fieldAt(ev.clientX, ev.clientY) ? 'move' : fieldBodyAt(ev.clientX, ev.clientY) ? 'move' : chimHandleAt(ev.clientX, ev.clientY) ? 'move' : divHandleAt(ev.clientX, ev.clientY) >= 0 ? 'ew-resize' : nearSlope(ev.clientX, ev.clientY) ? 'ns-resize' : 'grab';
       return;
     }
     ev.preventDefault();
     doDrag(ev.clientX, ev.clientY);
   });
   let chdrag = false, chZ = 0;
+  /** Which canopy node is the pointer on: 'move' (round, mid outer edge),
+      'width' (square, the outer corner), or null — the nearer one wins. */
   const canopyAt = (clientX, clientY) => {
-    if (!roofPanel.W) return false;
-    const M = roofModel(G, RF), hit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy);
-    if (!hit) return false;
-    const FR = frameNow(), r = rcv.getBoundingClientRect();
-    const sg = hit.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, mx = (hit.u0 + hit.u1) / 2;
-    const q = projF(FR, sg.a[0] + tx * mx + sg.n[0] * hit.d, sg.a[1] + ty * mx + sg.n[1] * hit.d, M.H0 - 0.15);
-    return Math.hypot(clientX - r.left - q[0], clientY - r.top - q[1]) <= 14;
+    if (!roofPanel.W) return null;
+    const M = roofModel(G, RF), hit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, M.H0);
+    if (!hit) return null;
+    const FR = frameNow(), r = rcv.getBoundingClientRect(), CP = canopyPts(hit);
+    const dist = p => { const q = projF(FR, p[0], p[1], p[2]); return Math.hypot(clientX - r.left - q[0], clientY - r.top - q[1]); };
+    const dm = dist(CP.mid), de = dist(CP.end);
+    return Math.min(dm, de) > 14 ? null : de < dm ? 'width' : 'move';
   };
+  /** The round node follows the pointer on the level of the canopy's outer
+      edge: the nearest wall takes it, the metre along it centres it, the
+      distance out sets its depth. A pitched canopy's edge drops as it
+      deepens, so the level is found again a few times. The square node
+      slides along the wall: its end moves, the other end stays. */
   const doCanopyDrag = (clientX, clientY) => {
     if (!cdrag || !roofPanel.W) return;
     const c = RF.bei && RF.bei.canopy;
     if (!c) return;
     const M = roofModel(G, RF), FR = frameNow(), r = rcv.getBoundingClientRect();
-    const z = M.H0 - 0.15;
-    const q = camPick((x, y, zz) => projF(FR, x, y, zz), [0, 0, z], [1, 0, 0], [0, 1, 0], clientX - r.left, clientY - r.top);
-    if (!q) return;
-    let sg = null, bd = Infinity;
-    for (const s2 of M.pl.segs) {
-      if (s2.len < 1) continue;
-      const t = [(s2.b[0] - s2.a[0]) / s2.len, (s2.b[1] - s2.a[1]) / s2.len];
-      const u = (q[0] - s2.a[0]) * t[0] + (q[1] - s2.a[1]) * t[1];
-      const uc = Math.max(0, Math.min(s2.len, u));
-      const d = Math.hypot(s2.a[0] + t[0] * uc - q[0], s2.a[1] + t[1] * uc - q[1]);
-      if (d < bd) { bd = d; sg = s2; }
+    const pickAt = z => camPick((x, y, zz) => projF(FR, x, y, zz), [0, 0, z], [1, 0, 0], [0, 1, 0], clientX - r.left, clientY - r.top);
+    const hit0 = canopySpanFor(M.pl.segs, c, M.H0);
+    if (!hit0) return;
+    if (cdrag === 'width') {
+      const q = pickAt(hit0.z1);
+      if (!q) return;
+      const sg = hit0.sg, t = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
+      const u1 = clamp((q[0] - sg.a[0]) * t[0] + (q[1] - sg.a[1]) * t[1], hit0.u0 + 1, Math.min(sg.len, hit0.u0 + 8));
+      c.w = +(u1 - hit0.u0).toFixed(1);
+      const uc = hit0.u0 + c.w / 2;
+      c.x = +(sg.a[0] + t[0] * uc).toFixed(2); c.y = +(sg.a[1] + t[1] * uc).toFixed(2);
+      if (canWCtl) syncCtl(canWCtl, c.w, v => fmt(v, 1) + ' m');
+      roofDraw();
+      return;
     }
-    if (!sg) return;
-    const t = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
-    const u = clamp((q[0] - sg.a[0]) * t[0] + (q[1] - sg.a[1]) * t[1], 0, sg.len);
-    c.f = segFace(sg);
-    c.x = +(sg.a[0] + t[0] * u).toFixed(2); c.y = +(sg.a[1] + t[1] * u).toFixed(2);
-    c.d = +clamp((q[0] - sg.a[0]) * sg.n[0] + (q[1] - sg.a[1]) * sg.n[1], 0.6, 4).toFixed(2);
+    let z = hit0.z1, got = null;
+    for (let k = 0; k < 4; k++) {
+      const q = pickAt(z);
+      if (!q) break;
+      let sg = null, bd = Infinity;
+      for (const s2 of M.pl.segs) {
+        if (s2.len < 1) continue;
+        const t = [(s2.b[0] - s2.a[0]) / s2.len, (s2.b[1] - s2.a[1]) / s2.len];
+        const u = (q[0] - s2.a[0]) * t[0] + (q[1] - s2.a[1]) * t[1];
+        const uc = Math.max(0, Math.min(s2.len, u));
+        const d = Math.hypot(s2.a[0] + t[0] * uc - q[0], s2.a[1] + t[1] * uc - q[1]);
+        if (d < bd) { bd = d; sg = s2; }
+      }
+      if (!sg) break;
+      const t = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
+      const u = clamp((q[0] - sg.a[0]) * t[0] + (q[1] - sg.a[1]) * t[1], 0, sg.len);
+      got = { f:segFace(sg), x:+(sg.a[0] + t[0] * u).toFixed(2), y:+(sg.a[1] + t[1] * u).toFixed(2),
+        d:+clamp((q[0] - sg.a[0]) * sg.n[0] + (q[1] - sg.a[1]) * sg.n[1], 0.6, 4).toFixed(2) };
+      const h2 = canopySpanFor(M.pl.segs, Object.assign({}, c, got), M.H0);
+      if (!h2 || Math.abs(h2.z1 - z) < 0.005) break;
+      z = h2.z1;
+    }
+    if (!got) return;
+    Object.assign(c, got);
     if (canDCtl) syncCtl(canDCtl, c.d, v => fmt(v, 2) + ' m');
+    canopyWords();
     roofDraw();
   };
-  let cdrag = false;
+  let cdrag = null;
+  /** Which gable part's ridge point is the pointer on: its index, or -1. */
+  const ridgeAt = (clientX, clientY) => {
+    if (!roofPanel.W) return -1;
+    const M = roofModel(G, RF), FR = frameNow(), r = rcv.getBoundingClientRect();
+    let best = -1, bd = 13;
+    M.ridges.forEach((R, i) => {
+      if (!R) return;
+      const q = ridgeScreen(FR, M, R).q;
+      const d = Math.hypot(clientX - r.left - q[0], clientY - r.top - q[1]);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  };
+  /** The ridge point slides straight across its part at the ridge's own
+      height: the pointer is read along that line as drawn on screen. */
+  const doRidgeDrag = (clientX, clientY) => {
+    if (!rgdrag || !roofPanel.W) return;
+    const M = roofModel(G, RF), R = M.ridges[rgdrag.zi], FR = frameNow(), r = rcv.getBoundingClientRect();
+    if (!R) return;
+    const P = c => { const p = ridgePoint(M, R, c); p[2] = M.H0 + rgdrag.h; return projF(FR, p[0], p[1], p[2]); };
+    const a = P(R.c0), b = P(R.c0 + R.w), dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+    if (L2 < 64) return;   // seen along the ridge's cross line: use the slider
+    const f = rgdrag.rg0 + ((clientX - rgdrag.sx) * dx + (clientY - rgdrag.sy) * dy) / L2;
+    setRidge(rgdrag.zi, f, rgdrag.h);
+    const rz = RF.zones[rgdrag.zi];
+    if (zonePitchCtls[rgdrag.zi]) syncCtl(zonePitchCtls[rgdrag.zi], rz.th, v => fmt(v, 0) + '°');
+    if (zoneRidgeCtls[rgdrag.zi]) syncCtl(zoneRidgeCtls[rgdrag.zi], Math.round(ridgeFrac(rz) * 100), v => fmt(v, 0) + '%');
+    sayRidge(rgdrag.zi);
+    roofDraw();
+  };
+  let rgdrag = null;
   const chimGeo = () => {
     const ch = RF.chim;
     if (!ch || !ch.on || !isFinite(+ch.x) || !isFinite(+ch.y)) return null;
@@ -8364,7 +8602,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     if (chimYCtl) syncCtl(chimYCtl, RF.chim.y, v => fmt(v, 1) + ' m');
     roofDraw();
   };
-  const endDrag = () => { orbit.end(); rdrag = fdrag = false; movedrag = null; chdrag = false; if (cdrag) { cdrag = false; buildCanopyUI(); } if (ddiv >= 0) { ddiv = -1; buildRoofUI(); roofDraw(); } rcv.style.cursor = 'default'; };
+  const endDrag = () => { orbit.end(); rdrag = fdrag = false; movedrag = null; chdrag = false; if (cdrag) { cdrag = null; buildCanopyUI(); } if (rgdrag) { rgdrag = null; buildRoofUI(); } if (ddiv >= 0) { ddiv = -1; buildRoofUI(); roofDraw(); } rcv.style.cursor = 'default'; };
   rcv.addEventListener('pointerup', endDrag);
   rcv.addEventListener('pointercancel', endDrag);
   zoomGesture(rcv, 'roof');
@@ -8896,10 +9134,12 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       glassSpans(f, u0, u1, x.sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
         const u = us[sp.ui], vv = u.door ? doorSpanV(u, head, k, G.fh) : unitSpanV(u, r.sill, head, k, G.fh);
         const rc = { w:sp.b - sp.a, h:Math.max(0.01, vv[1] - vv[0]), ov:[], fin:[], a:sp.a, b:sp.b, sg:x.sg, u0, u1, ui:sp.ui };
-        const cpC = RF.bei && RF.bei.canopy ? canopySpanFor(Mod().pl.segs, RF.bei.canopy) : null;
+        const cpC = RF.bei && RF.bei.canopy ? canopySpanFor(Mod().pl.segs, RF.bei.canopy, h0()) : null;
         if (cpC && cpC.sg === x.sg) {
+          /* a pitched canopy shades from its outer edge: a level slab of the
+             same depth hung at that edge's height */
           const c0 = Math.max(sp.a, cpC.u0), c1 = Math.min(sp.b, cpC.u1);
-          if (c1 - c0 > 0.05) rc.ov.push({ d:cpC.d, gap:Math.max(0, h0() - 0.15 - vv[1]), cover:(c1 - c0) / Math.max(0.05, sp.b - sp.a) });
+          if (c1 - c0 > 0.05) rc.ov.push({ d:cpC.d, gap:Math.max(0, cpC.z1 - vv[1]), cover:(c1 - c0) / Math.max(0.05, sp.b - sp.a) });
         }
         const evD = eaveDepth(MmE, H0E, beiE, x.sg, sp.a, sp.b);
         if (evD > 0.05) rc.ov.push({ d:evD, gap:Math.max(0, H0E - vv[1]), cover:1 });
@@ -12458,7 +12698,7 @@ function buildVentilation(host) {
     }
     rows.push(['Sun day', SH.key], ['Solar time (h)', +SH.h.toFixed(2)]);
     rows.push(['Sun altitude (°)', +sn.alt.toFixed(1)], ['Sun azimuth (°)', +sn.azi.toFixed(1)]);
-    rows.push(['Ridge shadow (m)', +shadowLenV(h0live() + ((RF.n === 0 ? 0 : RF.th) ? ((RF.n === 2 || RF.n === 3) ? G.D/2 : G.D) * Math.tan(RF.th * RAD) : 0), sn.alt).toFixed(1)]);
+    rows.push(['Ridge shadow (m)', +shadowLenV(h0live() - G.fl * G.fh + roofModel(G, RF).ridge, sn.alt).toFixed(1)]);
     rows.push(['Sunspace', (typeof SUNSP !== 'undefined' && SUNSP && SUNSP.on) ? SUNSP.face + ' d=' + SUNSP.depth.toFixed(1) + 'm w=' + Math.round(SUNSP.widthFrac*100) + '%' : 'off']);
     VEGETATION.forEach(v => rows.push([vegKind(v), specOf(v.type).pt + ' (' + specOf(v.type).sci + ') h=' + v.height + 'm trunk=' + trunkOf(v).toFixed(1) + 'm canopy=' + canopyOf(v).toFixed(1) + 'm ' + crownFormOf(v) + ' d=' + v.density + ' x=' + v.x + ' y=' + v.y + ' → ' + sideOf(v.x, v.y)]));
     WALLS.forEach(w => rows.push(['Wall', 'x=' + w.x + ' y=' + w.y + ' ' + w.along + ' h=' + w.height + 'm l=' + w.length + 'm → ' + sideOf(w.x, w.y)]));
@@ -14337,6 +14577,19 @@ style === 'sketch' ? '#EFEBE0'
           d:depthOf((outA[0] + outB[0]) / 2, (outA[1] + outB[1]) / 2, hgt / 2) });
       }
     }
+    /* the eave canopy: its plate in the roof's finish, falling at its own
+       pitch, a dark fascia on its outer edge; it stands on its wall, in
+       front of the glass under it, and the eave over its root covers it */
+    { const cpH = RF.bei && RF.bei.canopy ? canopySpanFor(M.pl.segs, RF.bei.canopy, H0) : null;
+      if (cpH) {
+        const sg = cpH.sg, CP = canopyPts(cpH), q = CP.quad, Ls = cpH.d / Math.cos(cpH.p * RAD);
+        const fk = night ? 0.32 : 0.6 + 0.4 * Math.max(0, sg.n[0] * sunL[0] + sg.n[1] * sunL[1]) * (0.3 + 0.7 * sinA);
+        items.push(onWallLayer(sg, 4, { pts:q, cnp:true, fill:shadeHex(roofBase(), fk), sh:fk, d:cdep(q), mat:look.roof ? look.roof.key : 'site',
+          uv:[[cpH.u0, 0], [cpH.u1, 0], [cpH.u1, Ls], [cpH.u0, Ls]] }));
+        const lo = p => [p[0], p[1], p[2] - 0.08], fq = [q[3], q[2], lo(q[2]), lo(q[3])];
+        if (wallSeen(sg.n)) items.push(onWallLayer(sg, 5, { pts:fq, fill:shadeHex('#5A5550', night ? 0.3 : faceK(sg.n)), d:cdep(fq) }));
+      }
+    }
     /* detached walls */
     SCENE.walls.forEach(w => {
       const hw = w.length / 2;
@@ -14662,7 +14915,7 @@ style === 'sketch' ? '#EFEBE0'
       }
       poly(it.pts, it.fill, style === 'sketch' ? CH.ink : (it.glass ? 'rgba(20,23,26,.45)' : it.nbTip ? 'rgba(90,110,130,.55)' : CH.ink), style === 'sketch' ? 1.6 : it.glass ? 1 : 1.2);
       let photoDone = false;
-      if (dressed && (it.wallSg || it.roof) && it.mat && it.mat !== 'site') {
+      if (dressed && (it.wallSg || it.roof || it.cnp) && it.mat && it.mat !== 'site') {
         const tex = matTex(it.mat, refreshRender);
         if (tex) photoDone = paintTexFace(it, tex);
       }
@@ -15438,12 +15691,9 @@ function exportModel() {
   }
 
   { const c = RF.bei && RF.bei.canopy;
-    const hit = c ? canopySpanFor(planModel(G).segs, c) : null;
-    if (hit) {
-      const sg = hit.sg, t = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len], n = [sg.n[0], sg.n[1], 0], z = H0 - 0.15;
-      const P = (u, v) => [sg.a[0] + t[0] * u + n[0] * v, sg.a[1] + t[1] * u + n[1] * v, z];
-      add('shading', 'Eave canopy', 'AA-SHADING', [[[P(hit.u0, 0), P(hit.u1, 0), P(hit.u1, hit.d), P(hit.u0, hit.d)], n]], { device:'Canopy', mat:'AA_Shade' });
-    }
+    const hit = c ? canopySpanFor(planModel(G).segs, c, H0) : null;
+    if (hit) add('shading', 'Eave canopy', 'AA-SHADING', [[canopyPts(hit).quad, [0, 0, 1]]],
+      { device:'Canopy', depth:hit.d, pitch:+hit.p.toFixed(1), mat:'AA_Shade' });
   }
   /* a north arrow on the ground, for the tools that do not read north */
   const R0 = Math.hypot(L, D) / 2 + 3;
@@ -15612,7 +15862,8 @@ function toDecisionsJSON() {
         balconies:balcGeo(MASS).all.map(B => B.ok ? { mode:B.mode === 'out' ? 'projecting' : 'recessed', width:B.w, depth:B.d, floors:B.levels, facade:segFace(B.sg), corner:B.corner, wrap:!!B.wrap } : { built:false, why:B.why }),
         planArea:+planModel(MASS).area.toFixed(1), wallColour:colourOf(fin) },
       roof:{ type:['flat', 'shed', 'gable', 'hip'][ROOF.n], pitch:ROOF.n === 0 ? 0 : ROOF.th,
-        zones:(ROOF.zones || []).map((z, i) => ({ part:'ABC'[i], type:['flat', 'shed', 'gable', 'hip'][z.n], pitch:z.n === 0 ? 0 : z.th, from:+z.f0.toFixed(3), to:+z.f1.toFixed(3) })), roofColour:colourOf(rfin),
+        zones:(ROOF.zones || []).map((z, i) => Object.assign({ part:'ABC'[i], type:['flat', 'shed', 'gable', 'hip'][z.n], pitch:z.n === 0 ? 0 : z.th, from:+z.f0.toFixed(3), to:+z.f1.toFixed(3) },
+          z.n === 2 && Math.abs(ridgeFrac(z) - 0.5) > 1e-3 ? { ridgeAt:ridgeFrac(z), rearPitch:+rearPitch(z.th, ridgeFrac(z)).toFixed(1) } : {})), roofColour:colourOf(rfin),
         parapet:ROOF.par && ROOF.par.on ? { height:+ROOF.par.h.toFixed(2) } : null,         beirado:ROOF.bei && ROOF.bei.on ? { projection:+ROOF.bei.d.toFixed(2), gables:ROOF.bei.ends !== false } : null,
         chimney:ROOF.chim && ROOF.chim.on ? { family:ROOF.chim.fam, x:+ROOF.chim.x.toFixed(2), y:+ROOF.chim.y.toFixed(2), heightAboveRoof:isFinite(+ROOF.chim.h) ? +ROOF.chim.h : null, widthEW:+chimFoot(ROOF.chim).x.toFixed(2), widthSN:+chimFoot(ROOF.chim).y.toFixed(2), sidePitch:isFinite(+ROOF.chim.taper) ? +ROOF.chim.taper : null } : null, roofColour:colourOf(rfin),
         solar:solStudy(ROOF.sol)},
@@ -15905,11 +16156,14 @@ function applyStudy(o) {
   ROOF.sol = fixSolFields(R0.sol);   ROOF.bei = { on:!!(R0.bei && R0.bei.on), d:clamp(fin(R0.bei && R0.bei.d, 0.15), 0, 1), ends:!R0.bei || R0.bei.ends !== false };
   if (R0.bei && R0.bei.canopy && typeof R0.bei.canopy === 'object') {
     const C0 = R0.bei.canopy;
-    ROOF.bei.canopy = { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:isFinite(+C0.x) ? +C0.x : 0, y:isFinite(+C0.y) ? +C0.y : 0, w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4) };
+    ROOF.bei.canopy = { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:isFinite(+C0.x) ? +C0.x : 0, y:isFinite(+C0.y) ? +C0.y : 0, w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4), p:clamp(Math.round(+C0.p || 0), 0, 45) };
   }
   if (Array.isArray(R0.zones) && R0.zones.length && R0.zones.length <= 3) {
     const zs = R0.zones.filter(z => z && [0, 1, 2, 3].indexOf(z.n) >= 0 && isFinite(+z.f0) && isFinite(+z.f1) && +z.f1 > +z.f0);
-    ROOF.zones = zs.length ? zs.map(z => ({ f0:+z.f0, f1:+z.f1, n:z.n, th:z.n === 0 ? 0 : clamp(Math.round(fin(z.th, 30)), 5, 75) })) : undefined;
+    /* a pitch to the tenth of a degree: pushing a gable's ridge keeps its
+       height and re-pitches the slopes finer than whole degrees */
+    ROOF.zones = zs.length ? zs.map(z => Object.assign({ f0:+z.f0, f1:+z.f1, n:z.n, th:z.n === 0 ? 0 : clamp(Math.round(fin(z.th, 30) * 10) / 10, 5, 75) },
+      z.n === 2 && isFinite(+z.rg) && +z.rg > 0 ? { rg:clamp(+z.rg, 0.2, 0.8) } : {})) : undefined;
   } else delete ROOF.zones;
   ['S', 'N', 'E', 'W'].forEach(f => {
     const s = o.open && o.open[f];
@@ -18198,7 +18452,11 @@ Object.assign(PT, {
   "Eaves": "Beirado", "Eave canopy": "Pala do beirado",
   "Canopy width": "Largura da pala",
   "Canopy depth": "Profundidade da pala",
-  "Push one stretch of eave further out to roof an exterior space — drag its node along the wall and outward.": "Avance um tramo do beirado para cobrir um espaço exterior — arraste o seu ponto ao longo da parede e para fora.",
+  "Push one stretch of eave further out to roof an exterior space — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level.": "Avance um tramo do beirado para cobrir um espaço exterior — arraste o seu ponto redondo ao longo da parede e para fora, e o ponto quadrado na ponta para o alargar. A inclinação faz a pala descer para fora da parede; a profundidade mede-se na horizontal.",
+  "Canopy pitch": "Inclinação da pala", "Outer edge": "Bordo exterior", "above the ground": "acima do solo",
+  "pitch held at": "inclinação limitada a", "to keep it 2.0 m clear": "para o manter a 2,0 m do solo",
+  "Ridge position": "Posição da cumeeira", "Slope to the main facade": "Vertente para a fachada principal", "to the rear": "para o tardoz",
+  "Left slope": "Vertente esquerda", "right slope": "vertente direita", "canopy": "pala",
   "Projection": "Projeção", "Gable ends": "Empenas",
   "Height": "Altura",
   "Chimney": "Chaminé",
@@ -18258,8 +18516,8 @@ Object.assign(PT, {
   "Between the seasonal ideals — decide by use": "Entre os ideais sazonais — decidir pelo uso",
   "Far from any solar ideal": "Longe de qualquer ideal solar",
   "The roof in three dimensions": "O telhado em três dimensões",
-  "The plan from Site under its roof, from the south-west corner until you turn it: drag open ground to go round it or to look from higher or lower, or use the bar over it. Drag the black point to re-pitch the roof — the green gauge draws each ideal pitch; stand the slope parallel to a ray to take it. Drag the amber point to size the collector field.":
-    "A planta do Local sob a sua cobertura, vista do canto sudoeste até a rodar: arraste o terreno livre para a contornar ou a ver de mais alto ou mais baixo, ou use a barra sobre o modelo. Arraste o ponto preto para mudar a inclinação — o calibre verde desenha cada inclinação ideal; ponha a vertente paralela a um raio para a tomar. Arraste o ponto âmbar para dimensionar o campo de colectores.",
+  "The plan from Site under its roof, from the south-west corner until you turn it: drag open ground to go round it or to look from higher or lower, or use the bar over it. Drag the black point to re-pitch the roof — the green gauge draws each ideal pitch; stand the slope parallel to a ray to take it. Drag the amber point to size the collector field. Push the white diamond on a gable’s ridge across to stand the ridge aside: it keeps its height, and the two slopes take their own pitches.":
+    "A planta do Local sob a sua cobertura, vista do canto sudoeste até a rodar: arraste o terreno livre para a contornar ou a ver de mais alto ou mais baixo, ou use a barra sobre o modelo. Arraste o ponto preto para mudar a inclinação — o calibre verde desenha cada inclinação ideal; ponha a vertente paralela a um raio para a tomar. Arraste o ponto âmbar para dimensionar o campo de colectores. Empurre para o lado o losango branco na cumeeira de uma cobertura de duas águas para a descentrar: a altura mantém-se e cada vertente fica com a sua inclinação.",
   "Front": "Frente",
   "Side": "Lado",
   "From S": "De S",
@@ -18401,7 +18659,7 @@ Object.assign(PT, {
   "Columns": "Colunas",
   "Rows": "Filas",
   "Drag the black point to re-pitch the roof, the amber point at the field’s corner to size the field.": "Arraste o ponto preto para mudar a inclinação, o ponto âmbar no canto do campo para o dimensionar.",
-  "Drag the black point to re-pitch the roof, the amber point at a field corner to size that field, a field itself to move it.": "Arraste o ponto preto para mudar a inclinação, o ponto âmbar no canto de um campo para o dimensionar, o próprio campo para o deslocar.",
+  "Drag the black point to re-pitch the roof, the white diamond on the ridge across to stand it aside, the amber point at a field corner to size that field, a field itself to move it.": "Arraste o ponto preto para mudar a inclinação, o losango branco na cumeeira para a descentrar, o ponto âmbar no canto de um campo para o dimensionar, o próprio campo para o deslocar.",
   "No collectors — choose PV panels or thermal collectors left of the model": "Sem colectores — escolha painéis fotovoltaicos ou colectores térmicos à esquerda do modelo",
   "No collectors — switch a collector on left of the model": "Sem colectores — ligue um colector à esquerda do modelo",
   "fields overlap — drag a field aside": "campos sobrepostos — arraste um campo para o lado",
