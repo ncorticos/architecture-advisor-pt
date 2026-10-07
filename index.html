@@ -15289,19 +15289,40 @@ function exportModel() {
     if (trunk.length) add('plant', nm + ' trunk', 'AA-PLANTING', trunk, Object.assign({ mat:'AA_Trunk' }, extra));
     add('plant', nm + ' crown', 'AA-PLANTING', crown, Object.assign({ mat:'AA_Leaf' }, extra));
   });
-  /* the real ground under the model: the Copernicus grid where derived */
+  /* the real ground under the model: the Copernicus grid where derived, resampled to a 0.25 m near-field
+     mesh — the service resolves ~30 m, so this smooths rather than surveys;
+     the name below says resampled whenever it is. */
+  function resampleGrid(g, step, half) {
+    const E = (g.n - 1) * g.step / 2;
+    const n = Math.max(2, Math.min(241, Math.floor(2 * half / step) + 1));
+    const s = (2 * half) / (n - 1);
+    const at = (e, nn) => {
+      const fx = (e + E) / g.step, fy = (nn + E) / g.step;
+      if (!(fx >= 0 && fy >= 0 && fx <= g.n - 1 && fy <= g.n - 1)) return 0;
+      const ix = Math.min(g.n - 2, Math.floor(fx)), jy = Math.min(g.n - 2, Math.floor(fy));
+      const ax = fx - ix, ay = fy - jy, H = g.h;
+      return H[jy * g.n + ix] * (1 - ax) * (1 - ay) + H[jy * g.n + ix + 1] * ax * (1 - ay)
+        + H[(jy + 1) * g.n + ix] * (1 - ax) * ay + H[(jy + 1) * g.n + ix + 1] * ax * ay;
+    };
+    const h = [];
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) h.push(+at(-half + i * s, -half + j * s).toFixed(2));
+    return { n, step:s, h };
+  }
   if (EXPORT_TERRAIN && EXPORT_TERRAIN.h && EXPORT_TERRAIN.h.length) {
-    const TN = EXPORT_TERRAIN.n, TS = EXPORT_TERRAIN.step, TE = (TN - 1) * TS / 2;
+    const pbb = planModel(G).bbox;
+    const half = Math.min(60, Math.max(20, Math.max(Math.abs(pbb[0]), Math.abs(pbb[1]), Math.abs(pbb[2]), Math.abs(pbb[3])) + 15));
+    const FG = resampleGrid(EXPORT_TERRAIN, 0.25, half);
+    const TN = FG.n, TS = FG.step, TE = (TN - 1) * TS / 2;
     const bb = (G.rot - 180) * RAD, cb = Math.cos(bb), sb = Math.sin(bb);
     const PW = (E, N) => [E * cb - N * sb, E * sb + N * cb];
-    const HH = (a, c) => EXPORT_TERRAIN.h[c * TN + a];
+    const HH = (a, c) => FG.h[c * TN + a];
     const tf = [];
     for (let jj = 0; jj < TN - 1; jj++) for (let ii = 0; ii < TN - 1; ii++) {
       const E0 = -TE + ii * TS, N0 = -TE + jj * TS;
       const p00 = PW(E0, N0), p10 = PW(E0 + TS, N0), p11 = PW(E0 + TS, N0 + TS), p01 = PW(E0, N0 + TS);
       tf.push([[[p00[0], p00[1], HH(ii, jj)], [p10[0], p10[1], HH(ii + 1, jj)], [p11[0], p11[1], HH(ii + 1, jj + 1)], [p01[0], p01[1], HH(ii, jj + 1)]], [0, 0, 1]]);
     }
-    add('terrain', 'Terrain (Copernicus DEM grid)', 'AA-TERRAIN', tf, { mat:'AA_Terrain', grid:TN + 'x' + TN + ' at ' + TS + ' m' });
+    add('terrain', 'Terrain (Copernicus DEM, resampled ' + TS.toFixed(2) + ' m near field)', 'AA-TERRAIN', tf, { mat:'AA_Terrain', grid:TN + 'x' + TN + ' at ' + TS.toFixed(2) + ' m' });
   }
 
   /* a north arrow on the ground, for the tools that do not read north */
