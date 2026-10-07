@@ -3307,9 +3307,8 @@ function roofModel(G, RF) {
   const zones = zones0.map(z => ({ n:z.n, th:z.n === 0 ? 0 : z.th, t:Math.tan((z.n === 0 ? 0 : z.th) * RAD),
     a0:S0 + clamp(z.f0, 0, 1) * SL, a1:S0 + clamp(z.f1, 0, 1) * SL }));
   const parKey = RF.par && RF.par.on ? '|par' + (+RF.par.h || 0.6).toFixed(2) : '';
-  /* a parapet roof has no overhang: the eaves stay set but hidden while
-     the parapet stands on the walls, never poking out beneath it */
-  const bei = RF.bei && RF.bei.on && !(RF.par && RF.par.on) ? clamp(+RF.bei.d || 0, 0, 1) : 0;
+  /* with a parapet the eave reads as a cornice under it: set either way */
+  const bei = RF.bei && RF.bei.on ? clamp(+RF.bei.d || 0, 0, 1) : 0;
   const beiEnds = !RF.bei || RF.bei.ends !== false;
   const beiKey = bei > 0 ? '|bei' + bei.toFixed(2) + (beiEnds ? '' : '|nog') : '';
   const key = pl.key + '|' + H0 + '|' + axis + '|' + zones0.map(z => [z.f0, z.f1, z.n, z.th].join(',')).join(';') + parKey + beiKey;
@@ -3829,6 +3828,25 @@ const opaque = c => {
 function sunspaceWall(pl, f) {
   const reach = sg => sg.n[0] * (sg.a[0] + sg.b[0]) / 2 + sg.n[1] * (sg.a[1] + sg.b[1]) / 2;
   return pl.segs.filter(q => segFace(q) === f).reduce((p, q) => !p || reach(q) > reach(p) + 1e-6 || (Math.abs(reach(q) - reach(p)) < 1e-6 && q.len > p.len) ? q : p, null);
+}
+/** A pushed-out stretch of eave (a canopy over exterior space) resolved onto
+    its wall: facade + plan point in, wall interval + depth out. */
+function canopySpanFor(segs, c) {
+  if (!c || typeof c !== 'object') return null;
+  const f = ['S', 'N', 'E', 'W'].indexOf(c.f) >= 0 ? c.f : 'S';
+  const cands = segs.filter(sg => segFace(sg) === f && sg.len >= 1);
+  if (!cands.length) return null;
+  let sg = cands[0], bd = Infinity, bu = 0;
+  for (const q of cands) {
+    const t = [(q.b[0] - q.a[0]) / q.len, (q.b[1] - q.a[1]) / q.len];
+    const u = (c.x - q.a[0]) * t[0] + (c.y - q.a[1]) * t[1];
+    const uc = Math.max(0, Math.min(q.len, u));
+    const d = Math.hypot(q.a[0] + t[0] * uc - c.x, q.a[1] + t[1] * uc - c.y);
+    if (d < bd) { bd = d; sg = q; bu = uc; }
+  }
+  const w = clamp(+c.w || 3, 1, 8), w2 = Math.min(w, sg.len);
+  const u0 = clamp(bu - w2 / 2, 0, Math.max(0, sg.len - w2)), u1 = Math.min(sg.len, u0 + w2);
+  return { sg, u0, u1, d:clamp(+c.d || 1.5, 0.6, 4) };
 }
 /** Local facade key of an outline wall, from its outward normal. */
 const segFace = sg => sg.n[1] < 0 ? 'S' : sg.n[1] > 0 ? 'N' : sg.n[0] > 0 ? 'E' : 'W';
@@ -7434,7 +7452,7 @@ function buildRoof(host) {
       buildBeiUI(); roofDraw();
     });
     beiBox.appendChild(tgl);
-    if (on && RF.par && RF.par.on) beiBox.appendChild(el('p', { class:'hint', text:'Hidden while the parapet is on: a parapet roof has no overhang.' }));
+    if (on && RF.par && RF.par.on) beiBox.appendChild(el('p', { class:'hint', text:'With a parapet the eave reads as a cornice under it.' }));
     if (on) {
       beiDCtl = rangeCtl('Projection', 0, 1, 0.05, +RF.bei.d || 0.15, v => { RF.bei.d = v; roofDraw(); }, v => fmt(v, 2) + ' m');
       beiBox.appendChild(beiDCtl);
@@ -7445,6 +7463,34 @@ function buildRoof(host) {
     } else beiDCtl = null;
   }
   buildBeiUI();
+  rail.appendChild(el('div', { class:'gh', text:'Eave canopy' }));
+  const canBox = rail.appendChild(el('div'));
+  let canWCtl = null, canDCtl = null;
+  function buildCanopyUI() {
+    canBox.innerHTML = '';
+    canWCtl = canDCtl = null;
+    const on = !!(RF.bei && RF.bei.canopy);
+    const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
+      if (v === 1) {
+        RF.bei = RF.bei || { on:false, d:0.15, ends:true };
+        const M = roofModel(G, RF);
+        const all = M.pl.segs.filter(sg => sg.len >= 2);
+        const pick = all.filter(sg => segFace(sg) === 'S');
+        const sg = (pick.length ? pick : all).reduce((p, q) => q.len > p.len ? q : p, all[0]);
+        if (!sg) return;
+        RF.bei.canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5 };
+      } else if (RF.bei) RF.bei.canopy = null;
+      buildCanopyUI(); roofDraw();
+    });
+    canBox.appendChild(tgl);
+    if (!on) return;
+    const c = RF.bei.canopy;
+    canWCtl = rangeCtl('Canopy width', 1, 8, 0.1, clamp(+c.w || 3, 1, 8), v => { c.w = +v.toFixed(1); roofDraw(); }, v => fmt(v, 1) + ' m');
+    canDCtl = rangeCtl('Canopy depth', 0.6, 4, 0.05, clamp(+c.d || 1.5, 0.6, 4), v => { c.d = +v.toFixed(2); roofDraw(); }, v => fmt(v, 2) + ' m');
+    canBox.appendChild(canWCtl); canBox.appendChild(canDCtl);
+    canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space — drag its node along the wall and outward.' }));
+  }
+  buildCanopyUI();
   rail.appendChild(el('div', { class:'gh', text:'Chimney' }));
   const chimBox = rail.appendChild(el('div'));
   let chimXCtl = null, chimYCtl = null;
@@ -7708,6 +7754,22 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
           }
         }
       }
+      /* the eave canopy: one pushed-out stretch of eave over exterior space */
+      { const Mc = roofModel(G, RF), cpHit = canopySpanFor(Mc.pl.segs, RF.bei && RF.bei.canopy);
+        if (cpHit) {
+          const sg = cpHit.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, nz = sg.n, zc = Mc.H0 - 0.15;
+          const P = (u, v) => [sg.a[0] + tx * u + nz[0] * v, sg.a[1] + ty * u + nz[1] * v, zc];
+          const q = [P(cpHit.u0, 0), P(cpHit.u1, 0), P(cpHit.u1, cpHit.d), P(cpHit.u0, cpHit.d)];
+          const pq = q.map(p => proj(p[0], p[1], p[2]));
+          ctx.beginPath(); pq.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+          ctx.fillStyle = 'rgba(217,119,6,.22)'; ctx.fill();
+          stroke(ctx, '#D97706', 1.4); ctx.stroke();
+          const m = proj(sg.a[0] + tx * (cpHit.u0 + cpHit.u1) / 2 + nz[0] * cpHit.d, sg.a[1] + ty * (cpHit.u0 + cpHit.u1) / 2 + nz[1] * cpHit.d, zc);
+          ctx.beginPath(); ctx.arc(m[0], m[1], 7, 0, 6.284); ctx.fillStyle = '#fff'; ctx.fill();
+          stroke(ctx, '#D97706', 2); ctx.stroke();
+          ctx.fillStyle = '#D97706'; ctx.beginPath(); ctx.arc(m[0], m[1], 2.5, 0, 6.284); ctx.fill();
+        }
+      }
       /* the divisions between roof parts, draggable along the longest side */
       M.zones.slice(1).forEach(z => {
         const cx = M.axis === 'x' ? z.a0 : bb[0], cy = M.axis === 'x' ? bb[1] : z.a0;
@@ -7860,7 +7922,8 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       return csvRows([['Parameter', 'Value'],
       ['Roof (largest part)', ['flat', 'shed', 'gable', 'hip'][RF.n]], ['Pitch (°)', RF.n === 0 ? 0 : RF.th],
       ['Roof parts', RF.zones.map((z, i) => 'ABC'[i] + ':' + ['flat', 'shed', 'gable', 'hip'][z.n] + (z.n === 0 ? '' : ' ' + z.th + '°')).join(' | ')],
-      ['Parapet', RF.par && RF.par.on ? fmt(RF.par.h, 2) + ' m' : 'none'],       ['Eaves', RF.bei && RF.bei.on ? (RF.par && RF.par.on ? 'hidden under the parapet' : fmt(RF.bei.d, 2) + ' m' + (RF.bei.ends !== false ? '' : ' · flush gables')) : 'none'],
+      ['Parapet', RF.par && RF.par.on ? fmt(RF.par.h, 2) + ' m' : 'none'],       ['Eaves', RF.bei && RF.bei.on ? fmt(RF.bei.d, 2) + ' m' + (RF.bei.ends !== false ? '' : ' · flush gables') + (RF.par && RF.par.on ? ' · as cornice under the parapet' : '') : 'none'],
+      ['Eave canopy', RF.bei && RF.bei.canopy ? RF.bei.canopy.f + ' · ' + fmt(RF.bei.canopy.w, 1) + ' × ' + fmt(RF.bei.canopy.d, 2) + ' m' : 'none'],
       ['Chimney', RF.chim && RF.chim.on ? CHIMNEY_FAM[RF.chim.fam].name + ' at ' + fmt(RF.chim.x, 1) + ', ' + fmt(RF.chim.y, 1) + ' m · ' + fmt(chimEffH(RF.chim), 2) + ' m above roof' : 'none'],
       ['Plan form (from Site)', (G.form || 'rect') + (G.patio && G.patio.on && G.patio.ok !== false ? ' + patio' : '')],
       ['Winter solar ideal (°)', +idealW.toFixed(0)],
@@ -8181,6 +8244,13 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       rcv.style.cursor = 'grabbing';
       return;
     }
+    if (canopyAt(ev.clientX, ev.clientY)) {
+      ev.preventDefault();
+      cdrag = true;
+      try { rcv.setPointerCapture(ev.pointerId); } catch (err) {}
+      rcv.style.cursor = 'grabbing';
+      return;
+    }
     if (chimHandleAt(ev.clientX, ev.clientY)) {
       ev.preventDefault();
       chdrag = true;
@@ -8209,15 +8279,52 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     if (fdrag) { ev.preventDefault(); doFieldDrag(ev.clientX, ev.clientY, fdrag); return; }
     if (movedrag) { ev.preventDefault(); doFieldMove(ev.clientX, ev.clientY); return; }
     if (chdrag) { ev.preventDefault(); doChimDrag(ev.clientX, ev.clientY); return; }
+    if (cdrag) { ev.preventDefault(); doCanopyDrag(ev.clientX, ev.clientY); return; }
     if (ddiv >= 0) { ev.preventDefault(); doDivDrag(ev.clientX, ev.clientY); return; }
     if (!rdrag) {
-      rcv.style.cursor = fieldAt(ev.clientX, ev.clientY) ? 'move' : fieldBodyAt(ev.clientX, ev.clientY) ? 'move' : chimHandleAt(ev.clientX, ev.clientY) ? 'move' : divHandleAt(ev.clientX, ev.clientY) >= 0 ? 'ew-resize' : nearSlope(ev.clientX, ev.clientY) ? 'ns-resize' : 'grab';
+      rcv.style.cursor = canopyAt(ev.clientX, ev.clientY) ? 'move' : fieldAt(ev.clientX, ev.clientY) ? 'move' : fieldBodyAt(ev.clientX, ev.clientY) ? 'move' : chimHandleAt(ev.clientX, ev.clientY) ? 'move' : divHandleAt(ev.clientX, ev.clientY) >= 0 ? 'ew-resize' : nearSlope(ev.clientX, ev.clientY) ? 'ns-resize' : 'grab';
       return;
     }
     ev.preventDefault();
     doDrag(ev.clientX, ev.clientY);
   });
   let chdrag = false, chZ = 0;
+  const canopyAt = (clientX, clientY) => {
+    if (!roofPanel.W) return false;
+    const M = roofModel(G, RF), hit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy);
+    if (!hit) return false;
+    const FR = frameNow(), r = rcv.getBoundingClientRect();
+    const sg = hit.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, mx = (hit.u0 + hit.u1) / 2;
+    const q = projF(FR, sg.a[0] + tx * mx + sg.n[0] * hit.d, sg.a[1] + ty * mx + sg.n[1] * hit.d, M.H0 - 0.15);
+    return Math.hypot(clientX - r.left - q[0], clientY - r.top - q[1]) <= 14;
+  };
+  const doCanopyDrag = (clientX, clientY) => {
+    if (!cdrag || !roofPanel.W) return;
+    const c = RF.bei && RF.bei.canopy;
+    if (!c) return;
+    const M = roofModel(G, RF), FR = frameNow(), r = rcv.getBoundingClientRect();
+    const z = M.H0 - 0.15;
+    const q = camPick((x, y, zz) => projF(FR, x, y, zz), [0, 0, z], [1, 0, 0], [0, 1, 0], clientX - r.left, clientY - r.top);
+    if (!q) return;
+    let sg = null, bd = Infinity;
+    for (const s2 of M.pl.segs) {
+      if (s2.len < 1) continue;
+      const t = [(s2.b[0] - s2.a[0]) / s2.len, (s2.b[1] - s2.a[1]) / s2.len];
+      const u = (q[0] - s2.a[0]) * t[0] + (q[1] - s2.a[1]) * t[1];
+      const uc = Math.max(0, Math.min(s2.len, u));
+      const d = Math.hypot(s2.a[0] + t[0] * uc - q[0], s2.a[1] + t[1] * uc - q[1]);
+      if (d < bd) { bd = d; sg = s2; }
+    }
+    if (!sg) return;
+    const t = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
+    const u = clamp((q[0] - sg.a[0]) * t[0] + (q[1] - sg.a[1]) * t[1], 0, sg.len);
+    c.f = segFace(sg);
+    c.x = +(sg.a[0] + t[0] * u).toFixed(2); c.y = +(sg.a[1] + t[1] * u).toFixed(2);
+    c.d = +clamp((q[0] - sg.a[0]) * sg.n[0] + (q[1] - sg.a[1]) * sg.n[1], 0.6, 4).toFixed(2);
+    if (canDCtl) syncCtl(canDCtl, c.d, v => fmt(v, 2) + ' m');
+    roofDraw();
+  };
+  let cdrag = false;
   const chimGeo = () => {
     const ch = RF.chim;
     if (!ch || !ch.on || !isFinite(+ch.x) || !isFinite(+ch.y)) return null;
@@ -8257,7 +8364,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     if (chimYCtl) syncCtl(chimYCtl, RF.chim.y, v => fmt(v, 1) + ' m');
     roofDraw();
   };
-  const endDrag = () => { orbit.end(); rdrag = fdrag = false; movedrag = null; chdrag = false; if (ddiv >= 0) { ddiv = -1; buildRoofUI(); roofDraw(); } rcv.style.cursor = 'default'; };
+  const endDrag = () => { orbit.end(); rdrag = fdrag = false; movedrag = null; chdrag = false; if (cdrag) { cdrag = false; buildCanopyUI(); } if (ddiv >= 0) { ddiv = -1; buildRoofUI(); roofDraw(); } rcv.style.cursor = 'default'; };
   rcv.addEventListener('pointerup', endDrag);
   rcv.addEventListener('pointercancel', endDrag);
   zoomGesture(rcv, 'roof');
@@ -8789,6 +8896,11 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       glassSpans(f, u0, u1, x.sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
         const u = us[sp.ui], vv = u.door ? doorSpanV(u, head, k, G.fh) : unitSpanV(u, r.sill, head, k, G.fh);
         const rc = { w:sp.b - sp.a, h:Math.max(0.01, vv[1] - vv[0]), ov:[], fin:[], a:sp.a, b:sp.b, sg:x.sg, u0, u1, ui:sp.ui };
+        const cpC = RF.bei && RF.bei.canopy ? canopySpanFor(Mod().pl.segs, RF.bei.canopy) : null;
+        if (cpC && cpC.sg === x.sg) {
+          const c0 = Math.max(sp.a, cpC.u0), c1 = Math.min(sp.b, cpC.u1);
+          if (c1 - c0 > 0.05) rc.ov.push({ d:cpC.d, gap:Math.max(0, h0() - 0.15 - vv[1]), cover:(c1 - c0) / Math.max(0.05, sp.b - sp.a) });
+        }
         const evD = eaveDepth(MmE, H0E, beiE, x.sg, sp.a, sp.b);
         if (evD > 0.05) rc.ov.push({ d:evD, gap:Math.max(0, H0E - vv[1]), cover:1 });
         bg.ok.forEach(B => {
@@ -15325,6 +15437,14 @@ function exportModel() {
     add('terrain', 'Terrain (Copernicus DEM, resampled ' + TS.toFixed(2) + ' m near field)', 'AA-TERRAIN', tf, { mat:'AA_Terrain', grid:TN + 'x' + TN + ' at ' + TS.toFixed(2) + ' m' });
   }
 
+  { const c = RF.bei && RF.bei.canopy;
+    const hit = c ? canopySpanFor(planModel(G).segs, c) : null;
+    if (hit) {
+      const sg = hit.sg, t = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len], n = [sg.n[0], sg.n[1], 0], z = H0 - 0.15;
+      const P = (u, v) => [sg.a[0] + t[0] * u + n[0] * v, sg.a[1] + t[1] * u + n[1] * v, z];
+      add('shading', 'Eave canopy', 'AA-SHADING', [[[P(hit.u0, 0), P(hit.u1, 0), P(hit.u1, hit.d), P(hit.u0, hit.d)], n]], { device:'Canopy', mat:'AA_Shade' });
+    }
+  }
   /* a north arrow on the ground, for the tools that do not read north */
   const R0 = Math.hypot(L, D) / 2 + 3;
   els.push({ kind:'north', name:'North', layer:'AA-NORTH',
@@ -15783,6 +15903,10 @@ function applyStudy(o) {
   ROOF.th = ROOF.n === 0 ? 0 : clamp(Math.round(fin(R0.th, 30)), 5, 75);
   ROOF.col = typeof R0.col === 'string' ? R0.col : null;
   ROOF.sol = fixSolFields(R0.sol);   ROOF.bei = { on:!!(R0.bei && R0.bei.on), d:clamp(fin(R0.bei && R0.bei.d, 0.15), 0, 1), ends:!R0.bei || R0.bei.ends !== false };
+  if (R0.bei && R0.bei.canopy && typeof R0.bei.canopy === 'object') {
+    const C0 = R0.bei.canopy;
+    ROOF.bei.canopy = { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:isFinite(+C0.x) ? +C0.x : 0, y:isFinite(+C0.y) ? +C0.y : 0, w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4) };
+  }
   if (Array.isArray(R0.zones) && R0.zones.length && R0.zones.length <= 3) {
     const zs = R0.zones.filter(z => z && [0, 1, 2, 3].indexOf(z.n) >= 0 && isFinite(+z.f0) && isFinite(+z.f1) && +z.f1 > +z.f0);
     ROOF.zones = zs.length ? zs.map(z => ({ f0:+z.f0, f1:+z.f1, n:z.n, th:z.n === 0 ? 0 : clamp(Math.round(fin(z.th, 30)), 5, 75) })) : undefined;
@@ -18027,7 +18151,7 @@ Object.assign(PT, {
   "Popular here": "Popular aqui",
   "Wall finishes": "Acabamentos de parede",
   "Wall module": "Módulo da parede",
-  "Hidden while the parapet is on: a parapet roof has no overhang.": "Oculto com a platibanda ligada: uma cobertura com platibanda não tem beirado.",
+  "With a parapet the eave reads as a cornice under it.": "Com platibanda, o beirado lê-se como cornija por baixo dela.",
   "Openings": "Aberturas",
   "Glass": "Vidro",
   "Doors": "Portas",
@@ -18071,7 +18195,11 @@ Object.assign(PT, {
   "Off": "Não",
   "On": "Sim",
   "Parapet": "Platibanda",
-  "Eaves": "Beirado", "Projection": "Projeção", "Gable ends": "Empenas",
+  "Eaves": "Beirado", "Eave canopy": "Pala do beirado",
+  "Canopy width": "Largura da pala",
+  "Canopy depth": "Profundidade da pala",
+  "Push one stretch of eave further out to roof an exterior space — drag its node along the wall and outward.": "Avance um tramo do beirado para cobrir um espaço exterior — arraste o seu ponto ao longo da parede e para fora.",
+  "Projection": "Projeção", "Gable ends": "Empenas",
   "Height": "Altura",
   "Chimney": "Chaminé",
   "Side pitch": "Inclinação das faces",
