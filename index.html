@@ -923,7 +923,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.104.0',
+  version:     '1.105.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -3621,7 +3621,7 @@ function roofModel(G, RF) {
     return { zi, alongX:ax, a0:ax ? r0[0] : r0[1], a1:ax ? r0[2] : r0[3], c0:ax ? r0[1] : r0[0], w:s.ridge.w,
       c:s.ridge.c, z:H0 + z.t * z.rg * s.ridge.w, rg:z.rg, th:z.th, rear:rearPitch(z.th, z.rg) };
   });
-  const val = { key, pl, H0, t:topT, th:topTh, n:topN, pieces, walls, steps, paras, paraArea, at, zOf, roofArea, roofVol, ridge, ridges,
+  const val = { key, pl, H0, bei, t:topT, th:topTh, n:topN, pieces, walls, steps, paras, paraArea, at, zOf, roofArea, roofVol, ridge, ridges,
     zones:zones.map((z, zi) => ({ n:z.n, th:z.th, rg:z.rg, rear:z.n === 2 ? rearPitch(z.th, z.rg) : z.th, area:zoneArea[zi] || 0, a0:z.a0, a1:z.a1 })),
     mixed, axis, flats:strips.filter(s => s.n === 0).map(s => s.r),
     zAt:(x, y) => { const r0 = at(x, y); return r0 ? H0 + r0.d : null; },
@@ -3884,10 +3884,11 @@ function sunspaceWall(pl, f) {
 }
 /** A pushed-out stretch of eave (a canopy over exterior space) resolved onto
     its wall: facade + plan point in, wall interval + depth out. Its root
-    hangs 0.15 m under the eave line (H0); a pitch falls it outward, the
-    outer edge kept 2.0 m above the ground (p is the pitch as built). */
+    hangs 0.15 m under the eave line (H0), or under the eave's own edge
+    where the roof Mr runs out past the wall; a pitch falls it outward,
+    the outer edge kept 2.0 m above the ground (p is the pitch as built). */
 const CANOPY_CLEAR = 2.0;
-function canopySpanFor(segs, c, H0) {
+function canopySpanFor(segs, c, H0, Mr) {
   if (!c || typeof c !== 'object') return null;
   const f = ['S', 'N', 'E', 'W'].indexOf(c.f) >= 0 ? c.f : 'S';
   const cands = segs.filter(sg => segFace(sg) === f && sg.len >= 1);
@@ -3902,7 +3903,11 @@ function canopySpanFor(segs, c, H0) {
   }
   const w = clamp(+c.w || 3, 1, 8), w2 = Math.min(w, sg.len);
   const u0 = clamp(bu - w2 / 2, 0, Math.max(0, sg.len - w2)), u1 = Math.min(sg.len, u0 + w2);
-  const d = clamp(+c.d || 1.5, 0.6, 4), z0 = (isFinite(+H0) ? +H0 : 3) - 0.15;
+  const d = clamp(+c.d || 1.5, 0.6, 4);
+  /* an alpendre hangs under the eave's edge, never through it: where the
+     roof runs out past this wall, the canopy's root drops below that edge */
+  let z0 = (isFinite(+H0) ? +H0 : 3) - 0.15;
+  if (Mr && Mr.zAt && Mr.bei > 0) { const ev = eaveEdge(Mr, Mr.H0, Mr.bei, sg, u0, u1); if (ev.d > 0.05) z0 = Math.min(z0, ev.z - 0.05); }
   const dz = Math.min(d * Math.tan(clamp(+c.p || 0, 0, 45) * RAD), Math.max(0, z0 - CANOPY_CLEAR));
   return { sg, u0, u1, d, z0, z1:z0 - dz, p:Math.atan2(dz, d) / RAD };
 }
@@ -3914,6 +3919,32 @@ function canopyPts(hit) {
   const P = (u, v) => [sg.a[0] + tx * u + n[0] * v, sg.a[1] + ty * u + n[1] * v, hit.z0 - (hit.z0 - hit.z1) * v / hit.d];
   return { P, quad:[P(hit.u0, 0), P(hit.u1, 0), P(hit.u1, hit.d), P(hit.u0, hit.d)],
     mid:P((hit.u0 + hit.u1) / 2, hit.d), end:P(hit.u1, hit.d) };
+}
+/** The canopy's timber frame, as an alpendre is built: past 0.5 m of depth
+    it no longer hangs off the wall but stands on posts — 0.15 m square,
+    set 0.25 m in from the ends and from the outer edge, so the beam and
+    the tiles run out past them as an alpendre's do, no span between posts
+    over 3 m (one more post for every 3 m) — under a 0.12 × 0.18 m beam
+    (frechal) that carries the tiles. World boxes as [x0, y0, z0, x1, y1, z1]. */
+const CANOPY_POST = 0.15, CANOPY_SPAN = 3, CANOPY_BEAM = [0.12, 0.18];
+function canopyFrame(hit) {
+  if (!hit || !(hit.d > 0.5)) return { posts:[], beam:null, n:0 };
+  const sg = hit.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, nv = sg.n;
+  const inset = 0.25, w = hit.u1 - hit.u0, N = Math.ceil(Math.max(0, w - 2 * inset) / CANOPY_SPAN - 1e-9) + 1, nC = hit.d - inset;
+  const zTop = hit.z0 - (hit.z0 - hit.z1) * nC / hit.d - 0.03, zBot = zTop - CANOPY_BEAM[1];
+  const at = (u, n) => [sg.a[0] + tx * u + nv[0] * n, sg.a[1] + ty * u + nv[1] * n];
+  const box = (p, q, z0, z1) => [Math.min(p[0], q[0]), Math.min(p[1], q[1]), z0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), z1];
+  const h = CANOPY_POST / 2, bw = CANOPY_BEAM[0] / 2;
+  const posts = Array.from({ length:N }, (_, i) => hit.u0 + inset + (w - 2 * inset) * i / (N - 1))
+    .map(u => box(at(u - h, nC - h), at(u + h, nC + h), 0, zBot));
+  return { posts, beam:box(at(hit.u0, nC - bw), at(hit.u1, nC + bw), zBot, zTop), n:N, span:(w - 2 * inset) / (N - 1) };
+}
+/** The side faces of a world box that a viewer sees, as [quad, outward normal] pairs. */
+function boxSides(B) {
+  const [x0, y0, z0, x1, y1, z1] = B;
+  return [[[[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, -1, 0]], [[[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], [1, 0, 0]],
+    [[[x1, y1, z0], [x0, y1, z0], [x0, y1, z1], [x1, y1, z1]], [0, 1, 0]], [[[x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1]], [-1, 0, 0]],
+    [[[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1]], [[[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]], [0, 0, -1]]];
 }
 /** Local facade key of an outline wall, from its outward normal. */
 const segFace = sg => sg.n[1] < 0 ? 'S' : sg.n[1] > 0 ? 'N' : sg.n[0] > 0 ? 'E' : 'W';
@@ -4006,23 +4037,27 @@ function devSpanPad(f, sg, gA, gB) {
     until the roof lets go, keeping only eave-high cover — a low wing roof
     under an upper wall is not shade. Zero where the wall stands flush, so
     gable ends off, junctions and wings measure themselves. */
-function eaveDepth(Mm, H0, bei, sg, a, b) {
-  if (!Mm || !Mm.zAt || !(bei > 0)) return 0;
+function eaveDepth(Mm, H0, bei, sg, a, b) { return eaveEdge(Mm, H0, bei, sg, a, b).d; }
+/** The same march, with the height of the eave's outer edge where it lets
+    go: an eave runs out down its own slope, so it shades from below the
+    wall top — the steeper the slope over the window, the lower its edge. */
+function eaveEdge(Mm, H0, bei, sg, a, b) {
+  if (!Mm || !Mm.zAt || !(bei > 0)) return { d:0, z:H0 };
   const dx = (sg.b[0] - sg.a[0]) / sg.len, dy = (sg.b[1] - sg.a[1]) / sg.len, n = sg.n;
   const span = Math.max(0, b - a);
   const us = span < 0.6 ? [(a + b) / 2] : [a + span * 0.25, (a + b) / 2, a + span * 0.75];
-  let best = Infinity;
+  let best = Infinity, bz = H0;
   for (const u of us) {
     const wx = sg.a[0] + dx * u, wy = sg.a[1] + dy * u;
-    let edge = 0;
+    let edge = 0, ez = H0;
     for (let t = 0.05; t <= 1.35; t += 0.05) {
       const z = Mm.zAt(wx + n[0] * t, wy + n[1] * t);
       if (z === null || z === undefined || z < H0 - 1.5) break;
-      edge = t;
+      edge = t; ez = z;
     }
-    if (edge < best) best = edge;
+    if (edge < best) { best = edge; bz = ez; }
   }
-  return best === Infinity ? 0 : Math.max(0, best - 0.025);
+  return best === Infinity ? { d:0, z:H0 } : { d:Math.max(0, best - 0.025), z:bz };
 }
 /** The device span of one wall: the switched-on glass as laid, plus the
     chosen extra width on each viewer end — the slab and the fins live
@@ -4045,7 +4080,12 @@ function faceFins(f) {
   const o = OPEN[f] || {}, n = Math.max(0, Math.min(6, o.finN || 0));
   if (!Array.isArray(o.finU) || o.finU.length !== n) {
     const lo = o.finSide === 'right' ? 0.5 : 0, hi = o.finSide === 'left' ? 0.5 : 1;
-    o.finU = Array.from({ length:n }, (_, i) => n === 1 ? (o.finSide === 'right' ? 1 : 0) : lo + (hi - lo) * (i / (n - 1)));
+    /* stations run from each wall's start; on the north and west sides the
+       start stands on the viewer's right (the plan's walls run west to east
+       and south to north), so Left and Right are read from outside, as the
+       overhang's extra widths already are */
+    const flip = f === 'N' || f === 'W';
+    o.finU = Array.from({ length:n }, (_, i) => n === 1 ? (o.finSide === 'right' ? 1 : 0) : lo + (hi - lo) * (i / (n - 1))).map(t => flip ? 1 - t : t);
   }
   o.finU = o.finU.map(t => isFinite(+t) ? Math.max(-0.5, Math.min(1.5, +t)) : 0);
   return o.finU;
@@ -7577,10 +7617,11 @@ function buildRoof(host) {
   let canWCtl = null, canDCtl = null, canPCtl = null, canSays = null;
   /** The canopy as built, in words: its pitch and the outer edge's height. */
   const canopyWords = () => {
-    const hit = canopySpanFor(roofModel(G, RF).pl.segs, RF.bei && RF.bei.canopy, G.fl * G.fh);
+    const hit = canopySpanFor(roofModel(G, RF).pl.segs, RF.bei && RF.bei.canopy, G.fl * G.fh, roofModel(G, RF));
     if (!canSays || !hit) return;
-    const held = (+RF.bei.canopy.p || 0) > hit.p + 0.05;
-    canSays.textContent = t('Outer edge') + ' ' + fmt(hit.z1, 2) + ' m ' + t('above the ground') + (held ? ' · ' + t('pitch held at') + ' ' + fmt(hit.p, 0) + '° ' + t('to keep it 2.0 m clear') : '');
+    const held = (+RF.bei.canopy.p || 0) > hit.p + 0.05, fr = canopyFrame(hit);
+    canSays.textContent = t('Outer edge') + ' ' + fmt(hit.z1, 2) + ' m ' + t('above the ground') + (held ? ' · ' + t('pitch held at') + ' ' + fmt(hit.p, 0) + '° ' + t('to keep it 2.0 m clear') : '')
+      + ' · ' + (fr.n ? fr.n + ' ' + t('timber posts') + ', ' + t('spans of') + ' ' + fmt(fr.span, 2) + ' m' : t('hung from the wall, no posts up to 0.5 m'));
   };
   function buildCanopyUI() {
     canBox.innerHTML = '';
@@ -7594,20 +7635,20 @@ function buildRoof(host) {
         const pick = all.filter(sg => segFace(sg) === 'S');
         const sg = (pick.length ? pick : all).reduce((p, q) => q.len > p.len ? q : p, all[0]);
         if (!sg) return;
-        RF.bei.canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:0 };
+        RF.bei.canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:15 };
       } else if (RF.bei) RF.bei.canopy = null;
       buildCanopyUI(); roofDraw();
     });
     canBox.appendChild(tgl);
     if (!on) return;
     const c = RF.bei.canopy;
-    canWCtl = rangeCtl('Canopy width', 1, 8, 0.1, clamp(+c.w || 3, 1, 8), v => { c.w = +v.toFixed(1); roofDraw(); }, v => fmt(v, 1) + ' m');
+    canWCtl = rangeCtl('Canopy width', 1, 8, 0.1, clamp(+c.w || 3, 1, 8), v => { c.w = +v.toFixed(1); canopyWords(); roofDraw(); }, v => fmt(v, 1) + ' m');
     canDCtl = rangeCtl('Canopy depth', 0.6, 4, 0.05, clamp(+c.d || 1.5, 0.6, 4), v => { c.d = +v.toFixed(2); canopyWords(); roofDraw(); }, v => fmt(v, 2) + ' m');
     canPCtl = rangeCtl('Canopy pitch', 0, 45, 1, clamp(+c.p || 0, 0, 45), v => { c.p = Math.round(v); canopyWords(); roofDraw(); }, v => fmt(v, 0) + '°');
     canBox.appendChild(canWCtl); canBox.appendChild(canDCtl); canBox.appendChild(canPCtl);
     canSays = canBox.appendChild(el('p', { class:'hint' }));
     canopyWords();
-    canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level.' }));
+    canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.' }));
   }
   buildCanopyUI();
   rail.appendChild(el('div', { class:'gh', text:'Chimney' }));
@@ -7850,6 +7891,21 @@ function buildRoof(host) {
         const k = RF.n === 0 ? 1 : 0.87 + 0.11 * f.b + 0.05 * f.a;
         faces.push({ pts:pc.poly.map(q => [q[0], q[1], M.zOf(f, q[0], q[1])]), fill:opaque(roofFill(0.2 + 0.3 * (1 - k), k)), pc });
       });
+      /* the eave canopy as an alpendre: a tiled lean-to in the roof's
+         colour, and past 0.5 m its timber posts and beam */
+      { const cpH = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, H0, M);
+        if (cpH) {
+          const n = cpH.sg.n, sp = Math.sin(cpH.p * RAD), cp = Math.cos(cpH.p * RAD);
+          if (camSees(A, n[0] * sp, n[1] * sp, cp)) {
+            const k = 0.87 - 0.11 * n[1] - 0.05 * n[0];
+            faces.push({ pts:canopyPts(cpH).quad, fill:opaque(roofFill(0.2 + 0.3 * (1 - k), k)), cnp:cpH });
+          }
+          const fr = canopyFrame(cpH);
+          fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
+            if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) faces.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26' });
+          }));
+        }
+      }
       const depth = F => F.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / F.pts.length;
       pushImportFaces(faces);
       pushChimPar(faces, M);
@@ -7857,6 +7913,16 @@ function buildRoof(host) {
         if (F.balc) { desk.path(F.pts.map(P3), true); balcFace(ctx, F.balc, P3); return; }
         if (F.import) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); return; }
 if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
+        if (F.cnp) {
+          /* the canopy's tiles: a channel every 0.25 m down its fall, and
+             the beirado's broken line of tile ends along its edge */
+          const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill();
+          const CP = canopyPts(F.cnp), w = F.cnp.u1 - F.cnp.u0, nT = Math.max(2, Math.round(w / 0.25));
+          stroke(ctx, 'rgba(20,23,26,.22)', 0.8);
+          for (let i = 1; i < nT; i++) { const u = F.cnp.u0 + w * i / nT, a = proj(...CP.P(u, 0)), b = proj(...CP.P(u, F.cnp.d)); seg(ctx, a[0], a[1], b[0], b[1]); }
+          stroke(ctx, CH.ink, 1.4); ctx.stroke(); desk.path(p, true);
+          return;
+        }
         const p = pathOf(F.pts);
         ctx.fillStyle = F.fill; ctx.fill();
         if (F.pc) {
@@ -7888,12 +7954,13 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       /* where the nodes stand on the canvas, for the page's own checks */
       const nodesOut = { canopy:null, ridge:[] };
       let canopyTag = null;
-      { const cpHit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, H0);
+      { const cpHit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, H0, M);
         if (cpHit) {
           const CP = canopyPts(cpHit);
           const pq = CP.quad.map(p => proj(p[0], p[1], p[2]));
+          /* the tiles and posts are drawn among the model's faces; here only
+             the amber outline that says it can be dragged */
           ctx.beginPath(); pq.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
-          ctx.fillStyle = 'rgba(217,119,6,.22)'; ctx.fill();
           stroke(ctx, '#D97706', 1.4); ctx.stroke();
           /* the round node moves it (along the wall, outward); the square
              one at its end widens it */
@@ -8080,8 +8147,10 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       ['Roof parts', RF.zones.map((z, i) => 'ABC'[i] + ':' + ['flat', 'shed', 'gable', 'hip'][z.n] + (z.n === 0 ? '' : ' ' + z.th + '°')
         + (M.ridges[i] && Math.abs(M.ridges[i].rg - 0.5) > 1e-3 ? '/' + fmt(M.ridges[i].rear, 1) + '° · ridge at ' + Math.round(M.ridges[i].rg * 100) + '%' : '')).join(' | ')],
       ['Parapet', RF.par && RF.par.on ? fmt(RF.par.h, 2) + ' m' : 'none'],       ['Eaves', RF.bei && RF.bei.on ? fmt(RF.bei.d, 2) + ' m' + (RF.bei.ends !== false ? '' : ' · flush gables') + (RF.par && RF.par.on ? ' · as cornice under the parapet' : '') : 'none'],
-      ['Eave canopy', (() => { const cH = RF.bei && RF.bei.canopy ? canopySpanFor(M.pl.segs, RF.bei.canopy, M.H0) : null;
-        return cH ? RF.bei.canopy.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '° · outer edge ' + fmt(cH.z1, 2) + ' m' : 'none'; })()],
+      ['Eave canopy', (() => { const cH = RF.bei && RF.bei.canopy ? canopySpanFor(M.pl.segs, RF.bei.canopy, M.H0, M) : null;
+        const fr = canopyFrame(cH);
+        return cH ? RF.bei.canopy.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '° · outer edge ' + fmt(cH.z1, 2) + ' m'
+          + (fr.n ? ' · ' + fr.n + ' timber posts, spans ' + fmt(fr.span, 2) + ' m' : ' · no posts') : 'none'; })()],
       ['Chimney', RF.chim && RF.chim.on ? CHIMNEY_FAM[RF.chim.fam].name + ' at ' + fmt(RF.chim.x, 1) + ', ' + fmt(RF.chim.y, 1) + ' m · ' + fmt(chimEffH(RF.chim), 2) + ' m above roof' : 'none'],
       ['Plan form (from Site)', (G.form || 'rect') + (G.patio && G.patio.on && G.patio.ok !== false ? ' + patio' : '')],
       ['Winter solar ideal (°)', +idealW.toFixed(0)],
@@ -8471,7 +8540,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       'width' (square, the outer corner), or null — the nearer one wins. */
   const canopyAt = (clientX, clientY) => {
     if (!roofPanel.W) return null;
-    const M = roofModel(G, RF), hit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, M.H0);
+    const M = roofModel(G, RF), hit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, M.H0, M);
     if (!hit) return null;
     const FR = frameNow(), r = rcv.getBoundingClientRect(), CP = canopyPts(hit);
     const dist = p => { const q = projF(FR, p[0], p[1], p[2]); return Math.hypot(clientX - r.left - q[0], clientY - r.top - q[1]); };
@@ -8489,7 +8558,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     if (!c) return;
     const M = roofModel(G, RF), FR = frameNow(), r = rcv.getBoundingClientRect();
     const pickAt = z => camPick((x, y, zz) => projF(FR, x, y, zz), [0, 0, z], [1, 0, 0], [0, 1, 0], clientX - r.left, clientY - r.top);
-    const hit0 = canopySpanFor(M.pl.segs, c, M.H0);
+    const hit0 = canopySpanFor(M.pl.segs, c, M.H0, M);
     if (!hit0) return;
     if (cdrag === 'width') {
       const q = pickAt(hit0.z1);
@@ -8500,6 +8569,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       const uc = hit0.u0 + c.w / 2;
       c.x = +(sg.a[0] + t[0] * uc).toFixed(2); c.y = +(sg.a[1] + t[1] * uc).toFixed(2);
       if (canWCtl) syncCtl(canWCtl, c.w, v => fmt(v, 1) + ' m');
+      canopyWords();
       roofDraw();
       return;
     }
@@ -8521,7 +8591,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       const u = clamp((q[0] - sg.a[0]) * t[0] + (q[1] - sg.a[1]) * t[1], 0, sg.len);
       got = { f:segFace(sg), x:+(sg.a[0] + t[0] * u).toFixed(2), y:+(sg.a[1] + t[1] * u).toFixed(2),
         d:+clamp((q[0] - sg.a[0]) * sg.n[0] + (q[1] - sg.a[1]) * sg.n[1], 0.6, 4).toFixed(2) };
-      const h2 = canopySpanFor(M.pl.segs, Object.assign({}, c, got), M.H0);
+      const h2 = canopySpanFor(M.pl.segs, Object.assign({}, c, got), M.H0, M);
       if (!h2 || Math.abs(h2.z1 - z) < 0.005) break;
       z = h2.z1;
     }
@@ -8871,7 +8941,7 @@ function buildOpenings(host) {
   const rwLine = el('span', { class:'pill empty' });
 
   host.appendChild(hint('open-shading',
-    'A horizontal overhang cuts the high summer sun on equator-facing glass, using the same profile-angle geometry as the roof pitch on the previous tab (Olgyay, pp.79–80; Lechner, pp.249–253). East and west glass gets low, near-level morning and evening sun that an overhang barely touches — vertical fins address it instead: Olgyay’s own shading-coefficient table gives fixed vertical fins on east/west walls about 0.31 (i.e. cutting roughly two-thirds of the unshaded gain), against about 0.20–0.25 for a continuous south overhang and 0.10–0.15 for movable horizontal louvres (pp.70–71) — fins genuinely earn their keep on the low, oblique east and west sun, west more than east once afternoon heat is added on top. Lechner still notes horizontal devices outperform fins even there, and that fins mainly suit the equator-side of an oblique facade (pp.255–259); on a due-south wall a fin fails only at the single moment the sun sits exactly perpendicular to the glass — solar noon — and keeps cutting the oblique morning and afternoon sun the rest of the day, so its contribution there can be substantial too, just covering different hours than an overhang does. Several shallower louvres or several narrower fins cut the same angle as one deep device while blocking less of the view — an eggcrate is the two stacked together, not added twice (DeKay &amp; Brown, Strategy 91, pp.248–249). Both sit directly on the opening: a single overhang rides the head, several louvres spread down across the full glazing top to bottom, and fins run left to right across whichever width is chosen — never floating clear of the window itself. The roof eave counts from the start as an overhang at the wall top, measured past each window — extend it too far and it also blocks the low winter sun, which the score below counts against it. In a heating-led climate a good overhang discriminates by season — cutting the high June sun while still admitting the low December sun that offsets the heating bill — so the shading score below rewards that gap rather than sheer depth: a device deep enough to block summer and winter equally scores no better than none at all.'));
+    'A horizontal overhang cuts the high summer sun on equator-facing glass, using the same profile-angle geometry as the roof pitch on the previous tab (Olgyay, pp.79–80; Lechner, pp.249–253). East and west glass gets low, near-level morning and evening sun that an overhang barely touches — vertical fins address it instead: Olgyay’s own shading-coefficient table gives fixed vertical fins on east/west walls about 0.31 (i.e. cutting roughly two-thirds of the unshaded gain), against about 0.20–0.25 for a continuous south overhang and 0.10–0.15 for movable horizontal louvres (pp.70–71) — fins genuinely earn their keep on the low, oblique east and west sun, west more than east once afternoon heat is added on top. Lechner still notes horizontal devices outperform fins even there, and that fins mainly suit the equator-side of an oblique facade (pp.255–259); on a due-south wall a fin fails only at the single moment the sun sits exactly perpendicular to the glass — solar noon — and keeps cutting the oblique morning and afternoon sun the rest of the day, so its contribution there can be substantial too, just covering different hours than an overhang does. Several shallower louvres or several narrower fins cut the same angle as one deep device while blocking less of the view — an eggcrate is the two stacked together, not added twice (DeKay &amp; Brown, Strategy 91, pp.248–249). Both sit directly on the opening: a single overhang rides the head, several louvres spread down across the full glazing top to bottom, and fins run left to right across whichever width is chosen — never floating clear of the window itself. The roof eave counts from the start, measured past each window and running out down its own slope — a steeper slope over the window drops its edge lower, so pushing a gable’s ridge aside on Roof changes the shade under it — and so do the eave canopy at its pitch and the balconies set on Site. The score samples each window’s glass point by point and tests each point’s ray to the sun against every device as drawn, hour by hour from sunrise to sunset, each hour weighed by the beam it brings to the glass — a clear-sky beam (Meinel’s air-mass fit) times the cosine of incidence — on the 21st of June to September, the SCE’s cooling season, and of November to February, the heart of the heating season. Extend a device too far and it also blocks the low winter sun, which the score counts against it. In a heating-led climate a good overhang discriminates by season — cutting the high summer sun while still admitting the low winter sun that offsets the heating bill — so the shading score below rewards that gap rather than sheer depth: a device deep enough to block summer and winter equally scores no better than none at all.'));
 
   /* --- the sunspace, right of the model, under the shading --------------- */
   const cSunOn = checkCtl('Attach a sunspace', SUNSP.on, v => { SUNSP.on = v; refreshOpenings(); });
@@ -8982,7 +9052,7 @@ function buildOpenings(host) {
     'Daylight and winter sun from above: glass on the slope facing the main facade earns its keep where the climate leans heating and overheats where it leans cooling; glass on the opposite slope gives soft diffuse light with little gain either way. Each slope is the roof’s own largest plane facing that way — the slope facing the main facade is the one the Roof tab collects on, so each glazed square metre there is one less for collectors. A slope the roof does not have takes no windows. Rows centre on the widest run of their slope; drag a row’s dot to slide it up or down the slope, or, on a flat roof, along it. Windows on a slope turned away from the camera draw dashed at their true places.'));
 
   host.appendChild(hint('open-accuracy',
-    'This tab sizes glazing and shading the way a first design pass would — geometric rules of thumb, not a simulation. It does not model diffuse or reflected light, glare, internal or solar heat gain, or a real sky, and the shading figure below is averaged over a fixed set of daytime hours on 21 June and 21 December only, not the whole year or an actual weather file. Olgyay himself called his shading coefficients "approximate values" (p.67); Lechner recommends checking any shading design against a physical model (p.251); Ching &amp; Shapiro note that optimal glazing sizing "should be calculated by computer simulation" (p.101). A value outside the coloured range is not forbidden — some briefs need it — but treat it as a flag to justify, not a default.'));
+    'This tab sizes glazing and shading the way a first design pass would — geometric rules of thumb, not a simulation. It does not model diffuse or reflected light, glare, internal or solar heat gain, or a real sky, and the shading figure below is a clear-sky beam average over the whole hours of the 21st of each month of June to September and of November to February, not the whole year or an actual weather file — nor is it the SCE’s own shading factor (Fh·Fo·Ff), which the Manual SCE reads from its tables. Olgyay himself called his shading coefficients "approximate values" (p.67); Lechner recommends checking any shading design against a physical model (p.251); Ching &amp; Shapiro note that optimal glazing sizing "should be calculated by computer simulation" (p.101). A value outside the coloured range is not forbidden — some briefs need it — but treat it as a flag to justify, not a default.'));
 
   function syncFaceCtls() {
     segSet(cFace, curFace);
@@ -9018,11 +9088,11 @@ function buildOpenings(host) {
     if (n === 1) return [rect.v1];
     return Array.from({ length:n }, (_, i) => rect.v0 + (rect.v1 - rect.v0) * (i / (n - 1)));
   }
-  /** One wall's windows, one per storey, each with its own devices, in world metres. */
-  const winGeo = (sg, w) => {
-    const o = OPEN[w.f], n = sg.n;
-    const off = (p, d) => [p[0] + n[0] * d, p[1] + n[1] * d, p[2]];
-    const devs = [], glass = [], sel = [], fins = [], lat = [];
+  /** Where one wall's band carries its devices: along the wall (x0–x1,
+      the glass they serve plus the extra widths) and up it (v0–v1, from
+      the lowest sill to the highest head they serve) — one place for the
+      drawing, the export and the shading score. */
+  function devBand(sg, w) {
     const uus = OPEN[w.f] && OPEN[w.f].units;
     /* the devices shade the glass wherever the student pushed it, not
        just the band it was born in */
@@ -9034,7 +9104,7 @@ function buildOpenings(host) {
     const dSpan = useSelW ? allSpans.filter(sp => sp.ui === selUiW) : allSpans;
     const gAW = dSpan.length ? Math.min(...dSpan.map(s => s.a)) : bw0;
     const gBW = dSpan.length ? Math.max(...dSpan.map(s => s.b)) : bw1;
-    const dx = devSpanPad(w.f, sg, gAW, gBW), dx0 = dx[0], dx1 = dx[1];
+    const dx = devSpanPad(w.f, sg, gAW, gBW);
     /* the devices shade the facade as composed — band plus wherever the
        glass was pushed, up or along — not where the band was born */
     let dv0 = Infinity, dv1 = -Infinity;
@@ -9047,6 +9117,15 @@ function buildOpenings(host) {
         dv0 = Math.min(dv0, vv[0]); dv1 = Math.max(dv1, vv[1]);
       });
     });
+    return { x0:dx[0], x1:dx[1], v0:dv0, v1:dv1 };
+  }
+  /** One wall's windows, one per storey, each with its own devices, in world metres. */
+  const winGeo = (sg, w) => {
+    const o = OPEN[w.f], n = sg.n;
+    const off = (p, d) => [p[0] + n[0] * d, p[1] + n[1] * d, p[2]];
+    const devs = [], glass = [], sel = [], fins = [], lat = [];
+    const uus = OPEN[w.f] && OPEN[w.f].units;
+    const bd = devBand(sg, w), dx0 = bd.x0, dx1 = bd.x1, dv0 = bd.v0, dv1 = bd.v1;
     w.rows.forEach((r, k) => {
       const floor = r.sill - o.sillZ;
       const rect = { u0:w.uc - w.w / 2, u1:w.uc + w.w / 2, v0:r.sill, v1:Math.min(r.head, h0()) };
@@ -9108,120 +9187,152 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
     return { wall, built, eff:wall > 0 ? built / wall : 0, per };
   }
 
-  /** Average fraction of the sun a side's own overhang and fins keep off its
-      windows across a day, by the profile-angle / wall-solar-azimuth method
-      (Olgyay, pp.79–80; Lechner, pp.249–259) — geometric, not a simulation.
-      The wall's azimuth is the way it really faces once the plan is turned
-      on Site. Averaged across hours spaced symmetrically either side of
-      solar noon — at noon alone an east or west wall has the sun exactly
-      along it, and a fin earns its keep only on the oblique sun either side —
-      and across the side's windows, weighed by their glass. Olgyay's own
-      shading-coefficient table gives vertical fixed fins on east/west walls
-      about 0.31, against about 0.20–0.25 for a continuous south overhang and
-      0.10–0.15 for movable horizontal louvres (pp.70–71). Called at 21 June
-      (172) for the summer test and 21 December (355) for the winter one. */
-  const SHADE_SAMPLE_OFFSETS = [-5,-4,-3,-2,-1,0,1,2,3,4,5];   // hours either side of solar noon
-  function shadeEffectiveness(f, doy) {
-    const o = OPEN[f], wallAz = faceAz(f), bg = balcGeo(G);
-    /* each window storey by storey, with the balconies set on Site over it:
-       a projecting balcony one storey up is an overhang over the part of the
-       window it spans, as far above the head as its slab; a loggia round the
-       window is an overhang at its ceiling and a fin at each closed side */
-    const rects = [], us = faceUnits(f);
-    const MmE = Mod(), H0E = MmE.H0, beiE = (RF.bei && RF.bei.on && !(RF.par && RF.par.on)) ? clamp(+RF.bei.d || 0, 0, 1) : 0;
+  /** Average fraction of the sun a side's devices keep off its glass — the
+      fraction of the beam that reaches the window's plane and is stopped
+      before it — read as Olgyay and Lechner read it, by the sun's profile
+      angle and wall-solar azimuth (Olgyay, pp.79–80; Lechner, pp.249–259),
+      but tested point by point rather than by rule of thumb: every window is
+      sampled on a grid of its glass, and each point's ray to the sun is
+      tested against every device as it is drawn — the overhang or louvres
+      over the band, the fins at their stations, the eave running out down
+      its own slope (so a steeper slope over the window drops its edge
+      lower), the eave canopy at its pitch, balcony slabs and a loggia's
+      ceiling and sides. Each hour counts by the beam it brings to the glass:
+      direct normal irradiance under a clear sky (Meinel & Meinel's air-mass
+      fit, with Kasten & Young's air mass) times the cosine of incidence on
+      the vertical glass, so a grazing hour weighs little and noon on a south
+      wall weighs most. The seasons are read over months, not one day: the
+      21st of June to September — the SCE's cooling season — for summer, and
+      of November to February, the heart of the heating season, for winter;
+      whole hours from sunrise to sunset. Geometric, not a simulation: no
+      diffuse sky, no reflections. Olgyay's own shading-coefficient table
+      gives vertical fixed fins on east/west walls about 0.31, against about
+      0.20–0.25 for a continuous south overhang and 0.10–0.15 for movable
+      horizontal louvres (pp.70–71). */
+  const SHADE_SUMMER = [172, 202, 233, 264], SHADE_WINTER = [325, 355, 21, 52];
+  const SHADE_SAMPLE_OFFSETS = [-7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7];   // hours either side of solar noon
+  /** Clear-sky beam (kW/m²) at a solar altitude in degrees: Meinel's fit
+      1.353·0.7^(AM^0.678), air mass after Kasten & Young (1989). */
+  const beamAt = alt => {
+    if (alt <= 0) return 0;
+    const zen = 90 - alt, am = 1 / (Math.cos(zen * RAD) + 0.50572 * Math.pow(96.07995 - zen, -1.6364));
+    return 1.353 * Math.pow(0.7, Math.pow(am, 0.678));
+  };
+  /** The devices over one window rectangle, in the wall's own terms — t
+      metres along the wall from its start, n out from the glass, z up:
+      plates z = za + (zb − za)·n/d over t0–t1, and fins at t over z0–z1. */
+  function shadeElements(f, x, sp, k, vv, MmE, H0E, beiE, bg, cpC) {
+    const o = OPEN[f], sg = x.sg, plates = [], fins = [];
+    /* the band's own devices, exactly where winGeo draws them */
+    const bd = devBand(sg, x.w);
+    if (o.ovD > 0) ovPositions(o.ovN, { v0:bd.v0, v1:bd.v1 }).forEach(z => plates.push({ za:z, zb:z, d:o.ovD, t0:bd.x0, t1:bd.x1 }));
+    if (o.finN > 0 && o.finD > 0) faceFins(f).forEach(tq => fins.push({ t:bd.x0 + tq * (bd.x1 - bd.x0), d:o.finD, z0:bd.v0, z1:bd.v1 }));
+    /* the eave canopy, falling at its pitch from its root */
+    if (cpC && cpC.sg === sg) plates.push({ za:cpC.z0, zb:cpC.z1, d:cpC.d, t0:cpC.u0, t1:cpC.u1 });
+    /* the roof eave over this window: from the roof's height at the wall
+       line out to its edge, along the whole wall and past its corners */
+    const ev = eaveEdge(MmE, H0E, beiE, sg, sp.a, sp.b);
+    if (ev.d > 0.05) {
+      const um = (sp.a + sp.b) / 2, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len;
+      const zw = MmE.zAt(sg.a[0] + tx * um + sg.n[0] * 0.03, sg.a[1] + ty * um + sg.n[1] * 0.03);
+      plates.push({ za:zw === null ? H0E : zw, zb:ev.z, d:ev.d, t0:-ev.d, t1:sg.len + ev.d });
+    }
+    /* balconies set on Site: a projecting slab one storey up; a loggia's
+       ceiling and its closed sides */
+    bg.ok.forEach(B => {
+      if (B.sg !== sg) return;
+      const t0 = B.u0 - (B.wrap < 0 ? B.d : 0), t1 = B.u1 + (B.wrap > 0 ? B.d : 0);
+      if (B.mode === 'out' && B.levels.indexOf(k + 2) >= 0) { const z = (k + 1) * G.fh - BALC_SLAB; plates.push({ za:z, zb:z, d:B.d, t0, t1 }); }
+      if (B.mode === 'in' && B.levels.indexOf(k + 1) >= 0) {
+        const z = (k + 1) * G.fh;
+        plates.push({ za:z, zb:z, d:B.d, t0:B.u0, t1:B.u1 });
+        if (!(B.corner < 0 && B.convexA)) fins.push({ t:B.u0, d:B.d, z0:k * G.fh, z1:z });
+        if (!(B.corner > 0 && B.convexB)) fins.push({ t:B.u1, d:B.d, z0:k * G.fh, z1:z });
+      }
+    });
+    return { plates, fins };
+  }
+  /** Does a point of the glass (t, z) see the sun along (dt, dn, dz), or
+      does a device stop the ray first? */
+  const rayBlocked = (els, t, z, dt, dn, dz) => {
+    for (const P of els.plates) {
+      const kz = (P.zb - P.za) / P.d, den = dz - kz * dn;
+      if (den <= 1e-9) continue;
+      const s = (P.za - z) / den;
+      if (s <= 1e-9) continue;
+      const n = s * dn, tt = t + s * dt;
+      if (n <= P.d + 1e-9 && tt >= P.t0 - 1e-9 && tt <= P.t1 + 1e-9) return true;
+    }
+    if (Math.abs(dt) > 1e-9) for (const F of els.fins) {
+      const s = (F.t - t) / dt;
+      if (s <= 1e-9) continue;
+      const n = s * dn, zz = z + s * dz;
+      if (n <= F.d + 1e-9 && zz >= F.z0 - 1e-9 && zz <= F.z1 + 1e-9) return true;
+    }
+    return false;
+  };
+  /** The share of a season's beam on this side's glass its devices stop,
+      in % — days as an array of days of the year (or one day). */
+  function shadeEffectiveness(f, days) {
+    const doys = Array.isArray(days) ? days : [days];
+    const wallAz = faceAz(f), bg = balcGeo(G), us = faceUnits(f);
+    const MmE = Mod(), H0E = MmE.H0, beiE = RF.bei && RF.bei.on ? clamp(+RF.bei.d || 0, 0, 1) : 0;
+    const cpC = RF.bei && RF.bei.canopy ? canopySpanFor(MmE.pl.segs, RF.bei.canopy, h0(), MmE) : null;
+    /* every window rectangle, storey by storey, with its devices and the
+       grid of points that samples its glass */
+    const rects = [];
     winsOf(f).forEach(x => x.w.rows.forEach((r, k) => {
       const head = Math.min(r.head, h0()), u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
       glassSpans(f, u0, u1, x.sg.len).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
-        const u = us[sp.ui], vv = u.door ? doorSpanV(u, head, k, G.fh) : unitSpanV(u, r.sill, head, k, G.fh);
-        const rc = { w:sp.b - sp.a, h:Math.max(0.01, vv[1] - vv[0]), ov:[], fin:[], a:sp.a, b:sp.b, sg:x.sg, u0, u1, ui:sp.ui };
-        const cpC = RF.bei && RF.bei.canopy ? canopySpanFor(Mod().pl.segs, RF.bei.canopy, h0()) : null;
-        if (cpC && cpC.sg === x.sg) {
-          /* a pitched canopy shades from its outer edge: a level slab of the
-             same depth hung at that edge's height */
-          const c0 = Math.max(sp.a, cpC.u0), c1 = Math.min(sp.b, cpC.u1);
-          if (c1 - c0 > 0.05) rc.ov.push({ d:cpC.d, gap:Math.max(0, cpC.z1 - vv[1]), cover:(c1 - c0) / Math.max(0.05, sp.b - sp.a) });
-        }
-        const evD = eaveDepth(MmE, H0E, beiE, x.sg, sp.a, sp.b);
-        if (evD > 0.05) rc.ov.push({ d:evD, gap:Math.max(0, H0E - vv[1]), cover:1 });
-        bg.ok.forEach(B => {
-          if (B.sg !== x.sg) return;
-          const a = Math.max(sp.a, B.u0 - (B.wrap < 0 ? B.d : 0)), b2 = Math.min(sp.b, B.u1 + (B.wrap > 0 ? B.d : 0));
-          if (b2 - a <= 0.05) return;
-          const cover = (b2 - a) / Math.max(0.05, sp.b - sp.a);
-          if (B.mode === 'out' && B.levels.indexOf(k + 2) >= 0) rc.ov.push({ d:B.d, gap:Math.max(0, (k + 1) * G.fh - BALC_SLAB - vv[1]), cover });
-          if (B.mode === 'in' && B.levels.indexOf(k + 1) >= 0) {
-            rc.ov.push({ d:B.d, gap:Math.max(0, (k + 1) * G.fh - vv[1]), cover });
-            [[-1, a - B.u0, B.corner < 0 && B.convexA], [1, B.u1 - b2, B.corner > 0 && B.convexB]].forEach(([side, gap, open]) => { if (!open) rc.fin.push({ d:B.d, gap:Math.max(0.1, gap), side }); });
-          }
-        });
-        rects.push(rc);
+        const u = us[sp.ui];
+        if (!u || u.gel) return;   // a breeze-block panel lets in no beam to keep off
+        const vv = u.door ? doorSpanV(u, head, k, G.fh) : unitSpanV(u, r.sill, head, k, G.fh);
+        const w = sp.b - sp.a, h = vv[1] - vv[0];
+        if (h <= 0.05) return;
+        const nu = clamp(Math.ceil(w / 0.3), 3, 6), nv = clamp(Math.ceil(h / 0.3), 3, 6), pts = [];
+        for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) pts.push([sp.a + w * (i + 0.5) / nu, vv[0] + h * (j + 0.5) / nv]);
+        const tx = (x.sg.b[0] - x.sg.a[0]) / x.sg.len, ty = (x.sg.b[1] - x.sg.a[1]) / x.sg.len;
+        /* +t is the way the sun's azimuth turns clockwise from the wall's normal, or against it */
+        rects.push({ area:w * h, pts, sgnT:(tx * x.sg.n[1] - ty * x.sg.n[0]) > 0 ? 1 : -1,
+          els:shadeElements(f, x, sp, k, vv, MmE, H0E, beiE, bg, cpC) });
       });
     }));
     if (!rects.length) return { pct:0, unshadedFrac:1 };
-    const noon = sunriseSunset(doy, lat, lon, tz).noon;
-    let sumUnshaded = 0, hits = 0;
-    SHADE_SAMPLE_OFFSETS.forEach(dh => {
-      const sun = sunPos(doy, noon + dh, lat, lon, tz);
-      if (sun.alt <= 0) return;
-      const dAz = Math.abs(((sun.azi - wallAz + 540) % 360) - 180);
-      // >= 89.5 so a sun exactly along the wall excludes symmetrically
-      if (dAz >= 89.5) return;   // sun behind this wall at this hour
-      const altR = sun.alt * RAD, dAzR = dAz * RAD;
-      const profile = Math.atan2(Math.tan(altR), Math.max(0.01, Math.cos(dAzR)));
-      const wsa = Math.atan2(Math.sin(dAzR), Math.max(0.01, Math.cos(dAzR)));
-      let glass = 0, lit = 0;
-      const sunRightAll = ((sun.azi - (wallAz + 180) + 540) % 360) - 180 > 0;
-      rects.forEach(r => {
-        const selUiS = devSelUI(f); const dropOv = o.ovD > 0 && (selUiS < 0 || r.ui === selUiS) ? Math.min(r.h, o.ovD * Math.tan(Math.max(0, profile)) * o.ovN) : 0;
-        /* each fin shades the glass down-sun of itself, as far as its
-           depth reaches — where the student put it, not a count */
-        let finSh = 0;
-        if (o.finN > 0 && o.finD > 0 && (selUiS < 0 || r.ui === selUiS)) {
-          const scSB = selUiS >= 0 ? selSpanB(f, r.sg, r.u0, r.u1, selUiS) : null;
-          const fx = scSB ? devSpanPad(f, r.sg, scSB[0], scSB[1]) : devSpanH(f, r.sg, r.u0, r.u1), sw = o.finD * Math.tan(Math.abs(wsa));
-          faceFins(f).forEach(t => {
-            const fp = fx[0] + t * (fx[1] - fx[0]);
-            const s0 = sunRightAll ? fp - sw : fp, s1 = sunRightAll ? fp : fp + sw;
-            finSh += Math.max(0, Math.min(s1, r.b) - Math.max(s0, r.a));
-          });
-          r.fin.forEach(q => {
-            const fp = q.side < 0 ? r.a - q.gap : r.b + q.gap, sww = q.d * Math.tan(Math.abs(wsa));
-            const s0 = sunRightAll ? fp - sww : fp, s1 = sunRightAll ? fp : fp + sww;
-            finSh += Math.max(0, Math.min(s1, r.b) - Math.max(s0, r.a));
-          });
-        }
-        const dropFin = Math.min(r.w, finSh);
-        /* the balconies: the deepest drop over the width they cover; a
-           loggia's sides, each shading only while the sun is on its side */
-        let dropB = 0, cov = 0;
-        r.ov.forEach(q => { const dq = clamp(q.d * Math.tan(Math.max(0, profile)) - q.gap, 0, r.h); if (dq > dropB) dropB = dq; cov = Math.max(cov, q.cover); });
-
-        /* sun slipping past the overhang's end lights a strip of glass from
-           the side — depth times tan of the wall-solar angle past a flush
-           end; the extra width absorbs it first (one slab deep; fins aside) */
-        /* the spill lands on the sun's own end — morning east, evening
-           west — and only that end's extension absorbs it */
-        const sunRight = sunRightAll;
-        const spill = o.ovD > 0 && (selUiS < 0 || r.ui === selUiS) ? Math.min(r.w, Math.max(0, o.ovD * Math.tan(Math.abs(wsa)) - (sunRight ? (o.ovR || 0) : (o.ovL || 0)))) : 0;
-        const hLit = cov * Math.max(0, r.h - Math.max(dropOv, dropB)) + (1 - cov) * Math.max(0, r.h - dropOv);
-        glass += r.w * r.h; lit += Math.max(0, r.w - spill - dropFin) * hLit + spill * r.h;
+    let tot = 0, lit = 0;
+    doys.forEach(doy => {
+      const noon = sunriseSunset(doy, lat, lon, tz).noon;
+      SHADE_SAMPLE_OFFSETS.forEach(dh => {
+        const sun = sunPos(doy, noon + dh, lat, lon, tz);
+        if (sun.alt <= 0.5) return;
+        const phi = ((sun.azi - wallAz + 540) % 360) - 180;
+        if (Math.abs(phi) >= 89.5) return;   // sun behind this wall at this hour
+        const ca = Math.cos(sun.alt * RAD), dn = ca * Math.cos(phi * RAD), dz = Math.sin(sun.alt * RAD), dl = ca * Math.sin(phi * RAD);
+        const wgt = beamAt(sun.alt) * dn;   // beam on the vertical glass
+        rects.forEach(rc => {
+          const dt = rc.sgnT * dl;
+          let seen = 0;
+          rc.pts.forEach(q => { if (!rayBlocked(rc.els, q[0], q[1], dt, dn, dz)) seen++; });
+          tot += wgt * rc.area; lit += wgt * rc.area * seen / rc.pts.length;
+        });
       });
-      sumUnshaded += glass > 0 ? lit / glass : 0;
-      hits++;
     });
-    if (hits === 0) return { pct:100, unshadedFrac:0 };   // this side gets no direct sun that day
-    const unshadedFrac = sumUnshaded / hits;
+    /* no beam reaches this side in that season: there is nothing to keep
+       off, and nothing a device could cost */
+    if (!(tot > 0)) return { pct:0, unshadedFrac:1, nosun:true };
+    const unshadedFrac = lit / tot;
     return { pct:100 * (1 - unshadedFrac), unshadedFrac };
   }
   /** 0–100 shading-design score for one side, or null with no device. A
       heating-led climate wants a device that discriminates by season — cuts
-      the high June sun but lets the low December sun in — so the score there
+      the high summer sun but lets the low winter sun in — so the score there
       is summer cut minus winter cut; a cooling-led climate wants summer cut
       only. */
   /** Do balconies set on Site stand on this side? */
   const balcOnFace = f => balcGeo(G).ok.some(B => segFace(B.sg) === f);
+  /** Does the eave canopy stand on this side? */
+  const canopyOnFace = f => { const c = RF.bei && RF.bei.canopy ? canopySpanFor(Mod().pl.segs, RF.bei.canopy, h0(), Mod()) : null; return !!c && segFace(c.sg) === f; };
   function eaveOnFace(f) {
-    if (!(RF.bei && RF.bei.on) || (RF.par && RF.par.on)) return false;
+    if (!(RF.bei && RF.bei.on)) return false;
     const MmE = Mod(), bei = clamp(+RF.bei.d || 0, 0, 1);
     if (!(bei > 0)) return false;
     const ws = winsOf(f);
@@ -9232,13 +9343,19 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
     }
     return false;
   }
+  /* the scores are read several times a draw: kept until anything they
+     read changes */
+  const SHADE_MEMO = new Map();
   function shadingScore(f) {
     const o = OPEN[f];
-    if ((o.ovD === 0 && o.finD === 0 && !balcOnFace(f) && !eaveOnFace(f)) || !faceUnits(f).some(u => u.on)) return null;
-    const summer = shadeEffectiveness(f, 172).pct;
-    if (!heating) return summer;
-    const winter = shadeEffectiveness(f, 355).pct;
-    return clamp(summer - winter, 0, 100);
+    if ((o.ovD === 0 && o.finD === 0 && !balcOnFace(f) && !eaveOnFace(f) && !canopyOnFace(f)) || !faceUnits(f).some(u => u.on)) return null;
+    const key = [f, heating, lat, lon, tz, h0(), JSON.stringify(o), JSON.stringify(RF), JSON.stringify(G)].join('|');
+    if (SHADE_MEMO.has(key)) return SHADE_MEMO.get(key);
+    const summer = shadeEffectiveness(f, SHADE_SUMMER).pct;
+    const v = !heating ? summer : clamp(summer - shadeEffectiveness(f, SHADE_WINTER).pct, 0, 100);
+    if (SHADE_MEMO.size > 64) SHADE_MEMO.clear();
+    SHADE_MEMO.set(key, v);
+    return v;
   }
 
   function refreshOpenings() {
@@ -9256,9 +9373,9 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
     }
     const sc = shadingScore(curFace);
     if (sc === null) { pillShade.className = 'pill empty'; pillShade.textContent = t('No shading device on this facade'); }
-    else if (sc >= 80) { pillShade.className = 'pill ok'; pillShade.textContent = t(heating ? 'Cuts summer sun while keeping winter gains' : 'Cuts most of the June-noon sun on this window'); }
-    else if (sc >= 50) { pillShade.className = 'pill empty'; pillShade.textContent = t(heating ? 'Some seasonal discrimination, but still costs real winter sun' : 'Leaves some of the June-noon sun on this window'); }
-    else { pillShade.className = 'pill bad'; pillShade.textContent = t(heating ? 'Blocks winter sun almost as much as summer — too deep for this climate' : 'Leaves much of the June-noon sun on this window'); }
+    else if (sc >= 80) { pillShade.className = 'pill ok'; pillShade.textContent = t(heating ? 'Cuts summer sun while keeping winter gains' : 'Cuts most of the summer sun on this window'); }
+    else if (sc >= 50) { pillShade.className = 'pill empty'; pillShade.textContent = t(heating ? 'Some seasonal discrimination, but still costs real winter sun' : 'Leaves some of the summer sun on this window'); }
+    else { pillShade.className = 'pill bad'; pillShade.textContent = t(heating ? 'Blocks winter sun almost as much as summer — too deep for this climate' : 'Leaves much of the summer sun on this window'); }
     [[cRwN, 'N'], [cRwE, 'E'], [cRwW, 'W']].forEach(([c, sl]) => { c.style.display = RF.n !== 0 && planeFor(sl) ? '' : 'none'; });
     {
       const z = rwSize(), cp = RF.n === 0 ? null : collectPlane(Mod());
@@ -9321,6 +9438,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
       /* the balconies set on Site: slabs and parapets among the faces, loggias after their wall */
       const BS = balcScene(G), P3 = q => proj(q[0], q[1], q[2]), dep3 = q => camDepth(A, q[0], q[1], q[2]), sees3 = n => camSees(A, n[0], n[1], n[2]);
       BS.solids.forEach(sl => { if (sl.kind === 'par' || sees3(sl.n)) items.push({ pts:sl.pts, balc:sl }); });
+      const cpO = RF.bei && RF.bei.canopy ? canopySpanFor(Mm.pl.segs, RF.bei.canopy, h0(), Mm) : null;
       Mm.walls.forEach(wl => {
         const sg = wl.sg;
         if (!segSeen(sg)) return;
@@ -9331,6 +9449,15 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
         const wD = wpts.reduce((s, q) => s + camDepth(A, q[0], q[1], q[2]), 0) / wpts.length;
         const wn = wins.find(o => o.sg === sg);
         if (wn) winGeo(sg, wn.w).devs.forEach(dv => items.push({ pts:dv.pts, dev:dv, d:wD - 0.05 }));
+        /* the eave canopy over this wall, which the shading score counts:
+           its tiles in the roof's colour, its posts and beam in timber */
+        if (cpO && cpO.sg === sg) {
+          canopyFrame(cpO).posts.concat(canopyFrame(cpO).beam ? [canopyFrame(cpO).beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
+            if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) items.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26', d:wD - 0.06 });
+          }));
+          const k = 0.87 - 0.11 * sg.n[1] - 0.05 * sg.n[0];
+          items.push({ pts:canopyPts(cpO).quad, fill:opaque(roofFill(0.2 + 0.3 * (1 - k), k)), d:wD - 0.07 });
+        }
       });
       Mm.steps.forEach(st => {
         if (!camSees(A, st.n[0], st.n[1], 0)) return;
@@ -9451,7 +9578,7 @@ const gelCount = f => { const nU = faceUnits(f).filter(u => u.on && u.gel).lengt
 
       // the readout, and the two badges, as on Site
       const o = OPEN[curFace];
-      const sh = ((o.ovD > 0 || o.finD > 0 || balcOnFace(curFace) || eaveOnFace(curFace)) && faceUnits(curFace).some(u => u.on)) ? shadeEffectiveness(curFace, 172).pct : null;
+      const sh = ((o.ovD > 0 || o.finD > 0 || balcOnFace(curFace) || eaveOnFace(curFace) || canopyOnFace(curFace)) && faceUnits(curFace).some(u => u.on)) ? shadeEffectiveness(curFace, SHADE_SUMMER).pct : null;
       const nW = winCount(curFace);
       label(ctx, t(faceName[curFace]) + ' · ' + t('faces') + ' ' + faceDir(curFace) + ' · WWR ' + fmt(facadeNumbers(curFace).eff * 100, 0) + '% · ' + nW + ' ' + t(nW === 1 ? 'window' : 'windows') + (gelCount(curFace) > 0 ? ' · ' + gelCount(curFace) + ' ' + t('brick ventilation') : '')
         + (sh !== null ? ' · ' + t('shading') + ' ' + fmt(sh, 0) + '%' : ''),
@@ -14577,17 +14704,26 @@ style === 'sketch' ? '#EFEBE0'
           d:depthOf((outA[0] + outB[0]) / 2, (outA[1] + outB[1]) / 2, hgt / 2) });
       }
     }
-    /* the eave canopy: its plate in the roof's finish, falling at its own
-       pitch, a dark fascia on its outer edge; it stands on its wall, in
-       front of the glass under it, and the eave over its root covers it */
-    { const cpH = RF.bei && RF.bei.canopy ? canopySpanFor(M.pl.segs, RF.bei.canopy, H0) : null;
+    /* the eave canopy as an alpendre: its tiles in the roof's finish,
+       falling at its own pitch, the beirado's line of tile ends along its
+       edge, and past 0.5 m the timber posts and beam it stands on. It
+       stands on its wall — posts, then tiles, then their edge, straight
+       after the glass under it — and the eave over its root covers it */
+    { const cpH = RF.bei && RF.bei.canopy ? canopySpanFor(M.pl.segs, RF.bei.canopy, H0, M) : null;
       if (cpH) {
         const sg = cpH.sg, CP = canopyPts(cpH), q = CP.quad, Ls = cpH.d / Math.cos(cpH.p * RAD);
         const fk = night ? 0.32 : 0.6 + 0.4 * Math.max(0, sg.n[0] * sunL[0] + sg.n[1] * sunL[1]) * (0.3 + 0.7 * sinA);
-        items.push(onWallLayer(sg, 4, { pts:q, cnp:true, fill:shadeHex(roofBase(), fk), sh:fk, d:cdep(q), mat:look.roof ? look.roof.key : 'site',
+        const TIMBER = '#7A5434', fr = canopyFrame(cpH);
+        fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([bq, nn]) => {
+          if (nn[2] !== 0 || !wallSeen(nn)) return;   // tops sit under the beam and the tiles
+          const k2 = night ? 0.3 : faceK(nn);
+          items.push(onWallLayer(sg, 4, { pts:bq, fill:shadeHex(TIMBER, k2), sh:k2, d:cdep(bq) }));
+        }));
+        items.push(onWallLayer(sg, 5, { pts:q, cnp:true, fill:shadeHex(roofBase(), fk), sh:fk, d:cdep(q), mat:look.roof ? look.roof.key : 'site',
           uv:[[cpH.u0, 0], [cpH.u1, 0], [cpH.u1, Ls], [cpH.u0, Ls]] }));
-        const lo = p => [p[0], p[1], p[2] - 0.08], fq = [q[3], q[2], lo(q[2]), lo(q[3])];
-        if (wallSeen(sg.n)) items.push(onWallLayer(sg, 5, { pts:fq, fill:shadeHex('#5A5550', night ? 0.3 : faceK(sg.n)), d:cdep(fq) }));
+        const lo = p => [p[0], p[1], p[2] - 0.07], fq = [q[3], q[2], lo(q[2]), lo(q[3])];
+        if (wallSeen(sg.n)) items.push(onWallLayer(sg, 6, { pts:fq, fill:shadeHex(roofBase(), night ? 0.3 : 0.62 * faceK(sg.n)), d:cdep(fq),
+          tileEnds:{ a:lo(q[3]), b:lo(q[2]), n:Math.max(2, Math.round((cpH.u1 - cpH.u0) / 0.24)) } }));
       }
     }
     /* detached walls */
@@ -14914,6 +15050,15 @@ style === 'sketch' ? '#EFEBE0'
         return;
       }
       poly(it.pts, it.fill, style === 'sketch' ? CH.ink : (it.glass ? 'rgba(20,23,26,.45)' : it.nbTip ? 'rgba(90,110,130,.55)' : CH.ink), style === 'sketch' ? 1.6 : it.glass ? 1 : 1.2);
+      /* the beirado: the round mouths of the canal tiles along the edge */
+      if (it.tileEnds && style !== 'sketch') {
+        const e = it.tileEnds, r = Math.max(1, 0.055 * kpx);
+        ctx.fillStyle = night ? 'rgba(0,0,0,.55)' : 'rgba(46,26,16,.62)';
+        for (let i = 0; i < e.n; i++) {
+          const f = (i + 0.5) / e.n, c = proj(FR, e.a[0] + (e.b[0] - e.a[0]) * f, e.a[1] + (e.b[1] - e.a[1]) * f, e.a[2] + (e.b[2] - e.a[2]) * f + 0.035);
+          ctx.beginPath(); ctx.ellipse(c[0], c[1], r, r * 0.75, 0, Math.PI, 2 * Math.PI); ctx.fill();
+        }
+      }
       let photoDone = false;
       if (dressed && (it.wallSg || it.roof || it.cnp) && it.mat && it.mat !== 'site') {
         const tex = matTex(it.mat, refreshRender);
@@ -15691,9 +15836,15 @@ function exportModel() {
   }
 
   { const c = RF.bei && RF.bei.canopy;
-    const hit = c ? canopySpanFor(planModel(G).segs, c, H0) : null;
-    if (hit) add('shading', 'Eave canopy', 'AA-SHADING', [[canopyPts(hit).quad, [0, 0, 1]]],
-      { device:'Canopy', depth:hit.d, pitch:+hit.p.toFixed(1), mat:'AA_Shade' });
+    const hit = c ? canopySpanFor(planModel(G).segs, c, H0, RM) : null;
+    if (hit) {
+      add('shading', 'Eave canopy', 'AA-SHADING', [[canopyPts(hit).quad, [0, 0, 1]]],
+        { device:'Canopy', depth:hit.d, pitch:+hit.p.toFixed(1), mat:'AA_Roof' });
+      /* the alpendre's timber frame: posts no more than 3 m apart, the beam over them */
+      const fr = canopyFrame(hit);
+      fr.posts.forEach((B, i) => add('column', 'Eave canopy post ' + (i + 1), 'AA-STRUCTURE', box(...B), { mat:'AA_Timber' }));
+      if (fr.beam) add('beam', 'Eave canopy beam', 'AA-STRUCTURE', box(...fr.beam), { mat:'AA_Timber' });
+    }
   }
   /* a north arrow on the ground, for the tools that do not read north */
   const R0 = Math.hypot(L, D) / 2 + 3;
@@ -15708,7 +15859,7 @@ const cadStem = () => slugify(sitePrefix() + 'architecture-advisor-pt') || 'arch
 /** DXF, AutoCAD R12 flavour: one 3DFACE per triangle or quad, on layers. */
 function toDXF(els) {
   const layers = { 'AA-WALLS':8, 'AA-GLAZING':5, 'AA-ROOF':1, 'AA-FLOOR':9, 'AA-SHADING':30, 'AA-SUNSPACE':4, 'AA-SOLAR':150,
-    'AA-SITE-WALLS':6, 'AA-PLANTING':3, 'AA-TERRAIN':2, 'AA-STONE':20, 'AA-NORTH':7 };
+    'AA-SITE-WALLS':6, 'AA-PLANTING':3, 'AA-TERRAIN':2, 'AA-STONE':20, 'AA-STRUCTURE':32, 'AA-NORTH':7 };
   const o = ['0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '9', '$INSUNITS', '70', '6', '0', 'ENDSEC',
     '0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', String(Object.keys(layers).length)];
   Object.keys(layers).forEach(n => o.push('0', 'LAYER', '2', n, '70', '0', '62', String(layers[n]), '6', 'CONTINUOUS'));
@@ -15729,7 +15880,7 @@ function toDXF(els) {
 /** The material library the exporters share: the Render tab's dressed
     finishes where it dressed them, site finishes elsewhere. */
 const hexRgb = h => { const s = String(h || '').replace('#', ''); const v = [0, 2, 4].map(i => parseInt(s.slice(i, i + 2), 16)); return v.map(x => isFinite(x) ? +(x / 255).toFixed(3) : 0.8); };
-const MAT_BY_LAYER = { 'AA-WALLS':'AA_Wall', 'AA-ROOF':'AA_Roof', 'AA-GLAZING':'AA_Glass', 'AA-GELOSIA':'AA_Glass', 'AA-SOLAR':'AA_Solar', 'AA-TERRAIN':'AA_Terrain', 'AA-PLANTING':'AA_Leaf', 'AA-FLOOR':'AA_Slab', 'AA-SHADING':'AA_Shade', 'AA-SUNSPACE':'AA_Glass', 'AA-SITE-WALLS':'AA_Wall', 'AA-BALCONY':'AA_Slab', 'AA-STONE':'AA_Stone', 'AA-NORTH':'AA_Default' };
+const MAT_BY_LAYER = { 'AA-STRUCTURE':'AA_Timber', 'AA-WALLS':'AA_Wall', 'AA-ROOF':'AA_Roof', 'AA-GLAZING':'AA_Glass', 'AA-GELOSIA':'AA_Glass', 'AA-SOLAR':'AA_Solar', 'AA-TERRAIN':'AA_Terrain', 'AA-PLANTING':'AA_Leaf', 'AA-FLOOR':'AA_Slab', 'AA-SHADING':'AA_Shade', 'AA-SUNSPACE':'AA_Glass', 'AA-SITE-WALLS':'AA_Wall', 'AA-BALCONY':'AA_Slab', 'AA-STONE':'AA_Stone', 'AA-NORTH':'AA_Default' };
 function exportMats() {
   const W = RENDER_MATS.wall, R = RENDER_MATS.roof;
   const wf = (typeof finishOf === 'function' && MASS) ? finishOf(MASS.col) : null;
@@ -15746,6 +15897,7 @@ function exportMats() {
     { name:'AA_Trunk', color:[0.42, 0.29, 0.23], desc:'trunks' },
     { name:'AA_Slab', color:[0.78, 0.78, 0.78], desc:'floors + balcony slabs' },
     { name:'AA_Shade', color:[0.6, 0.58, 0.54], desc:'overhangs, fins, devices' },
+    { name:'AA_Timber', color:[0.48, 0.33, 0.20], desc:'timber posts and beam of the eave canopy (alpendre)' },
     { name:'AA_Stone', color:hexRgb('#A29C90'), desc:'stone base (embasamento) and window/door frames (cantaria)' },
     { name:'AA_Default', color:[0.8, 0.8, 0.8], desc:'all other elements' }
   ];
@@ -15826,6 +15978,8 @@ function toIFC(els) {
       : x.kind === 'balcony' ? e('IFCSLAB(' + head + "'Balcony'," + pl2 + ',' + shape + ',$,.USERDEFINED.)')
       : x.kind === 'railing' ? e('IFCRAILING(' + head + '$,' + pl2 + ',' + shape + ',$,.GUARDRAIL.)')
       : x.kind === 'shading' ? e('IFCSHADINGDEVICE(' + head + str(x.device) + ',' + pl2 + ',' + shape + ',$,.USERDEFINED.)')
+      : x.kind === 'column' ? e('IFCCOLUMN(' + head + '$,' + pl2 + ',' + shape + ',$,.COLUMN.)')
+      : x.kind === 'beam' ? e('IFCBEAM(' + head + '$,' + pl2 + ',' + shape + ',$,.BEAM.)')
       : x.kind === 'plant' ? e('IFCGEOGRAPHICELEMENT(' + head + str(x.plantKind === 'bush' ? 'Bush' : 'Tree') + ',' + pl2 + ',' + shape + ',$,.USERDEFINED.)')
       : x.kind === 'solar' ? e('IFCSOLARDEVICE(' + head + '$,' + pl2 + ',' + shape + ',$,.' + x.solarType + '.)')
       : e('IFCBUILDINGELEMENTPROXY(' + head + "'Sunspace'," + pl2 + ',' + shape + ',$,.USERDEFINED.)');
@@ -18452,7 +18606,8 @@ Object.assign(PT, {
   "Eaves": "Beirado", "Eave canopy": "Pala do beirado",
   "Canopy width": "Largura da pala",
   "Canopy depth": "Profundidade da pala",
-  "Push one stretch of eave further out to roof an exterior space — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level.": "Avance um tramo do beirado para cobrir um espaço exterior — arraste o seu ponto redondo ao longo da parede e para fora, e o ponto quadrado na ponta para o alargar. A inclinação faz a pala descer para fora da parede; a profundidade mede-se na horizontal.",
+  "Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.": "Avance um tramo do beirado para cobrir um espaço exterior, como um alpendre — arraste o seu ponto redondo ao longo da parede e para fora, e o ponto quadrado na ponta para o alargar. A inclinação faz a pala descer para fora da parede; a profundidade mede-se na horizontal. Com mais de 0,5 m de profundidade assenta em pilares de madeira sob um frechal, mais um pilar por cada 3 m de largura.",
+  "timber posts": "pilares de madeira", "spans of": "vãos de", "hung from the wall, no posts up to 0.5 m": "suspensa da parede, sem pilares até 0,5 m",
   "Canopy pitch": "Inclinação da pala", "Outer edge": "Bordo exterior", "above the ground": "acima do solo",
   "pitch held at": "inclinação limitada a", "to keep it 2.0 m clear": "para o manter a 2,0 m do solo",
   "Ridge position": "Posição da cumeeira", "Slope to the main facade": "Vertente para a fachada principal", "to the rear": "para o tardoz",
@@ -18583,9 +18738,9 @@ Object.assign(PT, {
   "Fin depth": "Profundidade do brise",
   "Fins": "Brises",
   "No shading device on this facade": "Sem dispositivo de sombreamento nesta fachada",
-  "Cuts most of the June-noon sun on this window": "Corta a maior parte do sol do meio-dia de Junho nesta janela",
-  "Leaves some of the June-noon sun on this window": "Deixa passar alguma parte do sol do meio-dia de Junho nesta janela",
-  "Leaves much of the June-noon sun on this window": "Deixa passar grande parte do sol do meio-dia de Junho nesta janela",
+  "Cuts most of the summer sun on this window": "Corta a maior parte do sol de Verão nesta janela",
+  "Leaves some of the summer sun on this window": "Deixa passar alguma parte do sol de Verão nesta janela",
+  "Leaves much of the summer sun on this window": "Deixa passar grande parte do sol de Verão nesta janela",
   "Cuts summer sun while keeping winter gains": "Corta o sol de Verão mantendo os ganhos de Inverno",
   "Some seasonal discrimination, but still costs real winter sun": "Alguma discriminação sazonal, mas ainda custa sol de Inverno real",
   "Blocks winter sun almost as much as summer — too deep for this climate": "Bloqueia o sol de Inverno quase tanto como o de Verão — demasiado profundo para este clima",
@@ -18984,13 +19139,13 @@ Object.assign(PT_HINT, {
   'open-shape':
     'Vidro alto, luz funda; vidro largo, luz uniforme. A luz natural alcança cerca do dobro da altura da verga para dentro da sala (Lechner, <i>Heating, Cooling, Lighting</i>), por isso uma verga mais alta ilumina mais fundo — uma verga a 2,1 m chega a cerca de 4 m — enquanto uma janela mais larga espalha essa luz para os lados e deixa parede por baixo para o aquecimento, o lugar habitual do radiador sob o vidro. Janelas em fita, compridas e baixas, iluminam a sala de modo uniforme de ponta a ponta (Ching &amp; Shapiro, sobre dimensão, posição e uniformidade da luz natural). A nota Forma pondera as duas: profundidade a partir da verga contra a profundidade da sala para onde este lado se vira, largura a partir da largura média contra um generoso vão de 2,4 m. Como o ajuste WWR, é uma síntese própria desta aplicação entre fontes, não um número de nenhum livro — compare lados com ela; uma janela a sul alta e estreita e uma comprida e baixa podem ambas sair-se bem, por razões diferentes.',
   'open-shading':
-    'Uma pala horizontal corta o sol alto de Verão no vidro virado ao equador, usando a mesma geometria do ângulo de perfil da inclinação do telhado no separador anterior (Olgyay, pp.79–80; Lechner, pp.249–253). O vidro a este e a oeste recebe sol baixo, quase rasante, de manhã e ao fim da tarde, que uma pala mal toca — os brises verticais respondem a isso: a própria tabela de coeficientes de sombreamento de Olgyay dá aos brises verticais fixos nas paredes este/oeste cerca de 0,31 (ou seja, cortando cerca de dois terços do ganho não sombreado), contra cerca de 0,20–0,25 para uma pala contínua a sul e 0,10–0,15 para lâminas horizontais móveis (pp.70–71) — os brises ganham mesmo o seu lugar no sol baixo e oblíquo a este e a oeste, mais a oeste do que a este uma vez somado o calor da tarde. Lechner nota ainda que os dispositivos horizontais continuam a superar os brises mesmo aí, e que os brises servem sobretudo o lado do equador de uma fachada oblíqua (pp.255–259); numa parede virada a sul, um brise só falha no único momento em que o sol fica exactamente perpendicular ao vidro — o meio-dia solar — continuando a cortar o sol oblíquo da manhã e da tarde no resto do dia, pelo que o seu contributo aí também pode ser substancial, cobrindo apenas horas diferentes das de uma pala. Várias lâminas mais rasas ou vários brises mais estreitos cortam o mesmo ângulo que um dispositivo único mais profundo, bloqueando menos a vista — um caixote de ovos é os dois empilhados, não somados (DeKay &amp; Brown, Estratégia 91, pp.248–249). Ambos ficam directamente sobre o vão: uma única pala acompanha a verga, várias lâminas distribuem-se de cima a baixo por todo o envidraçado, e os brises correm da esquerda para a direita ao longo da largura escolhida — nunca flutuando afastados da própria janela. Num clima de aquecimento, uma boa pala discrimina por estação — corta o sol alto de Junho mas ainda deixa entrar o sol baixo de Dezembro que alivia a factura do aquecimento — pelo que a nota de sombreamento abaixo premeia essa diferença e não a profundidade em si: um dispositivo suficientemente profundo para bloquear Verão e Inverno por igual não vale mais do que nenhum.',
+    'Uma pala horizontal corta o sol alto de Verão no vidro virado ao equador, usando a mesma geometria do ângulo de perfil da inclinação do telhado no separador anterior (Olgyay, pp.79–80; Lechner, pp.249–253). O vidro a este e a oeste recebe sol baixo, quase rasante, de manhã e ao fim da tarde, que uma pala mal toca — os brises verticais respondem a isso: a própria tabela de coeficientes de sombreamento de Olgyay dá aos brises verticais fixos nas paredes este/oeste cerca de 0,31 (ou seja, cortando cerca de dois terços do ganho não sombreado), contra cerca de 0,20–0,25 para uma pala contínua a sul e 0,10–0,15 para lâminas horizontais móveis (pp.70–71) — os brises ganham mesmo o seu lugar no sol baixo e oblíquo a este e a oeste, mais a oeste do que a este uma vez somado o calor da tarde. Lechner nota ainda que os dispositivos horizontais continuam a superar os brises mesmo aí, e que os brises servem sobretudo o lado do equador de uma fachada oblíqua (pp.255–259); numa parede virada a sul, um brise só falha no único momento em que o sol fica exactamente perpendicular ao vidro — o meio-dia solar — continuando a cortar o sol oblíquo da manhã e da tarde no resto do dia, pelo que o seu contributo aí também pode ser substancial, cobrindo apenas horas diferentes das de uma pala. Várias lâminas mais rasas ou vários brises mais estreitos cortam o mesmo ângulo que um dispositivo único mais profundo, bloqueando menos a vista — um caixote de ovos é os dois empilhados, não somados (DeKay &amp; Brown, Estratégia 91, pp.248–249). Ambos ficam directamente sobre o vão: uma única pala acompanha a verga, várias lâminas distribuem-se de cima a baixo por todo o envidraçado, e os brises correm da esquerda para a direita ao longo da largura escolhida — nunca flutuando afastados da própria janela. O beirado conta desde o início, medido diante de cada janela e prolongado pela sua própria pendente — uma vertente mais inclinada sobre a janela baixa o seu bordo, pelo que descentrar a cumeeira no separador Cobertura muda a sombra por baixo dela — e contam também a pala do beirado com a sua inclinação e as varandas definidas no Local. A nota amostra o vidro de cada janela ponto a ponto e testa o raio de cada ponto para o sol contra cada dispositivo tal como está desenhado, hora a hora do nascer ao pôr do sol, cada hora pesada pelo feixe que traz ao vidro — o feixe de céu limpo (ajuste de massa de ar de Meinel) vezes o cosseno da incidência — no dia 21 de Junho a Setembro, a estação de arrefecimento do SCE, e de Novembro a Fevereiro, o centro da estação de aquecimento. Um dispositivo demasiado profundo também bloqueia o sol baixo de Inverno, o que a nota conta contra ele. Num clima de aquecimento, uma boa pala discrimina por estação — corta o sol alto de Verão mas ainda deixa entrar o sol baixo de Inverno que alivia a factura do aquecimento — pelo que a nota de sombreamento abaixo premeia essa diferença e não a profundidade em si: um dispositivo suficientemente profundo para bloquear Verão e Inverno por igual não vale mais do que nenhum.',
   'open-sunspace':
     'Um espaço solar anexo recolhe como uma janela de ganho directo, mas acumula e liberta ao longo do dia — a própria casa instrumentada de Galloway manteve um solário sem sombreamento entre 33 e 54°C enquanto a sala ficava perto de 27°C atrás dele (pp.24–30). Funciona melhor virado ao equador, mas é "cerca de metade tão sensível à orientação" como outros sistemas passivos — dentro de 30° do sul verdadeiro custa menos de 10% do óptimo (DeKay &amp; Brown, p.235). É também o mais caro e menos eficiente dos sistemas passivos, e inutilizável quando demasiado quente ou frio a menos que esteja bem ventilado — as aberturas de entrada e saída combinadas devem atingir pelo menos 16% da área envidraçada (Lechner, pp.183–187). Encosta-se à parede mais exterior do seu lado. Arraste o canto envidraçado exterior para definir tanto a distância a que fica do edifício como a largura que ocupa na parede.',
   'open-roofwin':
     'Luz natural e sol de inverno por cima: o vidro na vertente virada para a fachada principal compensa onde o clima pende para o aquecimento e sobreaquece onde pende para o arrefecimento; o vidro na vertente oposta dá luz difusa e suave, com pouco ganho num sentido ou noutro. Cada vertente é o maior plano da própria cobertura virado para esse lado — a vertente virada para a fachada principal é a que o separador Cobertura usa para os colectores, pelo que cada metro quadrado envidraçado nela é menos um para colectores. Uma vertente que a cobertura não tem não recebe janelas. As filas centram-se no troço mais largo da sua vertente; arraste o ponto de uma fila para a deslizar para cima ou para baixo na vertente ou, numa cobertura plana, ao longo dela. As janelas numa vertente voltada para longe da câmara desenham-se a tracejado nos seus lugares verdadeiros.',
   'open-accuracy':
-    'Este separador dimensiona vidro e sombreamento como um primeiro esboço de projecto — regras geométricas de bolso, não uma simulação. Não modela luz difusa ou reflectida, encandeamento, ganhos internos ou solares, nem um céu real, e o valor de sombreamento abaixo é a média de um conjunto fixo de horas do dia em 21 de Junho e 21 de Dezembro apenas, não do ano inteiro nem de um ficheiro climático real. O próprio Olgyay chamou aos seus coeficientes de sombreamento "valores aproximados" (p.67); Lechner recomenda verificar qualquer desenho de sombreamento com um modelo físico (p.251); Ching &amp; Shapiro notam que o dimensionamento óptimo do vidro "deveria ser calculado por simulação computacional" (p.101). Um valor fora do intervalo colorido não está proibido — alguns programas precisam disso — mas trate-o como um sinal a justificar, não uma opção por defeito.',
+    'Este separador dimensiona vidro e sombreamento como um primeiro esboço de projecto — regras geométricas de bolso, não uma simulação. Não modela luz difusa ou reflectida, encandeamento, ganhos internos ou solares, nem um céu real, e o valor de sombreamento abaixo é uma média do feixe de céu limpo sobre as horas inteiras do dia 21 de cada mês de Junho a Setembro e de Novembro a Fevereiro, não do ano inteiro nem de um ficheiro climático real — nem é o factor de sombreamento do próprio SCE (Fh·Fo·Ff), que o Manual SCE lê nas suas tabelas. O próprio Olgyay chamou aos seus coeficientes de sombreamento "valores aproximados" (p.67); Lechner recomenda verificar qualquer desenho de sombreamento com um modelo físico (p.251); Ching &amp; Shapiro notam que o dimensionamento óptimo do vidro "deveria ser calculado por simulação computacional" (p.101). Um valor fora do intervalo colorido não está proibido — alguns programas precisam disso — mas trate-o como um sinal a justificar, não uma opção por defeito.',
   'vent-face':
     'A câmara orbita o modelo: ↺ e ↻ rodam-no 45°, ▲ e ▼ inclinam-no 15°, Topo olha a direito para baixo como uma planta, Barlavento coloca-se de onde vem o vento, e De lado ao vento põe-se de perfil em relação a ele, baixa, para se verem as camadas a subir sobre a cobertura e a descer para o lado de sotavento. Repor volta ao canto sudoeste que os outros separadores usam. Árvores, muros e o escoamento lêem-se do seu lugar no local, não da vista: rodar a câmara só muda o que se vê.',
   'render-how':
