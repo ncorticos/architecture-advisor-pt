@@ -7707,6 +7707,62 @@ function buildRoof(host) {
   rail.appendChild(el('div', { class:'gh', text:'Roof parts' }));
   const zoneBox = rail.appendChild(el('div'));
   const divBox = rail.appendChild(el('div'));
+  let colBox = null;
+  const faceKeyOf = f => ({ front:'Faces the main facade', back:'Faces the rear', left:'Faces the left end', right:'Faces the right end' }[f] || 'Faces the main facade');
+  /** The roof under colour on the right: a part number, or -1 for the whole
+      roof — unset, the largest part, kept while it exists. */
+  const roofSelIdx = () => {
+    const n = (RF.zones && RF.zones.length) || 1;
+    if (RF.roofSel !== -1 && (!(RF.roofSel >= 0) || RF.roofSel >= n)) {
+      let bi = 0;
+      try {
+        const M = roofModel(G, RF);
+        M.zones.forEach((z, i) => { if (z.area > M.zones[bi].area) bi = i; });
+      } catch (e) {}
+      RF.roofSel = bi;
+    }
+    return RF.roofSel === -1 ? -1 : RF.roofSel;
+  };
+  /** The right side, rebuilt with the parts: numbered roofs to pick from,
+      one compact picker painting the pick. */
+  function buildRoofColUI() {
+    if (!colBox) return;
+    colBox.innerHTML = '';
+    const M = roofModel(G, RF);
+    const n = M.zones.length, sel = roofSelIdx();
+    colBox.appendChild(el('div', { class:'gh', text:t('Roofs') }));
+    const row = el('div', { class:'controls', style:'flex-wrap:wrap;gap:4px' });
+    M.zones.forEach((z, i) => {
+      const rz = RF.zones[i], key = (rz && rz.colA) || RF.col, f = key && finishOf(key);
+      const b = el('button', { class:'btn small' + (sel === i ? ' solid' : ''),
+        title:t('Part') + ' ' + 'ABC'[i] + ' · ' + ['Flat', 'Shed', 'Gable', 'Hip'][z.n] + (z.n ? ' ' + Math.round(z.th) + '°' : '') });
+      b.appendChild(el('span', { style:'display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px;border:1px solid rgba(20,23,26,.35);background:' + (f ? f.hex : '#cfd4cd') }));
+      b.appendChild(document.createTextNode(String(i + 1)));
+      b.onclick = () => { RF.roofSel = i; buildRoofColUI(); roofDraw(); };
+      row.appendChild(b);
+    });
+    const all = el('button', { class:'btn small' + (sel === -1 ? ' solid' : ''), text:t('Whole roof'), title:t('Roof colour — albedo') });
+    all.onclick = () => { RF.roofSel = -1; buildRoofColUI(); roofDraw(); };
+    row.appendChild(all);
+    colBox.appendChild(row);
+    colBox.appendChild(el('p', { class:'hint', text:t('Pick a roof number, then its colour — unset roofs follow the whole-roof colour.') }));
+    const fp = p => { p.classList.add('fpick'); colBox.appendChild(p); };
+    if (sel >= 0 && RF.zones[sel]) {
+      const rz = RF.zones[sel], z = M.zones[sel];
+      const R = M.ridges[sel];
+      const faceNow = rz.n === 2 && R ? (R.face || 'front') : ((z && z.face) || 'front');
+      colBox.appendChild(el('p', { class:'hint', text:(rz.n === 2 ? t('Main slope colour') : t('Part colour')) + ' · ' + t(faceKeyOf(faceNow)) }));
+      fp(finishPicker(() => rz.colA || null, k => { rz.colA = k; buildRoofColUI(); roofDraw(); }));
+      if (rz.n === 2) {
+        const opp = { front:'back', back:'front', left:'right', right:'left' }[faceNow] || 'back';
+        colBox.appendChild(el('p', { class:'hint', text:t('Other slope colour') + ' · ' + t(faceKeyOf(opp)) }));
+        fp(finishPicker(() => rz.colB || null, k => { rz.colB = k; buildRoofColUI(); roofDraw(); }));
+      }
+    } else {
+      colBox.appendChild(el('p', { class:'hint', text:t('Roof colour — albedo') }));
+      fp(finishPicker(() => RF.col, k => { RF.col = k; buildRoofColUI(); roofDraw(); }));
+    }
+  }
   let zonePitchCtls = [], zoneRidgeCtls = [], ridgeSays = [];
   /** Push part zi's ridge to rg of the way across, keeping its height: the
       first slope's pitch follows (kept 10–60°, as its slider), the second
@@ -7755,7 +7811,7 @@ function buildRoof(host) {
     zonePitchCtls = []; zoneRidgeCtls = []; ridgeSays = [];
     M.zones.forEach((z, i) => {
       const rz = RF.zones[i], head = el('div', { class:'gh' });
-      head.innerHTML = t('Part') + ' ' + 'ABC'[i] + ' · ' + spanM(M, i) + ' ' + along;
+      head.innerHTML = (i + 1) + ' · ' + t('Part') + ' ' + 'ABC'[i] + ' · ' + spanM(M, i) + ' ' + along;
       zoneBox.appendChild(head);
       const cT = segCtl('Type', TYPES, rz.n, v => {
         rz.n = v; if (v === 0) rz.th = 0; else if (!rz.th) rz.th = 30;
@@ -7780,18 +7836,6 @@ function buildRoof(host) {
         zoneBox.appendChild(cRg);
         ridgeSays[i] = zoneBox.appendChild(el('p', { class:'hint' }));
         sayRidge(i);
-      }
-      /* each part its own colour, each gable slope its own — chosen per side, like windows */
-      {
-        const faceNow = rz.n === 2 && M.ridges[i] ? (M.ridges[i].face || 'front') : ((M.zones[i] && M.zones[i].face) || 'front');
-        const fk = f => ({ front:'Faces the main facade', back:'Faces the rear', left:'Faces the left end', right:'Faces the right end' }[f] || 'Faces the main facade');
-        zoneBox.appendChild(el('p', { class:'hint', text:(rz.n === 2 ? t('Main slope colour') : t('Part colour')) + ' · ' + t(fk(faceNow)) }));
-        zoneBox.appendChild(finishPicker(() => rz.colA || null, k => { rz.colA = k; roofDraw(); }));
-        if (rz.n === 2) {
-          const opp = { front:'back', back:'front', left:'right', right:'left' }[faceNow] || 'back';
-          zoneBox.appendChild(el('p', { class:'hint', text:t('Other slope colour') + ' · ' + t(fk(opp)) }));
-          zoneBox.appendChild(finishPicker(() => rz.colB || null, k => { rz.colB = k; roofDraw(); }));
-        }
       }
       /* turn one part aside in quarter turns, to face another solar orientation */
       if (M.zones.length > 1 && (rz.n === 1 || rz.n === 2)) {
@@ -7840,7 +7884,8 @@ function buildRoof(host) {
         }
         syncRoofTop(); buildRoofUI(); roofDraw();
       } }));
-    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: divide the longest side (up to three parts), give each part its slopes and pitch, and drag the division on the model or above. Each part takes its own colour beside its pitch — a gable’s two slopes each their own — and turns in quarter turns with Rotate 90°, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
+    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: divide the longest side (up to three parts), give each part its slopes and pitch, and drag the division on the model or above. Numbered on the model, coloured from the list on the right: pick a roof number, then its colour — a gable’s two slopes each their own — and turn parts in quarter turns with Rotate 90°, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
+    buildRoofColUI();
   }
   buildRoofUI();
   /* --- parapet and chimney: the roof's edge and its fire -----------------
@@ -8027,8 +8072,8 @@ function buildRoof(host) {
     'One chimney, drawn as the region builds them — pick its style above where the parish builds more than one. It stands where it is put and rises what the slider says; the draw score judges the crown against the rule every chimney answers to: half a metre clear of the ridge on a pitched roof, a metre clear on a flat one, so the wind draws instead of pushing back down. “To the rule” raises it exactly there. A short chimney on the lee slope smokes back into the attic — height first, then position.'));
   const pillChim = el('span', { class:'pill empty' });
   props.appendChild(pillChim);
-  props.appendChild(el('div', { class:'gh', text:'Roof colour — albedo' }));
-  props.appendChild(finishPicker(() => RF.col, k => { RF.col = k; roofDraw(); })).classList.add('fpick');
+  colBox = props.appendChild(el('div'));
+  buildRoofColUI();
 
   const pillRoof = el('span', { class:'pill ok' });
   const pillRoofCol = el('span', { class:'pill empty' });
@@ -8277,6 +8322,28 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
         nodesOut.ridge.push(q);
       });
       window.__roofNodes = nodesOut;
+      /* numbered roofs: 1, 2, 3 on the parts, the pick ringed */
+      if (M.zones.length > 1) {
+        const selN = RF.roofSel;
+        M.zones.forEach((z, zi) => {
+          const span = [z.a0, z.a1], mid = (span[0] + span[1]) / 2;
+          const across = M.axis === 'x' ? (bb[1] + bb[3]) / 2 : (bb[0] + bb[2]) / 2;
+          const wHalf = Math.abs(span[1] - span[0]) / 4;
+          let best = null;
+          [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([ox, oy]) => {
+            const qx = M.axis === 'x' ? mid + ox * wHalf : across + ox * 1;
+            const qy = M.axis === 'x' ? across + oy * 1 : mid + oy * wHalf;
+            const e = M.zAt(qx, qy);
+            if (e !== null && e !== undefined && (best === null || e > best.e)) best = { X:qx, Y:qy, e };
+          });
+          if (!best) return;
+          const q = proj(best.X, best.Y, best.e + 0.8), isSel = selN === zi;
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(q[0], q[1], 10, 0, 6.284); ctx.fill();
+          stroke(ctx, isSel ? '#B45309' : CH.ink, isSel ? 2.5 : 1.2); ctx.stroke();
+          label(ctx, String(zi + 1), q[0], q[1], isSel ? '#B45309' : CH.ink, FM(11, '700'), 'center', 'middle');
+          desk.block(q[0] - 12, q[1] - 12, q[0] + 12, q[1] + 12);
+        });
+      }
       /* the divisions between roof parts, draggable along the longest side */
       M.zones.slice(1).forEach(z => {
         const cx = M.axis === 'x' ? z.a0 : bb[0], cy = M.axis === 'x' ? bb[1] : z.a0;
@@ -16863,6 +16930,7 @@ function applyStudy(o) {
       typeof z.colA === 'string' ? { colA:z.colA } : {},
       typeof z.colB === 'string' ? { colB:z.colB } : {})) : undefined;
   } else delete ROOF.zones;
+  if (isFinite(+R0.roofSel)) ROOF.roofSel = Math.max(-1, Math.min(2, Math.round(+R0.roofSel)));
   ['S', 'N', 'E', 'W'].forEach(f => {
     const s = o.open && o.open[f];
     if (!s || typeof s !== 'object') return;
@@ -19633,6 +19701,8 @@ Object.assign(PT, {
   "other slope": "outra vertente",
   "Parapet on": "Platibanda em",
   "Whole roof": "Toda a cobertura",
+  "Roofs": "Telhados",
+  "Pick a roof number, then its colour — unset roofs follow the whole-roof colour.": "Escolha um número de cobertura e depois a sua cor — as partes por definir seguem a cor de toda a cobertura.",
   "Front eave": "Beirado da frente",
   "Rear eave": "Beirado de trás",
   "East eave": "Beirado de nascente",
@@ -19743,7 +19813,7 @@ Object.assign(PT_HINT, {
   'roof-score':
     'Uma só pontuação lê a inclinação. <b>Inclinação · % do melhor</b> é o sol do ano na vertente virada para a fachada principal à sua inclinação, como parte do sol à melhor inclinação para essa direcção neste local — encontrada grau a grau, a partir da irradiação do próprio local (ver os colectores abaixo): a produção dos colectores escolhidos ou, sem nenhum, o sol no plano, que é o que o fotovoltaico lê. Muda devagar perto da melhor inclinação — 10° de desvio custam cerca de 1 a 2 % — pelo que qualquer inclinação que um telhado aguente pontua alto; só cai depressa muito longe dela. O calibre verde junto à vertente desenha as regras práticas de Galloway e Lechner para o sol do meio-dia numa vertente a sul — Inverno %1°, Verão %2°, anual %3° — sobre o balanço deste local de %4 meses de aquecimento (média abaixo de 18 °C) para %5 de arrefecimento (acima de 22 °C); arraste a vertente até ficar paralela a um raio para o tomar. A melhor inclinação para todo o ano fica perto do valor anual, mais baixa onde o sol de verão é forte. As faixas de cor 97/90 são cortes didácticos desta aplicação. Uma cobertura plana não tem inclinação a avaliar: os seus colectores tomam a sua própria estrutura.',
   'roof-divide':
-    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: divida o lado maior (até três partes), dê a cada parte as suas águas e inclinação, e arraste a divisão no modelo ou acima. Cada parte leva a sua cor junto à inclinação — as duas vertentes de uma cobertura de duas águas cada uma a sua — e roda em quartos de volta com Rodar 90°, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
+    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: divida o lado maior (até três partes), dê a cada parte as suas águas e inclinação, e arraste a divisão no modelo ou acima. Numeradas no modelo, com cor na lista à direita: escolha um número de cobertura e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode as partes em quartos de volta com Rodar 90°, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
   'ori-roof':
     'Uma superfície a sul recolhe o máximo quando o raio do meio-dia lhe chega quase perpendicular: <b>Inverno = latitude + 15°, Verão = latitude − 15°, anual = latitude</b> (Galloway; Lechner) — aqui <b>%1° / %2° / %3°</b>. %4. Os telhados tradicionais portugueses de telha ficam muito mais baixos, pelo que os colectores pedem em geral a sua própria estrutura — a tensão é a lição.',
   'ori-ff':
