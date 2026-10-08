@@ -2868,6 +2868,38 @@ function turbAnnual(turb, winds, alt) {
   }
   return { kwh:e, rated:pRated, swept:A, hubMean:vsum / 12, rho };
 }
+const TURB_SETBACK = 25;   // m off the house: inside it a turbine is too loud for the rooms
+const TURB_HOME_KWH = 3500;   // one home's annual electricity — the app's own homes yardstick
+/** Distance from a garden point to the house outline, with the nearest point on it. */
+function turbHouse(x, y) {
+  let boxes = [];
+  try { boxes = (typeof MASS !== 'undefined' && MASS ? planParts(MASS).pos : []) || []; } catch (e) { boxes = []; }
+  let d = Infinity, nx = x, ny = y;
+  for (const r of boxes) {
+    const px = clamp(x, r[0], r[2]), py = clamp(y, r[1], r[3]);
+    const dd = Math.hypot(x - px, y - py);
+    if (dd < d) { d = dd; nx = px; ny = py; }
+  }
+  return { d, nx, ny };
+}
+const turbHouseDist = (x, y) => turbHouse(x, y).d;
+/** A turbine spot held out of the 25 m noise setback; held=true when the rule engaged. */
+function turbClamp(x, y) {
+  let h = turbHouse(x, y), held = false;
+  for (let k = 0; k < 4 && h.d < TURB_SETBACK; k++) {
+    held = true;
+    let vx = x - h.nx, vy = y - h.ny, vl = Math.hypot(vx, vy);
+    if (vl < 1e-6) {
+      let cx = x, cy = y;
+      try { const bb = planModel(MASS).bbox; cx = (bb[0] + bb[2]) / 2; cy = (bb[1] + bb[3]) / 2; } catch (e) {}
+      vx = x - cx; vy = y - cy; vl = Math.hypot(vx, vy);
+      if (vl < 1e-6) { vx = 1; vy = 0; vl = 1; }
+    }
+    x = h.nx + vx / vl * TURB_SETBACK; y = h.ny + vy / vl * TURB_SETBACK;
+    h = turbHouse(x, y);
+  }
+  return { x, y, d:h.d, held };
+}
 /** The Roof tab's PV electricity, recomputed anywhere (Ventilation combines
     it with wind): null where no PV fits or the site is missing. */
 function pvAnnualKwh() {
@@ -8278,7 +8310,7 @@ function buildRoof(host) {
 
   roofPanel = makePanel(stage, {
     title: 'The roof in three dimensions',
-    note: 'The plan from Site under its roof, from the south-west corner until you turn it: drag open ground to go round it or to look from higher or lower, or use the bar over it. Drag the black point to re-pitch the roof — the green gauge draws each ideal pitch; stand the slope parallel to a ray to take it. Drag the amber point to size the collector field. Push the white diamond on a gable’s ridge across to stand the ridge aside: it keeps its height, and the two slopes take their own pitches.',
+    note: 'The plan from Site under its roof, from the south-west corner until you turn it: drag open ground to go round it or to look from higher or lower, or use the bar over it. Drag the black point to re-pitch the roof — the green gauge draws each ideal pitch; stand the slope parallel to a ray to take it. Drag the amber point to size the collector field. Push the white diamond on a gable’s ridge across to stand the ridge aside: it keeps its height, and the two slopes take their own pitches. Click a part’s A or B circle to work on that part — the orange ring marks the pick.',
     heightFn: w => phoneW(w) ? Math.round(w * 0.95 + 150) : Math.round(Math.max(300, Math.min(w / 1.55, roomH() - 252))),
     render(ctx, W, H) {
       const FR = roofFrame(W, H), narrow = phoneW(W), M = FR.M, pl = M.pl, H0 = FR.H0, bb = pl.bbox;
@@ -9008,6 +9040,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
      canvas turns the camera --- */
   const orbit = orbitDrag(RCAM, (az, e) => roofCam.set(az, e));
   rcv.addEventListener('pointerdown', ev => {
+    badgeDown = badgeAt(ev.clientX, ev.clientY); badgeX = ev.clientX; badgeY = ev.clientY;
     const fh = fieldAt(ev.clientX, ev.clientY);
     if (fh) {
       ev.preventDefault();
@@ -9097,6 +9130,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     if (rgdrag) { ev.preventDefault(); doRidgeDrag(ev.clientX, ev.clientY); return; }
     if (ddiv >= 0) { ev.preventDefault(); doDivDrag(ev.clientX, ev.clientY); return; }
     if (!rdrag) {
+      if (badgeAt(ev.clientX, ev.clientY) >= 0) { rcv.style.cursor = 'pointer'; return; }
       const cnH = canopyAt(ev.clientX, ev.clientY), rgH = cnH ? -1 : ridgeAt(ev.clientX, ev.clientY);
       rcv.style.cursor = cnH && cnH.part === 'width' ? 'ew-resize' : cnH && cnH.part === 'height' ? 'ns-resize' : cnH ? 'move' : rgH >= 0 ? 'move' : fieldAt(ev.clientX, ev.clientY) ? 'move' : fieldBodyAt(ev.clientX, ev.clientY) ? 'move' : chimHandleAt(ev.clientX, ev.clientY) ? 'move' : divHandleAt(ev.clientX, ev.clientY) >= 0 ? 'ew-resize' : nearSlope(ev.clientX, ev.clientY) ? 'ns-resize' : 'grab';
       return;
@@ -9203,6 +9237,34 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     roofDraw();
   };
   let cdrag = null;
+  /** A click on a part badge (not a drag): the pointerdown position, for click-to-select. */
+  let badgeDown = -1, badgeX = 0, badgeY = 0;
+  /** Which roof part's A/B badge is the pointer on: its index, or -1 —
+      the same seat the draw pass rings, so touching a circle picks that part. */
+  const badgeAt = (clientX, clientY) => {
+    if (!roofPanel.W) return -1;
+    const M = roofModel(G, RF);
+    if (M.zones.length < 2) return -1;
+    const FR = frameNow(), r = rcv.getBoundingClientRect(), bb = M.pl.bbox;
+    let best = -1, bd = 13;
+    M.zones.forEach((z, zi) => {
+      const span = [z.a0, z.a1], mid = (span[0] + span[1]) / 2;
+      const across = M.axis === 'x' ? (bb[1] + bb[3]) / 2 : (bb[0] + bb[2]) / 2;
+      const wHalf = Math.abs(span[1] - span[0]) / 4;
+      let seat = null;
+      [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([ox, oy]) => {
+        const qx = M.axis === 'x' ? mid + ox * wHalf : across + ox * 1;
+        const qy = M.axis === 'x' ? across + oy * 1 : mid + oy * wHalf;
+        const e = M.zAt(qx, qy);
+        if (e !== null && e !== undefined && (seat === null || e > seat.e)) seat = { X:qx, Y:qy, e };
+      });
+      if (!seat) return;
+      const q = projF(FR, seat.X, seat.Y, seat.e + 0.8);
+      const d = Math.hypot(clientX - r.left - q[0], clientY - r.top - q[1]);
+      if (d < bd) { bd = d; best = zi; }
+    });
+    return best;
+  };
   /** Which gable part's ridge point is the pointer on: its index, or -1. */
   const ridgeAt = (clientX, clientY) => {
     if (!roofPanel.W) return -1;
@@ -9283,7 +9345,14 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     if (chimYCtl && chdrag.zi === roofSelIdx()) syncCtl(chimYCtl, ch.y, v => fmt(v, 1) + ' m');
     roofDraw();
   };
-  const endDrag = () => { orbit.end(); rdrag = fdrag = false; movedrag = null; chdrag = false; if (cdrag) { cdrag = null; buildCanopyUI(); } if (rgdrag) { rgdrag = null; buildRoofUI(); } if (ddiv >= 0) { ddiv = -1; buildRoofUI(); roofDraw(); } rcv.style.cursor = 'default'; };
+  const endDrag = ev => {
+    if (ev && ev.type === 'pointerup' && badgeDown >= 0 && badgeDown !== roofSelIdx()
+      && Math.hypot(ev.clientX - badgeX, ev.clientY - badgeY) < 6 && badgeAt(ev.clientX, ev.clientY) === badgeDown) {
+      RF.roofSel = badgeDown;
+      buildRoofColUI(); buildRoofSideUI(); roofDraw();
+    }
+    badgeDown = -1;
+    orbit.end(); rdrag = fdrag = false; movedrag = null; chdrag = false; if (cdrag) { cdrag = null; buildCanopyUI(); } if (rgdrag) { rgdrag = null; buildRoofUI(); } if (ddiv >= 0) { ddiv = -1; buildRoofUI(); roofDraw(); } rcv.style.cursor = 'default'; };
   rcv.addEventListener('pointerup', endDrag);
   rcv.addEventListener('pointercancel', endDrag);
   zoomGesture(rcv, 'roof');
@@ -10728,6 +10797,7 @@ function buildVentilation(host) {
     if (isFinite(+t0.hub)) TURB.hub = clamp(+t0.hub, 5, 18);
     if (isFinite(+t0.x)) TURB.x = clamp(+t0.x, -30, 30);
     if (isFinite(+t0.y)) TURB.y = clamp(+t0.y, -30, 30);
+    { const c = turbClamp(TURB.x, TURB.y); TURB.x = +c.x.toFixed(1); TURB.y = +c.y.toFixed(1); }
   }
   const WIND_M = [];
   for (let _m = 0; _m < 12; _m++) WIND_M.push(K0 ? Object.assign({}, K0.WIND_M[_m]) : { dir:0, spd:3.0 });
@@ -12397,15 +12467,40 @@ function buildVentilation(host) {
   rail.appendChild(el('div', { class:'gh', text:'Wind turbine' }));
   const turbBox = rail.appendChild(el('div'));
   const turbSays = el('p', { class:'hint' });
+  let turbXCtl = null, turbYCtl = null, turbAlarm = false, turbDrag = null;
+  /** Both position thumbs follow a drag; the sliders only move in whole metres. */
+  const syncTurbPos = () => {
+    if (turbXCtl) { turbXCtl.range.value = Math.round(TURB.x); turbXCtl.out.textContent = fmt(Math.round(TURB.x), 0) + ' m'; }
+    if (turbYCtl) { turbYCtl.range.value = Math.round(TURB.y); turbYCtl.out.textContent = fmt(Math.round(TURB.y), 0) + ' m'; }
+  };
+  /** A requested spot through the 25 m noise setback; the sliders keep whole metres. */
+  const setTurbXY = (x, y) => {
+    const px = TURB.x, py = TURB.y;
+    const c = turbClamp(x, y);
+    let nx = +c.x.toFixed(0), ny = +c.y.toFixed(0), held = c.held;
+    if (turbHouseDist(nx, ny) < TURB_SETBACK) { nx = px; ny = py; held = true; }
+    TURB.x = nx; TURB.y = ny;
+    if (held) toast(t('Held 25 m off the house — closer is too loud'));
+    syncTurbPos(); refresh();
+  };
   function buildTurbUI() {
     turbBox.innerHTML = '';
+    turbXCtl = turbYCtl = null;
+    if (TURB && TURB.on) { const c0 = turbClamp(TURB.x, TURB.y); TURB.x = +c0.x.toFixed(1); TURB.y = +c0.y.toFixed(1); }
     const on = !!(TURB && TURB.on);
-    turbBox.appendChild(checkCtl('Add a wind turbine', on, v => { TURB.on = v === true; refresh(); }));
+    turbBox.appendChild(checkCtl('Add a wind turbine', on, v => {
+      TURB.on = v === true;
+      if (TURB.on) {
+        const c0 = turbClamp(TURB.x, TURB.y); TURB.x = +c0.x.toFixed(1); TURB.y = +c0.y.toFixed(1);
+        if (c0.held) toast(t('Held 25 m off the house — closer is too loud'));
+      }
+      buildTurbUI(); refresh();
+    }));
     if (on) {
       turbBox.appendChild(rangeCtl('Rotor diameter', 1, 4, 0.5, TURB.diam, v => { TURB.diam = +(+v).toFixed(1); refresh(); }, v => fmt(v, 1) + ' m'));
       turbBox.appendChild(rangeCtl('Hub height', 5, 18, 0.5, TURB.hub, v => { TURB.hub = +(+v).toFixed(1); refresh(); }, v => fmt(v, 1) + ' m'));
-      turbBox.appendChild(rangeCtl('Position east', -30, 30, 1, TURB.x, v => { TURB.x = +(+v).toFixed(0); refresh(); }, v => fmt(v, 0) + ' m'));
-      turbBox.appendChild(rangeCtl('Position north', -30, 30, 1, TURB.y, v => { TURB.y = +(+v).toFixed(0); refresh(); }, v => fmt(v, 0) + ' m'));
+      turbBox.appendChild(turbXCtl = rangeCtl('Position east', -30, 30, 1, TURB.x, v => setTurbXY(+v.toFixed(0), TURB.y), v => fmt(v, 0) + ' m'));
+      turbBox.appendChild(turbYCtl = rangeCtl('Position north', -30, 30, 1, TURB.y, v => setTurbXY(TURB.x, +v.toFixed(0)), v => fmt(v, 0) + ' m'));
     }
     turbBox.appendChild(turbSays);
   }
@@ -12485,7 +12580,7 @@ function buildVentilation(host) {
     'The two readings under the model qualify the <b>form</b> drawn on Site — the bar, its break, its patio — for air, whatever is planted round it. <b>Summer</b>: every half metre of floor looks out along the plan’s two axes to the first wall on each side. With windows on both opposite walls no more than five floor heights apart (%1 m here) it can be cross-ventilated; failing that, within 2.5 floor heights (%2 m) of a wall with a window it is single-sided; beyond both it is out of reach of natural ventilation. The 5 × and 2.5 × depths are the CIBSE AM10 rules of thumb, read on the plan’s walls rather than on rooms. A narrow bar, a wing, a recess or a patio all bring floor within reach; a deep square plan leaves its middle out. The reading also says whether the cross paths run with the June-to-August wind or across it. <b>Winter</b>: the December-to-February wind is traced onto every wall turned into it, and a wall counts as sheltered where a line back into the wind meets another part of the building — a patio’s inner walls, the lee of a wing. The share of all the glass left facing that wind unsheltered is the reading: 15 % or less reads as closed, above 35 % as open (this app’s teaching cuts). The form enters both ratings: the building’s own lee cuts the winter wind at the walls it shelters, and the summer rating reads only a cross path that reaches at least a quarter of the floor.',
     [fmt(5 * G.fh, 1), fmt(2.5 * G.fh, 1)]));
   host.appendChild(hint('vent-turb',
-    'A garden turbine earns where the wind does: monthly means at 10 m, taken to hub height by the 1/7 shear law, Rayleigh gust energy, 25 % water-to-wire, cut in at 2.5 m/s and capped at its 12 m/s rating — a screening estimate, honest to ±30 %, never a substitute for a year of measured wind. Taller than the walls is allowed: height is the whole point. Green from 4.5 m/s at the hub, yellow from 3, red below — with the sun’s PV beside it, and the two added as homes’ shares.'));
+    'A garden turbine earns where the wind does: monthly means at 10 m, taken to hub height by the 1/7 shear law, Rayleigh gust energy, 25 % water-to-wire, cut in at 2.5 m/s and capped at its 12 m/s rating — a screening estimate, honest to ±30 %, never a substitute for a year of measured wind. Taller than the walls is allowed: height is the whole point. Green from 4.5 m/s at the hub, yellow from 3, red below — with the sun’s PV beside it, and the two added as homes’ shares. Drag the turbine itself to move it round the garden — it is held 25 m off the house, closer is too loud for the rooms. Its rotor spins on the model at hub-wind speed. Wind plus sun count against one home’s 3,500 kWh a year: past that the reading turns red — take the turbine down.'));
   function refreshScores() {
     const ww = winterWind(), sa = summerAir(), wb = winterBand(ww), sb = summerBand(sa);
     olgPill.className = 'pill ' + (wb === 'ok' && sb === 'ok' ? 'ok' : wb === 'ok' || sb === 'ok' ? 'empty' : 'bad');
@@ -12499,27 +12594,37 @@ function buildVentilation(host) {
     pillFormS.className = 'pill ' + fv.sCls;
     pillFormS.textContent = t('Form in summer') + ' · ' + pc(fr.cross) + ' % ' + t('of the floor cross-ventilable') + ', ' + pc(fr.single) + ' % ' + t('single-sided') + ', '
       + pc(fr.none) + ' % ' + t('beyond reach') + ' — ' + t(fv.sWord) + (fv.cross > 0 ? '; ' + t(fv.aWord) + ' ' + t('from') + ' ' + COMPASS8[Math.round(fv.sw.dir / 45) % 8] : '');
-    /* a garden turbine's electricity, with the sun beside it */
+    /* a garden turbine's electricity, with the sun beside it — past one
+       home's 3,500 kWh the reading turns red: take the turbine down */
     const tc = turbCalc();
     if (!tc) { pillTurb.className = 'pill empty'; pillTurb.textContent = t('No turbine — add one on the left'); }
     else {
       const eTot = tc.kwh + (tc.pv ? tc.pv.kwh : 0);
-      const homes = eTot / 3500;
-      pillTurb.className = 'pill ' + (tc.hubMean < 3 ? 'bad' : tc.hubMean < 4.5 ? 'empty' : 'ok');
+      const homes = eTot / TURB_HOME_KWH, over = eTot > TURB_HOME_KWH;
+      pillTurb.className = 'pill ' + (over ? 'bad' : tc.hubMean < 3 ? 'bad' : tc.hubMean < 4.5 ? 'empty' : 'ok');
       pillTurb.textContent = t('Wind') + ' ' + fmt(tc.kwh, 0) + ' + ' + t('Sun') + ' ' + fmt(tc.pv ? tc.pv.kwh : 0, 0)
-        + ' = ' + fmt(eTot, 0) + ' kWh/yr ≈ ' + fmt(homes, 1) + ' ' + t('homes');
+        + ' = ' + fmt(eTot, 0) + ' kWh/yr ≈ ' + fmt(homes, 1) + ' ' + t('homes')
+        + (over ? ' — ' + t('Too much for one house — take the turbine down') : '');
     }
     turbSays.innerHTML = tc ? turbWords(tc) : '';
   }
-  /** The turbine's numbers in words for the rail. */
+  /** The turbine's numbers in words for the rail: its seat off the house,
+      its kWh, and the red flags — too close, or more than one home with the sun. */
   function turbWords(tc) {
+    const tD = turbHouseDist(TURB.x, TURB.y);
+    const eTot = tc.kwh + (tc.pv ? tc.pv.kwh : 0), over = eTot > TURB_HOME_KWH;
+    let s = tD < TURB_SETBACK
+      ? '<span style="color:#9f2420">⚠ ' + t('Too close — only') + ' ' + fmt(tD, 0) + ' ' + t('m off the house: inside the 25 m noise setback') + '</span>'
+      : t('Turbine stands') + ' ' + fmt(tD, 0) + ' ' + t('m off the house — 25 m minimum, closer is too loud');
     const wd = tc.hubMean < 3 ? t('too little wind here — the sun earns more')
       : tc.hubMean < 4.5 ? t('marginal wind — a small share; sun first')
       : t('good wind — a real share of a home');
-    let s = t('Wind at hub') + ' ' + fmt(tc.hubMean, 1) + ' m/s · ' + t('Turbine') + ' '
+    s += '<br>' + t('Wind at hub') + ' ' + fmt(tc.hubMean, 1) + ' m/s · ' + t('Turbine') + ' '
       + fmt(tc.kwh, 0) + ' kWh/yr · ' + wd + (tc.sheltered ? ' · ' + t('sheltered by nearby planting or walls') : '');
     if (tc.pv && tc.pv.perM2 > 0) s += '<br>' + t('Same area of PV would make') + ' ' + fmt(tc.swept * tc.pv.perM2, 0) + ' kWh/yr';
     if (tc.th) s += '<br>' + t('Thermal heat') + ' ' + fmt(tc.th.kwh, 0) + ' kWh/yr';
+    if (over) s += '<br><span style="color:#9f2420">' + t('Too much for one house — take the turbine down')
+      + ' (' + fmt(eTot, 0) + ' kWh/yr ' + t('Wind') + ' + ' + t('Sun') + ')</span>';
     return s;
   }
   /** Turbine + sun as built, or null. */
@@ -13213,6 +13318,22 @@ function buildVentilation(host) {
       const tHp = proj(TURB.x, TURB.y, tHz);
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(tHp[0], tHp[1], 4, 0, 6.284); ctx.fill();
       stroke(ctx, CH.ink, 1); ctx.stroke();
+      /* the 25 m noise setback: a red ring and a warning tag while the rule is tested */
+      const tD0 = turbHouseDist(TURB.x, TURB.y);
+      if (turbAlarm || tD0 < TURB_SETBACK) {
+        const tbb = planModel(G).bbox, tcx = (tbb[0] + tbb[2]) / 2, tcy = (tbb[1] + tbb[3]) / 2;
+        const ring = [];
+        for (let k = 0; k < 72; k++) {
+          const a = k / 72 * 2 * Math.PI, X = tcx + Math.cos(a) * TURB_SETBACK, Y = tcy + Math.sin(a) * TURB_SETBACK;
+          let gz = 0; try { gz = terraAt(X, Y); } catch (e) {}
+          ring.push([X, Y, gz + 0.25]);
+        }
+        poly(ring, null, '#DC2626', 1.6, [7, 5]);
+        const tp = proj(TURB.x, TURB.y, tHz + tR + 1.4);
+        ctx.fillStyle = '#9f2420'; ctx.font = 'bold 11px ui-monospace'; ctx.textAlign = 'center';
+        ctx.fillText('\u26a0 ' + t('25 m \u2014 too close'), tp[0], tp[1]);
+        ctx.textAlign = 'left';
+      }
     }
     /* ---- the layer rides the relief: it climbs over the house, the walls
        and the crowns (stylised displacement, not CFD), so the student sees
@@ -13577,6 +13698,9 @@ function buildVentilation(host) {
       rows.push(['Turbine rated power (W)', Math.round(tr.rated)]);
       rows.push(['PV electricity (kWh/year)', pv ? Math.round(pv.kwh) : 0]);
       rows.push(['Wind + sun (kWh/year)', Math.round(tr.kwh + (pv ? pv.kwh : 0))]);
+      rows.push(['Turbine off the house (m)', +turbHouseDist(TURB.x, TURB.y).toFixed(0)]);
+      rows.push(['Wind + sun vs one home (3500 kWh/year)', Math.round(tr.kwh + (pv ? pv.kwh : 0))
+        + ((tr.kwh + (pv ? pv.kwh : 0)) > TURB_HOME_KWH ? ' — over: take the turbine down' : ' — within')]);
     }
     VEGETATION.forEach(v => rows.push([vegKind(v), specOf(v.type).pt + ' (' + specOf(v.type).sci + ') h=' + v.height + 'm trunk=' + trunkOf(v).toFixed(1) + 'm canopy=' + canopyOf(v).toFixed(1) + 'm ' + crownFormOf(v) + ' d=' + v.density + ' x=' + v.x + ' y=' + v.y + ' → ' + sideOf(v.x, v.y)]));
     WALLS.forEach(w => rows.push(['Wall', 'x=' + w.x + ' y=' + w.y + ' ' + w.along + ' h=' + w.height + 'm l=' + w.length + 'm → ' + sideOf(w.x, w.y)]));
@@ -13619,14 +13743,38 @@ function buildVentilation(host) {
   cv.parentElement.appendChild(airCv);
   window.__arcaAir = null;
   let airRAF = 0, airLast = 0, airBeat = 0, airErr = '';
+  let turbSpin = 0, turbLast = 0;
+  /** The rotor turns on the overlay at hub-wind speed — a faint disc and three
+      blades over the mast the main canvas draws, so exports keep their blades. */
+  const drawTurbSpin = (g, ts) => {
+    if (!TURB || !TURB.on || !FR) return;
+    const dt = Math.min(0.05, Math.max(0, (ts - (turbLast || ts)) / 1000)); turbLast = ts;
+    let hm = 3; try { hm = turbAnnual(TURB, WIND_M, S.alt).hubMean; } catch (e) {}
+    turbSpin = (turbSpin + dt * Math.max(0.3, hm - 2) * 1.6) % (Math.PI * 2);
+    const tR = TURB.diam / 2;
+    let tHz = TURB.hub; try { tHz = terraAt(TURB.x, TURB.y) + TURB.hub; } catch (e) {}
+    const tAx = localDir((tunedWind().dir + 180) % 360);
+    const tNx = -tAx[0], tNy = -tAx[1];
+    let tHx = -tNy, tHy = tNx;
+    const tHl = Math.hypot(tHx, tHy) || 1; tHx /= tHl; tHy /= tHl;
+    const hub = projF(FR, TURB.x, TURB.y, tHz);
+    g.save(); g.globalAlpha = 0.16; g.fillStyle = '#ffffff';
+    g.beginPath(); g.arc(hub[0], hub[1], FR.s * tR, 0, 6.284); g.fill(); g.restore();
+    g.lineCap = 'round';
+    for (let tb = 0; tb < 3; tb++) {
+      const ta = turbSpin + tb * 2 * Math.PI / 3, co = Math.cos(ta), si = Math.sin(ta);
+      const tip = projF(FR, TURB.x + tHx * co * tR, TURB.y + tHy * co * tR, tHz + si * tR);
+      g.strokeStyle = '#3a3f45'; g.lineWidth = 4.5;
+      g.beginPath(); g.moveTo(hub[0], hub[1]); g.lineTo(tip[0], tip[1]); g.stroke();
+      g.strokeStyle = 'rgba(242,240,235,.95)'; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(hub[0], hub[1]); g.lineTo(tip[0], tip[1]); g.stroke();
+    }
+  };
   const airFrame = ts => {
     airRAF = 0;
     if (!ventPanel || !document.contains(ventPanel.canvas)) return;
-    if (!airCv.offsetParent || !airAnim) return;
-    if (ventAir && FR && ventAir.V0 > 0.03) {
-     try {
-      const dt = Math.min(0.05, Math.max(0, (ts - (airLast || ts)) / 1000));
-      airLast = ts;
+    if (!airCv.offsetParent || (!airAnim && !(TURB && TURB.on))) return;
+    try {
       if (airCv.width !== ventPanel.canvas.width || airCv.height !== ventPanel.canvas.height) {
         airCv.width = ventPanel.canvas.width; airCv.height = ventPanel.canvas.height;
       }
@@ -13635,6 +13783,10 @@ function buildVentilation(host) {
       const g = airCv.getContext('2d');
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, r.width, r.height);
+      drawTurbSpin(g, ts);
+      if (airAnim && ventAir && FR && ventAir.V0 > 0.03) {
+      const dt = Math.min(0.05, Math.max(0, (ts - (airLast || ts)) / 1000));
+      airLast = ts;
       ventAir.parts.forEach(p => {
         const L = ventAir.lines[p.li];
         if (!L) return;
@@ -13651,8 +13803,8 @@ function buildVentilation(host) {
       });
       window.__arcaAir = { lines: ventAir.lines, parts: ventAir.parts, V0: ventAir.V0,
         toA: ventAir.toA, midH: ventAir.midH, t: ventAir.t, boxes: ventAir.boxes, holes: ventAir.holes, beat: ++airBeat, err: airErr };
+      }
      } catch (err) { airErr = String((err && err.message) || err); }
-    }
     airRAF = requestAnimationFrame(airFrame);
   };
   const airKick = () => { airLast = 0; if (!airRAF) airRAF = requestAnimationFrame(airFrame); };
@@ -13740,6 +13892,15 @@ function buildVentilation(host) {
       t('L ' + fmt(w.length, 1) + ' × H ' + fmt(w.height, 1) + ' m') + ' · ' + t('shelters') + ' ' + t(FACE_NAME[f]) +
       '</span><br><span class="tm">' + t('Drag corners to resize · drag to move · double-click to remove') + '</span>';
   };
+  /** The turbine's mast on screen: hub dot or mast line within a finger's reach. */
+  const turbHit = (clientX, clientY) => {
+    if (!FR || !TURB || !TURB.on) return false;
+    const [sx, sy] = toBacking(clientX, clientY);
+    const pr = (x, y, z) => projF(FR, x, y, z);
+    let gz = 0; try { gz = terraAt(TURB.x, TURB.y); } catch (e) {}
+    const a = pr(TURB.x, TURB.y, gz), b = pr(TURB.x, TURB.y, gz + TURB.hub);
+    return distSeg(sx, sy, a[0], a[1], b[0], b[1]) <= 12;
+  };
   const clickHandler = ev => {
     if (!plantArmed && !wallArmed) return;
     const pos = getWorldPos(ev.clientX, ev.clientY);
@@ -13769,6 +13930,15 @@ function buildVentilation(host) {
   let orbit = null;   // a drag on open ground turns the camera
   cv.addEventListener('pointerdown', ev => {
     if (plantArmed || wallArmed || !FR) return;
+    if (TURB && TURB.on && turbHit(ev.clientX, ev.clientY)) {
+      ev.preventDefault();
+      const pos = getWorldPos(ev.clientX, ev.clientY);
+      turbDrag = { ox:TURB.x - pos.x, oy:TURB.y - pos.y };
+      downXY = [ev.clientX, ev.clientY];
+      try { cv.setPointerCapture(ev.pointerId); } catch (err) {}
+      cv.style.cursor = 'grabbing'; hideTip();
+      return;
+    }
     const hit = pickItem(ev.clientX, ev.clientY);
     if (!hit) {
       ev.preventDefault();
@@ -13828,6 +13998,17 @@ function buildVentilation(host) {
       refresh();
       return;
     }
+    if (turbDrag) {
+      ev.preventDefault();
+      const pos = getWorldPos(ev.clientX, ev.clientY);
+      const lim = { x:reachXY()[0] + FR.garden, y:reachXY()[1] + FR.garden };
+      const cx = clamp(pos.x + turbDrag.ox, -lim.x, lim.x), cy = clamp(pos.y + turbDrag.oy, -lim.y, lim.y);
+      const c = turbClamp(cx, cy);
+      TURB.x = +c.x.toFixed(1); TURB.y = +c.y.toFixed(1);
+      turbAlarm = c.held;
+      draw();
+      return;
+    }
     if (dragV) {
       ev.preventDefault();
       const pos = getWorldPos(ev.clientX, ev.clientY);
@@ -13854,6 +14035,11 @@ function buildVentilation(host) {
       hideTip(); draw();
       return;
     }
+    if (TURB && TURB.on && turbHit(ev.clientX, ev.clientY)) {
+      cv.style.cursor = 'grab';
+      showTip('<b>' + t('Turbine') + '</b><br><span class="tm">' + t('drag to move it \u2014 it stays 25 m off the house') + '</span>', ev);
+      return;
+    }
     const hit = pickItem(ev.clientX, ev.clientY);
     if (hit) {
       cv.style.cursor = hit.kind === 'handle' ? (hit.part === 'top' ? 'ns-resize' : 'ew-resize') : 'grab';
@@ -13868,6 +14054,13 @@ function buildVentilation(host) {
       return;
     }
     if (handleDrag) { handleDrag = null; cv.style.cursor = 'default'; refresh(); return; }
+    if (turbDrag) {
+      turbDrag = null; downXY = null; cv.style.cursor = 'default';
+      buildTurbUI();
+      if (turbAlarm) toast(t('Held 25 m off the house \u2014 closer is too loud'));
+      turbAlarm = false;
+      refresh(); return;
+    }
     if (dragV) {
       const moved = (ev && downXY) ? Math.hypot(ev.clientX - downXY[0], ev.clientY - downXY[1]) : 99;
       const dk = dragV.kind, di = dragV.index;
@@ -17208,6 +17401,7 @@ function applyStudy(o) {
   if (isFinite(+T0.hub)) TURB.hub = clamp(+T0.hub, 5, 18);
   if (isFinite(+T0.x)) TURB.x = clamp(+T0.x, -30, 30);
   if (isFinite(+T0.y)) TURB.y = clamp(+T0.y, -30, 30);
+  { const c = turbClamp(TURB.x, TURB.y); TURB.x = +c.x.toFixed(1); TURB.y = +c.y.toFixed(1); }
   const W0 = o.rwin || {};
   ['s', 'n', 'e', 'w'].forEach(k => { if (isFinite(+W0[k]) && +W0[k] >= 0 && +W0[k] <= 4) RWIN[k] = Math.round(+W0[k]); });
   ['sF', 'nF', 'eF', 'wF'].forEach(k => { if (isFinite(+W0[k])) RWIN[k] = clamp(+W0[k], 0, 1); });
@@ -19539,8 +19733,8 @@ Object.assign(PT, {
   "Between the seasonal ideals — decide by use": "Entre os ideais sazonais — decidir pelo uso",
   "Far from any solar ideal": "Longe de qualquer ideal solar",
   "The roof in three dimensions": "O telhado em três dimensões",
-  "The plan from Site under its roof, from the south-west corner until you turn it: drag open ground to go round it or to look from higher or lower, or use the bar over it. Drag the black point to re-pitch the roof — the green gauge draws each ideal pitch; stand the slope parallel to a ray to take it. Drag the amber point to size the collector field. Push the white diamond on a gable’s ridge across to stand the ridge aside: it keeps its height, and the two slopes take their own pitches.":
-    "A planta do Local sob a sua cobertura, vista do canto sudoeste até a rodar: arraste o terreno livre para a contornar ou a ver de mais alto ou mais baixo, ou use a barra sobre o modelo. Arraste o ponto preto para mudar a inclinação — o calibre verde desenha cada inclinação ideal; ponha a vertente paralela a um raio para a tomar. Arraste o ponto âmbar para dimensionar o campo de colectores. Empurre para o lado o losango branco na cumeeira de uma cobertura de duas águas para a descentrar: a altura mantém-se e cada vertente fica com a sua inclinação.",
+  "The plan from Site under its roof, from the south-west corner until you turn it: drag open ground to go round it or to look from higher or lower, or use the bar over it. Drag the black point to re-pitch the roof — the green gauge draws each ideal pitch; stand the slope parallel to a ray to take it. Drag the amber point to size the collector field. Push the white diamond on a gable’s ridge across to stand the ridge aside: it keeps its height, and the two slopes take their own pitches. Click a part’s A or B circle to work on that part — the orange ring marks the pick.":
+    "A planta do Local sob a sua cobertura, vista do canto sudoeste até a rodar: arraste o terreno livre para a contornar ou a ver de mais alto ou mais baixo, ou use a barra sobre o modelo. Arraste o ponto preto para mudar a inclinação — o calibre verde desenha cada inclinação ideal; ponha a vertente paralela a um raio para a tomar. Arraste o ponto âmbar para dimensionar o campo de colectores. Empurre para o lado o losango branco na cumeeira de uma cobertura de duas águas para a descentrar: a altura mantém-se e cada vertente fica com a sua inclinação. Clique no círculo A ou B de uma parte para trabalhar nessa parte — o anel laranja marca a parte escolhida.",
   "Front": "Frente",
   "Side": "Lado",
   "From S": "De S",
@@ -19959,7 +20153,15 @@ Object.assign(PT, {
   "good wind — a real share of a home": "bom vento — uma parte real de uma casa",
   "sheltered by nearby planting or walls": "abrigado por vegetação ou muros próximos",
   "Same area of PV would make": "A mesma área em FV daria",
-  "No turbine — add one on the left": "Sem turbina — acrescente uma à esquerda"
+  "No turbine — add one on the left": "Sem turbina — acrescente uma à esquerda",
+  "Turbine stands": "A turbina fica a",
+  "m off the house — 25 m minimum, closer is too loud": "m da casa — mínimo 25 m, mais perto faz demasiado barulho",
+  "Too close — only": "Demasiado perto — só a",
+  "m off the house: inside the 25 m noise setback": "m da casa: dentro da faixa de ruído de 25 m",
+  "Held 25 m off the house — closer is too loud": "Mantida a 25 m da casa — mais perto faz demasiado barulho",
+  "Too much for one house — take the turbine down": "Demais para uma casa — retire a turbina",
+  "drag to move it — it stays 25 m off the house": "arraste para a mover — fica sempre a 25 m da casa",
+  "25 m — too close": "25 m — demasiado perto"
 });
 
 /* --- the long captions, keyed by identifier ----------------------------- */
@@ -19974,6 +20176,8 @@ Object.assign(PT_HINT, {
     'As duas leituras por baixo do modelo qualificam a <b>forma</b> desenhada no Local — a barra, a sua quebra, o seu pátio — para o ar, seja o que for que se plante à volta. <b>Verão</b>: cada meio metro de piso olha ao longo dos dois eixos da planta até à primeira parede de cada lado. Com janelas nas duas paredes opostas a não mais de cinco alturas de piso uma da outra (aqui %1 m) pode ter ventilação cruzada; não sendo assim, a menos de 2,5 alturas de piso (%2 m) de uma parede com janela é unilateral; para lá das duas fica fora do alcance da ventilação natural. As profundidades de 5 × e 2,5 × são as regras práticas do CIBSE AM10, lidas nas paredes da planta e não em compartimentos. Uma barra estreita, uma ala, um recuo ou um pátio trazem piso para dentro do alcance; uma planta quadrada funda deixa o meio de fora. A leitura diz também se os percursos cruzados seguem o vento de Junho a Agosto ou o atravessam. <b>Inverno</b>: o vento de Dezembro a Fevereiro é levado a todas as paredes voltadas para ele, e uma parede conta como abrigada onde uma linha de volta ao vento encontra outra parte do edifício — as paredes interiores de um pátio, o sotavento de uma ala. A leitura é a parte de todo o vidro que fica de frente para esse vento sem abrigo: 15 % ou menos lê-se como fechada, acima de 35 % como aberta (cortes didácticos desta aplicação). A forma entra nas duas classificações: o sotavento do próprio edifício corta o vento de inverno nas paredes que abriga, e a classificação de verão só lê um percurso cruzado que alcance pelo menos um quarto do piso.',
   'vent-scores':
     'O compromisso de Olgyay (1963): manter fora o vento de inverno, deixar passar a brisa de verão — duas classificações em metros por segundo. <b>Inverno</b> lê o vento de Dezembro a Fevereiro (média vectorial dos meses, com o ajuste local), levado à altura do beirado sobre este terreno e exposição, e segue-o até cada parede voltada para ele: em cada ponto dessas paredes é cortado pelo melhor abrigo a montante — uma árvore, uma sebe ou um muro cuja copa ou comprimento atravesse a linha de volta ao vento corta-o mais dentro de 5 das suas alturas e cada vez menos até 20 alturas (12 para um muro cheio, de sotavento mais fundo mas mais curto), segundo os estudos de quebra-ventos de Heisler &amp; DeWalle (1988); folhagem densa corta mais do que folhagem aberta, um muro cheio até 80 %; o sotavento do próprio edifício corta 70 %. A caixa é o vento que resta nas paredes a barlavento: construa obstáculos a montante e ele desce, e o ar contorna a casa. <b>Verão</b> lê o vento de Junho a Agosto impelido através de cada par de lados opostos: Q = C<sub>d</sub> · A · U · √ΔC<sub>p</sub>, com C<sub>d</sub> 0,61, A as áreas que abrem dos dois lados em série (metade de cada área envidraçada), U o vento ao beirado e ΔC<sub>p</sub> 0,9 com o vento ao longo do par, menos à medida que roda para o atravessar. Plantação ou um muro <i>à frente</i> das janelas de entrada bloqueia o escoamento; <i>ao lado</i> do percurso, a menos de 3 m dele, afunila o ar para as aberturas, até +40 % — plante e construa dos lados e mantenha o percurso livre. A caixa é a velocidade do ar que entra pelas janelas de entrada — o caudal sobre a sua área que abre: sobe quando o jardim afunila, e é máxima quando a entrada é menor do que a saída (Givoni); a leitura acrescenta as renovações de ar por hora que o caudal dá à casa. As faixas — um corte de 50 % ou mais lê-se abrigado, 25 % ou menos exposto; 1,0 m/s ou mais nas entradas lê-se como brisa através da casa, abaixo de 0,5 m/s como ar parado — são cortes didácticos desta aplicação. Uma primeira passagem de projecto, não um estudo de vento.',
+  'vent-turb':
+    'Uma turbina de jardim rende onde há vento: médias mensais a 10 m, levadas à altura do rotor pela lei 1/7, energia das rajadas de Rayleigh, 25 % até à rede, arranque aos 2,5 m/s e limite à potência nominal aos 12 m/s — uma estimativa de triagem, honesta a ±30 %, nunca substitui um ano de vento medido. Mais alta que os muros é permitido: a altura é o essencial. Verde a partir de 4,5 m/s no cubo, amarelo a partir de 3, vermelho abaixo — com a FV do sol ao lado, e os dois somados em partes de casa. Arraste a própria turbina para a mover pelo jardim — fica mantida a 25 m da casa, mais perto faz demasiado barulho nos quartos. O rotor gira no modelo à velocidade do vento no cubo. Vento mais sol contam para os 3 500 kWh anuais de uma casa: acima disso a leitura fica vermelha — retire a turbina.',
   'site-form':
     'Quebre o volume com as ferramentas à esquerda do modelo. O <b>L</b> trabalha uma ponta da barra, o <b>T</b> o meio, o <b>U</b> as duas pontas de um lado comprido, o <b>H</b> as duas pontas dos dois lados compridos. <b>Estender</b> acrescenta a ala para fora da barra; <b>Escavar</b> recorta dentro dela, pelo que é a própria barra que se torna a letra: a perna do L afunda-se na barra como um recorte no seu canto, o pátio do U abre-se entre as suas pernas, o T e o H recortam o que fica ao lado das alas. O ponto preto da quebra é um alcance contínuo: arrastado para fora a ala cresce, de volta à fachada regressa a barra simples, mais para dentro o recuo aprofunda-se — nunca salta para o outro lado. O U tem três pontos: o canto interior de cada perna dá a largura dessa perna e o seu próprio alcance — para fora da barra, ou recuado para dentro dela, pelo que uma perna pode ser mais comprida do que a outra — e o ponto no meio do pátio dá a profundidade a que o pátio entra na barra; uma perna nunca recua para trás do fundo do pátio. <b>⇆ Outra ponta</b> e <b>⇅ Outro lado</b> espelham a quebra para a ponta oposta da barra ou para o seu lado comprido oposto. <b>Abrir um pátio</b> recorta um pátio na barra; o ponto do seu canto abre-o mais largo ou mais fundo e o ponto do seu centro desloca-o para qualquer lado dentro dela — encostado a um lado ou a outro, nunca só ao centro — deixando sempre 2 m de edifício à volta e 2 m livres de qualquer recuo. Todas as paredes do contorno — de uma ala, de um recuo, de um pátio — recebem a janela que a sua orientação tem em Aberturas e Sombreamento, pelo que uma quebra redistribui o vidro em vez de o esconder. Uma planta trabalhada muda o que as caixas lêem. <b>Sombra própria · inverno %</b> é a parte do sol de 21 de Dezembro nas paredes que o edifício retira a si próprio — cada parede amostrada a cada 0,75 m em três alturas, o sol a cada meia hora, cada amostra pesada por quão de frente o sol a atinge, e contada como perdida quando o raio de volta ao sol encontra alguma parte da planta (altura do beirado; coberturas inclinadas sombreiam um pouco mais). O mesmo teste a 21 de Junho dá a sombra de verão na leitura por baixo do modelo: uma quebra ou um pátio que sombreia paredes a nascente e a poente no verão ganha com isso, um que sombreia a fachada principal no inverno paga por isso. O <b>factor de forma</b> é tirado de todo o volume — cada parede até ao perfil da própria cobertura, cada plano de cobertura com a inclinação definida em Cobertura, o piso térreo — pelo que uma quebra ou um pátio quase sempre o aumenta: mais envolvente para o mesmo volume. O ajuste a Olgyay continua a ler o comprimento, a profundidade e a rotação da barra. Cobertura, Aberturas e Sombreamento e Ventilação trabalham todos sobre este volume tal como está desenhado, e a exportação CAD escreve-o; a Ventilação lê também a forma para o ar — quanto do piso consegue ventilar em cruzado, quanto do seu vidro volta ao vento de inverno.',
   'roof-albedo':
