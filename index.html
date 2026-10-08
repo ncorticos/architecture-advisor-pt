@@ -3410,6 +3410,67 @@ function beiSide(b, f) {
   const v = b['d' + f] !== undefined && b['d' + f] !== null ? +b['d' + f] : +b.d;
   return clamp(isFinite(v) ? v : 0, 0, 1);
 }
+/** A zone's eave past facade f, or 0 — each roof keeps its own eaves. */
+function zoneBeiSide(z, f) { return beiSide(z && z.bei, f); }
+/** Strongest eave past facade f across the roofs that have eaves on. */
+function beiSideOf(RF, f) {
+  let b = 0;
+  (RF.zones || []).forEach(z => { b = Math.max(b, zoneBeiSide(z, f)); });
+  return b;
+}
+/** Any eave on anywhere: the gate for measuring edges and shade. */
+function beiAny(RF) { return ['S', 'N', 'E', 'W'].some(f => beiSideOf(RF, f) > 0); }
+/** Every canopy standing, with its roof number. */
+function roofCanopies(RF) {
+  const out = [];
+  (RF.zones || []).forEach((z, i) => { if (z && z.canopy) out.push({ zi:i, c:z.canopy }); });
+  return out;
+}
+/** Every chimney standing, with its roof number. */
+function roofChims(RF) {
+  const out = [];
+  (RF.zones || []).forEach((z, i) => { if (z && z.chim && z.chim.on) out.push({ zi:i, ch:z.chim }); });
+  return out;
+}
+/** One-time: whole-roof parapet, eaves, canopy and chimney become the parts'
+    own settings, so every option visibly belongs to the picked roof. */
+function migrateRoofGlobals(G, RF) {
+  roofZones(G, RF);
+  const n = RF.zones.length;
+  if (!n) return;
+  const pl = planModel(G), bb = pl.bbox;
+  const spanX = bb[2] - bb[0], spanY = bb[3] - bb[1], ax = spanX >= spanY ? 'x' : 'y';
+  const S0 = ax === 'x' ? bb[0] : bb[1], SL = (ax === 'x' ? spanX : spanY) || 1;
+  const ziOf = (x, y) => {
+    const c = ax === 'x' ? x : y;
+    const k = RF.zones.findIndex(z => c >= S0 + clamp(z.f0, 0, 1) * SL - 1e-6 && c <= S0 + clamp(z.f1, 0, 1) * SL + 1e-6);
+    if (k >= 0) return k;
+    let bi = 0;
+    RF.zones.forEach((z, i) => { if ((z.f1 - z.f0) > (RF.zones[bi].f1 - RF.zones[bi].f0)) bi = i; });
+    return bi;
+  };
+  if (RF.par && RF.par.on) {
+    const zi = (isFinite(+RF.parZone) && +RF.parZone >= 0 && +RF.parZone < n) ? Math.round(+RF.parZone) : 0;
+    RF.zones[zi].par = { on:true, h:clamp(+RF.par.h || 0.6, 0.2, 1.5) };
+  }
+  if (RF.bei && RF.bei.on) {
+    const sides = {};
+    ['S', 'N', 'E', 'W'].forEach(f => { sides['d' + f] = beiSide(RF.bei, f); });
+    RF.zones.forEach(z => { z.bei = Object.assign({ on:true, ends:RF.bei.ends !== false }, sides); });
+  }
+  if (RF.bei && RF.bei.canopy && typeof RF.bei.canopy === 'object') {
+    const C0 = RF.bei.canopy;
+    RF.zones[(isFinite(+C0.x) && isFinite(+C0.y)) ? ziOf(+C0.x, +C0.y) : 0].canopy =
+      { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:+C0.x || 0, y:+C0.y || 0,
+        w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4), p:clamp(Math.round(+C0.p || 0), 0, 45),
+        drop:clamp(isFinite(+C0.drop) ? +C0.drop : 0.15, CANOPY_DROP_MIN, CANOPY_DROP_MAX) };
+  }
+  if (RF.chim && RF.chim.on) {
+    const zi = (isFinite(+RF.chim.x) && isFinite(+RF.chim.y)) ? ziOf(+RF.chim.x, +RF.chim.y) : 0;
+    RF.zones[zi].chim = Object.assign({}, RF.chim);
+  }
+  delete RF.par; delete RF.parZone; delete RF.bei; delete RF.chim;
+}
 /** Where a gable part's ridge stands across its width, 0–1 from the main
     facade (0.5 the even gable): kept between 0.2 and 0.8, and so that the
     second slope stays between 5° and 75°. */
@@ -3439,12 +3500,14 @@ function roofModel(G, RF) {
   const zones = zones0.map(z => ({ n:z.n, th:z.n === 0 ? 0 : z.th, t:Math.tan((z.n === 0 ? 0 : z.th) * RAD),
     rg:z.n === 2 ? ridgeFrac(z) : 0.5, rot:((+z.rot | 0) % 4 + 4) % 4,
     a0:S0 + clamp(z.f0, 0, 1) * SL, a1:S0 + clamp(z.f1, 0, 1) * SL }));
-  const parZone = RF.par && RF.par.on && isFinite(+RF.parZone) ? Math.max(-1, Math.min(zones0.length - 1, Math.round(+RF.parZone))) : -1;
-  const parKey = RF.par && RF.par.on ? '|par' + (+RF.par.h || 0.6).toFixed(2) + (parZone >= 0 ? 'z' + parZone : '') : '';
+  const parList = [];
+  zones0.forEach((z, zi) => { if (z.par && z.par.on) parList.push({ zi, h:clamp(+z.par.h || 0.6, 0.2, 1.5), a0:zones[zi].a0, a1:zones[zi].a1 }); });
+  const parKey = parList.map(p => '|par' + p.zi + p.h.toFixed(2)).join('');
   /* with a parapet the eave reads as a cornice under it: set either way */
-  const beiS = beiSide(RF.bei, 'S'), beiN = beiSide(RF.bei, 'N'), beiE = beiSide(RF.bei, 'E'), beiW = beiSide(RF.bei, 'W');
-  const beiEnds = !RF.bei || RF.bei.ends !== false;
-  const beiKey = (RF.bei && RF.bei.on) ? '|bei' + beiS.toFixed(2) + ',' + beiN.toFixed(2) + ',' + beiE.toFixed(2) + ',' + beiW.toFixed(2) + (beiEnds ? '' : '|nog') : '';
+  const beiKey = zones0.map((z, zi) => {
+    const o = z.bei && z.bei.on ? z.bei : null;
+    return '|bei' + zi + (o ? ['S', 'N', 'E', 'W'].map(f => beiSide(o, f).toFixed(2)).join(',') + (o.ends !== false ? '' : '|nog') : 'off');
+  }).join('');
   const key = pl.key + '|' + H0 + '|' + axis + '|' + zones0.map(z => [z.f0, z.f1, z.n, z.th, z.n === 2 ? ridgeFrac(z) : '', z.rot | 0].join(',')).join(';') + parKey + beiKey;
   if (ROOF_CACHE.key === key) return ROOF_CACHE.val;
   /* each maximal rectangle cut into strips, one per zone it meets — a flat
@@ -3539,14 +3602,15 @@ function roofModel(G, RF) {
     });
   };
   strips.forEach(s => {
-    /* each side grows by its own projection, so one eave stands wider than another */
-    const bGrow = { x0:beiW, x1:beiE, y0:beiS, y1:beiN };
+    /* each side grows by its own projection, from its own roof's eaves */
+    const zb = zones0[s.zi] && zones0[s.zi].bei, bon = !!(zb && zb.on);
+    const bGrow = { x0:bon ? beiSide(zb, 'W') : 0, x1:bon ? beiSide(zb, 'E') : 0, y0:bon ? beiSide(zb, 'S') : 0, y1:bon ? beiSide(zb, 'N') : 0 };
     if (!(bGrow.x0 > 0 || bGrow.x1 > 0 || bGrow.y0 > 0 || bGrow.y1 > 0)) return;
     const e0 = axis === 'x' ? 'x0' : 'y0', e1 = axis === 'x' ? 'x1' : 'y1';
     const c0 = axis === 'x' ? 'y0' : 'x0', c1 = axis === 'x' ? 'y1' : 'x1';
     const g = { x0:0, x1:0, y0:0, y1:0 };
     /* a free gable end stays flush when its eaves are suppressed */
-    const noEnd = s.n === 2 && !beiEnds;
+    const noEnd = s.n === 2 && !(zb && zb.ends !== false);
     g[e0] = (endCovered(s, e0) || noEnd) ? 0 : bGrow[e0]; g[e1] = (endCovered(s, e1) || noEnd) ? 0 : bGrow[e1];
     g[c0] = crossCovered(s, c0) ? 0 : bGrow[c0]; g[c1] = crossCovered(s, c1) ? 0 : bGrow[c1];
     s.r = [s.r[0] - g.x0, s.r[1] - g.y0, s.r[2] + g.x1, s.r[3] + g.y1];
@@ -3713,8 +3777,8 @@ function roofModel(G, RF) {
      thickness where the outline turns in, lengthened where it turns out —
      so the ring closes on itself and no two strips cross at a corner. */
   let paras = [], paraArea = 0;
-  if (RF.par && RF.par.on) {
-    const ph = clamp(+RF.par.h || 0.6, 0.2, 1.5), pt = 0.2;
+  if (parList.length) {
+    const pt = 0.2;
     const near = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
     const mitre = (sg, P0) => {
       const nb = pl.segs.find(o => o !== sg && (near(o.a, P0) || near(o.b, P0)));
@@ -3734,42 +3798,42 @@ function roofModel(G, RF) {
         return pr[pr.length - 1][1];
       };
       const uS = mitre(sg, sg.a), uE = L - mitre(sg, sg.b);
-      /* parapet on the selected part only: clip every run to that part's span along the division axis */
-      let cu0 = 0, cu1 = L;
-      if (parZone >= 0 && parZone < zones.length) {
-        const za0 = zones[parZone].a0, za1 = zones[parZone].a1;
-        const X0 = axis === 'x' ? sg.a[0] : sg.a[1], dX = axis === 'x' ? ux : uy;
-        if (Math.abs(dX) < 1e-9) {
-          if (!(X0 >= za0 - 1e-6 && X0 <= za1 + 1e-6)) { cu0 = 1; cu1 = 0; }
-        } else {
-          const w0 = (za0 - X0) / dX, w1 = (za1 - X0) / dX;
-          cu0 = Math.max(0, Math.min(w0, w1)); cu1 = Math.min(L, Math.max(w0, w1));
-        }
-      }
-      const clip2 = (ra, rb) => { const ca = Math.max(ra, cu0), cb = Math.min(rb, cu1); return cb > ca + 1e-6 ? [ca, cb] : null; };
+      /* each roof's own parapet: clip every run to that part's span along the division axis */
+      const X0 = axis === 'x' ? sg.a[0] : sg.a[1], dX = axis === 'x' ? ux : uy;
+      const clipSpan = pz => {
+        if (Math.abs(dX) < 1e-9) return (X0 >= pz.a0 - 1e-6 && X0 <= pz.a1 + 1e-6) ? [0, L] : null;
+        const w0 = (pz.a0 - X0) / dX, w1 = (pz.a1 - X0) / dX;
+        const ca = Math.max(0, Math.min(w0, w1)), cb = Math.min(L, Math.max(w0, w1));
+        return cb > ca + 1e-6 ? [ca, cb] : null;
+      };
       const inner = [[uS, zOn(uS)]].concat(pr.filter(q => q[0] > uS + 1e-6 && q[0] < uE - 1e-6), [[uE, zOn(uE)]]);
-      const top = p => [p[0], p[1], p[2] + ph];
-      pr.forEach((q, k) => {
-        if (!k) return;
-        const p0 = pr[k - 1], seg = clip2(p0[0], q[0]);
-        if (seg) {
-          const a = P(seg[0], zOn(seg[0])), b = P(seg[1], zOn(seg[1]));
-          paras.push({ sg, kind:'out', quad:[a, b, top(b), top(a)] });
-        }
-        /* the cap over this run of the profile, its inner edge clipped to the mitred line */
-        const i0 = k === 1 ? uS : Math.max(uS, p0[0]), i1 = k === pr.length - 1 ? uE : Math.min(uE, q[0]);
-        const ic = clip2(i0, i1);
-        if (ic) paras.push({ sg, kind:'cap', quad:[top(P(ic[0], zOn(ic[0]))), top(P(ic[1], zOn(ic[1]))), top(Q(ic[1], zOn(ic[1]))), top(Q(ic[0], zOn(ic[0])))] });
+      const top = (p, h) => [p[0], p[1], p[2] + h];
+      parList.forEach(pz => {
+        const span = clipSpan(pz);
+        if (!span) return;
+        const clip2 = (ra, rb) => { const ca = Math.max(ra, span[0]), cb = Math.min(rb, span[1]); return cb > ca + 1e-6 ? [ca, cb] : null; };
+        pr.forEach((q, k) => {
+          if (!k) return;
+          const p0 = pr[k - 1], seg = clip2(p0[0], q[0]);
+          if (seg) {
+            const a = P(seg[0], zOn(seg[0])), b = P(seg[1], zOn(seg[1]));
+            paras.push({ sg, kind:'out', quad:[a, b, top(b, pz.h), top(a, pz.h)] });
+          }
+          /* the cap over this run of the profile, its inner edge clipped to the mitred line */
+          const i0 = k === 1 ? uS : Math.max(uS, p0[0]), i1 = k === pr.length - 1 ? uE : Math.min(uE, q[0]);
+          const ic = clip2(i0, i1);
+          if (ic) paras.push({ sg, kind:'cap', quad:[top(P(ic[0], zOn(ic[0])), pz.h), top(P(ic[1], zOn(ic[1])), pz.h), top(Q(ic[1], zOn(ic[1])), pz.h), top(Q(ic[0], zOn(ic[0])), pz.h)] });
+        });
+        inner.forEach((q, k) => {
+          if (!k) return;
+          const p0 = inner[k - 1], seg = clip2(p0[0], q[0]);
+          if (seg) {
+            const c = Q(seg[0], seg[0] <= p0[0] + 1e-9 ? p0[1] : zOn(seg[0])), d = Q(seg[1], seg[1] >= q[0] - 1e-9 ? q[1] : zOn(seg[1]));
+            paras.push({ sg, kind:'in', quad:[d, c, top(c, pz.h), top(d, pz.h)] });
+          }
+        });
+        paraArea += Math.max(0, span[1] - span[0]) * (2 * pz.h + pt);
       });
-      inner.forEach((q, k) => {
-        if (!k) return;
-        const p0 = inner[k - 1], seg = clip2(p0[0], q[0]);
-        if (seg) {
-          const c = Q(seg[0], seg[0] <= p0[0] + 1e-9 ? p0[1] : zOn(seg[0])), d = Q(seg[1], seg[1] >= q[0] - 1e-9 ? q[1] : zOn(seg[1]));
-          paras.push({ sg, kind:'in', quad:[d, c, top(c), top(d)] });
-        }
-      });
-      paraArea += Math.max(0, cu1 - cu0) * (2 * ph + pt);
     });
   }
   /* each gable part's ridge that may be pushed aside: its widest strip
@@ -3783,7 +3847,7 @@ function roofModel(G, RF) {
     return { zi, alongX:ax, a0:ax ? r0[0] : r0[1], a1:ax ? r0[2] : r0[3], c0:ax ? r0[1] : r0[0], w:s.ridge.w,
       c:s.ridge.c, z:H0 + z.t * mm * s.ridge.w, rg:z.rg, th:z.th, rear:Math.atan(tbm) / RAD, face:s.ridge.face, mainK:s.ridge.mainK };
   });
-  const val = { key, pl, H0, bei:Math.max(beiS, beiN, beiE, beiW), t:topT, th:topTh, n:topN, pieces, walls, steps, paras, paraArea, skins, at, zOf, roofArea, roofVol, ridge, ridges,
+  const val = { key, pl, H0, bei:zones0.reduce((a, z) => Math.max(a, z.bei && z.bei.on ? Math.max(beiSide(z.bei, 'S'), beiSide(z.bei, 'N'), beiSide(z.bei, 'E'), beiSide(z.bei, 'W')) : 0), 0), t:topT, th:topTh, n:topN, pieces, walls, steps, paras, paraArea, skins, at, zOf, roofArea, roofVol, ridge, ridges,
     zones:zones.map((z, zi) => ({ n:z.n, th:z.th, rg:z.rg, rot:z.rot, rear:z.n === 2 ? rearPitch(z.th, z.rg) : z.th, area:zoneArea[zi] || 0, a0:z.a0, a1:z.a1,
       face:z.n === 2 ? null : z.n === 1 ? ['front', 'left', 'back', 'right'][z.rot] : null })),
     mixed, axis, flats:strips.filter(s => s.n === 0).map(s => s.r),
@@ -4047,10 +4111,16 @@ function sunspaceWall(pl, f) {
 }
 /** A pushed-out stretch of eave (a canopy over exterior space) resolved onto
     its wall: facade + plan point in, wall interval + depth out. Its root
-    hangs 0.15 m under the eave line (H0), or under the eave's own edge
-    where the roof Mr runs out past the wall; a pitch falls it outward,
-    the outer edge kept 2.0 m above the ground (p is the pitch as built). */
+    hangs below the eave line (H0) by the student's drop (0.15 m out of the
+    box), or under the eave's own edge where the roof Mr runs out past the
+    wall; a pitch falls it outward, the outer edge kept 2.0 m above the
+    ground (p is the pitch as built, drop the root's drop below the eave).
+    The slab reads 0.07 m thick, like the beirado's tile ends. */
 const CANOPY_CLEAR = 2.0;
+const CANOPY_THICK = 0.07;
+const CANOPY_DROP_MIN = 0.05, CANOPY_DROP_MAX = 1.5;
+function canopyDrop(c) { return clamp(isFinite(+((c || {}).drop)) ? +c.drop : 0.15, CANOPY_DROP_MIN, CANOPY_DROP_MAX); }
+function canopyMaxDrop(H0) { H0 = isFinite(+H0) ? +H0 : 3; return Math.max(CANOPY_DROP_MIN, Math.min(CANOPY_DROP_MAX, H0 - (CANOPY_CLEAR + 0.1))); }
 function canopySpanFor(segs, c, H0, Mr) {
   if (!c || typeof c !== 'object') return null;
   const f = ['S', 'N', 'E', 'W'].indexOf(c.f) >= 0 ? c.f : 'S';
@@ -4068,11 +4138,15 @@ function canopySpanFor(segs, c, H0, Mr) {
   const u0 = clamp(bu - w2 / 2, 0, Math.max(0, sg.len - w2)), u1 = Math.min(sg.len, u0 + w2);
   const d = clamp(+c.d || 1.5, 0.6, 4);
   /* an alpendre hangs under the eave's edge, never through it: where the
-     roof runs out past this wall, the canopy's root drops below that edge */
-  let z0 = (isFinite(+H0) ? +H0 : 3) - 0.15;
+     roof runs out past this wall, the canopy's root drops below that edge.
+     The drop is the student's own — dragged up and down from the eave —
+     kept so the root itself stays 2.1 m clear where the height allows it. */
+  const H0n = isFinite(+H0) ? +H0 : 3;
+  const drop = Math.min(canopyDrop(c || {}), canopyMaxDrop(H0n));
+  let z0 = H0n - drop;
   if (Mr && Mr.zAt && Mr.bei > 0) { const ev = eaveEdge(Mr, Mr.H0, Mr.bei, sg, u0, u1); if (ev.d > 0.05) z0 = Math.min(z0, ev.z - 0.05); }
   const dz = Math.min(d * Math.tan(clamp(+c.p || 0, 0, 45) * RAD), Math.max(0, z0 - CANOPY_CLEAR));
-  return { sg, u0, u1, d, z0, z1:z0 - dz, p:Math.atan2(dz, d) / RAD };
+  return { sg, u0, u1, d, z0, z1:z0 - dz, p:Math.atan2(dz, d) / RAD, drop };
 }
 /** The canopy's plate in world metres: P(u, v) along the wall and out from
     it, falling with the pitch; its four corners, its move node (mid outer
@@ -4081,7 +4155,17 @@ function canopyPts(hit) {
   const sg = hit.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, n = sg.n;
   const P = (u, v) => [sg.a[0] + tx * u + n[0] * v, sg.a[1] + ty * u + n[1] * v, hit.z0 - (hit.z0 - hit.z1) * v / hit.d];
   return { P, quad:[P(hit.u0, 0), P(hit.u1, 0), P(hit.u1, hit.d), P(hit.u0, hit.d)],
-    mid:P((hit.u0 + hit.u1) / 2, hit.d), end:P(hit.u1, hit.d) };
+    mid:P((hit.u0 + hit.u1) / 2, hit.d), end:P(hit.u1, hit.d),
+    root:P((hit.u0 + hit.u1) / 2, 0) };
+}
+/** The canopy as a 0.07 m slab: top, soffit and the three free fascia —
+    outer edge plus the two sides (the root sits against the wall). */
+function canopySlab(hit) {
+  if (!hit) return null;
+  const q = canopyPts(hit).quad;
+  const lo = p => [p[0], p[1], p[2] - CANOPY_THICK];
+  const qb = q.map(lo);
+  return { top:q, bottom:qb, outer:[q[3], q[2], qb[2], qb[3]], sideA:[q[0], q[3], qb[3], qb[0]], sideB:[q[1], q[2], qb[2], qb[1]] };
 }
 /** The canopy's timber frame, as an alpendre is built: past 0.5 m of depth
     it no longer hangs off the wall but stands on posts — 0.15 m square,
@@ -4518,13 +4602,13 @@ function pushImportFaces(arr, map) {
     (plan-local metres; map translates, as the Environmental view does). */
 function pushChimPar(arr, M, map) {
   if (!M) return;
-  if (ROOF.par && ROOF.par.on && M.paras) M.paras.forEach(pp => arr.push({ pts:map ? pp.quad.map(map) : pp.quad, fill:'#E9E5DD', par:1 }));
+  if (M.paras && M.paras.length) M.paras.forEach(pp => arr.push({ pts:map ? pp.quad.map(map) : pp.quad, fill:'#E9E5DD', par:1 }));
   if (M.skins) M.skins.forEach(sk => arr.push({ pts:map ? sk.quad.map(map) : sk.quad, fill:opaque(roofFillFor(sk.zi, sk.grp, 0.28, 0.8)), par:1 }));
-  const ch = ROOF.chim;
-  if (ch && ch.on && isFinite(+ch.x) && isFinite(+ch.y) && M.pl.inside(+ch.x, +ch.y)) {
+  roofChims(ROOF).forEach(({ ch }) => {
+    if (!isFinite(+ch.x) || !isFinite(+ch.y) || !M.pl.inside(+ch.x, +ch.y)) return;
     const z = M.zAt(+ch.x, +ch.y);
     if (z !== null) chimneyFaces(ch.fam, +ch.x, +ch.y, z, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy)).forEach(f => arr.push({ pts:map ? f.pts.map(map) : f.pts, fill:f.fill, chim:1 }));
-  }
+  });
 }
 
 /**
@@ -7572,6 +7656,7 @@ function buildRoof(host) {
   const lat = S.lat;
   pageHead(host, 'Roof',
     'Roof the plan drawn on Site — slopes, pitch, colour, and the sun the slope facing the main facade can collect.');
+  migrateRoofGlobals(MASS, ROOF);
   const G = MASS, RF = ROOF;
 
   /* --- the pitch and the sun it catches --------------------------------------
@@ -7682,6 +7767,9 @@ function buildRoof(host) {
   const rail = bench.appendChild(el('div', { class:'rail' }));
   const stage = bench.appendChild(el('div', { class:'stage' }));
   const props = bench.appendChild(el('div', { class:'props' }));
+  let colBox = null;
+  const roofSide = props.appendChild(el('div'));
+  colBox = roofSide.appendChild(el('div'));
   host.appendChild(section('Pitched roof — catch the low sun',
     'South slope as a solar collector; the same geometry explains deep winter glass'));
   host.appendChild(hint('ori-roof',
@@ -7707,7 +7795,6 @@ function buildRoof(host) {
   rail.appendChild(el('div', { class:'gh', text:'Roof parts' }));
   const zoneBox = rail.appendChild(el('div'));
   const divBox = rail.appendChild(el('div'));
-  let colBox = null;
   const faceKeyOf = f => ({ front:'Faces the main facade', back:'Faces the rear', left:'Faces the left end', right:'Faces the right end' }[f] || 'Faces the main facade');
   /** The roof under colour on the right: a part number, or -1 for the whole
       roof — unset, the largest part, kept while it exists. */
@@ -7725,6 +7812,12 @@ function buildRoof(host) {
   };
   /** The right side, rebuilt with the parts: numbered roofs to pick from,
       one compact picker painting the pick. */
+  let sideReady = false;
+  /** Rebuild every right-side section for the picked roof. */
+  function buildRoofSideUI() {
+    if (!sideReady) return;
+    buildParUI(); buildBeiUI(); buildCanopyUI(); buildChimUI(); buildSolUI();
+  }
   function buildRoofColUI() {
     if (!colBox) return;
     colBox.innerHTML = '';
@@ -7738,11 +7831,11 @@ function buildRoof(host) {
         title:t('Part') + ' ' + 'ABC'[i] + ' · ' + ['Flat', 'Shed', 'Gable', 'Hip'][z.n] + (z.n ? ' ' + Math.round(z.th) + '°' : '') });
       b.appendChild(el('span', { style:'display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px;border:1px solid rgba(20,23,26,.35);background:' + (f ? f.hex : '#cfd4cd') }));
       b.appendChild(document.createTextNode(String(i + 1)));
-      b.onclick = () => { RF.roofSel = i; buildRoofColUI(); roofDraw(); };
+      b.onclick = () => { RF.roofSel = i; buildRoofColUI(); buildRoofSideUI(); roofDraw(); };
       row.appendChild(b);
     });
     const all = el('button', { class:'btn small' + (sel === -1 ? ' solid' : ''), text:t('Whole roof'), title:t('Roof colour — albedo') });
-    all.onclick = () => { RF.roofSel = -1; buildRoofColUI(); roofDraw(); };
+    all.onclick = () => { RF.roofSel = -1; buildRoofColUI(); buildRoofSideUI(); roofDraw(); };
     row.appendChild(all);
     colBox.appendChild(row);
     colBox.appendChild(el('p', { class:'hint', text:t('Pick a roof number, then its colour — unset roofs follow the whole-roof colour.') }));
@@ -7885,7 +7978,7 @@ function buildRoof(host) {
         syncRoofTop(); buildRoofUI(); roofDraw();
       } }));
     divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: divide the longest side (up to three parts), give each part its slopes and pitch, and drag the division on the model or above. Numbered on the model, coloured from the list on the right: pick a roof number, then its colour — a gable’s two slopes each their own — and turn parts in quarter turns with Rotate 90°, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
-    buildRoofColUI();
+    buildRoofColUI(); buildRoofSideUI();
   }
   buildRoofUI();
   /* --- parapet and chimney: the roof's edge and its fire -----------------
@@ -7893,98 +7986,102 @@ function buildRoof(host) {
      the form factor follows it. One chimney stands on the roof where it is
      put, drawn as the region builds them (see the survey in the code); drag
      its black point along the roof, or set its metres in the rail. */
-  rail.appendChild(el('div', { class:'gh', text:'Parapet' }));
-  const parBox = rail.appendChild(el('div'));
+  roofSide.appendChild(el('div', { class:'gh', text:'Parapet' }));
+  const parBox = roofSide.appendChild(el('div'));
   let parHCtl = null;
   function buildParUI() {
     parBox.innerHTML = '';
-    const on = !!(RF.par && RF.par.on);
+    const RZ = RF.zones[roofSelIdx()], zp = RZ.par, on = !!(zp && zp.on);
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
-      RF.par = { on:v === 1, h:RF.par && isFinite(+RF.par.h) ? +RF.par.h : 0.6 };
+      RZ.par = { on:v === 1, h:(zp && isFinite(+zp.h)) ? +zp.h : 0.6 };
       buildParUI(); buildBeiUI(); roofDraw();
     });
     parBox.appendChild(tgl);
     if (on) {
-      parHCtl = rangeCtl('Height', 0.2, 1.5, 0.05, +RF.par.h || 0.6, v => { RF.par.h = v; roofDraw(); }, v => fmt(v, 2) + ' m');
+      parHCtl = rangeCtl('Height', 0.2, 1.5, 0.05, (zp && isFinite(+zp.h)) ? +zp.h : 0.6, v => { RZ.par.h = v; roofDraw(); }, v => fmt(v, 2) + ' m');
       parBox.appendChild(parHCtl);
-      const nzp = (RF.zones && RF.zones.length) || 1;
-      if (nzp > 1) {
-        const opts = [{ value:-1, label:t('Whole roof') }].concat(RF.zones.map((z, i) => ({ value:i, label:t('Part') + ' ' + 'ABC'[i] })));
-        const cur = isFinite(+RF.parZone) && +RF.parZone >= 0 && +RF.parZone < nzp ? Math.round(+RF.parZone) : -1;
-        parBox.appendChild(segCtl(t('Parapet on'), opts, cur, v => { RF.parZone = v; roofDraw(); }));
-      }
     } else parHCtl = null;
   }
   buildParUI();
-  rail.appendChild(el('div', { class:'gh', text:'Eaves' }));
-  const beiBox = rail.appendChild(el('div'));
+  roofSide.appendChild(el('div', { class:'gh', text:'Eaves' }));
+  const beiBox = roofSide.appendChild(el('div'));
   let beiDCtl = null;
   function buildBeiUI() {
     beiBox.innerHTML = '';
-    const on = !!(RF.bei && RF.bei.on);
+    const RZ = RF.zones[roofSelIdx()], zb = RZ.bei, on = !!(zb && zb.on);
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
       const keep = {};
-      ['S', 'N', 'E', 'W'].forEach(f => { if (RF.bei && isFinite(+RF.bei['d' + f])) keep['d' + f] = +RF.bei['d' + f]; });
-      RF.bei = Object.assign({ on:v === 1, d:RF.bei && isFinite(+RF.bei.d) ? +RF.bei.d : 0.15, ends:!RF.bei || RF.bei.ends !== false }, keep);
+      ['S', 'N', 'E', 'W'].forEach(f => { if (zb && isFinite(+zb['d' + f])) keep['d' + f] = +zb['d' + f]; });
+      RZ.bei = Object.assign({ on:v === 1, ends:!zb || zb.ends !== false }, keep);
       buildBeiUI(); roofDraw();
     });
     beiBox.appendChild(tgl);
-    if (on && RF.par && RF.par.on) beiBox.appendChild(el('p', { class:'hint', text:'With a parapet the eave reads as a cornice under it.' }));
+    if (on && RZ.par && RZ.par.on) beiBox.appendChild(el('p', { class:'hint', text:'With a parapet the eave reads as a cornice under it.' }));
     if (on) {
-      const d0 = isFinite(+RF.bei.d) ? +RF.bei.d : 0.15;
       [['S', 'Front eave'], ['N', 'Rear eave'], ['E', 'East eave'], ['W', 'West eave']].forEach(([f, lab]) => {
-        const v0 = isFinite(+RF.bei['d' + f]) ? +RF.bei['d' + f] : d0;
-        beiBox.appendChild(rangeCtl(t(lab), 0, 1, 0.05, v0, v => { RF.bei['d' + f] = +(+v).toFixed(2); roofDraw(); }, v => fmt(v, 2) + ' m'));
+        const v0 = zb && isFinite(+zb['d' + f]) ? +zb['d' + f] : 0.15;
+        beiBox.appendChild(rangeCtl(t(lab), 0, 1, 0.05, v0, v => {
+          if (!RZ.bei || typeof RZ.bei !== 'object') RZ.bei = { on:true, ends:true };
+          RZ.bei['d' + f] = +(+v).toFixed(2); roofDraw();
+        }, v => fmt(v, 2) + ' m'));
       });
       beiDCtl = null;
-      beiBox.appendChild(segCtl('Gable ends', [{ value:0, label:'Off' }, { value:1, label:'On' }], (!RF.bei || RF.bei.ends !== false) ? 1 : 0, v => {
-        RF.bei.ends = v === 1;
+      beiBox.appendChild(segCtl('Gable ends', [{ value:0, label:'Off' }, { value:1, label:'On' }], (!zb || zb.ends !== false) ? 1 : 0, v => {
+        if (!RZ.bei || typeof RZ.bei !== 'object') RZ.bei = { on:true };
+        RZ.bei.ends = v === 1;
         buildBeiUI(); roofDraw();
       }));
     } else beiDCtl = null;
   }
   buildBeiUI();
-  rail.appendChild(el('div', { class:'gh', text:'Eave canopy' }));
-  const canBox = rail.appendChild(el('div'));
-  let canWCtl = null, canDCtl = null, canPCtl = null, canSays = null;
-  /** The canopy as built, in words: its pitch and the outer edge's height. */
+  roofSide.appendChild(el('div', { class:'gh', text:'Eave canopy' }));
+  const canBox = roofSide.appendChild(el('div'));
+  let canWCtl = null, canDCtl = null, canPCtl = null, canHCtl = null, canSays = null;
+  /** The canopy as built, in words: root and outer-edge heights, pitch, posts. */
   const canopyWords = () => {
-    const hit = canopySpanFor(roofModel(G, RF).pl.segs, RF.bei && RF.bei.canopy, G.fl * G.fh, roofModel(G, RF));
+    const zc = RF.zones[roofSelIdx()];
+    const hit = canopySpanFor(roofModel(G, RF).pl.segs, zc && zc.canopy, G.fl * G.fh, roofModel(G, RF));
     if (!canSays || !hit) return;
-    const held = (+RF.bei.canopy.p || 0) > hit.p + 0.05, fr = canopyFrame(hit);
-    canSays.textContent = t('Outer edge') + ' ' + fmt(hit.z1, 2) + ' m ' + t('above the ground') + (held ? ' · ' + t('pitch held at') + ' ' + fmt(hit.p, 0) + '° ' + t('to keep it 2.0 m clear') : '')
+    const zc2 = RF.zones[roofSelIdx()], cc2 = zc2 && zc2.canopy;
+    const held = (cc2 && isFinite(+cc2.p) ? +cc2.p : 0) > hit.p + 0.05, fr = canopyFrame(hit);
+    const dropHeld = (cc2 && isFinite(+cc2.drop) ? +cc2.drop : 0.15) > (hit.drop || 0.15) + 0.005;
+    canSays.textContent = t('Root') + ' ' + fmt(hit.z0, 2) + ' m · ' + t('Outer edge') + ' ' + fmt(hit.z1, 2) + ' m ' + t('above the ground')
+      + (held ? ' · ' + t('pitch held at') + ' ' + fmt(hit.p, 0) + '° ' + t('to keep it 2.0 m clear') : '')
+      + (dropHeld ? ' · ' + t('drop held to keep root 2.1 m clear') : '')
       + ' · ' + (fr.n ? fr.n + ' ' + t('timber posts') + ', ' + t('spans of') + ' ' + fmt(fr.span, 2) + ' m' : t('hung from the wall, no posts up to 0.5 m'));
   };
   function buildCanopyUI() {
     canBox.innerHTML = '';
-    canWCtl = canDCtl = canPCtl = canSays = null;
-    const on = !!(RF.bei && RF.bei.canopy);
+    canWCtl = canDCtl = canPCtl = canHCtl = canSays = null;
+    const RZ = RF.zones[roofSelIdx()], c0 = RZ.canopy, on = !!(c0 && typeof c0 === 'object');
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
       if (v === 1) {
-        RF.bei = RF.bei || { on:false, d:0.15, ends:true };
-        const M = roofModel(G, RF);
-        const all = M.pl.segs.filter(sg => sg.len >= 2);
+        const M = roofModel(G, RF), Zi = roofSelIdx(), zspan = M.zones[Zi];
+        const inSpan = sg => !zspan || (((M.axis === 'x' ? (sg.a[0] + sg.b[0]) / 2 : (sg.a[1] + sg.b[1]) / 2) >= zspan.a0 - 1e-6) && ((M.axis === 'x' ? (sg.a[0] + sg.b[0]) / 2 : (sg.a[1] + sg.b[1]) / 2) <= zspan.a1 + 1e-6));
+        const walled = M.pl.segs.filter(sg => sg.len >= 2 && inSpan(sg));
+        const all = walled.length ? walled : M.pl.segs.filter(sg => sg.len >= 2);
         const pick = all.filter(sg => segFace(sg) === 'S');
         const sg = (pick.length ? pick : all).reduce((p, q) => q.len > p.len ? q : p, all[0]);
         if (!sg) return;
-        RF.bei.canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:15 };
-      } else if (RF.bei) RF.bei.canopy = null;
+        RF.zones[roofSelIdx()].canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:15, drop:0.15 };
+      } else RF.zones[roofSelIdx()].canopy = null;
       buildCanopyUI(); roofDraw();
     });
     canBox.appendChild(tgl);
     if (!on) return;
-    const c = RF.bei.canopy;
+    const c = RZ.canopy;
     canWCtl = rangeCtl('Canopy width', 1, 8, 0.1, clamp(+c.w || 3, 1, 8), v => { c.w = +v.toFixed(1); canopyWords(); roofDraw(); }, v => fmt(v, 1) + ' m');
     canDCtl = rangeCtl('Canopy depth', 0.6, 4, 0.05, clamp(+c.d || 1.5, 0.6, 4), v => { c.d = +v.toFixed(2); canopyWords(); roofDraw(); }, v => fmt(v, 2) + ' m');
     canPCtl = rangeCtl('Canopy pitch', 0, 45, 1, clamp(+c.p || 0, 0, 45), v => { c.p = Math.round(v); canopyWords(); roofDraw(); }, v => fmt(v, 0) + '°');
-    canBox.appendChild(canWCtl); canBox.appendChild(canDCtl); canBox.appendChild(canPCtl);
+    canHCtl = rangeCtl('Canopy drop', 0.05, 1.5, 0.05, canopyDrop(c), v => { c.drop = +v.toFixed(2); canopyWords(); roofDraw(); }, v => fmt(v, 2) + ' m');
+    canBox.appendChild(canWCtl); canBox.appendChild(canDCtl); canBox.appendChild(canPCtl); canBox.appendChild(canHCtl);
     canSays = canBox.appendChild(el('p', { class:'hint' }));
     canopyWords();
-    canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.' }));
+    canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it, its diamond at the wall up and down to set how far it hangs below the eave. The pitch falls the canopy away from the wall; its depth is measured level. The slab reads 0.07 m thick. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.' }));
   }
   buildCanopyUI();
-  rail.appendChild(el('div', { class:'gh', text:'Chimney' }));
-  const chimBox = rail.appendChild(el('div'));
+  roofSide.appendChild(el('div', { class:'gh', text:'Chimney' }));
+  const chimBox = roofSide.appendChild(el('div'));
   let chimXCtl = null, chimYCtl = null;
   const chimSpan = () => {
     const M = roofModel(G, RF), bb = M.pl.bbox;
@@ -7995,12 +8092,17 @@ function buildRoof(host) {
   function buildChimUI() {
     chimBox.innerHTML = '';
     chimXCtl = chimYCtl = null;
-    const ch = RF.chim, fam = ch && ch.on ? chimneyOf(STATE.site.nuts) : null;
+    const RZc = RF.zones[roofSelIdx()], ch = RZc.chim, fam = ch && ch.on ? chimneyOf(STATE.site.nuts) : null;
     if (!(ch && ch.on)) {
       chimBox.appendChild(el('button', { class:'btn small', text:'+ Add chimney', title:t('Raise the region’s chimney where the roof is highest'),
         onclick:() => {
-          const M = roofModel(G, RF), at = placeChimney(M);
-          RF.chim = Object.assign({ on:true, fam:chimneyOf(STATE.site.nuts) }, at || { x:0, y:0 });
+          const M = roofModel(G, RF), at0 = placeChimney(M), Zi = roofSelIdx(), zz = M.zones[Zi];
+          let at = at0;
+          if (at && zz) {
+            if (M.axis === 'x') at = Object.assign({}, at, { x:+clamp(at.x, zz.a0 + 0.4, zz.a1 - 0.4).toFixed(2) });
+            else at = Object.assign({}, at, { y:+clamp(at.y, zz.a0 + 0.4, zz.a1 - 0.4).toFixed(2) });
+          }
+          RZc.chim = Object.assign({ on:true, fam:chimneyOf(STATE.site.nuts) }, at || { x:0, y:0 });
           buildChimUI(); roofDraw();
         } }));
       return;
@@ -8012,7 +8114,7 @@ function buildRoof(host) {
       const Mh = roofModel(G, RF);
       if (!chimDrawable(Mh, +ch.x, +ch.y)) {
         const at = placeChimney(Mh);
-        if (at) { RF.chim.x = at.x; RF.chim.y = at.y; }
+        if (at) { ch.x = at.x; ch.y = at.y; }
       }
     }
     const styles = chimneyList(STATE.site.nuts);
@@ -8020,7 +8122,7 @@ function buildRoof(host) {
       const row = el('div', { class:'srcrow' });
       styles.forEach(k => {
         const b = el('button', { class:'btn small' + (k === fam ? ' solid' : ''), type:'button', text:t(CHIMNEY_FAM[k].name),
-          title:t(CHIMNEY_FAM[k].name), onclick:() => { RF.chim.fam = k; buildChimUI(); roofDraw(); } });
+          title:t(CHIMNEY_FAM[k].name), onclick:() => { ch.fam = k; buildChimUI(); roofDraw(); } });
         b.setAttribute('aria-pressed', String(k === fam));
         row.appendChild(b);
       });
@@ -8034,45 +8136,48 @@ function buildRoof(host) {
     chimBox.appendChild(note);
     const F = CHIMNEY_FAM[fam] || CHIMNEY_FAM.alentejana;
     const cH = rangeCtl('Height above roof', 0.3, 3.0, 0.05, isFinite(+ch.h) ? +ch.h : F.h,
-      v => { RF.chim.h = +v.toFixed(2); roofDraw(); }, v => fmt(v, 2) + ' m');
+      v => { ch.h = +v.toFixed(2); roofDraw(); }, v => fmt(v, 2) + ' m');
     chimBox.appendChild(cH);
     const ft0 = chimFoot(ch);
     let cWx = null, cWy = null;
     cWx = rangeCtl('Width E–W', 0.3, 2.5, 0.05, +ft0.x.toFixed(2),
-      v => { RF.chim.wx = +v.toFixed(2); if (RF.chim.lock !== false) { RF.chim.wy = +v.toFixed(2); if (cWy) { cWy.range.value = +v.toFixed(2); cWy.out.textContent = fmt(v, 2) + ' m'; } } roofDraw(); }, v => fmt(v, 2) + ' m');
+      v => { ch.wx = +v.toFixed(2); if (ch.lock !== false) { ch.wy = +v.toFixed(2); if (cWy) { cWy.range.value = +v.toFixed(2); cWy.out.textContent = fmt(v, 2) + ' m'; } } roofDraw(); }, v => fmt(v, 2) + ' m');
     chimBox.appendChild(cWx);
     cWy = rangeCtl('Width S–N', 0.3, 2.5, 0.05, +ft0.y.toFixed(2),
-      v => { RF.chim.wy = +v.toFixed(2); if (RF.chim.lock !== false) { RF.chim.wx = +v.toFixed(2); if (cWx) { cWx.range.value = +v.toFixed(2); cWx.out.textContent = fmt(v, 2) + ' m'; } } roofDraw(); }, v => fmt(v, 2) + ' m');
+      v => { ch.wy = +v.toFixed(2); if (ch.lock !== false) { ch.wx = +v.toFixed(2); if (cWx) { cWx.range.value = +v.toFixed(2); cWx.out.textContent = fmt(v, 2) + ' m'; } } roofDraw(); }, v => fmt(v, 2) + ' m');
     chimBox.appendChild(cWy);
-    chimBox.appendChild(el('button', { class:'btn small' + (RF.chim.lock !== false ? ' solid' : ''), text:t('Link widths'), title:t('Keep both widths equal'),
-      'aria-pressed':String(RF.chim.lock !== false), onclick:() => {
-        if (RF.chim.lock !== false) { RF.chim.lock = false; }
-        else { const ft = chimFoot(RF.chim); RF.chim.lock = true; RF.chim.wx = +ft.x.toFixed(2); RF.chim.wy = +ft.x.toFixed(2); }
+    chimBox.appendChild(el('button', { class:'btn small' + (ch.lock !== false ? ' solid' : ''), text:t('Link widths'), title:t('Keep both widths equal'),
+      'aria-pressed':String(ch.lock !== false), onclick:() => {
+        if (ch.lock !== false) { ch.lock = false; }
+        else { const ft = chimFoot(ch); ch.lock = true; ch.wx = +ft.x.toFixed(2); ch.wy = +ft.x.toFixed(2); }
         buildChimUI(); roofDraw();
       } }));
     const cT = rangeCtl('Side pitch', 0, 10, 0.5, isFinite(+ch.taper) ? +ch.taper : 0,
-      v => { RF.chim.taper = +v.toFixed(1); roofDraw(); }, v => fmt(v, 1) + '°');
+      v => { ch.taper = +v.toFixed(1); roofDraw(); }, v => fmt(v, 1) + '°');
     chimBox.appendChild(cT);
     chimBox.appendChild(el('button', { class:'btn small', text:'\u2191 ' + t('To the rule'), title:t('Raise the crown exactly to the rule: half a metre over the ridge, a metre over flat'),
       onclick:() => {
-        const M = roofModel(G, RF), z = M.zAt(+RF.chim.x, +RF.chim.y), r = chimRule(M);
-        if (z !== null) { RF.chim.h = Math.max(0.3, +(r.ref + r.need - z).toFixed(2)); buildChimUI(); roofDraw(); }
+        const M = roofModel(G, RF), z = M.zAt(+ch.x, +ch.y), r = chimRule(M);
+        if (z !== null) { ch.h = Math.max(0.3, +(r.ref + r.need - z).toFixed(2)); buildChimUI(); roofDraw(); }
       } }));
     const sp = chimSpan();
     chimXCtl = rangeCtl('Metres from the west face', Math.min(sp.x0, sp.x1), Math.max(sp.x0, sp.x1), 0.1, clamp(ch.x, sp.x0, sp.x1),
-      v => { const nx = +v.toFixed(2); if (!chimDrawable(roofModel(G, RF), nx, +RF.chim.y)) { chimXCtl.range.value = RF.chim.x; chimXCtl.out.textContent = fmt(RF.chim.x, 1) + ' m'; toast(t('No roof there \u2014 the chimney stays where it stands')); return; } RF.chim.x = nx; roofDraw(); }, v => fmt(v, 1) + ' m');
+      v => { const Mm = roofModel(G, RF), zz = Mm.zones[roofSelIdx()]; let nx = +v.toFixed(2);
+        if (zz && Mm.axis === 'x') nx = +clamp(nx, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
+        if (!chimDrawable(roofModel(G, RF), nx, +ch.y)) { chimXCtl.range.value = ch.x; chimXCtl.out.textContent = fmt(ch.x, 1) + ' m'; toast(t('No roof there \u2014 the chimney stays where it stands')); return; } ch.x = nx; roofDraw(); }, v => fmt(v, 1) + ' m');
     chimYCtl = rangeCtl('Metres from the south face', Math.min(sp.y0, sp.y1), Math.max(sp.y0, sp.y1), 0.1, clamp(ch.y, sp.y0, sp.y1),
-      v => { const ny = +v.toFixed(2); if (!chimDrawable(roofModel(G, RF), +RF.chim.x, ny)) { chimYCtl.range.value = RF.chim.y; chimYCtl.out.textContent = fmt(RF.chim.y, 1) + ' m'; toast(t('No roof there \u2014 the chimney stays where it stands')); return; } RF.chim.y = ny; roofDraw(); }, v => fmt(v, 1) + ' m');
+      v => { const Mm = roofModel(G, RF), zz = Mm.zones[roofSelIdx()]; let ny = +v.toFixed(2);
+        if (zz && Mm.axis === 'y') ny = +clamp(ny, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
+        if (!chimDrawable(roofModel(G, RF), +ch.x, ny)) { chimYCtl.range.value = ch.y; chimYCtl.out.textContent = fmt(ch.y, 1) + ' m'; toast(t('No roof there \u2014 the chimney stays where it stands')); return; } ch.y = ny; roofDraw(); }, v => fmt(v, 1) + ' m');
     chimBox.appendChild(chimXCtl); chimBox.appendChild(chimYCtl);
     chimBox.appendChild(el('button', { class:'btn small', text:'× ' + t('Remove'), title:t('Take the chimney away'),
-      onclick:() => { RF.chim = null; buildChimUI(); roofDraw(); } }));
+      onclick:() => { RZc.chim = null; buildChimUI(); roofDraw(); } }));
   }
   buildChimUI();
   host.appendChild(hint('roof-chimney',
     'One chimney, drawn as the region builds them — pick its style above where the parish builds more than one. It stands where it is put and rises what the slider says; the draw score judges the crown against the rule every chimney answers to: half a metre clear of the ridge on a pitched roof, a metre clear on a flat one, so the wind draws instead of pushing back down. “To the rule” raises it exactly there. A short chimney on the lee slope smokes back into the attic — height first, then position.'));
   const pillChim = el('span', { class:'pill empty' });
   props.appendChild(pillChim);
-  colBox = props.appendChild(el('div'));
   buildRoofColUI();
 
   const pillRoof = el('span', { class:'pill ok' });
@@ -8098,7 +8203,9 @@ function buildRoof(host) {
     refreshRoofCol();
     refreshSolar();
     {
-      const M = roofModel(G, RF), sc = chimScore(M, RF.chim);
+      const M = roofModel(G, RF);
+      const scs = roofChims(RF).map(({ ch }) => chimScore(M, ch)).filter(v => v !== null);
+      const sc = scs.length ? Math.min.apply(null, scs) : null;
       if (sc === null) { pillChim.className = 'pill empty'; pillChim.textContent = t('No chimney — add one above'); }
       else {
         pillChim.className = 'pill ' + (sc >= 80 ? 'ok' : sc >= 50 ? 'empty' : 'bad');
@@ -8223,21 +8330,32 @@ function buildRoof(host) {
         const k = RF.n === 0 ? 1 : 0.87 + 0.11 * f.b + 0.05 * f.a;
         faces.push({ pts:pc.poly.map(q => [q[0], q[1], M.zOf(f, q[0], q[1])]), fill:opaque(roofFillFor(pc.zi, f.grp, 0.2 + 0.3 * (1 - k), k)), pc });
       });
-      /* the eave canopy as an alpendre: a tiled lean-to in the roof's
-         colour, and past 0.5 m its timber posts and beam */
-      { const cpH = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, H0, M);
-        if (cpH) {
-          const n = cpH.sg.n, sp = Math.sin(cpH.p * RAD), cp = Math.cos(cpH.p * RAD);
-          if (camSees(A, n[0] * sp, n[1] * sp, cp)) {
-            const k = 0.87 - 0.11 * n[1] - 0.05 * n[0];
-            faces.push({ pts:canopyPts(cpH).quad, fill:opaque(roofFill(0.2 + 0.3 * (1 - k), k)), cnp:cpH });
-          }
-          const fr = canopyFrame(cpH);
-          fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
-            if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) faces.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26' });
-          }));
+      /* the eave canopies as alpendres: tiled 0.07 m slabs in their roof's
+         colour, and past 0.5 m their timber posts and beams */
+      roofCanopies(RF).forEach(({ zi, c }) => {
+        const cpH = canopySpanFor(M.pl.segs, c, H0, M);
+        if (!cpH) return;
+        const n = cpH.sg.n, sp = Math.sin(cpH.p * RAD), cp = Math.cos(cpH.p * RAD);
+        const colK = 0.87 - 0.11 * n[1] - 0.05 * n[0];
+        const topFill = opaque(roofFillFor(zi, 'A', 0.2 + 0.3 * (1 - colK), colK));
+        const sideFill = opaque(roofFillFor(zi, 'A', 0.38, colK * 0.82));
+        const botFill = opaque(roofFillFor(zi, 'A', 0.42, colK * 0.62));
+        if (camSees(A, n[0] * sp, n[1] * sp, cp)) {
+          faces.push({ pts:canopyPts(cpH).quad, fill:topFill, cnp:Object.assign({ zi }, cpH) });
         }
-      }
+        const slab = canopySlab(cpH);
+        if (slab) {
+          const tx = (cpH.sg.b[0] - cpH.sg.a[0]) / cpH.sg.len, ty = (cpH.sg.b[1] - cpH.sg.a[1]) / cpH.sg.len;
+          if (camSees(A, n[0], n[1], 0)) faces.push({ pts:slab.outer, fill:sideFill });
+          if (camSees(A, tx, ty, 0)) faces.push({ pts:slab.sideB, fill:sideFill });
+          if (camSees(A, -tx, -ty, 0)) faces.push({ pts:slab.sideA, fill:sideFill });
+          if (camSees(A, -n[0] * sp, -n[1] * sp, -cp)) faces.push({ pts:slab.bottom, fill:botFill });
+        }
+        const fr = canopyFrame(cpH);
+        fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
+          if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) faces.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26' });
+        }));
+      });
       const depth = F => F.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / F.pts.length;
       pushImportFaces(faces);
       pushChimPar(faces, M);
@@ -8270,9 +8388,8 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       });
 
       /* the chimney's crown, dragged along the roof */
-      {
-        const ch = RF.chim;
-        if (ch && ch.on && isFinite(+ch.x) && isFinite(+ch.y) && M.pl.inside(+ch.x, +ch.y)) {
+      roofChims(RF).forEach(({ ch }) => {
+        if (isFinite(+ch.x) && isFinite(+ch.y) && M.pl.inside(+ch.x, +ch.y)) {
           const z = M.zAt(+ch.x, +ch.y);
           if (z !== null) {
             const F = CHIMNEY_FAM[ch.fam] || CHIMNEY_FAM.alentejana;
@@ -8281,35 +8398,43 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
             stroke(ctx, '#fff', 1.6); ctx.stroke();
           }
         }
-      }
-      /* the eave canopy: one pushed-out stretch of eave over exterior space */
+      });
+      /* the eave canopies: pushed-out stretches of eave over exterior space */
       /* where the nodes stand on the canvas, for the page's own checks */
-      const nodesOut = { canopy:null, ridge:[] };
-      let canopyTag = null;
-      { const cpHit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, H0, M);
-        if (cpHit) {
-          const CP = canopyPts(cpHit);
-          const pq = CP.quad.map(p => proj(p[0], p[1], p[2]));
-          /* the tiles and posts are drawn among the model's faces; here only
-             the amber outline that says it can be dragged */
-          ctx.beginPath(); pq.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
-          stroke(ctx, '#D97706', 1.4); ctx.stroke();
-          /* the round node moves it (along the wall, outward); the square
-             one at its end widens it */
-          const m = proj(...CP.mid);
-          ctx.beginPath(); ctx.arc(m[0], m[1], 7, 0, 6.284); ctx.fillStyle = '#fff'; ctx.fill();
-          stroke(ctx, '#D97706', 2); ctx.stroke();
-          ctx.fillStyle = '#D97706'; ctx.beginPath(); ctx.arc(m[0], m[1], 2.5, 0, 6.284); ctx.fill();
-          const e = proj(...CP.end);
-          ctx.fillStyle = '#fff'; ctx.fillRect(e[0] - 6, e[1] - 6, 12, 12);
-          stroke(ctx, '#D97706', 2); ctx.strokeRect(e[0] - 6, e[1] - 6, 12, 12);
-          ctx.fillStyle = '#D97706'; ctx.fillRect(e[0] - 2.5, e[1] - 2.5, 5, 5);
-          desk.block(m[0] - 9, m[1] - 9, m[0] + 9, m[1] + 9); desk.block(e[0] - 9, e[1] - 9, e[0] + 9, e[1] + 9);
-          nodesOut.canopy = { mid:m, end:e };
-          /* a pitched canopy says its pitch: in this view a fall reads as depth */
-          if (cpHit.p >= 0.5) canopyTag = { txt:t('canopy') + ' ' + fmt(cpHit.p, 0) + '°', a:proj(...CP.quad[3]), b:proj(...CP.quad[2]) };
-        }
-      }
+      const nodesOut = { canopy:null, canopies:[], ridge:[] };
+      const canopyTags = [];
+      roofCanopies(RF).forEach(({ zi, c }) => {
+        const cpHit = canopySpanFor(M.pl.segs, c, H0, M);
+        if (!cpHit) return;
+        const CP = canopyPts(cpHit);
+        const pq = CP.quad.map(p => proj(p[0], p[1], p[2]));
+        /* the slab and posts are drawn among the model's faces; here only
+           the amber outline that says it can be dragged */
+        ctx.beginPath(); pq.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+        stroke(ctx, '#D97706', 1.4); ctx.stroke();
+        /* the round node moves it (along the wall, outward); the square
+           one at its end widens it; the diamond at the wall slides it
+           up and down below the eave */
+        const m = proj(...CP.mid);
+        ctx.beginPath(); ctx.arc(m[0], m[1], 7, 0, 6.284); ctx.fillStyle = '#fff'; ctx.fill();
+        stroke(ctx, '#D97706', 2); ctx.stroke();
+        ctx.fillStyle = '#D97706'; ctx.beginPath(); ctx.arc(m[0], m[1], 2.5, 0, 6.284); ctx.fill();
+        const e = proj(...CP.end);
+        ctx.fillStyle = '#fff'; ctx.fillRect(e[0] - 6, e[1] - 6, 12, 12);
+        stroke(ctx, '#D97706', 2); ctx.strokeRect(e[0] - 6, e[1] - 6, 12, 12);
+        ctx.fillStyle = '#D97706'; ctx.fillRect(e[0] - 2.5, e[1] - 2.5, 5, 5);
+        const h = proj(...CP.root);
+        ctx.beginPath(); ctx.moveTo(h[0], h[1] - 8); ctx.lineTo(h[0] + 8, h[1]); ctx.lineTo(h[0], h[1] + 8); ctx.lineTo(h[0] - 8, h[1]); ctx.closePath();
+        ctx.fillStyle = '#fff'; ctx.fill(); stroke(ctx, '#D97706', 2); ctx.stroke();
+        ctx.fillStyle = '#D97706'; ctx.beginPath(); ctx.arc(h[0], h[1], 2.5, 0, 6.284); ctx.fill();
+        desk.block(m[0] - 9, m[1] - 9, m[0] + 9, m[1] + 9); desk.block(e[0] - 9, e[1] - 9, e[0] + 9, e[1] + 9);
+        desk.block(h[0] - 10, h[1] - 10, h[0] + 10, h[1] + 10);
+        const rec = { mid:m, end:e, hgt:h, zi };
+        nodesOut.canopies.push(rec);
+        if (!nodesOut.canopy) nodesOut.canopy = { mid:m, end:e, hgt:h };
+        /* a pitched canopy says its pitch: in this view a fall reads as depth */
+        if (cpHit.p >= 0.5) canopyTags.push({ txt:t('canopy') + ' ' + fmt(cpHit.p, 0) + '°', a:proj(...CP.quad[3]), b:proj(...CP.quad[2]) });
+      });
       /* each gable part's ridge point, a white diamond halfway along the
          ridge: push it across to stand the ridge aside */
       M.ridges.forEach(R => {
@@ -8497,7 +8622,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
             desk.place(txt, [[A[0], A[1] - 14, 'center'], [A[0] + 10, A[1] - 6, 'left'], [A[0] - 10, A[1] - 6, 'right']], CH.ink2, FM(10)); }
         }
       }
-      if (canopyTag) desk.place(canopyTag.txt, desk.beside(canopyTag.txt, FM(10), canopyTag.a, canopyTag.b, proj((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2, H0), [0.5, 0.3, 0.7], 4, 2), '#B45309', FM(10));
+      canopyTags.forEach(canopyTag => desk.place(canopyTag.txt, desk.beside(canopyTag.txt, FM(10), canopyTag.a, canopyTag.b, proj((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2, H0), [0.5, 0.3, 0.7], 4, 2), '#B45309', FM(10)));
       gaugeTags.forEach(g => {
         desk.place(g.txt, [[g.p[0] - 7, g.p[1], 'right'], [g.p[0] + 7, g.p[1], 'left'], [g.p[0], g.p[1] - 11, 'center'], [g.p[0], g.p[1] + 11, 'center'],
           [g.p[0] - 7, g.p[1] - 10, 'right'], [g.p[0] + 7, g.p[1] - 10, 'left']], '#15803d', F(9));
@@ -8510,13 +8635,31 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       ['Roof parts', RF.zones.map((z, i) => 'ABC'[i] + ':' + ['flat', 'shed', 'gable', 'hip'][z.n] + (z.n === 0 ? '' : ' ' + z.th + '°')
         + (M.ridges[i] && Math.abs(M.ridges[i].rg - 0.5) > 1e-3 ? '/' + fmt(M.ridges[i].rear, 1) + '° · ridge at ' + Math.round(M.ridges[i].rg * 100) + '%' : '')
         + (M.zones[i] && M.zones[i].face ? ' · faces ' + M.zones[i].face : '') + (z.rot ? ' · turned ' + (z.rot * 90) + '°' : '')).join(' | ')],
-      ['Parapet', RF.par && RF.par.on ? fmt(RF.par.h, 2) + ' m' + (isFinite(+RF.parZone) && +RF.parZone >= 0 ? ' · only Part ' + 'ABC'[+RF.parZone] : ' · whole roof') : 'none'],
-      ['Eaves', RF.bei && RF.bei.on ? 'S ' + fmt(beiSide(RF.bei, 'S'), 2) + ' m · N ' + fmt(beiSide(RF.bei, 'N'), 2) + ' m · E ' + fmt(beiSide(RF.bei, 'E'), 2) + ' m · W ' + fmt(beiSide(RF.bei, 'W'), 2) + ' m' + (RF.bei.ends !== false ? '' : ' · flush gables') + (RF.par && RF.par.on ? ' · as cornice under the parapet' : '') : 'none'],
-      ['Eave canopy', (() => { const cH = RF.bei && RF.bei.canopy ? canopySpanFor(M.pl.segs, RF.bei.canopy, M.H0, M) : null;
-        const fr = canopyFrame(cH);
-        return cH ? RF.bei.canopy.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '° · outer edge ' + fmt(cH.z1, 2) + ' m'
-          + (fr.n ? ' · ' + fr.n + ' timber posts, spans ' + fmt(fr.span, 2) + ' m' : ' · no posts') : 'none'; })()],
-      ['Chimney', RF.chim && RF.chim.on ? CHIMNEY_FAM[RF.chim.fam].name + ' at ' + fmt(RF.chim.x, 1) + ', ' + fmt(RF.chim.y, 1) + ' m · ' + fmt(chimEffH(RF.chim), 2) + ' m above roof' : 'none'],
+      ['Parapet by roof', (() => {
+        const hs = (RF.zones || []).map((z, i) => (z.par && z.par.on) ? 'Roof ' + (i + 1) + ': ' + fmt(z.par.h, 2) + ' m' : null).filter(Boolean);
+        return hs.length ? hs.join(' | ') : 'none';
+      })()],
+      ['Eaves by roof', (() => {
+        const hs = (RF.zones || []).map((z, i) => {
+          if (!(z.bei && z.bei.on)) return null;
+          return 'Roof ' + (i + 1) + ': S ' + fmt(beiSide(z.bei, 'S'), 2) + ' m · N ' + fmt(beiSide(z.bei, 'N'), 2) + ' m · E ' + fmt(beiSide(z.bei, 'E'), 2) + ' m · W ' + fmt(beiSide(z.bei, 'W'), 2) + ' m' + (z.bei.ends !== false ? '' : ' · flush gables');
+        }).filter(Boolean);
+        return hs.length ? hs.join(' | ') : 'none';
+      })()],
+      ['Eave canopy', (() => {
+        const hs = roofCanopies(RF).map(({ zi, c }) => {
+          const cH = canopySpanFor(M.pl.segs, c, M.H0, M);
+          if (!cH) return null;
+          const fr = canopyFrame(cH);
+          return 'Roof ' + (zi + 1) + ': ' + c.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '° · 0.07 m slab · root ' + fmt(cH.z0, 2) + ' m (drop ' + fmt(cH.drop, 2) + ' m) · outer edge ' + fmt(cH.z1, 2) + ' m'
+            + (fr.n ? ' · ' + fr.n + ' timber posts, spans ' + fmt(fr.span, 2) + ' m' : ' · no posts');
+        }).filter(Boolean);
+        return hs.length ? hs.join(' | ') : 'none';
+      })()],
+      ['Chimneys', (() => {
+        const hs = roofChims(RF).map(({ zi, ch }) => 'Roof ' + (zi + 1) + ': ' + CHIMNEY_FAM[ch.fam].name + ' at ' + fmt(ch.x, 1) + ', ' + fmt(ch.y, 1) + ' m · ' + fmt(chimEffH(ch), 2) + ' m above roof');
+        return hs.length ? hs.join(' | ') : 'none';
+      })()],
       ['Plan form (from Site)', (G.form || 'rect') + (G.patio && G.patio.on && G.patio.ok !== false ? ' + patio' : '')],
       ['Winter solar ideal (°)', +idealW.toFixed(0)],
       ['Summer solar ideal (°)', +idealS.toFixed(0)],
@@ -8600,9 +8743,13 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       if (!solarNowFor(tech) || !solarNowFor(tech).fld || !solarNowFor(tech).fld.fits) spec.dy = (spec.dy || 0) - up;
     }
   };
-  rail.appendChild(el('div', { class:'gh', text:'Solar collection' }));
+  roofSide.appendChild(el('div', { class:'gh', text:'Solar collection' }));
+  const solBox = roofSide.appendChild(el('div'));
   /* a house roof, not a solar farm: fields stay within a household scale */
   const solMax = t => t === 'pv' ? [12, 6] : [8, 4];
+  function buildSolUI() {
+    if (!sideReady) return;
+    solBox.innerHTML = '';
   [['pv', 'PV panels'], ['thermal', 'Thermal collectors']].forEach(([tt, nm]) => {
     const key = tt === 'pv' ? 'pv' : 'th', o = RF.sol[key], [mc, mr] = solMax(tt);
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], o.on ? 1 : 0, v => {
@@ -8620,11 +8767,14 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     });
     const pmH = el('p', { class:'hint' });
     solCtl[tt] = { tgl, cc, cr, pm, pmH };
-    rail.appendChild(el('div', { class:'keys', text:nm }));
-    rail.appendChild(el('div', { class:'rgroup' }, [tgl, cc, cr]));
-    rail.appendChild(pm);
-    rail.appendChild(pmH);
+    solBox.appendChild(el('div', { class:'keys', text:nm }));
+    solBox.appendChild(el('div', { class:'rgroup' }, [tgl, cc, cr]));
+    solBox.appendChild(pm);
+    solBox.appendChild(pmH);
   });
+  }
+  buildSolUI();
+  sideReady = true;
   rail.appendChild(el('div', { class:'keys', text:t('Drag the black point to re-pitch the roof, the white diamond on the ridge across to stand it aside, the amber point at a field corner to size that field, a field itself or its blue centre node to move it. Click a field to select it — each field keeps its own pitch, size and place.') }));
   function refreshSolar() {
     syncField();
@@ -8911,10 +9061,11 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       rcv.style.cursor = 'grabbing';
       return;
     }
-    if (chimHandleAt(ev.clientX, ev.clientY)) {
+    const chHit = chimHandleAt(ev.clientX, ev.clientY);
+    if (chHit) {
       ev.preventDefault();
-      chdrag = true;
-      const tp = chimGeo();
+      const tp = chimGeo(chHit.zi);
+      chdrag = { zi:chHit.zi };
       chZ = tp ? tp.z0 : 0;
       try { rcv.setPointerCapture(ev.pointerId); } catch (err) {}
       rcv.style.cursor = 'grabbing';
@@ -8953,7 +9104,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     if (ddiv >= 0) { ev.preventDefault(); doDivDrag(ev.clientX, ev.clientY); return; }
     if (!rdrag) {
       const cnH = canopyAt(ev.clientX, ev.clientY), rgH = cnH ? -1 : ridgeAt(ev.clientX, ev.clientY);
-      rcv.style.cursor = cnH === 'width' ? 'ew-resize' : cnH ? 'move' : rgH >= 0 ? 'move' : fieldAt(ev.clientX, ev.clientY) ? 'move' : fieldBodyAt(ev.clientX, ev.clientY) ? 'move' : chimHandleAt(ev.clientX, ev.clientY) ? 'move' : divHandleAt(ev.clientX, ev.clientY) >= 0 ? 'ew-resize' : nearSlope(ev.clientX, ev.clientY) ? 'ns-resize' : 'grab';
+      rcv.style.cursor = cnH && cnH.part === 'width' ? 'ew-resize' : cnH && cnH.part === 'height' ? 'ns-resize' : cnH ? 'move' : rgH >= 0 ? 'move' : fieldAt(ev.clientX, ev.clientY) ? 'move' : fieldBodyAt(ev.clientX, ev.clientY) ? 'move' : chimHandleAt(ev.clientX, ev.clientY) ? 'move' : divHandleAt(ev.clientX, ev.clientY) >= 0 ? 'ew-resize' : nearSlope(ev.clientX, ev.clientY) ? 'ns-resize' : 'grab';
       return;
     }
     ev.preventDefault();
@@ -8961,30 +9112,57 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
   });
   let chdrag = false, chZ = 0;
   /** Which canopy node is the pointer on: 'move' (round, mid outer edge),
-      'width' (square, the outer corner), or null — the nearer one wins. */
+      'width' (square, the outer corner), 'height' (diamond at the wall, mid
+      root) — or null. The nearer one wins. */
   const canopyAt = (clientX, clientY) => {
     if (!roofPanel.W) return null;
-    const M = roofModel(G, RF), hit = canopySpanFor(M.pl.segs, RF.bei && RF.bei.canopy, M.H0, M);
-    if (!hit) return null;
-    const FR = frameNow(), r = rcv.getBoundingClientRect(), CP = canopyPts(hit);
-    const dist = p => { const q = projF(FR, p[0], p[1], p[2]); return Math.hypot(clientX - r.left - q[0], clientY - r.top - q[1]); };
-    const dm = dist(CP.mid), de = dist(CP.end);
-    return Math.min(dm, de) > 14 ? null : de < dm ? 'width' : 'move';
+    const M = roofModel(G, RF), FR = frameNow(), r = rcv.getBoundingClientRect();
+    let best = null;
+    roofCanopies(RF).forEach(({ zi, c }) => {
+      const hit = canopySpanFor(M.pl.segs, c, M.H0, M);
+      if (!hit) return;
+      const CP = canopyPts(hit);
+      const dist = p => { const q = projF(FR, p[0], p[1], p[2]); return Math.hypot(clientX - r.left - q[0], clientY - r.top - q[1]); };
+      const dm = dist(CP.mid), de = dist(CP.end), dh = dist(CP.root);
+      const m = Math.min(dm, de, dh);
+      if (m <= 14 && (!best || m < best.d)) best = { zi, part:m === dh ? 'height' : (de < dm ? 'width' : 'move'), d:m };
+    });
+    return best ? { zi:best.zi, part:best.part } : null;
   };
   /** The round node follows the pointer on the level of the canopy's outer
       edge: the nearest wall takes it, the metre along it centres it, the
       distance out sets its depth. A pitched canopy's edge drops as it
       deepens, so the level is found again a few times. The square node
-      slides along the wall: its end moves, the other end stays. */
+      slides along the wall: its end moves, the other end stays. The diamond
+      at the wall slides the whole slab up and down below the eave: its drop
+      grows as it goes down, the pitch kept, the posts following. */
   const doCanopyDrag = (clientX, clientY) => {
     if (!cdrag || !roofPanel.W) return;
-    const c = RF.bei && RF.bei.canopy;
+    const zc = RF.zones[cdrag.zi], c = zc && zc.canopy;
     if (!c) return;
     const M = roofModel(G, RF), FR = frameNow(), r = rcv.getBoundingClientRect();
     const pickAt = z => camPick((x, y, zz) => projF(FR, x, y, zz), [0, 0, z], [1, 0, 0], [0, 1, 0], clientX - r.left, clientY - r.top);
     const hit0 = canopySpanFor(M.pl.segs, c, M.H0, M);
     if (!hit0) return;
-    if (cdrag === 'width') {
+    if (cdrag.part === 'height') {
+      if (cdrag.drop0 === undefined) {
+        const sg0 = hit0.sg, t0 = [(sg0.b[0] - sg0.a[0]) / sg0.len, (sg0.b[1] - sg0.a[1]) / sg0.len];
+        const uMid = (hit0.u0 + hit0.u1) / 2;
+        cdrag.O0 = [sg0.a[0] + t0[0] * uMid, sg0.a[1] + t0[1] * uMid, hit0.z0];
+        cdrag.U0 = [t0[0], t0[1], 0];
+        cdrag.drop0 = canopyDrop(c);
+        cdrag.H0n = isFinite(+M.H0) ? +M.H0 : 3;
+      }
+      const uv = camPick((x, y, zz) => projF(FR, x, y, zz), cdrag.O0, cdrag.U0, [0, 0, 1], clientX - r.left, clientY - r.top);
+      if (!uv) return;
+      const maxD = canopyMaxDrop(cdrag.H0n);
+      c.drop = +clamp(cdrag.drop0 - uv[1], CANOPY_DROP_MIN, maxD).toFixed(2);
+      if (canHCtl && cdrag.zi === roofSelIdx()) syncCtl(canHCtl, c.drop, v => fmt(v, 2) + ' m');
+      canopyWords();
+      roofDraw();
+      return;
+    }
+    if (cdrag.part === 'width') {
       const q = pickAt(hit0.z1);
       if (!q) return;
       const sg = hit0.sg, t = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
@@ -8992,7 +9170,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       c.w = +(u1 - hit0.u0).toFixed(1);
       const uc = hit0.u0 + c.w / 2;
       c.x = +(sg.a[0] + t[0] * uc).toFixed(2); c.y = +(sg.a[1] + t[1] * uc).toFixed(2);
-      if (canWCtl) syncCtl(canWCtl, c.w, v => fmt(v, 1) + ' m');
+      if (canWCtl && cdrag.zi === roofSelIdx()) syncCtl(canWCtl, c.w, v => fmt(v, 1) + ' m');
       canopyWords();
       roofDraw();
       return;
@@ -9020,8 +9198,13 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       z = h2.z1;
     }
     if (!got) return;
+    const zz = M.zones[cdrag.zi];
+    if (zz) {
+      if (M.axis === 'x') got.x = +clamp(got.x, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
+      else got.y = +clamp(got.y, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
+    }
     Object.assign(c, got);
-    if (canDCtl) syncCtl(canDCtl, c.d, v => fmt(v, 2) + ' m');
+    if (canDCtl && cdrag.zi === roofSelIdx()) syncCtl(canDCtl, c.d, v => fmt(v, 2) + ' m');
     canopyWords();
     roofDraw();
   };
@@ -9057,30 +9240,35 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
     roofDraw();
   };
   let rgdrag = null;
-  const chimGeo = () => {
-    const ch = RF.chim;
+  const chimGeo = zi => {
+    const zc = RF.zones[zi], ch = zc && zc.chim;
     if (!ch || !ch.on || !isFinite(+ch.x) || !isFinite(+ch.y)) return null;
     const M = roofModel(G, RF);
     if (!M.pl.inside(+ch.x, +ch.y)) return null;
     const z = M.zAt(+ch.x, +ch.y);
     if (z === null) return null;
     const F = CHIMNEY_FAM[ch.fam] || CHIMNEY_FAM.alentejana;
-    return { x:+ch.x, y:+ch.y, z0:z, z1:z + chimTopH(F, chimEffH(ch)) };
+    return { zi, x:+ch.x, y:+ch.y, z0:z, z1:z + chimTopH(F, chimEffH(ch)) };
   };
   const chimHandleAt = (clientX, clientY) => {
     if (!roofPanel.W) return false;
-    const tp = chimGeo();
-    if (!tp) return false;
     const FR = frameNow(), r = rcv.getBoundingClientRect();
-    const a = projF(FR, tp.x, tp.y, tp.z0), b = projF(FR, tp.x, tp.y, tp.z1);
     const px = clientX - r.left, py = clientY - r.top;
-    const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1;
-    const u = Math.min(1, Math.max(0, ((px - a[0]) * dx + (py - a[1]) * dy) / L2));
-    if (Math.hypot(px - (a[0] + u * dx), py - (a[1] + u * dy)) <= 14) return true;
-    return Math.hypot(px - b[0], py - (b[1] - 8)) <= 12;   // its floating dot
+    for (let zi = 0; zi < (RF.zones || []).length; zi++) {
+      const tp = chimGeo(zi);
+      if (!tp) continue;
+      const a = projF(FR, tp.x, tp.y, tp.z0), b = projF(FR, tp.x, tp.y, tp.z1);
+      const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1;
+      const u = Math.min(1, Math.max(0, ((px - a[0]) * dx + (py - a[1]) * dy) / L2));
+      if (Math.hypot(px - (a[0] + u * dx), py - (a[1] + u * dy)) <= 14) return { zi:tp.zi };
+      if (Math.hypot(px - b[0], py - (b[1] - 8)) <= 12) return { zi:tp.zi };
+    }
+    return false;
   };
   const doChimDrag = (clientX, clientY) => {
     if (!chdrag || !roofPanel.W) return;
+    const zc = RF.zones[chdrag.zi], ch = zc && zc.chim;
+    if (!ch) { chdrag = false; return; }
     const FR = frameNow(), M = FR.M, r = rcv.getBoundingClientRect();
     const proj = (x, y, z) => projF(FR, x, y, z);
     const q = camPick(proj, [0, 0, chZ], [1, 0, 0], [0, 1, 0], clientX - r.left, clientY - r.top);
@@ -9091,9 +9279,14 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       for (let k = 0; k < 200 && !M.pl.inside(nx, ny); k++) { nx += (cx - nx) * 0.05; ny += (cy - ny) * 0.05; }
       if (!M.pl.inside(nx, ny)) return;
     }
-    RF.chim.x = +nx.toFixed(2); RF.chim.y = +ny.toFixed(2);
-    if (chimXCtl) syncCtl(chimXCtl, RF.chim.x, v => fmt(v, 1) + ' m');
-    if (chimYCtl) syncCtl(chimYCtl, RF.chim.y, v => fmt(v, 1) + ' m');
+    const zz = M.zones[chdrag.zi];
+    if (zz) {
+      if (M.axis === 'x') nx = +clamp(nx, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
+      else ny = +clamp(ny, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
+    }
+    ch.x = +nx.toFixed(2); ch.y = +ny.toFixed(2);
+    if (chimXCtl && chdrag.zi === roofSelIdx()) syncCtl(chimXCtl, ch.x, v => fmt(v, 1) + ' m');
+    if (chimYCtl && chdrag.zi === roofSelIdx()) syncCtl(chimYCtl, ch.y, v => fmt(v, 1) + ' m');
     roofDraw();
   };
   const endDrag = () => { orbit.end(); rdrag = fdrag = false; movedrag = null; chdrag = false; if (cdrag) { cdrag = null; buildCanopyUI(); } if (rgdrag) { rgdrag = null; buildRoofUI(); } if (ddiv >= 0) { ddiv = -1; buildRoofUI(); roofDraw(); } rcv.style.cursor = 'default'; };
@@ -9712,8 +9905,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
   function shadeEffectiveness(f, days) {
     const doys = Array.isArray(days) ? days : [days];
     const wallAz = faceAz(f), bg = balcGeo(G), us = faceUnits(f);
-    const MmE = Mod(), H0E = MmE.H0, beiE = RF.bei && RF.bei.on ? clamp(+RF.bei.d || 0, 0, 1) : 0;
-    const cpC = RF.bei && RF.bei.canopy ? canopySpanFor(MmE.pl.segs, RF.bei.canopy, h0(), MmE) : null;
+    const MmE = Mod(), H0E = MmE.H0, beiE = beiAny(RF) ? 1 : 0;
+    const cpC = (() => { const Mm = Mod(); for (const { c } of roofCanopies(RF)) { const h = canopySpanFor(Mm.pl.segs, c, h0(), Mm); if (h) return h; } return null; })();
     /* every window rectangle, storey by storey, with its devices and the
        grid of points that samples its glass */
     const rects = [];
@@ -9768,10 +9961,10 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
   /** Do balconies set on Site stand on this side? */
   const balcOnFace = f => balcGeo(G).ok.some(B => segFace(B.sg) === f);
   /** Does the eave canopy stand on this side? */
-  const canopyOnFace = f => { const c = RF.bei && RF.bei.canopy ? canopySpanFor(Mod().pl.segs, RF.bei.canopy, h0(), Mod()) : null; return !!c && segFace(c.sg) === f; };
+  const canopyOnFace = f => { const Mm = Mod(); for (const { c } of roofCanopies(RF)) { const h = canopySpanFor(Mm.pl.segs, c, h0(), Mm); if (h && segFace(h.sg) === f) return true; } return false; };
   function eaveOnFace(f) {
-    if (!(RF.bei && RF.bei.on)) return false;
-    const MmE = Mod(), bei = beiSide(RF.bei, f);
+    if (!beiAny(RF)) return false;
+    const MmE = Mod(), bei = beiSideOf(RF, f);
     if (!(bei > 0)) return false;
     const ws = winsOf(f);
     for (const x of ws) {
@@ -9878,7 +10071,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       /* the balconies set on Site: slabs and parapets among the faces, loggias after their wall */
       const BS = balcScene(G), P3 = q => proj(q[0], q[1], q[2]), dep3 = q => camDepth(A, q[0], q[1], q[2]), sees3 = n => camSees(A, n[0], n[1], n[2]);
       BS.solids.forEach(sl => { if (sl.kind === 'par' || sees3(sl.n)) items.push({ pts:sl.pts, balc:sl }); });
-      const cpO = RF.bei && RF.bei.canopy ? canopySpanFor(Mm.pl.segs, RF.bei.canopy, h0(), Mm) : null;
+      const cpO = (() => { for (const { c } of roofCanopies(RF)) { const h = canopySpanFor(Mm.pl.segs, c, h0(), Mm); if (h) return h; } return null; })();
       Mm.walls.forEach(wl => {
         const sg = wl.sg;
         if (!segSeen(sg)) return;
@@ -9890,13 +10083,22 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
         const wn = wins.find(o => o.sg === sg);
         if (wn) winGeo(sg, wn.w).devs.forEach(dv => items.push({ pts:dv.pts, dev:dv, d:wD - 0.05 }));
         /* the eave canopy over this wall, which the shading score counts:
-           its tiles in the roof's colour, its posts and beam in timber */
+           its 0.07 m slab in the roof's colour, its posts and beam in timber */
         if (cpO && cpO.sg === sg) {
           canopyFrame(cpO).posts.concat(canopyFrame(cpO).beam ? [canopyFrame(cpO).beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
             if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) items.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26', d:wD - 0.06 });
           }));
           const k = 0.87 - 0.11 * sg.n[1] - 0.05 * sg.n[0];
-          items.push({ pts:canopyPts(cpO).quad, fill:opaque(roofFill(0.2 + 0.3 * (1 - k), k)), d:wD - 0.07 });
+          const topFill = opaque(roofFill(0.2 + 0.3 * (1 - k), k));
+          const sideFill = opaque(roofFill(0.38, k * 0.82));
+          items.push({ pts:canopyPts(cpO).quad, fill:topFill, d:wD - 0.07 });
+          const slabO = canopySlab(cpO);
+          if (slabO) {
+            const tx = (cpO.sg.b[0] - cpO.sg.a[0]) / cpO.sg.len, ty = (cpO.sg.b[1] - cpO.sg.a[1]) / cpO.sg.len;
+            if (camSees(A, cpO.sg.n[0], cpO.sg.n[1], 0)) items.push({ pts:slabO.outer, fill:sideFill, d:wD - 0.065 });
+            if (camSees(A, tx, ty, 0)) items.push({ pts:slabO.sideB, fill:sideFill, d:wD - 0.065 });
+            if (camSees(A, -tx, -ty, 0)) items.push({ pts:slabO.sideA, fill:sideFill, d:wD - 0.065 });
+          }
         }
       });
       Mm.steps.forEach(st => {
@@ -15277,28 +15479,37 @@ style === 'sketch' ? '#EFEBE0'
           d:depthOf((outA[0] + outB[0]) / 2, (outA[1] + outB[1]) / 2, hgt / 2) });
       }
     }
-    /* the eave canopy as an alpendre: its tiles in the roof's finish,
+    /* the eave canopy as an alpendre: its 0.07 m slab in the roof's finish,
        falling at its own pitch, the beirado's line of tile ends along its
-       edge, and past 0.5 m the timber posts and beam it stands on. It
-       stands on its wall — posts, then tiles, then their edge, straight
-       after the glass under it — and the eave over its root covers it */
-    { const cpH = RF.bei && RF.bei.canopy ? canopySpanFor(M.pl.segs, RF.bei.canopy, H0, M) : null;
+       outer fascia plus the two side fascia, and past 0.5 m the timber posts
+       and beam it stands on. It stands on its wall — posts, then slab, then
+       its edge, straight after the glass under it — and the eave over its
+       root covers it. The drop below the eave is the student's own. */
+    roofCanopies(RF).forEach(({ c }) => {
+      const cpH = canopySpanFor(M.pl.segs, c, H0, M);
       if (cpH) {
         const sg = cpH.sg, CP = canopyPts(cpH), q = CP.quad, Ls = cpH.d / Math.cos(cpH.p * RAD);
         const fk = night ? 0.32 : 0.6 + 0.4 * Math.max(0, sg.n[0] * sunL[0] + sg.n[1] * sunL[1]) * (0.3 + 0.7 * sinA);
         const TIMBER = '#7A5434', fr = canopyFrame(cpH);
         fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([bq, nn]) => {
-          if (nn[2] !== 0 || !wallSeen(nn)) return;   // tops sit under the beam and the tiles
+          if (nn[2] !== 0 || !wallSeen(nn)) return;   // tops sit under the beam and the slab
           const k2 = night ? 0.3 : faceK(nn);
           items.push(onWallLayer(sg, 4, { pts:bq, fill:shadeHex(TIMBER, k2), sh:k2, d:cdep(bq) }));
         }));
         items.push(onWallLayer(sg, 5, { pts:q, cnp:true, fill:shadeHex(roofBase(), fk), sh:fk, d:cdep(q), mat:look.roof ? look.roof.key : 'site',
           uv:[[cpH.u0, 0], [cpH.u1, 0], [cpH.u1, Ls], [cpH.u0, Ls]] }));
-        const lo = p => [p[0], p[1], p[2] - 0.07], fq = [q[3], q[2], lo(q[2]), lo(q[3])];
-        if (wallSeen(sg.n)) items.push(onWallLayer(sg, 6, { pts:fq, fill:shadeHex(roofBase(), night ? 0.3 : 0.62 * faceK(sg.n)), d:cdep(fq),
+        const lo = p => [p[0], p[1], p[2] - CANOPY_THICK], fq = [q[3], q[2], lo(q[2]), lo(q[3])];
+        const sideK = night ? 0.3 : 0.62 * faceK(sg.n);
+        if (wallSeen(sg.n)) items.push(onWallLayer(sg, 6, { pts:fq, fill:shadeHex(roofBase(), sideK), d:cdep(fq),
           tileEnds:{ a:lo(q[3]), b:lo(q[2]), n:Math.max(2, Math.round((cpH.u1 - cpH.u0) / 0.24)) } }));
+        const slabV = canopySlab(cpH);
+        if (slabV) {
+          const tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len;
+          if (wallSeen([tx, ty, 0])) items.push(onWallLayer(sg, 6, { pts:slabV.sideB, fill:shadeHex(roofBase(), sideK), d:cdep(slabV.sideB) }));
+          if (wallSeen([-tx, -ty, 0])) items.push(onWallLayer(sg, 6, { pts:slabV.sideA, fill:shadeHex(roofBase(), sideK), d:cdep(slabV.sideA) }));
+        }
       }
-    }
+    });
     /* detached walls */
     SCENE.walls.forEach(w => {
       const hw = w.length / 2;
@@ -15501,7 +15712,7 @@ style === 'sketch' ? '#EFEBE0'
     /* the parapet the Roof tab builds — on a gable as on a flat roof, its
        corners mitred — the outer face dressed as the wall it continues,
        the inner face in the wall's colour, a pale stone coping on top */
-    if (RF.par && RF.par.on && M.paras) M.paras.forEach(pp => {
+    if (M.paras && M.paras.length) M.paras.forEach(pp => {
       const sg = pp.sg, q = pp.quad;
       if (pp.kind === 'out' && !wallSeen(sg.n)) return;
       if (pp.kind === 'in' && !wallSeen([-sg.n[0], -sg.n[1]])) return;
@@ -15512,15 +15723,16 @@ style === 'sketch' ? '#EFEBE0'
         mat:pp.kind === 'out' && look.wall ? look.wall.key : null, wallSg:pp.kind === 'out' ? sg : null,
         uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) });
     });
-    if (RF.chim && RF.chim.on && isFinite(+RF.chim.x) && isFinite(+RF.chim.y)) {
+    roofChims(RF).forEach(({ ch }) => {
       try {
-        const zx = M.zAt(+RF.chim.x, +RF.chim.y);
+        if (!isFinite(+ch.x) || !isFinite(+ch.y)) return;
+        const zx = M.zAt(+ch.x, +ch.y);
         if (zx !== null && isFinite(zx)) {
-          chimneyFaces(RF.chim.fam, +RF.chim.x, +RF.chim.y, zx, chimEffH(RF.chim), chimFoot(RF.chim), chimTaper(RF.chim), (qx, qy) => M.zAt(qx, qy))
+          chimneyFaces(ch.fam, +ch.x, +ch.y, zx, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy))
             .forEach(f => items.push({ pts:f.pts, fill:f.fill, chim:true, d:dc(f.pts) }));
         }
       } catch (e) {}
-    }
+    });
     try {
       (BSviz || { solids:[] }).solids.forEach(sl => {
         if (!sl.pts || sl.pts.length < 3) return;
@@ -16438,17 +16650,22 @@ function exportModel() {
     add('terrain', 'Terrain (Copernicus DEM, resampled ' + TS.toFixed(2) + ' m near field)', 'AA-TERRAIN', tf, { mat:'AA_Terrain', grid:TN + 'x' + TN + ' at ' + TS.toFixed(2) + ' m' });
   }
 
-  { const c = RF.bei && RF.bei.canopy;
-    const hit = c ? canopySpanFor(planModel(G).segs, c, H0, RM) : null;
+  roofCanopies(RF).forEach(({ c }) => {
+    const hit = canopySpanFor(planModel(G).segs, c, H0, RM);
     if (hit) {
-      add('shading', 'Eave canopy', 'AA-SHADING', [[canopyPts(hit).quad, [0, 0, 1]]],
-        { device:'Canopy', depth:hit.d, pitch:+hit.p.toFixed(1), mat:'AA_Roof' });
+      const slabX = canopySlab(hit), nX = hit.sg.n;
+      const txX = (hit.sg.b[0] - hit.sg.a[0]) / hit.sg.len, tyX = (hit.sg.b[1] - hit.sg.a[1]) / hit.sg.len;
+      const spX = Math.sin(hit.p * RAD), cpX = Math.cos(hit.p * RAD);
+      add('shading', 'Eave canopy', 'AA-SHADING', [[canopyPts(hit).quad, [nX[0] * spX, nX[1] * spX, cpX]],
+        [slabX.outer, [nX[0], nX[1], 0]], [slabX.sideA, [-txX, -tyX, 0]], [slabX.sideB, [txX, tyX, 0]],
+        [slabX.bottom, [-nX[0] * spX, -nX[1] * spX, -cpX]]],
+        { device:'Canopy', depth:hit.d, pitch:+hit.p.toFixed(1), thickness:CANOPY_THICK, root:+hit.z0.toFixed(2), drop:+hit.drop.toFixed(2), outer:+hit.z1.toFixed(2), mat:'AA_Roof' });
       /* the alpendre's timber frame: posts no more than 3 m apart, the beam over them */
       const fr = canopyFrame(hit);
       fr.posts.forEach((B, i) => add('column', 'Eave canopy post ' + (i + 1), 'AA-STRUCTURE', box(...B), { mat:'AA_Timber' }));
       if (fr.beam) add('beam', 'Eave canopy beam', 'AA-STRUCTURE', box(...fr.beam), { mat:'AA_Timber' });
     }
-  }
+  });
   /* a north arrow on the ground, for the tools that do not read north */
   const R0 = Math.hypot(L, D) / 2 + 3;
   els.push({ kind:'north', name:'North', layer:'AA-NORTH',
@@ -16621,8 +16838,9 @@ function toDecisionsJSON() {
       roof:{ type:['flat', 'shed', 'gable', 'hip'][ROOF.n], pitch:ROOF.n === 0 ? 0 : ROOF.th,
         zones:(ROOF.zones || []).map((z, i) => Object.assign({ part:'ABC'[i], type:['flat', 'shed', 'gable', 'hip'][z.n], pitch:z.n === 0 ? 0 : z.th, from:+z.f0.toFixed(3), to:+z.f1.toFixed(3) },
           z.n === 2 && Math.abs(ridgeFrac(z) - 0.5) > 1e-3 ? { ridgeAt:ridgeFrac(z), rearPitch:+rearPitch(z.th, ridgeFrac(z)).toFixed(1) } : {})), roofColour:colourOf(rfin),
-        parapet:ROOF.par && ROOF.par.on ? Object.assign({ height:+ROOF.par.h.toFixed(2) }, isFinite(+ROOF.parZone) && +ROOF.parZone >= 0 ? { onlyPart:'ABC'[+ROOF.parZone] } : { scope:'whole roof' }) : null,         beirado:ROOF.bei && ROOF.bei.on ? { projectionS:+beiSide(ROOF.bei, 'S').toFixed(2), projectionN:+beiSide(ROOF.bei, 'N').toFixed(2), projectionE:+beiSide(ROOF.bei, 'E').toFixed(2), projectionW:+beiSide(ROOF.bei, 'W').toFixed(2), gables:ROOF.bei.ends !== false } : null,
-        chimney:ROOF.chim && ROOF.chim.on ? { family:ROOF.chim.fam, x:+ROOF.chim.x.toFixed(2), y:+ROOF.chim.y.toFixed(2), heightAboveRoof:isFinite(+ROOF.chim.h) ? +ROOF.chim.h : null, widthEW:+chimFoot(ROOF.chim).x.toFixed(2), widthSN:+chimFoot(ROOF.chim).y.toFixed(2), sidePitch:isFinite(+ROOF.chim.taper) ? +ROOF.chim.taper : null } : null, roofColour:colourOf(rfin),
+        parapets:(ROOF.zones || []).filter(z => z.par && z.par.on).map(z => ({ roof:(ROOF.zones || []).indexOf(z) + 1, height:+z.par.h.toFixed(2) })),
+        beirados:(ROOF.zones || []).filter(z => z.bei && z.bei.on).map(z => ({ roof:(ROOF.zones || []).indexOf(z) + 1, projectionS:+beiSide(z.bei, 'S').toFixed(2), projectionN:+beiSide(z.bei, 'N').toFixed(2), projectionE:+beiSide(z.bei, 'E').toFixed(2), projectionW:+beiSide(z.bei, 'W').toFixed(2), gables:z.bei.ends !== false })),
+        chimneys:roofChims(ROOF).map(({ zi, ch }) => ({ roof:zi + 1, family:ch.fam, x:+ch.x.toFixed(2), y:+ch.y.toFixed(2), heightAboveRoof:isFinite(+ch.h) ? +ch.h : null, widthEW:+chimFoot(ch).x.toFixed(2), widthSN:+chimFoot(ch).y.toFixed(2), sidePitch:isFinite(+ch.taper) ? +ch.taper : null })), roofColour:colourOf(rfin),
         solar:solStudy(ROOF.sol)},
       openings:OPEN, sunspace:SUNSP, roofWindows:RWIN,
       render:{ prompt:RENDER_PROMPT,
@@ -16918,7 +17136,7 @@ function applyStudy(o) {
   }
   if (R0.bei && R0.bei.canopy && typeof R0.bei.canopy === 'object') {
     const C0 = R0.bei.canopy;
-    ROOF.bei.canopy = { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:isFinite(+C0.x) ? +C0.x : 0, y:isFinite(+C0.y) ? +C0.y : 0, w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4), p:clamp(Math.round(+C0.p || 0), 0, 45) };
+    ROOF.bei.canopy = { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:isFinite(+C0.x) ? +C0.x : 0, y:isFinite(+C0.y) ? +C0.y : 0, w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4), p:clamp(Math.round(+C0.p || 0), 0, 45), drop:clamp(isFinite(+C0.drop) ? +C0.drop : 0.15, 0.05, 1.5) };
   }
   if (Array.isArray(R0.zones) && R0.zones.length && R0.zones.length <= 3) {
     const zs = R0.zones.filter(z => z && [0, 1, 2, 3].indexOf(z.n) >= 0 && isFinite(+z.f0) && isFinite(+z.f1) && +z.f1 > +z.f0);
@@ -16928,7 +17146,20 @@ function applyStudy(o) {
       z.n === 2 && isFinite(+z.rg) && +z.rg > 0 ? { rg:clamp(+z.rg, 0.2, 0.8) } : {},
       isFinite(+z.rot) ? { rot:((Math.round(+z.rot) % 4) + 4) % 4 } : {},
       typeof z.colA === 'string' ? { colA:z.colA } : {},
-      typeof z.colB === 'string' ? { colB:z.colB } : {})) : undefined;
+      typeof z.colB === 'string' ? { colB:z.colB } : {},
+      z.par && typeof z.par === 'object' ? { par:{ on:!!z.par.on, h:clamp(fin(z.par.h, 0.6), 0.2, 1.5) } } : {},
+      z.bei && typeof z.bei === 'object' ? { bei:Object.assign({ on:!!z.bei.on, ends:z.bei.ends !== false },
+        ['S', 'N', 'E', 'W'].map(f => ({ ['d' + f]:isFinite(+z.bei['d' + f]) ? clamp(+z.bei['d' + f], 0, 1) : undefined })).reduce((a, o) => Object.assign(a, Object.fromEntries(Object.entries(o).filter(([k, v]) => v !== undefined))), {})) } : {},
+      z.canopy && typeof z.canopy === 'object' ? { canopy:{
+        f:['S', 'N', 'E', 'W'].indexOf(z.canopy.f) >= 0 ? z.canopy.f : 'S', x:isFinite(+z.canopy.x) ? +z.canopy.x : 0, y:isFinite(+z.canopy.y) ? +z.canopy.y : 0,
+        w:clamp(+z.canopy.w || 3, 1, 8), d:clamp(+z.canopy.d || 1.5, 0.6, 4), p:clamp(Math.round(+z.canopy.p || 0), 0, 45),
+        drop:clamp(isFinite(+z.canopy.drop) ? +z.canopy.drop : 0.15, 0.05, 1.5) } } : {},
+      z.chim && typeof z.chim === 'object' ? { chim:Object.assign({ on:!!z.chim.on },
+        typeof z.chim.fam === 'string' ? { fam:z.chim.fam } : {},
+        isFinite(+z.chim.x) ? { x:+z.chim.x } : {}, isFinite(+z.chim.y) ? { y:+z.chim.y } : {},
+        isFinite(+z.chim.h) ? { h:+z.chim.h } : {}, isFinite(+z.chim.wx) ? { wx:+z.chim.wx } : {},
+        isFinite(+z.chim.wy) ? { wy:+z.chim.wy } : {}, isFinite(+z.chim.taper) ? { taper:+z.chim.taper } : {},
+        'lock' in z.chim ? { lock:z.chim.lock !== false } : {}) } : {})) : undefined;
   } else delete ROOF.zones;
   if (isFinite(+R0.roofSel)) ROOF.roofSel = Math.max(-1, Math.min(2, Math.round(+R0.roofSel)));
   ['S', 'N', 'E', 'W'].forEach(f => {
@@ -19247,9 +19478,11 @@ Object.assign(PT, {
   "Eaves": "Beirado", "Eave canopy": "Pala do beirado",
   "Canopy width": "Largura da pala",
   "Canopy depth": "Profundidade da pala",
-  "Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.": "Avance um tramo do beirado para cobrir um espaço exterior, como um alpendre — arraste o seu ponto redondo ao longo da parede e para fora, e o ponto quadrado na ponta para o alargar. A inclinação faz a pala descer para fora da parede; a profundidade mede-se na horizontal. Com mais de 0,5 m de profundidade assenta em pilares de madeira sob um frechal, mais um pilar por cada 3 m de largura.",
+  "Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it. The pitch falls the canopy away from the wall; its depth is measured level. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.": "Avance um tramo do beirado para cobrir um espaço exterior, como um alpendre — arraste o seu ponto redondo ao longo da parede e para fora, o ponto quadrado na ponta para o alargar e o losango no encosto para cima e para baixo para definir a descida abaixo do beirado. A pala desenha-se com 0,07 m de espessura. A inclinação faz a pala descer para fora da parede; a profundidade mede-se na horizontal. Com mais de 0,5 m de profundidade assenta em pilares de madeira sob um frechal, mais um pilar por cada 3 m de largura.",
   "timber posts": "pilares de madeira", "spans of": "vãos de", "hung from the wall, no posts up to 0.5 m": "suspensa da parede, sem pilares até 0,5 m",
-  "Canopy pitch": "Inclinação da pala", "Outer edge": "Bordo exterior", "above the ground": "acima do solo",
+  "Canopy pitch": "Inclinação da pala", "Canopy drop": "Descida da pala", "Root": "Encosto", "Outer edge": "Bordo exterior", "above the ground": "acima do solo",
+  "Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it, its diamond at the wall up and down to set how far it hangs below the eave. The pitch falls the canopy away from the wall; its depth is measured level. The slab reads 0.07 m thick. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.": "Avance um tramo do beirado para cobrir um espaço exterior, como um alpendre — arraste o seu ponto redondo ao longo da parede e para fora, o ponto quadrado na ponta para o alargar e o losango no encosto para cima e para baixo para definir a descida abaixo do beirado. A inclinação faz a pala descer para fora da parede; a profundidade mede-se na horizontal. A pala desenha-se com 0,07 m de espessura. Com mais de 0,5 m de profundidade assenta em pilares de madeira sob um frechal, mais um pilar por cada 3 m de largura.",
+  "drop held to keep root 2.1 m clear": "descida limitada para manter o encosto a 2,1 m do solo",
   "pitch held at": "inclinação limitada a", "to keep it 2.0 m clear": "para o manter a 2,0 m do solo",
   "Ridge position": "Posição da cumeeira", "Slope to the main facade": "Vertente para a fachada principal", "to the rear": "para o tardoz",
   "Left slope": "Vertente esquerda", "right slope": "vertente direita", "canopy": "pala",
