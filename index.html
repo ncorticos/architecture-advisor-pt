@@ -3420,13 +3420,13 @@ function beiSideOf(RF, f) {
 }
 /** Any eave on anywhere: the gate for measuring edges and shade. */
 function beiAny(RF) { return ['S', 'N', 'E', 'W'].some(f => beiSideOf(RF, f) > 0); }
-/** Every canopy standing, with its roof number. */
+/** Every canopy standing, with its part letter. */
 function roofCanopies(RF) {
   const out = [];
   (RF.zones || []).forEach((z, i) => { if (z && z.canopy) out.push({ zi:i, c:z.canopy }); });
   return out;
 }
-/** Every chimney standing, with its roof number. */
+/** Every chimney standing, with its part letter. */
 function roofChims(RF) {
   const out = [];
   (RF.zones || []).forEach((z, i) => { if (z && z.chim && z.chim.on) out.push({ zi:i, ch:z.chim }); });
@@ -7830,7 +7830,7 @@ function buildRoof(host) {
       const b = el('button', { class:'btn small' + (sel === i ? ' solid' : ''),
         title:t('Part') + ' ' + 'ABC'[i] + ' · ' + ['Flat', 'Shed', 'Gable', 'Hip'][z.n] + (z.n ? ' ' + Math.round(z.th) + '°' : '') });
       b.appendChild(el('span', { style:'display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px;border:1px solid rgba(20,23,26,.35);background:' + (f ? f.hex : '#cfd4cd') }));
-      b.appendChild(document.createTextNode(String(i + 1)));
+      b.appendChild(document.createTextNode(t('Part') + ' ' + ('ABC'[i] || String(i + 1))));
       b.onclick = () => { RF.roofSel = i; buildRoofColUI(); buildRoofSideUI(); roofDraw(); };
       row.appendChild(b);
     });
@@ -7838,7 +7838,7 @@ function buildRoof(host) {
     all.onclick = () => { RF.roofSel = -1; buildRoofColUI(); buildRoofSideUI(); roofDraw(); };
     row.appendChild(all);
     colBox.appendChild(row);
-    colBox.appendChild(el('p', { class:'hint', text:t('Pick a roof number, then its colour — unset roofs follow the whole-roof colour.') }));
+    colBox.appendChild(el('p', { class:'hint', text:t('Pick Part A or Part B, then its colour — unset parts follow the whole-roof colour.') }));
     const fp = p => { p.classList.add('fpick'); colBox.appendChild(p); };
     if (sel >= 0 && RF.zones[sel]) {
       const rz = RF.zones[sel], z = M.zones[sel];
@@ -7904,7 +7904,7 @@ function buildRoof(host) {
     zonePitchCtls = []; zoneRidgeCtls = []; ridgeSays = [];
     M.zones.forEach((z, i) => {
       const rz = RF.zones[i], head = el('div', { class:'gh' });
-      head.innerHTML = (i + 1) + ' · ' + t('Part') + ' ' + 'ABC'[i] + ' · ' + spanM(M, i) + ' ' + along;
+      head.innerHTML = t('Part') + ' ' + ('ABC'[i] || String(i + 1)) + ' · ' + spanM(M, i) + ' ' + along;
       zoneBox.appendChild(head);
       const cT = segCtl('Type', TYPES, rz.n, v => {
         rz.n = v; if (v === 0) rz.th = 0; else if (!rz.th) rz.th = 30;
@@ -7930,9 +7930,10 @@ function buildRoof(host) {
         ridgeSays[i] = zoneBox.appendChild(el('p', { class:'hint' }));
         sayRidge(i);
       }
-      /* turn one part aside in quarter turns, to face another solar orientation */
+      /* turn one part aside in quarter turns, to face another solar orientation:
+         one labelled button per part — Rotate 90° Part A, Part B (Part C with three) */
       if (M.zones.length > 1 && (rz.n === 1 || rz.n === 2)) {
-        zoneBox.appendChild(el('button', { class:'btn small', text:'\u27f3 ' + t('Rotate 90°'),
+        zoneBox.appendChild(el('button', { class:'btn small', text:'\u27f3 ' + t('Rotate 90°') + ' ' + t('Part') + ' ' + ('ABC'[i] || String(i + 1)),
           title:t('Turn this part a quarter turn, to face another solar orientation'), onclick:() => {
             rz.rot = ((((rz.rot | 0) + 1) % 4) + 4) % 4;
             syncRoofTop(); buildRoofUI(); roofDraw();
@@ -7977,7 +7978,7 @@ function buildRoof(host) {
         }
         syncRoofTop(); buildRoofUI(); roofDraw();
       } }));
-    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: divide the longest side (up to three parts), give each part its slopes and pitch, and drag the division on the model or above. Numbered on the model, coloured from the list on the right: pick a roof number, then its colour — a gable’s two slopes each their own — and turn parts in quarter turns with Rotate 90°, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
+    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: divide the longest side (up to three parts), give each part its slopes and pitch, and drag the division on the model or above. Lettered on the model, coloured from the list on the right: pick Part A or Part B, then its colour — a gable’s two slopes each their own — and turn each part in quarter turns with its Rotate 90° Part A / Part B button, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
     buildRoofColUI(); buildRoofSideUI();
   }
   buildRoofUI();
@@ -8005,7 +8006,6 @@ function buildRoof(host) {
   buildParUI();
   roofSide.appendChild(el('div', { class:'gh', text:'Eaves' }));
   const beiBox = roofSide.appendChild(el('div'));
-  let beiDCtl = null;
   function buildBeiUI() {
     beiBox.innerHTML = '';
     const RZ = RF.zones[roofSelIdx()], zb = RZ.bei, on = !!(zb && zb.on);
@@ -8025,13 +8025,7 @@ function buildRoof(host) {
           RZ.bei['d' + f] = +(+v).toFixed(2); roofDraw();
         }, v => fmt(v, 2) + ' m'));
       });
-      beiDCtl = null;
-      beiBox.appendChild(segCtl('Gable ends', [{ value:0, label:'Off' }, { value:1, label:'On' }], (!zb || zb.ends !== false) ? 1 : 0, v => {
-        if (!RZ.bei || typeof RZ.bei !== 'object') RZ.bei = { on:true };
-        RZ.bei.ends = v === 1;
-        buildBeiUI(); roofDraw();
-      }));
-    } else beiDCtl = null;
+    }
   }
   buildBeiUI();
   roofSide.appendChild(el('div', { class:'gh', text:'Eave canopy' }));
@@ -8447,7 +8441,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
         nodesOut.ridge.push(q);
       });
       window.__roofNodes = nodesOut;
-      /* numbered roofs: 1, 2, 3 on the parts, the pick ringed */
+      /* part-lettered roofs: A, B, C on the parts, the pick ringed */
       if (M.zones.length > 1) {
         const selN = RF.roofSel;
         M.zones.forEach((z, zi) => {
@@ -8465,7 +8459,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
           const q = proj(best.X, best.Y, best.e + 0.8), isSel = selN === zi;
           ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(q[0], q[1], 10, 0, 6.284); ctx.fill();
           stroke(ctx, isSel ? '#B45309' : CH.ink, isSel ? 2.5 : 1.2); ctx.stroke();
-          label(ctx, String(zi + 1), q[0], q[1], isSel ? '#B45309' : CH.ink, FM(11, '700'), 'center', 'middle');
+          label(ctx, ('ABC'[zi] || String(zi + 1)), q[0], q[1], isSel ? '#B45309' : CH.ink, FM(11, '700'), 'center', 'middle');
           desk.block(q[0] - 12, q[1] - 12, q[0] + 12, q[1] + 12);
         });
       }
@@ -8636,13 +8630,13 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
         + (M.ridges[i] && Math.abs(M.ridges[i].rg - 0.5) > 1e-3 ? '/' + fmt(M.ridges[i].rear, 1) + '° · ridge at ' + Math.round(M.ridges[i].rg * 100) + '%' : '')
         + (M.zones[i] && M.zones[i].face ? ' · faces ' + M.zones[i].face : '') + (z.rot ? ' · turned ' + (z.rot * 90) + '°' : '')).join(' | ')],
       ['Parapet by roof', (() => {
-        const hs = (RF.zones || []).map((z, i) => (z.par && z.par.on) ? 'Roof ' + (i + 1) + ': ' + fmt(z.par.h, 2) + ' m' : null).filter(Boolean);
+        const hs = (RF.zones || []).map((z, i) => (z.par && z.par.on) ? 'Part ' + ('ABC'[i] || String(i + 1)) + ': ' + fmt(z.par.h, 2) + ' m' : null).filter(Boolean);
         return hs.length ? hs.join(' | ') : 'none';
       })()],
       ['Eaves by roof', (() => {
         const hs = (RF.zones || []).map((z, i) => {
           if (!(z.bei && z.bei.on)) return null;
-          return 'Roof ' + (i + 1) + ': S ' + fmt(beiSide(z.bei, 'S'), 2) + ' m · N ' + fmt(beiSide(z.bei, 'N'), 2) + ' m · E ' + fmt(beiSide(z.bei, 'E'), 2) + ' m · W ' + fmt(beiSide(z.bei, 'W'), 2) + ' m' + (z.bei.ends !== false ? '' : ' · flush gables');
+          return 'Part ' + ('ABC'[i] || String(i + 1)) + ': S ' + fmt(beiSide(z.bei, 'S'), 2) + ' m · N ' + fmt(beiSide(z.bei, 'N'), 2) + ' m · E ' + fmt(beiSide(z.bei, 'E'), 2) + ' m · W ' + fmt(beiSide(z.bei, 'W'), 2) + ' m' + (z.bei.ends !== false ? '' : ' · flush gables');
         }).filter(Boolean);
         return hs.length ? hs.join(' | ') : 'none';
       })()],
@@ -8651,13 +8645,13 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
           const cH = canopySpanFor(M.pl.segs, c, M.H0, M);
           if (!cH) return null;
           const fr = canopyFrame(cH);
-          return 'Roof ' + (zi + 1) + ': ' + c.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '° · 0.07 m slab · root ' + fmt(cH.z0, 2) + ' m (drop ' + fmt(cH.drop, 2) + ' m) · outer edge ' + fmt(cH.z1, 2) + ' m'
+          return 'Part ' + ('ABC'[zi] || String(zi + 1)) + ': ' + c.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '° · 0.07 m slab · root ' + fmt(cH.z0, 2) + ' m (drop ' + fmt(cH.drop, 2) + ' m) · outer edge ' + fmt(cH.z1, 2) + ' m'
             + (fr.n ? ' · ' + fr.n + ' timber posts, spans ' + fmt(fr.span, 2) + ' m' : ' · no posts');
         }).filter(Boolean);
         return hs.length ? hs.join(' | ') : 'none';
       })()],
       ['Chimneys', (() => {
-        const hs = roofChims(RF).map(({ zi, ch }) => 'Roof ' + (zi + 1) + ': ' + CHIMNEY_FAM[ch.fam].name + ' at ' + fmt(ch.x, 1) + ', ' + fmt(ch.y, 1) + ' m · ' + fmt(chimEffH(ch), 2) + ' m above roof');
+        const hs = roofChims(RF).map(({ zi, ch }) => 'Part ' + ('ABC'[zi] || String(zi + 1)) + ': ' + CHIMNEY_FAM[ch.fam].name + ' at ' + fmt(ch.x, 1) + ', ' + fmt(ch.y, 1) + ' m · ' + fmt(chimEffH(ch), 2) + ' m above roof');
         return hs.length ? hs.join(' | ') : 'none';
       })()],
       ['Plan form (from Site)', (G.form || 'rect') + (G.patio && G.patio.on && G.patio.ok !== false ? ' + patio' : '')],
@@ -19935,7 +19929,7 @@ Object.assign(PT, {
   "Parapet on": "Platibanda em",
   "Whole roof": "Toda a cobertura",
   "Roofs": "Telhados",
-  "Pick a roof number, then its colour — unset roofs follow the whole-roof colour.": "Escolha um número de cobertura e depois a sua cor — as partes por definir seguem a cor de toda a cobertura.",
+  "Pick Part A or Part B, then its colour — unset parts follow the whole-roof colour.": "Escolha a Parte A ou a Parte B e depois a sua cor — as partes por definir seguem a cor de toda a cobertura.",
   "Front eave": "Beirado da frente",
   "Rear eave": "Beirado de trás",
   "East eave": "Beirado de nascente",
@@ -20046,7 +20040,7 @@ Object.assign(PT_HINT, {
   'roof-score':
     'Uma só pontuação lê a inclinação. <b>Inclinação · % do melhor</b> é o sol do ano na vertente virada para a fachada principal à sua inclinação, como parte do sol à melhor inclinação para essa direcção neste local — encontrada grau a grau, a partir da irradiação do próprio local (ver os colectores abaixo): a produção dos colectores escolhidos ou, sem nenhum, o sol no plano, que é o que o fotovoltaico lê. Muda devagar perto da melhor inclinação — 10° de desvio custam cerca de 1 a 2 % — pelo que qualquer inclinação que um telhado aguente pontua alto; só cai depressa muito longe dela. O calibre verde junto à vertente desenha as regras práticas de Galloway e Lechner para o sol do meio-dia numa vertente a sul — Inverno %1°, Verão %2°, anual %3° — sobre o balanço deste local de %4 meses de aquecimento (média abaixo de 18 °C) para %5 de arrefecimento (acima de 22 °C); arraste a vertente até ficar paralela a um raio para o tomar. A melhor inclinação para todo o ano fica perto do valor anual, mais baixa onde o sol de verão é forte. As faixas de cor 97/90 são cortes didácticos desta aplicação. Uma cobertura plana não tem inclinação a avaliar: os seus colectores tomam a sua própria estrutura.',
   'roof-divide':
-    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: divida o lado maior (até três partes), dê a cada parte as suas águas e inclinação, e arraste a divisão no modelo ou acima. Numeradas no modelo, com cor na lista à direita: escolha um número de cobertura e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode as partes em quartos de volta com Rodar 90°, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
+    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: divida o lado maior (até três partes), dê a cada parte as suas águas e inclinação, e arraste a divisão no modelo ou acima. Com letras no modelo, com cor na lista à direita: escolha a Parte A ou a Parte B e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode cada parte em quartos de volta com o seu botão Rodar 90° Parte A / Parte B, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
   'ori-roof':
     'Uma superfície a sul recolhe o máximo quando o raio do meio-dia lhe chega quase perpendicular: <b>Inverno = latitude + 15°, Verão = latitude − 15°, anual = latitude</b> (Galloway; Lechner) — aqui <b>%1° / %2° / %3°</b>. %4. Os telhados tradicionais portugueses de telha ficam muito mais baixos, pelo que os colectores pedem em geral a sua própria estrutura — a tensão é a lição.',
   'ori-ff':
