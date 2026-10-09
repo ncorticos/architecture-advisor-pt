@@ -3902,6 +3902,18 @@ function roofModel(G, RF) {
    one that can carry it. Metres, in the plan's local frame; u along the
    wall from its start, v out along its outward normal. */
 const BALC_SLAB = 0.18, BALC_PAR = 1.0, BALC_MAX = 6;
+const WIN_REVEAL = 0.20;   // glass sits this far behind the facade plane
+/** Four jamb quads from a facade opening to its recessed glass quad (same
+    [u0v0, u1v0, u1v1, u0v1] order; n the wall's outward normal). */
+function winReveal(quad, n) {
+  const F = quad.map(p => [p[0] + n[0] * WIN_REVEAL, p[1] + n[1] * WIN_REVEAL, p[2]]);
+  return [
+    { pts:[F[3], F[2], quad[2], quad[3]], fill:'rgba(105,100,90,.6)' },
+    { pts:[F[1], F[0], quad[0], quad[1]], fill:'rgba(150,143,130,.55)' },
+    { pts:[F[0], F[3], quad[3], quad[0]], fill:'rgba(128,122,110,.55)' },
+    { pts:[F[2], F[1], quad[1], quad[2]], fill:'rgba(128,122,110,.55)' }
+  ];
+}
 /** A balcony as the student left it, sized to the wall it stands on. */
 function balcOne(G, pl, fl, b) {
   const res = { b, ok:false, why:null };
@@ -9848,7 +9860,7 @@ function buildOpenings(host) {
         const uv = (uu && eu.door) ? doorSpanV(uu, rect.v1, k, G.fh) : unitSpanV(uu, rect.v0, rect.v1, k, G.fh);
         const v0 = uv[0], v1 = uv[1];
         if (v1 - v0 < 0.1) return;
-        const quad = [onWall(sg, sp.a, v0), onWall(sg, sp.b, v0), onWall(sg, sp.b, v1), onWall(sg, sp.a, v1)];
+        const quad = [off(onWall(sg, sp.a, v0), -WIN_REVEAL), off(onWall(sg, sp.b, v0), -WIN_REVEAL), off(onWall(sg, sp.b, v1), -WIN_REVEAL), off(onWall(sg, sp.a, v1), -WIN_REVEAL)];
         (uu && eu.gel ? lat : glass).push(quad);
         if (uu && sp.ui === o.sel && k === openSelK(w.f)) sel.push(quad);
       });
@@ -9963,6 +9975,10 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
         if (!(B.corner > 0 && B.convexB)) fins.push({ t:B.u1, d:B.d, z0:k * G.fh, z1:z });
       }
     });
+    /* the glass sits 0.20 deep while every device stands on the facade: the
+       reveal deepens each device by the same 0.20, as built */
+    plates.forEach(q => q.d += WIN_REVEAL);
+    fins.forEach(q => q.d += WIN_REVEAL);
     return { plates, fins };
   }
   /** Does a point of the glass (t, z) see the sun along (dt, dn, dz), or
@@ -10224,12 +10240,14 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
           const act = wn.w.f === curFace;
           const wg = winGeo(it.sg, wn.w);
           wg.glass.forEach(gl => {
+            winReveal(gl, it.sg.n).forEach(j => poly(j.pts, j.fill));
             poly(gl, act ? 'rgba(219,234,254,.95)' : 'rgba(219,234,254,.8)', act ? '#2563EB' : 'rgba(37,99,235,.75)', act ? 1.8 : 1.2);
             const n = Math.max(1, Math.round(wn.w.w / 1.2));   // a pane to about every 1.2 m
             stroke(ctx, act ? '#2563EB' : 'rgba(37,99,235,.6)', 0.9);
             for (let k = 1; k < n; k++) { const a = proj(...gl[0].map((v, i) => v + (gl[1][i] - v) * k / n)), b = proj(...gl[3].map((v, i) => v + (gl[2][i] - v) * k / n)); seg(ctx, a[0], a[1], b[0], b[1]); }
           });
           wg.lat.forEach(q => {
+            winReveal(q, it.sg.n).forEach(j => poly(j.pts, j.fill));
             poly(q, act ? 'rgba(255,255,255,.95)' : 'rgba(245,244,240,.85)', act ? '#57534E' : 'rgba(87,83,78,.7)', 1.4);
             const p = q.map(pt => proj(...pt)), mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
             stroke(ctx, act ? '#57534E' : 'rgba(87,83,78,.7)', 1);
@@ -10297,7 +10315,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
             const wu = wus[sp.ui], wv = unitDoor(wu, kwx) ? doorSpanV(wu, wbv1, kwx, G.fh) : unitSpanV(wu, wbv0, wbv1, kwx, G.fh);
             const mid = (sp.a + sp.b) / 2, isSel = sp.ui === wsel && kwx === wsk;
             wdot(onWall(rh.sg, mid, wv[1]), isSel);
-            if (isSel) poly([onWall(rh.sg, sp.a, wv[0]), onWall(rh.sg, sp.b, wv[0]), onWall(rh.sg, sp.b, wv[1]), onWall(rh.sg, sp.a, wv[1])], 'rgba(180,83,9,0.10)', '#B45309', 2.5);
+            const offS = (p, d) => [p[0] + rh.sg.n[0] * d, p[1] + rh.sg.n[1] * d, p[2]];
+            if (isSel) poly([offS(onWall(rh.sg, sp.a, wv[0]), -WIN_REVEAL), offS(onWall(rh.sg, sp.b, wv[0]), -WIN_REVEAL), offS(onWall(rh.sg, sp.b, wv[1]), -WIN_REVEAL), offS(onWall(rh.sg, sp.a, wv[1]), -WIN_REVEAL)], 'rgba(180,83,9,0.10)', '#B45309', 2.5);
           });
         });
         /* a black node per fin where it stands — cached for picking */
@@ -13159,7 +13178,7 @@ function buildVentilation(host) {
           faceFins(w.f).map(t => fx[0] + t * (fx[1] - fx[0]))
             .forEach(uF => out.push({ ov:false, pts:[onWallV(sg, uF, v0), off(onWallV(sg, uF, v0), o.finD), off(onWallV(sg, uF, v1), o.finD), onWallV(sg, uF, v1)] }));
         }
-        glass.push([onWallV(sg, u0, v0), onWallV(sg, u1, v0), onWallV(sg, u1, v1), onWallV(sg, u0, v1)]);
+        glass.push([off(onWallV(sg, u0, v0), -WIN_REVEAL), off(onWallV(sg, u1, v0), -WIN_REVEAL), off(onWallV(sg, u1, v1), -WIN_REVEAL), off(onWallV(sg, u0, v1), -WIN_REVEAL)]);
       });
       return { glass, devs:out };
     };
@@ -13245,7 +13264,10 @@ function buildVentilation(host) {
       const wn = it.sg && wins.find(o => o.sg === it.sg);
       if (wn) {
         const lit = sun.alt > 0 && it.sg.n[0] * sunL[0] + it.sg.n[1] * sunL[1] > 0;
-        devsOf(it.sg, wn.w).glass.forEach(gl => poly(gl, lit ? 'rgba(191,219,254,.95)' : 'rgba(219,234,254,.85)', lit ? '#2563EB' : CH.ink2, lit ? 1.8 : 1.2));
+        devsOf(it.sg, wn.w).glass.forEach(gl => {
+          winReveal(gl, it.sg.n).forEach(j => poly(j.pts, j.fill));
+          poly(gl, lit ? 'rgba(191,219,254,.95)' : 'rgba(219,234,254,.85)', lit ? '#2563EB' : CH.ink2, lit ? 1.8 : 1.2);
+        });
       }
       if (shadeHit && it.sg && it.prof && sun.alt > 0 && it.sg.n[0] * sunL[0] + it.sg.n[1] * sunL[1] > 0) {
         /* A crown or garden wall between this sunlit face and the sun: per
@@ -15708,14 +15730,15 @@ style === 'sketch' ? '#EFEBE0'
           });
           segs.forEach(([a2, b2]) => {
             if (eu.door) {
-              const q = rect(a2, b2, v0, v1, 0.06);
+              const q = rect(a2, b2, v0, v1, -WIN_REVEAL);
               items.push(onWallLayer(sg, 3, { pts:q, door:{ sg, u0:a2, u1:b2, v0, v1 }, fill:'#2E3236', d:cdep(q) }));
             } else if (eu.gel) {
-              const q = rect(a2, b2, v0, v1, 0.05), k2 = night ? 0.3 : faceK(sg.n);
+              const q = rect(a2, b2, v0, v1, -WIN_REVEAL), k2 = night ? 0.3 : faceK(sg.n);
               items.push(onWallLayer(sg, 3, { pts:q, fill:shadeHex('#B0603C', k2), sh:k2, mat:'gelosia', wallSg:sg, gel:true, d:cdep(q),
                 uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) }));
             } else {
-              const q = rect(a2, b2, v0, v1, 0.07);
+              const q = rect(a2, b2, v0, v1, -WIN_REVEAL);
+              winReveal(q, sg.n).forEach(j => items.push(onWallLayer(sg, 3, { pts:j.pts, fill:j.fill })));
               items.push(onWallLayer(sg, 3, { pts:q, win:{ sg, u0:a2, u1:b2, v0, v1 },
                 fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(), glass:true, d:cdep(q) }));
             }
@@ -16166,7 +16189,7 @@ style === 'sketch' ? '#EFEBE0'
       if (it.door && style !== 'sketch') {
         const dr = it.door, sg = dr.sg, n = sg.n;
         const leaf3 = [[dr.u0 + 0.07, dr.v0 + 0.04], [dr.u1 - 0.07, dr.v0 + 0.04], [dr.u1 - 0.07, dr.v1 - 0.05], [dr.u0 + 0.07, dr.v1 - 0.05]]
-          .map(([u, v]) => { const p = onWall(sg, u, v); return [p[0] + n[0] * 0.12, p[1] + n[1] * 0.12, p[2]]; });
+          .map(([u, v]) => { const p = onWall(sg, u, v); return [p[0] + n[0] * (0.12 - WIN_REVEAL), p[1] + n[1] * (0.12 - WIN_REVEAL), p[2]]; });
         const leaf = leaf3.map(p => proj(FR, p[0], p[1], p[2]));
         ctx.beginPath(); leaf.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
         ctx.fillStyle = night ? '#3A3E42' : look.door ? look.door.c : '#44584E'; ctx.fill();
@@ -16651,7 +16674,13 @@ function exportModel() {
     const uLeftIsB = (along[0] * n[1] + along[1] * -n[0]) > 0;
     const x0 = Math.max(0, u0 - (uLeftIsB ? (o.ovR || 0) : (o.ovL || 0))), x1 = Math.min(segLen === undefined ? u1 + 1 : segLen, u1 + (uLeftIsB ? (o.ovL || 0) : (o.ovR || 0)));
     const off = (p, d) => [p[0] + n[0] * d, p[1] + n[1] * d, p[2]];
-    add('window', tag + ' window' + (gk ? ' ' + gk : ''), gk === 'brick ventilation' ? 'AA-GELOSIA' : 'AA-GLAZING', [[[P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)], n]], { width:ww, height:v1 - v0, wwr:o.wwr, facade:f, mat:'AA_Glass' });
+    const Gp = (u, v) => { const p = P(u, v); return [p[0] - n[0] * WIN_REVEAL, p[1] - n[1] * WIN_REVEAL, p[2]]; };
+    add('window', tag + ' window' + (gk ? ' ' + gk : ''), gk === 'brick ventilation' ? 'AA-GELOSIA' : 'AA-GLAZING', [[[Gp(u0, v0), Gp(u1, v0), Gp(u1, v1), Gp(u0, v1)], n]], { width:ww, height:v1 - v0, wwr:o.wwr, facade:f, mat:'AA_Glass' });
+    add('wall', tag + ' reveal', 'AA-WALLS', [
+      [[P(u0, v0), P(u1, v0), Gp(u1, v0), Gp(u0, v0)], [0, 0, 1]],
+      [[Gp(u0, v1), Gp(u1, v1), P(u1, v1), P(u0, v1)], [0, 0, -1]],
+      [[P(u0, v0), Gp(u0, v0), Gp(u0, v1), P(u0, v1)], [-along[0], -along[1], 0]],
+      [[Gp(u1, v0), P(u1, v0), P(u1, v1), Gp(u1, v1)], [along[0], along[1], 0]]], { mat:'AA_Wall' });
     if (devOK && o.ovD > 0) {
       const vs = o.ovN <= 1 ? [v1] : Array.from({ length:o.ovN }, (_, i) => v0 + (v1 - v0) * (i / (o.ovN - 1)));
       vs.forEach((vt, i) => add('shading', tag + (o.ovN > 1 ? ' louvre ' + (i + 1) : ' overhang'), 'AA-SHADING',
