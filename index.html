@@ -4679,7 +4679,7 @@ function pushImportFaces(arr, map) {
     (plan-local metres; map translates, as the Environmental view does). */
 function pushChimPar(arr, M, map) {
   if (!M) return;
-  if (M.paras && M.paras.length) M.paras.forEach(pp => arr.push({ pts:map ? pp.quad.map(map) : pp.quad, fill:'#E9E5DD', par:1 }));
+  if (M.paras && M.paras.length) M.paras.forEach(pp => arr.push({ pts:map ? pp.quad.map(map) : pp.quad, fill:'#E9E5DD', par:1, sg:pp.sg, kind:pp.kind }));
   if (M.skins) M.skins.forEach(sk => arr.push({ pts:map ? sk.quad.map(map) : sk.quad, fill:opaque(roofFillFor(sk.zi, sk.grp, 0.28, 0.8)), par:1 }));
   roofChims(ROOF).forEach(({ ch }) => {
     if (!isFinite(+ch.x) || !isFinite(+ch.y) || !M.pl.inside(+ch.x, +ch.y)) return;
@@ -4858,6 +4858,33 @@ const camDepth = (A, x, y, z) => (x * A.d[0] + y * A.d[1]) * A.ce - (z || 0) * A
       above it, so it paints first and the stack over it. A face of the
       stack that dips below the plane (behind the ridge, under a taller
       wing) keeps its depth order and is covered, as it should be. */
+  let SORT_AX = null;   // camera axes of the panel now sorting, for occlusion tests
+  /** A chimney or parapet face fully hidden behind a roof face along the view
+      rays: every point's ray camera-ward meets that face's own polygon nearer.
+      Back-to-front painting then covers it, as it should. */
+  function roofHidesPar(c, s, pl) {
+    const A = SORT_AX;
+    if (!A || !A.d || !isFinite(A.ce) || !isFinite(A.se)) return false;
+    const ux = A.d[0] * A.ce, uy = A.d[1] * A.ce, uz = -A.se;
+    const den0 = pl[0] * ux + pl[1] * uy + pl[2] * uz;
+    if (Math.abs(den0) < 1e-9) return false;
+    const P = s.pts;
+    const inside = (x, y) => {
+      let ins = false;
+      for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+        const a = P[i], b = P[j];
+        if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) ins = !ins;
+      }
+      return ins;
+    };
+    for (const v of c.pts) {
+      const sc = (pl[0] * v[0] + pl[1] * v[1] + pl[2] * v[2] - pl[3]) / den0;
+      if (!(sc > 1e-9)) return false;
+      const w = [v[0] - ux * sc, v[1] - uy * sc, v[2] - uz * sc];
+      if (!inside(w[0], w[1])) return false;
+    }
+    return true;
+  }
   function chimRoofOrder(p, q) {
     /* a parapet stands on the roof's edge the same way */
     const c = (p.chim || p.par) ? p : (q.chim || q.par) ? q : null;
@@ -4867,7 +4894,9 @@ const camDepth = (A, x, y, z) => (x * A.d[0] + y * A.d[1]) * A.ce - (z || 0) * A
     const pl = facePlane(s);
     if (!pl || pl[2] < 1e-6) return 0;                // seen edge-on: nothing to tell
     const over = c.pts.every(v => v[0] * pl[0] + v[1] * pl[1] + v[2] * pl[2] > pl[3] - 0.02);   // a foot resting on the surface still stands on it
-    return over ? (c === p ? 1 : -1) : 0;
+    if (!over) return 0;
+    if (SORT_AX && roofHidesPar(c, s, pl)) return c === p ? -1 : 1;   // occluded along the rays: the roof covers it
+    return c === p ? 1 : -1;
   }
   function roofWallOrder(p, q) { return (isRoofFace(p) && isWallFace(q)) ? 1 : (isWallFace(p) && isRoofFace(q)) ? -1 : chimRoofOrder(p, q); }
 /** Does a face with outward normal (nx, ny, nz) turn toward the camera? */
@@ -5775,7 +5804,7 @@ function buildEnvironment(host) {
     const path3 = pts3 => { ctx.beginPath(); pts3.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath(); };
     pushImportFaces(faces, wQ);
     pushChimPar(faces, M, wQ);
-    faces.sort((p1, q1) => roofWallOrder(p1, q1) || dep(q1) - dep(p1)).forEach(f2 => {
+    SORT_AX = null; faces.sort((p1, q1) => roofWallOrder(p1, q1) || dep(q1) - dep(p1)).forEach(f2 => {
       if (f2.balc) { balcFace(ctx, f2.balc, P3e); return; }
       if (f2.chim || f2.par) { path3(f2.pts); ctx.fillStyle = f2.fill; ctx.fill(); stroke(ctx, CH.ink, 1.1); ctx.stroke(); return; }
       if (f2.import) { path3(f2.pts); ctx.fillStyle = f2.fill; ctx.fill(); return; }
@@ -7011,7 +7040,7 @@ function buildSite(host) {
         });
         pushImportFaces(faces);
         pushChimPar(faces, RM);
-        faces.sort((p, q) => roofWallOrder(p, q) || dep(q.pts) - dep(p.pts) || (p.balc ? 1 : 0) - (q.balc ? 1 : 0)).forEach(fc => {
+        SORT_AX = null; faces.sort((p, q) => roofWallOrder(p, q) || dep(q.pts) - dep(p.pts) || (p.balc ? 1 : 0) - (q.balc ? 1 : 0)).forEach(fc => {
           const scr = fc.pts.map(q => at(q[0], q[1], beta, q[2]));
           if (fc.balc) { desk.path(scr, true); balcFace(ctx, fc.balc, P3s); return; }
           if (fc.import) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); return; }
@@ -8444,10 +8473,15 @@ function buildRoof(host) {
       const depth = F => F.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / F.pts.length;
       pushImportFaces(faces);
       pushChimPar(faces, M);
-      faces.sort((p, q) => roofWallOrder(p, q) || depth(q) - depth(p)).forEach(F => {
+      SORT_AX = A; faces.sort((p, q) => roofWallOrder(p, q) || depth(q) - depth(p)).forEach(F => {
         if (F.balc) { desk.path(F.pts.map(P3), true); balcFace(ctx, F.balc, P3); return; }
         if (F.import) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); return; }
-if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
+if (F.chim || F.par) {
+          if (F.par && F.sg && F.kind) {
+            const pn = F.kind === 'out' ? F.sg.n : F.kind === 'in' ? [-F.sg.n[0], -F.sg.n[1]] : null;
+            if (pn ? !camSees(A, pn[0], pn[1], 0) : !camSees(A, 0, 0, 1)) return;
+          }
+          const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
         if (F.cnp) {
           /* the canopy's tiles: a channel every 0.25 m down its fall, and
              the beirado's broken line of tile ends along its edge */
@@ -10250,7 +10284,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       const depth = it => it.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / it.pts.length - (it.dev ? 0.01 : 0);
       pushImportFaces(items);
       pushChimPar(items, Mm);
-      items.sort((p, q) => roofWallOrder(p, q) || ((q.d === undefined ? depth(q) : q.d) - (p.d === undefined ? depth(p) : p.d))).forEach(it => {
+      SORT_AX = A; items.sort((p, q) => roofWallOrder(p, q) || ((q.d === undefined ? depth(q) : q.d) - (p.d === undefined ? depth(p) : p.d))).forEach(it => {
         if (it.balc) { balcFace(ctx, it.balc, P3); return; }
         if (it.import) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); return; }
         if (it.chim || it.par) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
@@ -13261,7 +13295,7 @@ function buildVentilation(host) {
     });
     pushImportFaces(items);
     pushChimPar(items, M);
-    items.sort((p1, q1) => roofWallOrder(p1, q1) || ((q1.d === undefined ? depthV(q1) : q1.d) - (p1.d === undefined ? depthV(p1) : p1.d))).forEach(it => {
+    SORT_AX = AX; items.sort((p1, q1) => roofWallOrder(p1, q1) || ((q1.d === undefined ? depthV(q1) : q1.d) - (p1.d === undefined ? depthV(p1) : p1.d))).forEach(it => {
       if (it.balc) { balcFace(ctx, it.balc, P3v); return; }
       if (it.import) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); return; }
       if (it.chim || it.par) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
