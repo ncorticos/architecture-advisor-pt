@@ -7829,7 +7829,8 @@ function buildRoof(host) {
   const divBox = rail.appendChild(el('div'));
   const faceKeyOf = f => ({ front:'Faces the main facade', back:'Faces the rear', left:'Faces the left end', right:'Faces the right end' }[f] || 'Faces the main facade');
   /** The roof under colour on the right: a part number, or -1 for the whole
-      roof — unset, the largest part, kept while it exists. */
+      roof — unset, the largest part, kept while it exists. The side sections
+      below always edit one part: the pick, or the largest part under Whole. */
   const roofSelIdx = () => {
     const n = (RF.zones && RF.zones.length) || 1;
     if (RF.roofSel !== -1 && (!(RF.roofSel >= 0) || RF.roofSel >= n)) {
@@ -7841,6 +7842,16 @@ function buildRoof(host) {
       RF.roofSel = bi;
     }
     return RF.roofSel === -1 ? -1 : RF.roofSel;
+  };
+  const roofEditIdx = () => {
+    const s = roofSelIdx();
+    if (s !== -1) return s;
+    try {
+      const M = roofModel(G, RF);
+      let bi = 0;
+      M.zones.forEach((z, i) => { if (z.area > M.zones[bi].area) bi = i; });
+      return bi;
+    } catch (e) { return 0; }
   };
   /** The right side, rebuilt with the parts: numbered roofs to pick from,
       one compact picker painting the pick. */
@@ -7854,10 +7865,13 @@ function buildRoof(host) {
     if (!colBox) return;
     colBox.innerHTML = '';
     const M = roofModel(G, RF);
+    if (M.zones.length < 2) RF.roofSel = -1;   // undivided: no parts to pick, only the whole roof
     const n = M.zones.length, sel = roofSelIdx();
     colBox.appendChild(el('div', { class:'gh', text:t('Roofs') }));
     const row = el('div', { class:'controls', style:'flex-wrap:wrap;gap:4px' });
+    if (M.zones.length < 2) row.appendChild(el('span', { class:'hint', text:t('Divide the roof to colour parts apart — one roof takes one colour.') }));
     M.zones.forEach((z, i) => {
+      if (M.zones.length < 2) return;
       const rz = RF.zones[i], key = (rz && rz.colA) || RF.col, f = key && finishOf(key);
       const b = el('button', { class:'btn small' + (sel === i ? ' solid' : ''),
         title:t('Part') + ' ' + 'ABC'[i] + ' · ' + ['Flat', 'Shed', 'Gable', 'Hip'][z.n] + (z.n ? ' ' + Math.round(z.th) + '°' : '') });
@@ -7870,7 +7884,7 @@ function buildRoof(host) {
     all.onclick = () => { RF.roofSel = -1; buildRoofColUI(); buildRoofSideUI(); roofDraw(); };
     row.appendChild(all);
     colBox.appendChild(row);
-    colBox.appendChild(el('p', { class:'hint', text:t('Pick Part A or Part B, then its colour — unset parts follow the whole-roof colour.') }));
+    if (M.zones.length > 1) colBox.appendChild(el('p', { class:'hint', text:t('Pick Part A or Part B, then its colour — unset parts follow the whole-roof colour.') }));
     const fp = p => { p.classList.add('fpick'); colBox.appendChild(p); };
     if (sel >= 0 && RF.zones[sel]) {
       const rz = RF.zones[sel], z = M.zones[sel];
@@ -8024,7 +8038,7 @@ function buildRoof(host) {
   let parHCtl = null;
   function buildParUI() {
     parBox.innerHTML = '';
-    const RZ = RF.zones[roofSelIdx()], zp = RZ.par, on = !!(zp && zp.on);
+    const RZ = RF.zones[roofEditIdx()], zp = RZ.par, on = !!(zp && zp.on);
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
       RZ.par = { on:v === 1, h:(zp && isFinite(+zp.h)) ? +zp.h : 0.6 };
       buildParUI(); buildBeiUI(); roofDraw();
@@ -8040,7 +8054,7 @@ function buildRoof(host) {
   const beiBox = roofSide.appendChild(el('div'));
   function buildBeiUI() {
     beiBox.innerHTML = '';
-    const RZ = RF.zones[roofSelIdx()], zb = RZ.bei, on = !!(zb && zb.on);
+    const RZ = RF.zones[roofEditIdx()], zb = RZ.bei, on = !!(zb && zb.on);
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
       const keep = {};
       ['S', 'N', 'E', 'W'].forEach(f => { if (zb && isFinite(+zb['d' + f])) keep['d' + f] = +zb['d' + f]; });
@@ -8065,10 +8079,10 @@ function buildRoof(host) {
   let canWCtl = null, canDCtl = null, canPCtl = null, canHCtl = null, canSays = null;
   /** The canopy as built, in words: root and outer-edge heights, pitch, posts. */
   const canopyWords = () => {
-    const zc = RF.zones[roofSelIdx()];
+    const zc = RF.zones[roofEditIdx()];
     const hit = canopySpanFor(roofModel(G, RF).pl.segs, zc && zc.canopy, G.fl * G.fh, roofModel(G, RF));
     if (!canSays || !hit) return;
-    const zc2 = RF.zones[roofSelIdx()], cc2 = zc2 && zc2.canopy;
+    const zc2 = RF.zones[roofEditIdx()], cc2 = zc2 && zc2.canopy;
     const held = (cc2 && isFinite(+cc2.p) ? +cc2.p : 0) > hit.p + 0.05, fr = canopyFrame(hit);
     const dropHeld = (cc2 && isFinite(+cc2.drop) ? +cc2.drop : 0.15) > (hit.drop || 0.15) + 0.005;
     canSays.textContent = t('Root') + ' ' + fmt(hit.z0, 2) + ' m · ' + t('Outer edge') + ' ' + fmt(hit.z1, 2) + ' m ' + t('above the ground')
@@ -8079,18 +8093,18 @@ function buildRoof(host) {
   function buildCanopyUI() {
     canBox.innerHTML = '';
     canWCtl = canDCtl = canPCtl = canHCtl = canSays = null;
-    const RZ = RF.zones[roofSelIdx()], c0 = RZ.canopy, on = !!(c0 && typeof c0 === 'object');
+    const RZ = RF.zones[roofEditIdx()], c0 = RZ.canopy, on = !!(c0 && typeof c0 === 'object');
     const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
       if (v === 1) {
-        const M = roofModel(G, RF), Zi = roofSelIdx(), zspan = M.zones[Zi];
+        const M = roofModel(G, RF), Zi = roofEditIdx(), zspan = M.zones[Zi];
         const inSpan = sg => !zspan || (((M.axis === 'x' ? (sg.a[0] + sg.b[0]) / 2 : (sg.a[1] + sg.b[1]) / 2) >= zspan.a0 - 1e-6) && ((M.axis === 'x' ? (sg.a[0] + sg.b[0]) / 2 : (sg.a[1] + sg.b[1]) / 2) <= zspan.a1 + 1e-6));
         const walled = M.pl.segs.filter(sg => sg.len >= 2 && inSpan(sg));
         const all = walled.length ? walled : M.pl.segs.filter(sg => sg.len >= 2);
         const pick = all.filter(sg => segFace(sg) === 'S');
         const sg = (pick.length ? pick : all).reduce((p, q) => q.len > p.len ? q : p, all[0]);
         if (!sg) return;
-        RF.zones[roofSelIdx()].canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:15, drop:0.15 };
-      } else RF.zones[roofSelIdx()].canopy = null;
+        RF.zones[roofEditIdx()].canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:15, drop:0.15 };
+      } else RF.zones[roofEditIdx()].canopy = null;
       buildCanopyUI(); roofDraw();
     });
     canBox.appendChild(tgl);
@@ -8118,11 +8132,11 @@ function buildRoof(host) {
   function buildChimUI() {
     chimBox.innerHTML = '';
     chimXCtl = chimYCtl = null;
-    const RZc = RF.zones[roofSelIdx()], ch = RZc.chim, fam = ch && ch.on ? chimneyOf(STATE.site.nuts) : null;
+    const RZc = RF.zones[roofEditIdx()], ch = RZc.chim, fam = ch && ch.on ? chimneyOf(STATE.site.nuts) : null;
     if (!(ch && ch.on)) {
       chimBox.appendChild(el('button', { class:'btn small', text:'+ Add chimney', title:t('Raise the region’s chimney where the roof is highest'),
         onclick:() => {
-          const M = roofModel(G, RF), at0 = placeChimney(M), Zi = roofSelIdx(), zz = M.zones[Zi];
+          const M = roofModel(G, RF), at0 = placeChimney(M), Zi = roofEditIdx(), zz = M.zones[Zi];
           let at = at0;
           if (at && zz) {
             if (M.axis === 'x') at = Object.assign({}, at, { x:+clamp(at.x, zz.a0 + 0.4, zz.a1 - 0.4).toFixed(2) });
@@ -8188,11 +8202,11 @@ function buildRoof(host) {
       } }));
     const sp = chimSpan();
     chimXCtl = rangeCtl('Metres from the west face', Math.min(sp.x0, sp.x1), Math.max(sp.x0, sp.x1), 0.1, clamp(ch.x, sp.x0, sp.x1),
-      v => { const Mm = roofModel(G, RF), zz = Mm.zones[roofSelIdx()]; let nx = +v.toFixed(2);
+      v => { const Mm = roofModel(G, RF), zz = Mm.zones[roofEditIdx()]; let nx = +v.toFixed(2);
         if (zz && Mm.axis === 'x') nx = +clamp(nx, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
         if (!chimDrawable(roofModel(G, RF), nx, +ch.y)) { chimXCtl.range.value = ch.x; chimXCtl.out.textContent = fmt(ch.x, 1) + ' m'; toast(t('No roof there \u2014 the chimney stays where it stands')); return; } ch.x = nx; roofDraw(); }, v => fmt(v, 1) + ' m');
     chimYCtl = rangeCtl('Metres from the south face', Math.min(sp.y0, sp.y1), Math.max(sp.y0, sp.y1), 0.1, clamp(ch.y, sp.y0, sp.y1),
-      v => { const Mm = roofModel(G, RF), zz = Mm.zones[roofSelIdx()]; let ny = +v.toFixed(2);
+      v => { const Mm = roofModel(G, RF), zz = Mm.zones[roofEditIdx()]; let ny = +v.toFixed(2);
         if (zz && Mm.axis === 'y') ny = +clamp(ny, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
         if (!chimDrawable(roofModel(G, RF), +ch.x, ny)) { chimYCtl.range.value = ch.y; chimYCtl.out.textContent = fmt(ch.y, 1) + ' m'; toast(t('No roof there \u2014 the chimney stays where it stands')); return; } ch.y = ny; roofDraw(); }, v => fmt(v, 1) + ' m');
     chimBox.appendChild(chimXCtl); chimBox.appendChild(chimYCtl);
@@ -9185,7 +9199,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       if (!uv) return;
       const maxD = canopyMaxDrop(cdrag.H0n);
       c.drop = +clamp(cdrag.drop0 - uv[1], CANOPY_DROP_MIN, maxD).toFixed(2);
-      if (canHCtl && cdrag.zi === roofSelIdx()) syncCtl(canHCtl, c.drop, v => fmt(v, 2) + ' m');
+      if (canHCtl && cdrag.zi === roofEditIdx()) syncCtl(canHCtl, c.drop, v => fmt(v, 2) + ' m');
       canopyWords();
       roofDraw();
       return;
@@ -9198,7 +9212,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       c.w = +(u1 - hit0.u0).toFixed(1);
       const uc = hit0.u0 + c.w / 2;
       c.x = +(sg.a[0] + t[0] * uc).toFixed(2); c.y = +(sg.a[1] + t[1] * uc).toFixed(2);
-      if (canWCtl && cdrag.zi === roofSelIdx()) syncCtl(canWCtl, c.w, v => fmt(v, 1) + ' m');
+      if (canWCtl && cdrag.zi === roofEditIdx()) syncCtl(canWCtl, c.w, v => fmt(v, 1) + ' m');
       canopyWords();
       roofDraw();
       return;
@@ -9232,7 +9246,7 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       else got.y = +clamp(got.y, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
     }
     Object.assign(c, got);
-    if (canDCtl && cdrag.zi === roofSelIdx()) syncCtl(canDCtl, c.d, v => fmt(v, 2) + ' m');
+    if (canDCtl && cdrag.zi === roofEditIdx()) syncCtl(canDCtl, c.d, v => fmt(v, 2) + ' m');
     canopyWords();
     roofDraw();
   };
@@ -9341,8 +9355,8 @@ if (F.chim || F.par) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill
       else ny = +clamp(ny, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
     }
     ch.x = +nx.toFixed(2); ch.y = +ny.toFixed(2);
-    if (chimXCtl && chdrag.zi === roofSelIdx()) syncCtl(chimXCtl, ch.x, v => fmt(v, 1) + ' m');
-    if (chimYCtl && chdrag.zi === roofSelIdx()) syncCtl(chimYCtl, ch.y, v => fmt(v, 1) + ' m');
+    if (chimXCtl && chdrag.zi === roofEditIdx()) syncCtl(chimXCtl, ch.x, v => fmt(v, 1) + ' m');
+    if (chimYCtl && chdrag.zi === roofEditIdx()) syncCtl(chimYCtl, ch.y, v => fmt(v, 1) + ' m');
     roofDraw();
   };
   const endDrag = ev => {
@@ -20188,6 +20202,7 @@ Object.assign(PT, {
   "Whole roof": "Toda a cobertura",
   "Roofs": "Telhados",
   "Pick Part A or Part B, then its colour — unset parts follow the whole-roof colour.": "Escolha a Parte A ou a Parte B e depois a sua cor — as partes por definir seguem a cor de toda a cobertura.",
+  "Divide the roof to colour parts apart — one roof takes one colour.": "Divida a cobertura para colorir as partes em separado — uma cobertura leva uma cor.",
   "Front eave": "Beirado da frente",
   "Rear eave": "Beirado de trás",
   "East eave": "Beirado de nascente",
