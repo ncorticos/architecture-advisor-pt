@@ -3805,9 +3805,10 @@ function roofModel(G, RF) {
   const mixed = new Set(strips.map(s => s.n + ':' + s.th)).size > 1;
   /* a parapet: every outline wall carried up by its height — envelope too.
      A 20 cm wall: the outer face on the wall's own line, the inner face
-     and the cap mitred at every corner — the inner line shortened by the
-     thickness where the outline turns in, lengthened where it turns out —
-     so the ring closes on itself and no two strips cross at a corner. */
+     mitred at every corner — shortened where the outline turns out, so the
+     inner ring closes on itself. The cap runs full to every corner and laps
+     over its neighbour there, alternating walls a hair higher (3 mm, unseen)
+     so coplanar laps never shimmer — the joint reads as laid flashing. */
   let paras = [], paraArea = 0;
   if (parList.length) {
     const pt = 0.2;
@@ -3819,8 +3820,9 @@ function roofModel(G, RF) {
       const dn = ((far[0] - P0[0]) * sg.n[0] + (far[1] - P0[1]) * sg.n[1]) / Lb;
       return dn < -0.5 ? pt : dn > 0.5 ? -pt : 0;
     };
-    walls.forEach(wl => {
+    walls.forEach((wl, wi) => {
       const sg = wl.sg, L = sg.len, ux = (sg.b[0] - sg.a[0]) / L, uy = (sg.b[1] - sg.a[1]) / L;
+      const plift = (wi % 2) * 0.003;   // lapped caps 3 mm apart: no shimmer, no slit
       const nx = sg.n[0], ny = sg.n[1], pr = wl.prof;
       const P = (u, z) => [sg.a[0] + ux * u, sg.a[1] + uy * u, z];
       const Q = (u, z) => [sg.a[0] + ux * u - nx * pt, sg.a[1] + uy * u - ny * pt, z];
@@ -3839,7 +3841,7 @@ function roofModel(G, RF) {
         return cb > ca + 1e-6 ? [ca, cb] : null;
       };
       const inner = [[uS, zOn(uS)]].concat(pr.filter(q => q[0] > uS + 1e-6 && q[0] < uE - 1e-6), [[uE, zOn(uE)]]);
-      const top = (p, h) => [p[0], p[1], p[2] + h];
+      const top = (p, h) => [p[0], p[1], p[2] + h + plift];
       parList.forEach(pz => {
         const span = clipSpan(pz);
         if (!span) return;
@@ -3852,7 +3854,7 @@ function roofModel(G, RF) {
             paras.push({ sg, kind:'out', quad:[a, b, top(b, pz.h), top(a, pz.h)] });
           }
           /* the cap over this run of the profile, its inner edge clipped to the mitred line */
-          const i0 = k === 1 ? uS : Math.max(uS, p0[0]), i1 = k === pr.length - 1 ? uE : Math.min(uE, q[0]);
+          const i0 = k === 1 ? 0 : p0[0], i1 = k === pr.length - 1 ? L : q[0];
           const ic = clip2(i0, i1);
           if (ic) paras.push({ sg, kind:'cap', quad:[top(P(ic[0], zOn(ic[0])), pz.h), top(P(ic[1], zOn(ic[1])), pz.h), top(Q(ic[1], zOn(ic[1])), pz.h), top(Q(ic[0], zOn(ic[0])), pz.h)] });
         });
