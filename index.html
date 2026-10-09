@@ -3701,8 +3701,31 @@ function roofModel(G, RF) {
   });
   /* a 15 cm skin: every outer edge drops a fascia, so the roof reads as a
      covering, not a sheet — ridges, hips and valleys are folds, and steps
-     keep their own walls, so only the open edge falls */
+     keep their own walls, so only the open edge falls. Where a parapet run
+     stands on that edge the fascia stands down: no slab edge under a parapet. */
   const SKIN_T = 0.15, skins = [];
+  const parRuns = [];
+  if (parList.length) pl.segs.forEach(sg => {
+    const L = sg.len, ux = (sg.b[0] - sg.a[0]) / L, uy = (sg.b[1] - sg.a[1]) / L;
+    const X0 = axis === 'x' ? sg.a[0] : sg.a[1], dX = axis === 'x' ? ux : uy;
+    parList.forEach(pz => {
+      let cu0, cu1;
+      if (Math.abs(dX) < 1e-9) {
+        if (!(X0 >= pz.a0 - 1e-6 && X0 <= pz.a1 + 1e-6)) return;
+        cu0 = 0; cu1 = L;
+      } else {
+        const w0 = (pz.a0 - X0) / dX, w1 = (pz.a1 - X0) / dX;
+        cu0 = Math.max(0, Math.min(w0, w1)); cu1 = Math.min(L, Math.max(w0, w1));
+      }
+      if (cu1 > cu0 + 1e-6) parRuns.push({ sg, u0:cu0, u1:cu1 });
+    });
+  });
+  const underParapet = (x, y) => parRuns.some(r => {
+    const t = [(r.sg.b[0] - r.sg.a[0]) / r.sg.len, (r.sg.b[1] - r.sg.a[1]) / r.sg.len];
+    const u = (x - r.sg.a[0]) * t[0] + (y - r.sg.a[1]) * t[1];
+    if (u < r.u0 - 1e-6 || u > r.u1 + 1e-6) return false;
+    return Math.hypot(x - (r.sg.a[0] + t[0] * u), y - (r.sg.a[1] + t[1] * u)) < 0.06;
+  });
   pieces.forEach(pc => {
     const P = pc.poly, cw = polyArea(P) < 0 ? -1 : 1;
     for (let i = 0; i < P.length; i++) {
@@ -3711,6 +3734,7 @@ function roofModel(G, RF) {
       const ox = cw * dy / L2, oy = -cw * dx / L2;
       const mx = (a[0] + b[0]) / 2 + ox * 0.05, my = (a[1] + b[1]) / 2 + oy * 0.05;
       if (pl.inside(mx, my) && at(mx, my)) continue;
+      if (underParapet((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)) continue;
       const za = zOf(pc.f, a[0], a[1]), zb = zOf(pc.f, b[0], b[1]);
       skins.push({ zi:pc.zi, grp:pc.f.grp, n:[ox, oy, 0],
         quad:[[a[0], a[1], za], [b[0], b[1], zb], [b[0], b[1], zb - SKIN_T], [a[0], a[1], za - SKIN_T]]});
