@@ -9901,7 +9901,14 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       gives vertical fixed fins on east/west walls about 0.31, against about
       0.20–0.25 for a continuous south overhang and 0.10–0.15 for movable
       horizontal louvres (pp.70–71). */
-  const SHADE_SUMMER = [172, 202, 233, 264], SHADE_WINTER = [325, 355, 21, 52];
+  /* The teaching schedule a device must keep: shaded from equinox to equinox
+     (21 Mar–21 Oct, full shade at the 20 June peak) and open to the sun from
+     equinox to equinox (21 Oct–21 Mar). Fixed devices discriminate by sun
+     angle, not by date — and the equinoxes are the symmetric switch, the noon
+     altitude crossing the design profile angle (Olgyay, pp.79–80; Lechner,
+     pp.249–259): what shades the high June sun admits the low January one. */
+  const SHADE_SUMMER = [80, 140, 171, 232, 294], SHADE_WINTER = [294, 325, 355, 21, 52, 80];
+  const SHADE_PEAK = 171;
   const SHADE_SAMPLE_OFFSETS = [-7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7];   // hours either side of solar noon
   /** Clear-sky beam (kW/m²) at a solar altitude in degrees: Meinel's fit
       1.353·0.7^(AM^0.678), air mass after Kasten & Young (1989). */
@@ -10019,8 +10026,9 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
   /** 0–100 shading-design score for one side, or null with no device. A
       heating-led climate wants a device that discriminates by season — cuts
       the high summer sun but lets the low winter sun in — so the score there
-      is summer cut minus winter cut; a cooling-led climate wants summer cut
-      only. */
+      is the mean of the summer cut and the winter admission; a cooling-led
+      climate wants summer cut only. 100 needs full shade at the June peak
+      with the winter sun untouched; winter over-shading drags it down. */
   /** Do balconies set on Site stand on this side? */
   const balcOnFace = f => balcGeo(G).ok.some(B => segFace(B.sg) === f);
   /** Does the eave canopy stand on this side? */
@@ -10048,7 +10056,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     const key = [f, heating, lat, lon, tz, h0(), JSON.stringify(o), JSON.stringify(RF), JSON.stringify(G)].join('|');
     if (SHADE_MEMO.has(key)) return SHADE_MEMO.get(key);
     const summer = shadeEffectiveness(f, SHADE_SUMMER).pct;
-    const v = !heating ? summer : clamp(summer - shadeEffectiveness(f, SHADE_WINTER).pct, 0, 100);
+    const winter = shadeEffectiveness(f, SHADE_WINTER).pct;
+    const v = !heating ? summer : (summer + (100 - winter)) / 2;
     if (SHADE_MEMO.size > 64) SHADE_MEMO.clear();
     SHADE_MEMO.set(key, v);
     return v;
@@ -10070,7 +10079,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     const sc = shadingScore(curFace);
     if (sc === null) { pillShade.className = 'pill empty'; pillShade.textContent = t('No shading device on this facade'); }
     else if (sc >= 80) { pillShade.className = 'pill ok'; pillShade.textContent = t(heating ? 'Cuts summer sun while keeping winter gains' : 'Cuts most of the summer sun on this window'); }
-    else if (sc >= 50) { pillShade.className = 'pill empty'; pillShade.textContent = t(heating ? 'Some seasonal discrimination, but still costs real winter sun' : 'Leaves some of the summer sun on this window'); }
+    else if (sc >= 60) { pillShade.className = 'pill empty'; pillShade.textContent = t(heating ? 'Some seasonal discrimination, but still costs real winter sun' : 'Leaves some of the summer sun on this window'); }
     else { pillShade.className = 'pill bad'; pillShade.textContent = t(heating ? 'Blocks winter sun almost as much as summer — too deep for this climate' : 'Leaves much of the summer sun on this window'); }
     [[cRwN, 'N'], [cRwE, 'E'], [cRwW, 'W']].forEach(([c, sl]) => { c.style.display = RF.n !== 0 && planeFor(sl) ? '' : 'none'; });
     {
@@ -10288,27 +10297,39 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       const sh = ((o.ovD > 0 || o.finD > 0 || balcOnFace(curFace) || eaveOnFace(curFace) || canopyOnFace(curFace)) && faceUnits(curFace).some(u => u.on)) ? shadeEffectiveness(curFace, SHADE_SUMMER).pct : null;
       const nW = winCount(curFace);
       label(ctx, t(faceName[curFace]) + ' · ' + t('faces') + ' ' + faceDir(curFace) + ' · WWR ' + fmt(facadeNumbers(curFace).eff * 100, 0) + '% · ' + nW + ' ' + t(nW === 1 ? 'window' : 'windows') + (gelCount(curFace) > 0 ? ' · ' + gelCount(curFace) + ' ' + t('brick ventilation') : '')
-        + (sh !== null ? ' · ' + t('shading') + ' ' + fmt(sh, 0) + '%' : ''),
+        + (sh !== null ? ' · ' + t('shading') + ' ' + fmt(sh, 0) + '%' + ' · Jun 20 ' + fmt(shadeEffectiveness(curFace, SHADE_PEAK).pct, 0) + '%' : ''),
         8, narrow ? 72 : 12, CH.ink2, FM(narrow ? 9.5 : 11), 'left', 'middle');
       const GREEN = '#16A34A';
       const fitColor = v => v === null ? CH.faint : v >= 80 ? GREEN : v >= 50 ? '#D97706' : '#DC2626';
+      /* shading fit degrades yellow to red: full discrimination reads green
+         from 80, then a calibrated ramp — school-bus yellow at the 60 teaching
+         cut, signal red at zero — so the number yellows as winter over-shading
+         starts to cost, and reddens as it fails. */
+      const shadeColor = v => {
+        if (v === null) return CH.faint;
+        if (v >= 80) return GREEN;
+        const f = clamp(v / 80, 0, 1);
+        return 'rgb(' + Math.round(220 + 14 * f) + ',' + Math.round(38 + 141 * f) + ',' + Math.round(38 - 30 * f) + ')';
+      };
       const bw = narrow ? Math.min(110, (W - 16) / 2) : 84;
-      const fitBadge = (i, value, caption) => {
-        const col = fitColor(value), x = narrow ? 4 + i * (bw + 4) : W - 92, y = narrow ? 4 : 6 + i * 58, bh = narrow ? 50 : 52;
+      const fitBadge = (i, value, caption, colFn) => {
+        const col = (colFn || fitColor)(value), x = narrow ? 4 + i * (bw + 4) : W - 92, y = narrow ? 4 : 6 + i * 58, bh = narrow ? 50 : 52;
         ctx.fillStyle = '#fff'; ctx.fillRect(x, y, bw, bh);
         stroke(ctx, col, 1.5); ctx.strokeRect(x, y, bw, bh);
         label(ctx, value === null ? '–' : String(Math.round(value)), x + bw / 2, y + 23, col, FM(narrow ? 20 : 24), 'center', 'middle');
         label(ctx, t(caption), x + bw / 2, y + 42, CH.muted, F(9), 'center', 'middle');
       };
       fitBadge(0, overallScore(), 'WWR fit /100');
-      fitBadge(1, shadingScore(curFace), 'Shading fit /100');
+      fitBadge(1, shadingScore(curFace), 'Shading fit /100', shadeColor);
       fitBadge(2, shapeScore(curFace), 'Shape fit /100');
     },
     csv: () => {
-      const rows = [['Facade side', 'Faces', 'Windows', 'Glass (m²)', 'WWR', 'Sill (m)', 'Head (m)', 'Overhang depth (m)', 'Overhang count', 'Overhang extra left (m)', 'Overhang extra right (m)', 'Fin depth (m)', 'Fin count', 'Fin side', 'WWR fit (0–100)', 'Shading fit (0–100)', 'Shape fit (0–100)']];
-      FACES.forEach(f => { const o = OPEN[f], ws = winsOf(f), sc = shadingScore(f), sh = shapeScore(f), fn = facadeNumbers(f);
+      const rows = [['Facade side', 'Faces', 'Windows', 'Glass (m²)', 'WWR', 'Sill (m)', 'Head (m)', 'Overhang depth (m)', 'Overhang count', 'Overhang extra left (m)', 'Overhang extra right (m)', 'Fin depth (m)', 'Fin count', 'Fin side', 'WWR fit (0–100)', 'Shading fit (0–100)', 'Summer shade Mar–Oct (%)', 'Winter shade Oct–Mar (%)', 'Shade at peak 20 Jun (%)', 'Shape fit (0–100)']];
+      FACES.forEach(f => { const o = OPEN[f], ws = winsOf(f), sc = shadingScore(f), sh = shapeScore(f), fn = facadeNumbers(f), hasDev = sc !== null;
         rows.push([faceName[f], COMPASS8_EN[Math.round(faceAz(f) / 45) % 8], winCount(f), +fn.built.toFixed(2), fmt(fn.eff, 2), fmt(o.sillZ, 2), fmt(o.headZ, 2),
-          fmt(o.ovD, 2), o.ovN, fmt(o.ovL || 0, 2), fmt(o.ovR || 0, 2), fmt(o.finD, 2), o.finN, o.finSide, Math.round(facadeScore(f)), sc === null ? '' : Math.round(sc), sh === null ? '' : Math.round(sh)]);
+          fmt(o.ovD, 2), o.ovN, fmt(o.ovL || 0, 2), fmt(o.ovR || 0, 2), fmt(o.finD, 2), o.finN, o.finSide, Math.round(facadeScore(f)), sc === null ? '' : Math.round(sc),
+          hasDev ? Math.round(shadeEffectiveness(f, SHADE_SUMMER).pct) : '', hasDev ? Math.round(shadeEffectiveness(f, SHADE_WINTER).pct) : '',
+          hasDev ? Math.round(shadeEffectiveness(f, SHADE_PEAK).pct) : '', sh === null ? '' : Math.round(sh)]);
         const H = ws.length ? ws[0].w.rows[0].head : 0, depth = (f === 'S' || f === 'N') ? G.D : G.L;
         fn.per.forEach((q, i) => {
           const on = faceUnits(f)[i] && faceUnits(f)[i].on;
