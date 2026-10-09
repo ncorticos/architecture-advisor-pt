@@ -12467,7 +12467,7 @@ function buildVentilation(host) {
   rail.appendChild(el('div', { class:'gh', text:'Wind turbine' }));
   const turbBox = rail.appendChild(el('div'));
   const turbSays = el('p', { class:'hint' });
-  let turbXCtl = null, turbYCtl = null, turbAlarm = false, turbDrag = null;
+  let turbXCtl = null, turbYCtl = null, turbAlarm = false, turbDrag = null, turbSel = false;
   /** Both position thumbs follow a drag; the sliders only move in whole metres. */
   const syncTurbPos = () => {
     if (turbXCtl) { turbXCtl.range.value = Math.round(TURB.x); turbXCtl.out.textContent = fmt(Math.round(TURB.x), 0) + ' m'; }
@@ -12580,7 +12580,7 @@ function buildVentilation(host) {
     'The two readings under the model qualify the <b>form</b> drawn on Site — the bar, its break, its patio — for air, whatever is planted round it. <b>Summer</b>: every half metre of floor looks out along the plan’s two axes to the first wall on each side. With windows on both opposite walls no more than five floor heights apart (%1 m here) it can be cross-ventilated; failing that, within 2.5 floor heights (%2 m) of a wall with a window it is single-sided; beyond both it is out of reach of natural ventilation. The 5 × and 2.5 × depths are the CIBSE AM10 rules of thumb, read on the plan’s walls rather than on rooms. A narrow bar, a wing, a recess or a patio all bring floor within reach; a deep square plan leaves its middle out. The reading also says whether the cross paths run with the June-to-August wind or across it. <b>Winter</b>: the December-to-February wind is traced onto every wall turned into it, and a wall counts as sheltered where a line back into the wind meets another part of the building — a patio’s inner walls, the lee of a wing. The share of all the glass left facing that wind unsheltered is the reading: 15 % or less reads as closed, above 35 % as open (this app’s teaching cuts). The form enters both ratings: the building’s own lee cuts the winter wind at the walls it shelters, and the summer rating reads only a cross path that reaches at least a quarter of the floor.',
     [fmt(5 * G.fh, 1), fmt(2.5 * G.fh, 1)]));
   host.appendChild(hint('vent-turb',
-    'A garden turbine earns where the wind does: monthly means at 10 m, taken to hub height by the 1/7 shear law, Rayleigh gust energy, 25 % water-to-wire, cut in at 2.5 m/s and capped at its 12 m/s rating — a screening estimate, honest to ±30 %, never a substitute for a year of measured wind. Taller than the walls is allowed: height is the whole point. Green from 4.5 m/s at the hub, yellow from 3, red below — with the sun’s PV beside it, and the two added as homes’ shares. Drag the turbine itself to move it round the garden — it is held 25 m off the house, closer is too loud for the rooms. Its rotor spins on the model at hub-wind speed. Wind plus sun count against one home’s 3,500 kWh a year: past that the reading turns red — take the turbine down.'));
+    'A garden turbine earns where the wind does: monthly means at 10 m, taken to hub height by the 1/7 shear law, Rayleigh gust energy, 25 % water-to-wire, cut in at 2.5 m/s and capped at its 12 m/s rating — a screening estimate, honest to ±30 %, never a substitute for a year of measured wind. Taller than the walls is allowed: height is the whole point. Green from 4.5 m/s at the hub, yellow from 3, red below — with the sun’s PV beside it, and the two added as homes’ shares. Drag the turbine itself to move it round the garden — it is held 25 m off the house, closer is too loud for the rooms. Its rotor spins on the model at the displayed wind’s speed, faster in fast months. Planting or walls within 12 m cost it a fifth of its wind (×0.8). Wind plus sun count against one home’s 3,500 kWh a year: past that the reading turns red — take the turbine down.'));
   function refreshScores() {
     const ww = winterWind(), sa = summerAir(), wb = winterBand(ww), sb = summerBand(sa);
     olgPill.className = 'pill ' + (wb === 'ok' && sb === 'ok' ? 'ok' : wb === 'ok' || sb === 'ok' ? 'empty' : 'bad');
@@ -12620,17 +12620,28 @@ function buildVentilation(host) {
       : tc.hubMean < 4.5 ? t('marginal wind — a small share; sun first')
       : t('good wind — a real share of a home');
     s += '<br>' + t('Wind at hub') + ' ' + fmt(tc.hubMean, 1) + ' m/s · ' + t('Turbine') + ' '
-      + fmt(tc.kwh, 0) + ' kWh/yr · ' + wd + (tc.sheltered ? ' · ' + t('sheltered by nearby planting or walls') : '');
+      + fmt(tc.kwh, 0) + ' kWh/yr · ' + wd + (tc.sheltered ? ' · ' + t('sheltered by nearby planting or walls (wind ×0.8)') : '');
     if (tc.pv && tc.pv.perM2 > 0) s += '<br>' + t('Same area of PV would make') + ' ' + fmt(tc.swept * tc.pv.perM2, 0) + ' kWh/yr';
     if (tc.th) s += '<br>' + t('Thermal heat') + ' ' + fmt(tc.th.kwh, 0) + ' kWh/yr';
     if (over) s += '<br><span style="color:#9f2420">' + t('Too much for one house — take the turbine down')
       + ' (' + fmt(eTot, 0) + ' kWh/yr ' + t('Wind') + ' + ' + t('Sun') + ')</span>';
     return s;
   }
+  /** Turbine yield with its lee: planting or walls within 12 m cost a fifth of the wind. */
+  const turbYield = () => {
+    const sh = turbSheltered() ? 0.8 : 1;
+    return turbAnnual(TURB, sh === 1 ? WIND_M : WIND_M.map(w => ({ dir:w.dir, spd:w.spd * sh })), S.alt);
+  };
+  /** Hub wind of the displayed months, with the same lee — the rotor answers to it. */
+  const turbWindNow = () => {
+    let v10 = 3; try { v10 = tunedWind().spd; } catch (e) {}
+    const hub = clamp(TURB.hub, 3, 30);
+    return v10 * Math.pow(hub / 10, 0.14) * (turbSheltered() ? 0.8 : 1);
+  };
   /** Turbine + sun as built, or null. */
   function turbCalc() {
     if (!TURB || !TURB.on) return null;
-    const r = turbAnnual(TURB, WIND_M, S.alt);
+    const r = turbYield();
     const pv = pvAnnualKwh(), th = thAnnualKwh();
     return Object.assign({}, r, { pv, th, sheltered:turbSheltered() });
   }
@@ -13316,8 +13327,14 @@ function buildVentilation(host) {
           [TURB.x + tdx * tR - tOx * 0.3, TURB.y + tdy * tR - tOy * 0.3, tHz + tdz * tR]], '#F2F0EB', CH.ink, 0.9);
       }
       const tHp = proj(TURB.x, TURB.y, tHz);
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(tHp[0], tHp[1], 4, 0, 6.284); ctx.fill();
-      stroke(ctx, CH.ink, 1); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(tHp[0], tHp[1], 7, 0, 6.284); ctx.fillStyle = '#fff'; ctx.fill();
+      stroke(ctx, turbSel ? '#D97706' : CH.ink, turbSel ? 2.5 : 1.5); ctx.stroke();
+      ctx.fillStyle = turbSel ? '#D97706' : CH.ink; ctx.beginPath(); ctx.arc(tHp[0], tHp[1], 2.2, 0, 6.284); ctx.fill();
+      if (turbSel) {
+        const bs = [];
+        for (let k = 0; k < 40; k++) { const a = k / 40 * 2 * Math.PI; bs.push([TURB.x + Math.cos(a) * 1.1, TURB.y + Math.sin(a) * 1.1, tGz + 0.15]); }
+        poly(bs, null, '#D97706', 2);
+      }
       /* the 25 m noise setback: a red ring and a warning tag while the rule is tested */
       const tD0 = turbHouseDist(TURB.x, TURB.y);
       if (turbAlarm || tD0 < TURB_SETBACK) {
@@ -13621,13 +13638,17 @@ function buildVentilation(host) {
        the air driven through the house — higher is better; both in m/s */
     ventBadge(0, fmt(wwR.Uwall, 1), winterBand(wwR), 'm/s · winter walls', scoreDelta && scoreDelta.w);
     ventBadge(1, noPairFlow ? null : fmt(saR.v, 2), noPairFlow ? null : summerBand(saR), 'm/s · summer inlets', scoreDelta && scoreDelta.s);
+    /* turbine: its kWh on the model corner — red with the pill past one home */
+    const tct = (TURB && TURB.on) ? turbCalc() : null;
+    const tTot = tct ? tct.kwh + (tct.pv ? tct.pv.kwh : 0) : 0;
+    ventBadge(2, tct ? fmt(tct.kwh, 0) : null, !tct ? null : (tTot > TURB_HOME_KWH ? 'bad' : tct.hubMean < 3 ? 'bad' : tct.hubMean < 4.5 ? 'empty' : 'ok'), 'kWh/yr · turbine', null);
     if (shadowTag) {
       const desk = labelDesk(ctx, W, H);
       const boxPts = [];
       const bbV = M.pl.bbox;
       [0, ridge].forEach(z => [[bbV[2], bbV[3]], [bbV[0], bbV[3]], [bbV[0], bbV[1]], [bbV[2], bbV[1]]].forEach(c => boxPts.push(proj(c[0], c[1], z))));
       desk.area(hullV(boxPts));
-      desk.block(0, 0, W * 0.45, narrowV ? 80 : 32).block(narrowV ? 0 : W - 150, 0, narrowV ? 190 : W, narrowV ? 60 : 120).block(0, H - 30, W, H);
+      desk.block(0, 0, W * 0.45, narrowV ? 80 : 32).block(narrowV ? 0 : W - 150, 0, narrowV ? 190 : W, narrowV ? 60 : 185).block(0, H - 30, W, H);
       const spots = shadowTag.pts.filter(q => !desk.covered(q[0], q[1])).slice(0, 4);
       const around = q => [[q[0] + 8, q[1] - 9, 'left'], [q[0] - 8, q[1] - 9, 'right'], [q[0] + 8, q[1] + 9, 'left'], [q[0] - 8, q[1] + 9, 'right']];
       desk.place(shadowTag.txt, (spots.length ? spots : shadowTag.pts.slice(0, 1)).map(around).reduce((a, b) => a.concat(b), []), CH.ink2, FM(9.5));
@@ -13691,7 +13712,7 @@ function buildVentilation(host) {
     rows.push(['Ridge shadow (m)', +shadowLenV(h0live() - G.fl * G.fh + roofModel(G, RF).ridge, sn.alt).toFixed(1)]);
     rows.push(['Sunspace', (typeof SUNSP !== 'undefined' && SUNSP && SUNSP.on) ? SUNSP.face + ' d=' + SUNSP.depth.toFixed(1) + 'm w=' + Math.round(SUNSP.widthFrac*100) + '%' : 'off']);
     if (TURB && TURB.on) {
-      const tr = turbAnnual(TURB, WIND_M, S.alt), pv = pvAnnualKwh();
+      const tr = turbYield(), pv = pvAnnualKwh();
       rows.push(['Wind turbine', 'rotor ' + TURB.diam.toFixed(1) + ' m at ' + TURB.hub.toFixed(1) + ' m, x=' + TURB.x + ' y=' + TURB.y + ' → ' + sideOf(TURB.x, TURB.y)]);
       rows.push(['Turbine hub mean wind (m/s)', +tr.hubMean.toFixed(2)]);
       rows.push(['Turbine electricity (kWh/year)', Math.round(tr.kwh)]);
@@ -13749,8 +13770,8 @@ function buildVentilation(host) {
   const drawTurbSpin = (g, ts) => {
     if (!TURB || !TURB.on || !FR) return;
     const dt = Math.min(0.05, Math.max(0, (ts - (turbLast || ts)) / 1000)); turbLast = ts;
-    let hm = 3; try { hm = turbAnnual(TURB, WIND_M, S.alt).hubMean; } catch (e) {}
-    turbSpin = (turbSpin + dt * Math.max(0.3, hm - 2) * 1.6) % (Math.PI * 2);
+    let hm = 3; try { hm = turbWindNow(); } catch (e) {}
+    turbSpin = (turbSpin + dt * Math.max(0.2, hm - 1.5) * 1.6) % (Math.PI * 2);
     const tR = TURB.diam / 2;
     let tHz = TURB.hub; try { tHz = terraAt(TURB.x, TURB.y) + TURB.hub; } catch (e) {}
     const tAx = localDir((tunedWind().dir + 180) % 360);
@@ -14050,13 +14071,15 @@ function buildVentilation(host) {
   const endDragV = ev => {
     if (orbit) {
       const moved = orbit.moved; orbit = null; cv.style.cursor = 'default';
-      if (!moved && ev && ev.type === 'pointerup' && selected) { selected = null; refresh(); }   // a click on open ground drops the selection
+      if (!moved && ev && ev.type === 'pointerup' && (selected || turbSel)) { selected = null; turbSel = false; refresh(); }   // a click on open ground drops the selection
       return;
     }
     if (handleDrag) { handleDrag = null; cv.style.cursor = 'default'; refresh(); return; }
     if (turbDrag) {
+      const movedT = (ev && downXY) ? Math.hypot(ev.clientX - downXY[0], ev.clientY - downXY[1]) : 99;
       turbDrag = null; downXY = null; cv.style.cursor = 'default';
       buildTurbUI();
+      if (movedT < 6 && !turbAlarm) turbSel = true;
       if (turbAlarm) toast(t('Held 25 m off the house \u2014 closer is too loud'));
       turbAlarm = false;
       refresh(); return;
@@ -14071,7 +14094,7 @@ function buildVentilation(host) {
       }
       refresh();
     } else if (ev && ev.type === 'pointerup' && !plantArmed && !wallArmed && FR) {
-      if (!pickItem(ev.clientX, ev.clientY) && selected) { selected = null; refresh(); }
+      if (!pickItem(ev.clientX, ev.clientY) && !(TURB && TURB.on && turbHit(ev.clientX, ev.clientY)) && (selected || turbSel)) { selected = null; turbSel = false; refresh(); }
     }
   };
   cv.addEventListener('pointerup', endDragV);
@@ -20154,6 +20177,8 @@ Object.assign(PT, {
   "sheltered by nearby planting or walls": "abrigado por vegetação ou muros próximos",
   "Same area of PV would make": "A mesma área em FV daria",
   "No turbine — add one on the left": "Sem turbina — acrescente uma à esquerda",
+  "sheltered by nearby planting or walls (wind ×0.8)": "abrigado por vegetação ou muros próximos (vento ×0,8)",
+  "kWh/yr · turbine": "kWh/ano · turbina",
   "Turbine stands": "A turbina fica a",
   "m off the house — 25 m minimum, closer is too loud": "m da casa — mínimo 25 m, mais perto faz demasiado barulho",
   "Too close — only": "Demasiado perto — só a",
@@ -20177,7 +20202,7 @@ Object.assign(PT_HINT, {
   'vent-scores':
     'O compromisso de Olgyay (1963): manter fora o vento de inverno, deixar passar a brisa de verão — duas classificações em metros por segundo. <b>Inverno</b> lê o vento de Dezembro a Fevereiro (média vectorial dos meses, com o ajuste local), levado à altura do beirado sobre este terreno e exposição, e segue-o até cada parede voltada para ele: em cada ponto dessas paredes é cortado pelo melhor abrigo a montante — uma árvore, uma sebe ou um muro cuja copa ou comprimento atravesse a linha de volta ao vento corta-o mais dentro de 5 das suas alturas e cada vez menos até 20 alturas (12 para um muro cheio, de sotavento mais fundo mas mais curto), segundo os estudos de quebra-ventos de Heisler &amp; DeWalle (1988); folhagem densa corta mais do que folhagem aberta, um muro cheio até 80 %; o sotavento do próprio edifício corta 70 %. A caixa é o vento que resta nas paredes a barlavento: construa obstáculos a montante e ele desce, e o ar contorna a casa. <b>Verão</b> lê o vento de Junho a Agosto impelido através de cada par de lados opostos: Q = C<sub>d</sub> · A · U · √ΔC<sub>p</sub>, com C<sub>d</sub> 0,61, A as áreas que abrem dos dois lados em série (metade de cada área envidraçada), U o vento ao beirado e ΔC<sub>p</sub> 0,9 com o vento ao longo do par, menos à medida que roda para o atravessar. Plantação ou um muro <i>à frente</i> das janelas de entrada bloqueia o escoamento; <i>ao lado</i> do percurso, a menos de 3 m dele, afunila o ar para as aberturas, até +40 % — plante e construa dos lados e mantenha o percurso livre. A caixa é a velocidade do ar que entra pelas janelas de entrada — o caudal sobre a sua área que abre: sobe quando o jardim afunila, e é máxima quando a entrada é menor do que a saída (Givoni); a leitura acrescenta as renovações de ar por hora que o caudal dá à casa. As faixas — um corte de 50 % ou mais lê-se abrigado, 25 % ou menos exposto; 1,0 m/s ou mais nas entradas lê-se como brisa através da casa, abaixo de 0,5 m/s como ar parado — são cortes didácticos desta aplicação. Uma primeira passagem de projecto, não um estudo de vento.',
   'vent-turb':
-    'Uma turbina de jardim rende onde há vento: médias mensais a 10 m, levadas à altura do rotor pela lei 1/7, energia das rajadas de Rayleigh, 25 % até à rede, arranque aos 2,5 m/s e limite à potência nominal aos 12 m/s — uma estimativa de triagem, honesta a ±30 %, nunca substitui um ano de vento medido. Mais alta que os muros é permitido: a altura é o essencial. Verde a partir de 4,5 m/s no cubo, amarelo a partir de 3, vermelho abaixo — com a FV do sol ao lado, e os dois somados em partes de casa. Arraste a própria turbina para a mover pelo jardim — fica mantida a 25 m da casa, mais perto faz demasiado barulho nos quartos. O rotor gira no modelo à velocidade do vento no cubo. Vento mais sol contam para os 3 500 kWh anuais de uma casa: acima disso a leitura fica vermelha — retire a turbina.',
+    'Uma turbina de jardim rende onde há vento: médias mensais a 10 m, levadas à altura do rotor pela lei 1/7, energia das rajadas de Rayleigh, 25 % até à rede, arranque aos 2,5 m/s e limite à potência nominal aos 12 m/s — uma estimativa de triagem, honesta a ±30 %, nunca substitui um ano de vento medido. Mais alta que os muros é permitido: a altura é o essencial. Verde a partir de 4,5 m/s no cubo, amarelo a partir de 3, vermelho abaixo — com a FV do sol ao lado, e os dois somados em partes de casa. Arraste a própria turbina para a mover pelo jardim — fica mantida a 25 m da casa, mais perto faz demasiado barulho nos quartos. O rotor gira no modelo à velocidade do vento apresentado, mais depressa nos meses de vento forte. Vegetação ou muros a menos de 12 m custam-lhe um quinto do vento (×0,8). Vento mais sol contam para os 3 500 kWh anuais de uma casa: acima disso a leitura fica vermelha — retire a turbina.',
   'site-form':
     'Quebre o volume com as ferramentas à esquerda do modelo. O <b>L</b> trabalha uma ponta da barra, o <b>T</b> o meio, o <b>U</b> as duas pontas de um lado comprido, o <b>H</b> as duas pontas dos dois lados compridos. <b>Estender</b> acrescenta a ala para fora da barra; <b>Escavar</b> recorta dentro dela, pelo que é a própria barra que se torna a letra: a perna do L afunda-se na barra como um recorte no seu canto, o pátio do U abre-se entre as suas pernas, o T e o H recortam o que fica ao lado das alas. O ponto preto da quebra é um alcance contínuo: arrastado para fora a ala cresce, de volta à fachada regressa a barra simples, mais para dentro o recuo aprofunda-se — nunca salta para o outro lado. O U tem três pontos: o canto interior de cada perna dá a largura dessa perna e o seu próprio alcance — para fora da barra, ou recuado para dentro dela, pelo que uma perna pode ser mais comprida do que a outra — e o ponto no meio do pátio dá a profundidade a que o pátio entra na barra; uma perna nunca recua para trás do fundo do pátio. <b>⇆ Outra ponta</b> e <b>⇅ Outro lado</b> espelham a quebra para a ponta oposta da barra ou para o seu lado comprido oposto. <b>Abrir um pátio</b> recorta um pátio na barra; o ponto do seu canto abre-o mais largo ou mais fundo e o ponto do seu centro desloca-o para qualquer lado dentro dela — encostado a um lado ou a outro, nunca só ao centro — deixando sempre 2 m de edifício à volta e 2 m livres de qualquer recuo. Todas as paredes do contorno — de uma ala, de um recuo, de um pátio — recebem a janela que a sua orientação tem em Aberturas e Sombreamento, pelo que uma quebra redistribui o vidro em vez de o esconder. Uma planta trabalhada muda o que as caixas lêem. <b>Sombra própria · inverno %</b> é a parte do sol de 21 de Dezembro nas paredes que o edifício retira a si próprio — cada parede amostrada a cada 0,75 m em três alturas, o sol a cada meia hora, cada amostra pesada por quão de frente o sol a atinge, e contada como perdida quando o raio de volta ao sol encontra alguma parte da planta (altura do beirado; coberturas inclinadas sombreiam um pouco mais). O mesmo teste a 21 de Junho dá a sombra de verão na leitura por baixo do modelo: uma quebra ou um pátio que sombreia paredes a nascente e a poente no verão ganha com isso, um que sombreia a fachada principal no inverno paga por isso. O <b>factor de forma</b> é tirado de todo o volume — cada parede até ao perfil da própria cobertura, cada plano de cobertura com a inclinação definida em Cobertura, o piso térreo — pelo que uma quebra ou um pátio quase sempre o aumenta: mais envolvente para o mesmo volume. O ajuste a Olgyay continua a ler o comprimento, a profundidade e a rotação da barra. Cobertura, Aberturas e Sombreamento e Ventilação trabalham todos sobre este volume tal como está desenhado, e a exportação CAD escreve-o; a Ventilação lê também a forma para o ar — quanto do piso consegue ventilar em cruzado, quanto do seu vidro volta ao vento de inverno.',
   'roof-albedo':
