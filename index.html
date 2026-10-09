@@ -3869,7 +3869,10 @@ function roofModel(G, RF) {
          keeps its extension where the outline turns in */
       const iS = uS > 0 ? 0 : uS, iE = uE < L ? L : uE;
       const inner = [[iS, zOn(iS)]].concat(pr.filter(q => q[0] > iS + 1e-6 && q[0] < iE - 1e-6), [[iE, zOn(iE)]]);
-      const top = (p, h) => [p[0], p[1], p[2] + h + plift];
+      const top = (p, h) => [p[0], p[1], p[2] + h];
+      /* caps alone ride the micro-lift: faces keep exact shared edges, while
+         coplanar cap laps 3 mm apart never shimmer */
+      const capTop = (p, h) => [p[0], p[1], p[2] + h + plift];
       parList.forEach(pz => {
         const span = clipSpan(pz);
         if (!span) return;
@@ -3884,7 +3887,7 @@ function roofModel(G, RF) {
           /* the cap over this run of the profile, its inner edge clipped to the mitred line */
           const i0 = k === 1 ? 0 : p0[0], i1 = k === pr.length - 1 ? L : q[0];
           const ic = clip2(i0, i1);
-          if (ic) paras.push({ sg, kind:'cap', quad:[top(P(ic[0], zOn(ic[0])), pz.h), top(P(ic[1], zOn(ic[1])), pz.h), top(Q(ic[1], zOn(ic[1])), pz.h), top(Q(ic[0], zOn(ic[0])), pz.h)] });
+          if (ic) paras.push({ sg, kind:'cap', quad:[capTop(P(ic[0], zOn(ic[0])), pz.h), capTop(P(ic[1], zOn(ic[1])), pz.h), capTop(Q(ic[1], zOn(ic[1])), pz.h), capTop(Q(ic[0], zOn(ic[0])), pz.h)] });
         });
         inner.forEach((q, k) => {
           if (!k) return;
