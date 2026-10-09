@@ -13279,6 +13279,19 @@ function buildVentilation(host) {
       }
       if (it.sg) balcHoles(ctx, BSv.holes.get(it.sg), P3v, dep3v, sees3v);
     });
+    /* solar collection from the Roof tab on its slope — PV blue, thermal dark —
+       drawn past the sorted massing, as on Roof: a whole slope's averaged depth
+       would otherwise bury the modules under the tiles */
+    ['pv', 'thermal'].forEach(t => {
+      try {
+        const key = t === 'pv' ? 'pv' : 'th';
+        const o = RF.sol && RF.sol[key];
+        if (!o || !o.on) return;
+        const fld = solarField(G, RF, lat, solarOptimum(S, t, G.rot, C.t).tilt, Object.assign({ tech:t }, o));
+        if (!fld || !fld.fits) return;
+        fld.mods.forEach(mo => poly(mo.q, t === 'pv' ? '#1E3A8A' : '#22262B', CH.ink, 1));
+      } catch (e) {}
+    });
     window.__arcaShade = { wall: shadeDbg.wall, roof: shadeDbg.roof, sunAlt: +sun.alt.toFixed(1) };
     wins.forEach(o => {
       if (wallSeen(o.sg.n)) return;
@@ -15970,6 +15983,9 @@ style === 'sketch' ? '#EFEBE0'
         items.push({ pts:sl.pts, fill:'rgba(190,185,175,.92)', d:dc(sl.pts) });
       });
     } catch (e) {}
+    /* solar collection above the tiles, held for the pass past the sorted
+       massing (see below): a whole slope's averaged depth would bury them */
+    const solItems = [];
     ['pv', 'thermal'].forEach(t => {
       const key = t === 'pv' ? 'pv' : 'th';
       const o = RF.sol && RF.sol[key];
@@ -15978,7 +15994,7 @@ style === 'sketch' ? '#EFEBE0'
         const opt = solarOptimum(S, t, G.rot, C.t);
         const fld = solarField(G, RF, S.lat, opt.tilt, Object.assign({ tech:t }, o));
         if (!fld || !fld.fits) return;
-        fld.mods.forEach(mo => items.push({ pts:mo.q, fill:t === 'pv' ? '#1E3A8A' : '#22262B', d:dc(mo.q) }));
+        fld.mods.forEach(mo => solItems.push({ pts:mo.q, fill:t === 'pv' ? '#1E3A8A' : '#22262B' }));
       } catch (e) {}
     });
     /* Texture dressing: the finish's own tile at its true size, repeated
@@ -16189,6 +16205,8 @@ style === 'sketch' ? '#EFEBE0'
       /* loggia mouths last: the wall's own dressing lies beneath them */
       if (it.wl && BSviz) paintVizLoggia(it.wallSg);
     });
+    /* the Roof tab's collectors lie on the tiles, past every sorted face */
+    solItems.forEach(sq => poly(sq.pts, sq.fill, CH.ink, 1.2));
     ctx.fillStyle = night ? '#E8EAF0' : CH.ink2; ctx.font = F(10); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText(prompt.slice(0, 90), 8, H - 22);
     label(ctx, t('sun') + ' ' + fmt(sun.alt, 0) + '° · ' + t(styleNow()) + (night ? ' · ' + t('night') : ''), 8, H - 9, night ? '#AEB6C8' : CH.muted, F(9), 'left', 'middle');
