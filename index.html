@@ -3840,7 +3840,11 @@ function roofModel(G, RF) {
         const ca = Math.max(0, Math.min(w0, w1)), cb = Math.min(L, Math.max(w0, w1));
         return cb > ca + 1e-6 ? [ca, cb] : null;
       };
-      const inner = [[uS, zOn(uS)]].concat(pr.filter(q => q[0] > uS + 1e-6 && q[0] < uE - 1e-6), [[uE, zOn(uE)]]);
+      /* the inner face runs to the exact corner where the outline turns out
+         (an L-joint with its neighbour, closed under the lapped caps) and
+         keeps its extension where the outline turns in */
+      const iS = uS > 0 ? 0 : uS, iE = uE < L ? L : uE;
+      const inner = [[iS, zOn(iS)]].concat(pr.filter(q => q[0] > iS + 1e-6 && q[0] < iE - 1e-6), [[iE, zOn(iE)]]);
       const top = (p, h) => [p[0], p[1], p[2] + h + plift];
       parList.forEach(pz => {
         const span = clipSpan(pz);
