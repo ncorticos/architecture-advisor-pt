@@ -848,7 +848,7 @@ details.more[open] > summary{color:var(--ink)}
   <div class="foot">
     <div class="foot-top">
       <div>
-        <span class="appname">Architecture Advisor PT</span><span class="ver" id="footVer">v1.0.0</span>
+        <span class="appname">Architecture Advisor PT</span><span class="ver" id="footVer">v1.106.0</span>
         <p class="tag" data-t="footTag">A bioclimatic design advisor for architecture students, written for the
            decisions that are made before a regulation has anything to say about them.</p>
       </div>
@@ -923,7 +923,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.105.0',
+  version:     '1.106.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -17783,9 +17783,9 @@ function sceBlock(o) {
     + ' = <b>' + tvTxt + ' °C</b> ' + cmpS + ' → <b>V' + Z.si + '</b></div></div>'
     + '<p class="sce-ch">' + t(S.ch) + '</p><p class="sce-where">' + whereTxt + '</p>' + outTxt + '</div>'
     + '<figure class="sce-lad">' + sceLadder(Z) + '<figcaption>' + t('The zones up the ground of %1; the line is the site.').replace('%1', Z.nuts) + '</figcaption></figure></div>'
+    + grp('The surroundings', null, 'The same intentions at the scale of the plot: sun, wind, canopy, water and ground.', S.site, 'S')
     + grp('Winter · the building', S.w[0], S.w[1], S.w[2], 'B')
     + grp('Summer · the building', S.s[0], S.s[1], S.s[2], 'B')
-    + grp('The surroundings', null, 'The same intentions at the scale of the plot: sun, wind, canopy, water and ground.', S.site, 'S')
     + '</div>';
   wrap.querySelector('.panel-body').appendChild(hint('sce-src',
     'The zone is the Manual SCE’s (Despacho n.º 6476-H/2021, §5.3): the region from the municipality (Anexo II), its reference values '
@@ -18909,7 +18909,9 @@ function applyStatic() {
     const pt = STATIC_PT[k];
     n.innerHTML = (LANG === 'pt' && pt !== undefined) ? pt : n.dataset.en;
   });
-  $('#footVer').textContent = 'v' + APP.version;
+  { const d = new Date(), M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const p2 = v => String(v).padStart(2, '0');
+    $('#footVer').textContent = 'v' + APP.version + ' · ' + d.getDate() + ' ' + M[d.getMonth()] + ' ' + d.getFullYear() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()); }
   buildRefs();
 }
 
