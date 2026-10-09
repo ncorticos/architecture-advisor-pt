@@ -15731,9 +15731,11 @@ style === 'sketch' ? '#EFEBE0'
           segs.forEach(([a2, b2]) => {
             if (eu.door) {
               const q = rect(a2, b2, v0, v1, -WIN_REVEAL);
+              winReveal(q, sg.n).forEach(j => items.push(onWallLayer(sg, 3, { pts:j.pts, fill:j.fill })));
               items.push(onWallLayer(sg, 3, { pts:q, door:{ sg, u0:a2, u1:b2, v0, v1 }, fill:'#2E3236', d:cdep(q) }));
             } else if (eu.gel) {
               const q = rect(a2, b2, v0, v1, -WIN_REVEAL), k2 = night ? 0.3 : faceK(sg.n);
+              winReveal(q, sg.n).forEach(j => items.push(onWallLayer(sg, 3, { pts:j.pts, fill:j.fill })));
               items.push(onWallLayer(sg, 3, { pts:q, fill:shadeHex('#B0603C', k2), sh:k2, mat:'gelosia', wallSg:sg, gel:true, d:cdep(q),
                 uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) }));
             } else {
