@@ -8095,21 +8095,48 @@ function buildRoof(host) {
         } }));
     });
     /* --- divisions: numbered, selectable, on either 90° side ---
-       Direction first (longest side, or the shortest side turned 90° —
-       same parts, fractions kept), then one numbered row per division:
-       pick its number to select it on the model, slide it to take it
-       where it is needed, or drag its numbered handle on the model. */
+       Two buttons do it all: + Long side divides along the long side,
+       + Short side (90°) along the short side — each splits the widest
+       part there in two, then the new numbered division is selected,
+       ready to slide where it is needed, or drag its handle on the model. */
     if (!RF.divAxis || (RF.divAxis !== 'long' && RF.divAxis !== 'cross')) RF.divAxis = 'long';
     if (!isFinite(+RF.divSel) || +RF.divSel < 1 || +RF.divSel >= M.zones.length) RF.divSel = M.zones.length > 1 ? 1 : -1;
     else RF.divSel = Math.round(+RF.divSel);
-    divBox.appendChild(segCtl(t('Division direction'), [
-      { value:'long', label:t('Long side'), title:t('Cut along the longest side') },
-      { value:'cross', label:t('Short side (90°)'), title:t('Cut along the shortest side instead — the same parts turned 90°') }
-    ], RF.divAxis === 'cross' ? 'cross' : 'long', v => {
-      RF.divAxis = v === 'cross' ? 'cross' : 'long';
-      RF.divSel = -1;
+    /* one split routine for both buttons: the part keeps its left half and
+       hands its right half to a twin — type, pitch, turn and colours
+       included — and the new division is selected, ready to be slid where
+       it is needed */
+    const splitBi = bi => {
+      const w = RF.zones[bi], mid = (w.f0 + w.f1) / 2;
+      RF.zones.splice(bi + 1, 0, Object.assign({ f0:mid, f1:w.f1, n:w.n, th:w.th, rot:(w.rot | 0) }, w.rg !== undefined ? { rg:w.rg } : {}, w.colA ? { colA:w.colA } : {}, w.colB ? { colB:w.colB } : {}));
+      w.f1 = mid;
+      RF.divSel = bi + 1;
       syncRoofTop(); buildRoofUI(); roofDraw();
-    }));
+    };
+    /* divide along one side: the side's own metres decide — the widest
+       part there must clear 2 m, so both halves keep the 1 m minimum */
+    const sideLen = side => {
+      const bb = M.pl.bbox;
+      const L = Math.max(bb[2] - bb[0], bb[3] - bb[1]), S = Math.min(bb[2] - bb[0], bb[3] - bb[1]);
+      return side === 'cross' ? S : L;
+    };
+    const splitSide = side => {
+      RF.divAxis = side === 'cross' ? 'cross' : 'long';
+      RF.divSel = -1;
+      const M2 = roofModel(G, RF);
+      let bi = 0;
+      M2.zones.forEach((z, i) => { if (z.a1 - z.a0 > M2.zones[bi].a1 - M2.zones[bi].a0) bi = i; });
+      splitBi(bi);
+    };
+    [['long', t('Long side'), t('Divide along the long side — splits the widest part')],
+     ['cross', t('Short side (90°)'), t('Divide along the short side, turned 90° — splits the widest part')]].forEach(([side, lab, tip]) => {
+      const active = M.zones.length > 1 && (RF.divAxis === 'cross') === (side === 'cross');
+      const b = el('button', { class:'btn small' + (active ? ' solid' : ''), text:'+ ' + lab, title:tip, 'aria-pressed':String(active),
+        onclick:() => splitSide(side) });
+      const widest = Math.max(...RF.zones.map(z => clamp(z.f1 - z.f0, 0, 1))) * sideLen(side);
+      if (!(M.zones.length < 3 && widest >= 2)) b.disabled = true;
+      divBox.appendChild(b);
+    });
     M.zones.slice(1).forEach((z, k) => {
       const s0 = M.axis === 'x' ? M.pl.bbox[0] : M.pl.bbox[1];
       const num = k + 1, sel = RF.divSel === num;
@@ -8128,40 +8155,8 @@ function buildRoof(host) {
       row.appendChild(c);
       divBox.appendChild(row);
     });
-    const canSplit = M.zones.length < 3 && M.zones.some(z => z.a1 - z.a0 >= 2);
-    /* one split routine for both buttons: the part keeps its left half and
-       hands its right half to a twin — type, pitch, turn and colours
-       included — and the new division is selected, ready to be slid where
-       it is needed */
-    const splitBi = bi => {
-      const w = RF.zones[bi], mid = (w.f0 + w.f1) / 2;
-      RF.zones.splice(bi + 1, 0, Object.assign({ f0:mid, f1:w.f1, n:w.n, th:w.th, rot:(w.rot | 0) }, w.rg !== undefined ? { rg:w.rg } : {}, w.colA ? { colA:w.colA } : {}, w.colB ? { colB:w.colB } : {}));
-      w.f1 = mid;
-      RF.divSel = bi + 1;
-      syncRoofTop(); buildRoofUI(); roofDraw();
-    };
-    const add = el('button', { class:'btn small', text:'+ ' + t('Divide the largest part'),
-      title:t('Split the widest part in two at its middle — set each side below'), onclick:() => {
-        const M2 = roofModel(G, RF);
-        let bi = 0;
-        M2.zones.forEach((z, i) => { if (z.a1 - z.a0 > M2.zones[bi].a1 - M2.zones[bi].a0) bi = i; });
-        splitBi(bi);
-      } });
-    if (!canSplit) add.disabled = true;
-    divBox.appendChild(add);
-    /* the mirror button: splitting the narrowest part refines where the
-       detail is — a small açoteia beside a wide pitched roof, or the other
-       way round — while the wide parts stand untouched */
-    const canSplitSmall = M.zones.length < 3 && M.zones.length > 0 && M.zones.every(z => z.a1 - z.a0 >= 2);
-    const addSmall = el('button', { class:'btn small', text:'+ ' + t('Divide the smallest part'),
-      title:t('Split the narrowest part in two at its middle — set each side below'), onclick:() => {
-        const M2 = roofModel(G, RF);
-        let bi = 0;
-        M2.zones.forEach((z, i) => { if (z.a1 - z.a0 < M2.zones[bi].a1 - M2.zones[bi].a0) bi = i; });
-        splitBi(bi);
-      } });
-    if (!canSplitSmall) addSmall.disabled = true;
-    divBox.appendChild(addSmall);
+    if (M.zones.length >= 3) divBox.appendChild(el('p', { class:'hint',
+      text:t('Three parts at most — remove one to divide again') }));
     if (M.zones.length > 1) divBox.appendChild(el('button', { class:'btn small', text:'\u21c4 ' + t('Invert'),
       title:t('Swap every part’s type and pitch with its mirror image'), onclick:() => {
         const zs = RF.zones, n = zs.length;
@@ -8172,7 +8167,7 @@ function buildRoof(host) {
         }
         syncRoofTop(); buildRoofUI(); roofDraw();
       } }));
-    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: divide the longest side, or the shortest side turned 90°, into up to three parts, give each part its slopes and pitch, and drag the numbered division on the model or above — pick its number to select it, then slide it where it is needed. Lettered on the model, coloured from the list on the right: pick Part A or Part B, then its colour — a gable’s two slopes each their own — and turn each part in quarter turns with its Rotate 90° Part A / Part B button, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
+    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: press + Long side or + Short side (90°) to divide that side into up to three parts — each split cuts the widest part in two at its middle. Give each part its slopes and pitch, and drag the numbered division on the model or above — pick its number to select it, then slide it where it is needed. Lettered on the model, coloured from the list on the right: pick Part A or Part B, then its colour — a gable’s two slopes each their own — and turn each part in quarter turns with its Rotate 90° Part A / Part B button, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
     buildRoofColUI(); buildRoofSideUI();
   }
   buildRoofUI();
@@ -20041,19 +20036,15 @@ Object.assign(PT, {
   "Type": "Tipo",
   "Part": "Parte",
   "Division": "Divisão",
-  "Division direction": "Direção da divisão",
   "Long side": "Lado maior",
   "Short side (90°)": "Lado menor (90°)",
   "Select division": "Escolher divisão",
-  "Cut along the longest side": "Cortar ao longo do lado maior",
-  "Cut along the shortest side instead — the same parts turned 90°": "Cortar ao longo do lado menor — as mesmas partes rodadas 90°",
-  "Divide the largest part": "Dividir a parte maior",
-  "Divide the smallest part": "Dividir a parte menor",
+  "Divide along the long side — splits the widest part": "Dividir ao longo do lado maior — divide a parte mais larga a meio",
+  "Divide along the short side, turned 90° — splits the widest part": "Dividir ao longo do lado menor, rodado 90° — divide a parte mais larga a meio",
+  "Three parts at most — remove one to divide again": "Máximo três partes — remova uma para voltar a dividir",
   "Invert": "Inverter",
   "Swap every part’s type and pitch with its mirror image": "Troca o tipo e a inclinação de cada parte com a sua imagem espelhada",
   "Merge this part into its neighbour": "Unir esta parte à vizinha",
-  "Split the widest part in two at its middle — set each side below": "Divide a parte mais larga em duas a meio — defina cada lado abaixo",
-  "Split the narrowest part in two at its middle — set each side below": "Divide a parte mais estreita em duas a meio — defina cada lado abaixo",
   "along the length": "ao longo do comprimento",
   "along the depth": "ao longo da profundidade",
   "Winter ideal": "Ideal de Inverno",
@@ -20583,7 +20574,7 @@ Object.assign(PT_HINT, {
   'roof-score':
     'Uma só pontuação lê a inclinação. <b>Inclinação · % do melhor</b> é o sol do ano na vertente virada para a fachada principal à sua inclinação, como parte do sol à melhor inclinação para essa direcção neste local — encontrada grau a grau, a partir da irradiação do próprio local (ver os colectores abaixo): a produção dos colectores escolhidos ou, sem nenhum, o sol no plano, que é o que o fotovoltaico lê. Muda devagar perto da melhor inclinação — 10° de desvio custam cerca de 1 a 2 % — pelo que qualquer inclinação que um telhado aguente pontua alto; só cai depressa muito longe dela. O calibre verde junto à vertente desenha as regras práticas de Galloway e Lechner para o sol do meio-dia numa vertente a sul — Inverno %1°, Verão %2°, anual %3° — sobre o balanço deste local de %4 meses de aquecimento (média abaixo de 18 °C) para %5 de arrefecimento (acima de 22 °C); arraste a vertente até ficar paralela a um raio para o tomar. A melhor inclinação para todo o ano fica perto do valor anual, mais baixa onde o sol de verão é forte. As faixas de cor 97/90 são cortes didácticos desta aplicação. Uma cobertura plana não tem inclinação a avaliar: os seus colectores tomam a sua própria estrutura.',
   'roof-divide':
-    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: divida o lado maior, ou o lado menor rodado 90°, em até três partes, dê a cada parte as suas águas e inclinação, e arraste a divisão numerada no modelo ou acima — escolha o seu número para a seleccionar e deslize-a para onde for preciso. Com letras no modelo, com cor na lista à direita: escolha a Parte A ou a Parte B e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode cada parte em quartos de volta com o seu botão Rodar 90° Parte A / Parte B, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
+    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: carregue em + Lado maior ou + Lado menor (90°) para dividir esse lado em até três partes — cada divisão corta a parte mais larga a meio. Dê a cada parte as suas águas e inclinação, e arraste a divisão numerada no modelo ou acima — escolha o seu número para a seleccionar e deslize-a para onde for preciso. Com letras no modelo, com cor na lista à direita: escolha a Parte A ou a Parte B e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode cada parte em quartos de volta com o seu botão Rodar 90° Parte A / Parte B, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
   'ori-roof':
     'Uma superfície a sul recolhe o máximo quando o raio do meio-dia lhe chega quase perpendicular: <b>Inverno = latitude + 15°, Verão = latitude − 15°, anual = latitude</b> (Galloway; Lechner) — aqui <b>%1° / %2° / %3°</b>. %4. Os telhados tradicionais portugueses de telha ficam muito mais baixos, pelo que os colectores pedem em geral a sua própria estrutura — a tensão é a lição.',
   'ori-ff':
