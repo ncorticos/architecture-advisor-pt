@@ -8129,7 +8129,7 @@ function buildRoof(host) {
       splitBi(bi);
     };
     [['long', t('Long side'), t('Divide along the long side — splits the widest part')],
-     ['cross', t('Short side (90°)'), t('Divide along the short side, turned 90° — splits the widest part')]].forEach(([side, lab, tip]) => {
+     ['cross', t('Short side'), t('Divide along the short side, turned 90° — splits the widest part')]].forEach(([side, lab, tip]) => {
       const active = M.zones.length > 1 && (RF.divAxis === 'cross') === (side === 'cross');
       const b = el('button', { class:'btn small' + (active ? ' solid' : ''), text:'+ ' + lab, title:tip, 'aria-pressed':String(active),
         onclick:() => splitSide(side) });
@@ -8167,7 +8167,7 @@ function buildRoof(host) {
         }
         syncRoofTop(); buildRoofUI(); roofDraw();
       } }));
-    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: press + Long side or + Short side (90°) to divide that side into up to three parts — each split cuts the widest part in two at its middle. Give each part its slopes and pitch, and drag the numbered division on the model or above — pick its number to select it, then slide it where it is needed. Lettered on the model, coloured from the list on the right: pick Part A or Part B, then its colour — a gable’s two slopes each their own — and turn each part in quarter turns with its Rotate 90° Part A / Part B button, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
+    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: press + Long side or + Short side to divide that side into up to three parts — each split cuts the widest part in two at its middle. Give each part its slopes and pitch, and drag the numbered division on the model or above — pick its number to select it, then slide it where it is needed. Lettered on the model, coloured from the list on the right: pick Part A or Part B, then its colour — a gable’s two slopes each their own — and turn each part in quarter turns with its Rotate 90° Part A / Part B button, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
     buildRoofColUI(); buildRoofSideUI();
   }
   buildRoofUI();
@@ -20038,6 +20038,7 @@ Object.assign(PT, {
   "Division": "Divisão",
   "Long side": "Lado maior",
   "Short side (90°)": "Lado menor (90°)",
+  "Short side": "Lado menor",
   "Select division": "Escolher divisão",
   "Divide along the long side — splits the widest part": "Dividir ao longo do lado maior — divide a parte mais larga a meio",
   "Divide along the short side, turned 90° — splits the widest part": "Dividir ao longo do lado menor, rodado 90° — divide a parte mais larga a meio",
@@ -20574,7 +20575,7 @@ Object.assign(PT_HINT, {
   'roof-score':
     'Uma só pontuação lê a inclinação. <b>Inclinação · % do melhor</b> é o sol do ano na vertente virada para a fachada principal à sua inclinação, como parte do sol à melhor inclinação para essa direcção neste local — encontrada grau a grau, a partir da irradiação do próprio local (ver os colectores abaixo): a produção dos colectores escolhidos ou, sem nenhum, o sol no plano, que é o que o fotovoltaico lê. Muda devagar perto da melhor inclinação — 10° de desvio custam cerca de 1 a 2 % — pelo que qualquer inclinação que um telhado aguente pontua alto; só cai depressa muito longe dela. O calibre verde junto à vertente desenha as regras práticas de Galloway e Lechner para o sol do meio-dia numa vertente a sul — Inverno %1°, Verão %2°, anual %3° — sobre o balanço deste local de %4 meses de aquecimento (média abaixo de 18 °C) para %5 de arrefecimento (acima de 22 °C); arraste a vertente até ficar paralela a um raio para o tomar. A melhor inclinação para todo o ano fica perto do valor anual, mais baixa onde o sol de verão é forte. As faixas de cor 97/90 são cortes didácticos desta aplicação. Uma cobertura plana não tem inclinação a avaliar: os seus colectores tomam a sua própria estrutura.',
   'roof-divide':
-    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: carregue em + Lado maior ou + Lado menor (90°) para dividir esse lado em até três partes — cada divisão corta a parte mais larga a meio. Dê a cada parte as suas águas e inclinação, e arraste a divisão numerada no modelo ou acima — escolha o seu número para a seleccionar e deslize-a para onde for preciso. Com letras no modelo, com cor na lista à direita: escolha a Parte A ou a Parte B e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode cada parte em quartos de volta com o seu botão Rodar 90° Parte A / Parte B, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
+    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: carregue em + Lado maior ou + Lado menor para dividir esse lado em até três partes — cada divisão corta a parte mais larga a meio. Dê a cada parte as suas águas e inclinação, e arraste a divisão numerada no modelo ou acima — escolha o seu número para a seleccionar e deslize-a para onde for preciso. Com letras no modelo, com cor na lista à direita: escolha a Parte A ou a Parte B e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode cada parte em quartos de volta com o seu botão Rodar 90° Parte A / Parte B, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
   'ori-roof':
     'Uma superfície a sul recolhe o máximo quando o raio do meio-dia lhe chega quase perpendicular: <b>Inverno = latitude + 15°, Verão = latitude − 15°, anual = latitude</b> (Galloway; Lechner) — aqui <b>%1° / %2° / %3°</b>. %4. Os telhados tradicionais portugueses de telha ficam muito mais baixos, pelo que os colectores pedem em geral a sua própria estrutura — a tensão é a lição.',
   'ori-ff':
