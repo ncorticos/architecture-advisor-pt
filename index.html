@@ -9792,15 +9792,16 @@ function buildOpenings(host) {
       buildUnitUI(); refreshOpenings();
     } });
     const plus = el('button', { class:'btn small', text:'+', title:t('One window more'), 'aria-label':t('One window more'), onclick:() => {
-      const us = faceUnits(curFace);
-      if (us.length > 5) return;
+      let us = faceUnits(curFace);
+      if (us.length > 5) { toast(t('No room for more windows on this side')); return; }
       const sgg = refWall(curFace), bnd = sgg && segWindow(sgg, G);
       if (sgg && !bnd) { OPEN[curFace].wwr = 0.15; toast(t('Glass started at 15% to receive it')); }
       const band0 = sgg && segWindow(sgg, G);
       const bandW0 = band0 ? band0.w : 0;
       const want = bandW0 > 0 ? clamp(1.2 / bandW0, 0.05, 0.5) : 0.25;
       /* a new window takes the widest free stretch of the band — never
-         stacked on its neighbours, never moving them */
+         stacked on its neighbours, never moving them; a full band takes
+         the roomier end, clear of the nearest centre */
       let npos = 0.5;
       if (band0 && bandW0 > 0) {
         const bb0 = band0.uc - band0.w / 2;
@@ -9808,15 +9809,23 @@ function buildOpenings(host) {
           .filter(s => { const e = unitFloor(us[s.ui], FL); return e.on; })
           .map(s => [clamp((s.a - bb0) / bandW0, 0, 1), clamp((s.b - bb0) / bandW0, 0, 1)])
           .sort((p, q) => p[0] - q[0]);
-        let bg0 = 0, bg1 = 1, best = 1, prev = 0;
+        let bg0 = 0, bg1 = 1, best = 0, prev = 0;
         occ.forEach(([a, b]) => { if (a - prev > best) { best = a - prev; bg0 = prev; bg1 = a; } prev = Math.max(prev, b); });
-        if (1 - prev > best) { bg0 = prev; bg1 = 1; }
-        npos = clamp((bg0 + bg1) / 2, 0, 1);
+        if (1 - prev > best) { bg0 = prev; bg1 = 1; best = 1 - prev; }
+        if (bg1 - bg0 >= 0.05) npos = clamp((bg0 + bg1) / 2, 0, 1);
+        else {
+          const mid = occ.map(([a, b]) => (a + b) / 2);
+          const room = p => Math.min(p, 1 - p, ...mid.map(m => Math.abs(m - p) / 2));
+          npos = room(clamp(want / 2, 0, 1)) >= room(clamp(1 - want / 2, 0, 1)) ? clamp(want / 2, 0, 1) : clamp(1 - want / 2, 0, 1);
+        }
       }
+      us = faceUnits(curFace);   // re-fetch: never push to a stale list
+      if (us.length > 5) { toast(t('No room for more windows on this side')); return; }
       us.push({ on:true, frac:want, pos:npos, off:0, up:0 });
       OPEN[curFace].sel = us.length - 1;
       OPEN[curFace].laid = true;
       buildUnitUI(); refreshOpenings();
+      toast(t('Window') + ' ' + us.length + ' ' + t('added — drag it into place'));
     } });
     const nU = faceUnits(curFace).length;
     if (nU < 1) minus.disabled = true;
@@ -20090,6 +20099,7 @@ Object.assign(PT, {
   "open": "aberta",
   "closed": "fechada",
   "Window planted — drag it into place": "Janela plantada — arraste-a para o lugar",
+  "added — drag it into place": "adicionada — arraste-a para o lugar",
   "No room for more windows on this side": "Sem espaço para mais janelas nesta fachada",
   "moved to": "mudada para",
   "That wall cannot take a window": "Essa parede não pode levar janela",
