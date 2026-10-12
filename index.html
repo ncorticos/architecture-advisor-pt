@@ -8051,8 +8051,10 @@ function buildRoof(host) {
         sayRidge(i);
       }
       /* turn one part aside in quarter turns, to face another solar orientation:
-         one labelled button per part — Rotate 90° Part A, Part B (Part C with three) */
-      if (M.zones.length > 1 && (rz.n === 1 || rz.n === 2)) {
+         every shed or gabled part carries its own button — Part A alone, or
+         Parts A, B (and C) once divided; flat and hip parts face every way
+         already and carry none */
+      if (rz.n === 1 || rz.n === 2) {
         zoneBox.appendChild(el('button', { class:'btn small', text:'\u27f3 ' + t('Rotate 90°') + ' ' + t('Part') + ' ' + ('ABC'[i] || String(i + 1)),
           title:t('Turn this part a quarter turn, to face another solar orientation'), onclick:() => {
             rz.rot = ((((rz.rot | 0) + 1) % 4) + 4) % 4;
