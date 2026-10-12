@@ -3436,6 +3436,18 @@ function roofZones(G, RF) {
   RF.zones.forEach(z => { z.th = z.n === 0 ? 0 : z.th; z.rot = ((+z.rot | 0) % 4 + 4) % 4; });
   return RF.zones;
 }
+/** The plan's longest side in plan metres ('x' length, 'y' depth). */
+function roofDivLongAxis(G) {
+  try { const pl = planModel(G), bb = pl.bbox; return (bb[2] - bb[0]) >= (bb[3] - bb[1]) ? 'x' : 'y'; }
+  catch (e) { return 'x'; }
+}
+/** Which side the divisions cut: the longest side, or the shortest side
+    turned 90° — the same parts, fractions kept, read across the other way. */
+function roofDivAxis(G, RF) {
+  const l = roofDivLongAxis(G);
+  if (RF && RF.divAxis === 'cross') return l === 'x' ? 'y' : 'x';
+  return l;
+}
 /** Eave projection past one side — S the main facade, N the rear, E/W the ends — in metres. */
 function beiSide(b, f) {
   if (!b || !b.on) return 0;
@@ -3471,7 +3483,7 @@ function migrateRoofGlobals(G, RF) {
   const n = RF.zones.length;
   if (!n) return;
   const pl = planModel(G), bb = pl.bbox;
-  const spanX = bb[2] - bb[0], spanY = bb[3] - bb[1], ax = spanX >= spanY ? 'x' : 'y';
+  const spanX = bb[2] - bb[0], spanY = bb[3] - bb[1], ax = roofDivAxis(G, RF);
   const S0 = ax === 'x' ? bb[0] : bb[1], SL = (ax === 'x' ? spanX : spanY) || 1;
   const ziOf = (x, y) => {
     const c = ax === 'x' ? x : y;
@@ -3523,7 +3535,9 @@ function roofModel(G, RF) {
   const pl = planModel(G), H0 = G.fl * G.fh;
   const zones0 = roofZones(G, RF);
   const bb = pl.bbox, spanX = bb[2] - bb[0], spanY = bb[3] - bb[1];
-  const axis = spanX >= spanY ? 'x' : 'y', S0 = axis === 'x' ? bb[0] : bb[1], SL = axis === 'x' ? spanX : spanY;
+  const longAxis = spanX >= spanY ? 'x' : 'y';
+  const axis = (RF && RF.divAxis === 'cross') ? (longAxis === 'x' ? 'y' : 'x') : longAxis;
+  const S0 = axis === 'x' ? bb[0] : bb[1], SL = axis === 'x' ? spanX : spanY;
   /* a gable's ridge stands at rg of the way across, from the main facade
      (or from the left, where the part's main ridge runs front to back):
      0.5 the even gable, other
@@ -3915,7 +3929,7 @@ function roofModel(G, RF) {
   const val = { key, pl, H0, bei:zones0.reduce((a, z) => Math.max(a, z.bei && z.bei.on ? Math.max(beiSide(z.bei, 'S'), beiSide(z.bei, 'N'), beiSide(z.bei, 'E'), beiSide(z.bei, 'W')) : 0), 0), t:topT, th:topTh, n:topN, pieces, walls, steps, paras, paraArea, skins, at, zOf, roofArea, roofVol, ridge, ridges,
     zones:zones.map((z, zi) => ({ n:z.n, th:z.th, rg:z.rg, rot:z.rot, rear:z.n === 2 ? rearPitch(z.th, z.rg) : z.th, area:zoneArea[zi] || 0, a0:z.a0, a1:z.a1,
       face:z.n === 2 ? null : z.n === 1 ? ['front', 'left', 'back', 'right'][z.rot] : null })),
-    mixed, axis, flats:strips.filter(s => s.n === 0).map(s => s.r),
+    mixed, axis, longAxis, divAxis:(RF && RF.divAxis === 'cross' ? 'cross' : 'long'), flats:strips.filter(s => s.n === 0).map(s => s.r),
     zAt:(x, y) => { const r0 = at(x, y); return r0 ? H0 + r0.d : null; },
     wallArea:walls.reduce((a, w) => a + w.area, 0) + steps.reduce((a, st) => a + st.area, 0) };
   ROOF_CACHE.key = key; ROOF_CACHE.val = val;
@@ -4284,8 +4298,11 @@ const segFace = sg => sg.n[1] < 0 ? 'S' : sg.n[1] > 0 ? 'N' : sg.n[0] > 0 ? 'E' 
  * drawn on all of them.
  */
 /** Window units, per facade: the facade's glass split into independently
-    switchable windows, tiled side by side along every wall. fracs always sum
-    to 1; a switched-off unit leaves an honest hole (no glass, no gain). */
+    switchable windows, each standing on its own anchor along every wall.
+    frac is the unit's own width as a share of the glass band, pos its own
+    centre (0–1 along the band), off a free metre-nudge; editing one unit
+    never moves another — a switched-off unit leaves an honest hole
+    (no glass, no gain). */
 /** One window's values on storey k: each floor keeps its own position,
     size, lift and switch, decoupled from the other floors — unset, the
     floor follows the unit's shared values, as a single storey always does. */
@@ -4294,6 +4311,7 @@ function unitFloor(u, k) {
   const door = F && ('door' in F) ? !!F.door : !!(u && u.door);
   return {
     frac: F && isFinite(+F.frac) ? +F.frac : +(u && u.frac),
+    pos: F && isFinite(+F.pos) ? +F.pos : (u && isFinite(+u.pos) ? +u.pos : 0.5),
     off: F && isFinite(+F.off) ? +F.off : (u && isFinite(+u.off) ? +u.off : 0),
     up: F && isFinite(+F.up) ? +F.up : (u && isFinite(+u.up) ? +u.up : 0),
     ht: F && ('ht' in F) ? F.ht : u && u.ht,
@@ -4307,7 +4325,7 @@ function unitFloor(u, k) {
 function unitFloorW(u, k) {
   if (!u.floors) u.floors = [];
   if (!u.floors[k] || typeof u.floors[k] !== 'object') {
-    u.floors[k] = { frac:+u.frac, off:isFinite(+u.off) ? +u.off : 0, up:isFinite(+u.up) ? +u.up : 0,
+    u.floors[k] = { frac:+u.frac, pos:isFinite(+u.pos) ? +u.pos : 0.5, off:isFinite(+u.off) ? +u.off : 0, up:isFinite(+u.up) ? +u.up : 0,
       on:u.on !== false, door:!!u.door, gel:!!u.gel && !u.door };
     if (u.ht !== undefined) u.floors[k].ht = u.ht;
     if (u.sl !== undefined) u.floors[k].sl = u.sl;
@@ -4336,6 +4354,15 @@ function faceUnits(f) {
   o.units = o.units.filter(w => w && isFinite(+w.frac) && +w.frac > 0).slice(0, 6);
   /* an emptied side stays empty: no glass, honest zeros everywhere */
   o.units.forEach(w => { w.on = w.on !== false; w.frac = +w.frac; w.off = isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0; w.up = isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0; w.gel = !!w.gel && !w.door; w.ht = isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined; w.sl = isFinite(+w.sl) ? Math.max(-0.5, Math.min(2.5, +w.sl)) : undefined; });
+  /* independence, backfilled once: units saved before anchors existed keep
+     exactly where the old side-by-side tiling had them — each takes the
+     centre the chain gave it, then never follows another unit again */
+  let _cum = 0;
+  o.units.forEach(w => {
+    if (!isFinite(+w.pos)) w.pos = _cum + (+w.frac) / 2;
+    w.pos = +w.pos;
+    _cum += +w.frac;
+  });
   if (!(o.sel >= 0) || o.sel >= o.units.length) o.sel = -1;
   return o.units;
 }
@@ -4343,9 +4370,10 @@ function faceUnits(f) {
 function glassShare(f) {
   return faceUnits(f).reduce((a, w) => a + (w.on ? w.frac : 0), 0);
 }
-/** Absolute spans of one wall's glass [u0,u1] per unit, in order: each
-    unit's share shifted by its own offset along the wall, clamped to the
-    wall itself. Units cross and overlap freely — the wall is the only
+/** Absolute spans of one wall's glass [u0,u1] per unit, in order: every
+    unit stands on its own anchor along the band — centre pos plus its own
+    metre offset — clamped to the wall itself, so no unit ever moves
+    another. Units cross and overlap freely — the wall is the only
     boundary; shared totals below count overlaps once. */
 /** One window's vertical span on storey k: the band's sill-to-head slid
     by the unit's own lift, height kept, clamped to its storey. Doors
@@ -4463,13 +4491,11 @@ function glassSpans(f, u0, u1, segLen, k) {
   const us = faceUnits(f), out = [], bandW = Math.max(0, u1 - u0);
   const hi = segLen === undefined ? u1 : Math.max(u1, segLen);
   const kk = isFinite(+k) ? Math.max(0, Math.floor(+k)) : 0;
-  let u = u0;
   us.forEach((w, i) => {
     const e = unitFloor(w, kk);
-    const wd = Math.max(0, e.frac) * bandW, c = u + wd / 2 + e.off;
+    const wd = Math.max(0, e.frac) * bandW, c = u0 + (isFinite(e.pos) ? e.pos : 0.5) * bandW + e.off;
     const a = Math.min(Math.max(c - wd / 2, 0), Math.max(0, hi - wd));
     out.push({ a, b:Math.min(hi, a + wd), on:e.on, ui:i, k:kk });
-    u += wd;
   });
   return out;
 }
@@ -8068,28 +8094,74 @@ function buildRoof(host) {
           syncRoofTop(); buildRoofUI(); roofDraw();
         } }));
     });
+    /* --- divisions: numbered, selectable, on either 90° side ---
+       Direction first (longest side, or the shortest side turned 90° —
+       same parts, fractions kept), then one numbered row per division:
+       pick its number to select it on the model, slide it to take it
+       where it is needed, or drag its numbered handle on the model. */
+    if (!RF.divAxis || (RF.divAxis !== 'long' && RF.divAxis !== 'cross')) RF.divAxis = 'long';
+    if (!isFinite(+RF.divSel) || +RF.divSel < 1 || +RF.divSel >= M.zones.length) RF.divSel = M.zones.length > 1 ? 1 : -1;
+    else RF.divSel = Math.round(+RF.divSel);
+    divBox.appendChild(segCtl(t('Division direction'), [
+      { value:'long', label:t('Long side'), title:t('Cut along the longest side') },
+      { value:'cross', label:t('Short side (90°)'), title:t('Cut along the shortest side instead — the same parts turned 90°') }
+    ], RF.divAxis === 'cross' ? 'cross' : 'long', v => {
+      RF.divAxis = v === 'cross' ? 'cross' : 'long';
+      RF.divSel = -1;
+      syncRoofTop(); buildRoofUI(); roofDraw();
+    }));
     M.zones.slice(1).forEach((z, k) => {
       const s0 = M.axis === 'x' ? M.pl.bbox[0] : M.pl.bbox[1];
-      const c = rangeCtl(t('Division') + ' ' + (k + 1) + ' (m)', z.a0 - s0, z.a0 - s0, 0.5, z.a0 - s0,
-        v => { setDiv(k + 1, v); roofDraw(); }, v => fmt(v, 1) + ' m');
+      const num = k + 1, sel = RF.divSel === num;
+      const row = el('div', { class:'controls', style:'align-items:center;gap:6px' });
+      const pick = el('button', { class:'btn small' + (sel ? ' solid' : ''), text:String(num),
+        title:t('Select division') + ' ' + num });
+      pick.style.minWidth = '32px';
+      pick.onclick = () => { RF.divSel = num; buildRoofUI(); roofDraw(); };
+      row.appendChild(pick);
+      const c = rangeCtl(t('Division') + ' ' + num + ' (m)', z.a0 - s0, z.a0 - s0, 0.5, z.a0 - s0,
+        v => { RF.divSel = num; setDiv(num, v); roofDraw(); }, v => fmt(v, 1) + ' m');
       const lo = M.zones[k].a0 - s0 + 1, hi = z.a1 - s0 - 1;
       c.range.min = Math.min(lo, hi); c.range.max = Math.max(lo, hi);
       c.range.addEventListener('change', buildRoofUI);
-      divBox.appendChild(c);
+      if (sel) { c.style.outline = '2px solid #B45309'; c.style.borderRadius = '6px'; }
+      row.appendChild(c);
+      divBox.appendChild(row);
     });
     const canSplit = M.zones.length < 3 && M.zones.some(z => z.a1 - z.a0 >= 2);
+    /* one split routine for both buttons: the part keeps its left half and
+       hands its right half to a twin — type, pitch, turn and colours
+       included — and the new division is selected, ready to be slid where
+       it is needed */
+    const splitBi = bi => {
+      const w = RF.zones[bi], mid = (w.f0 + w.f1) / 2;
+      RF.zones.splice(bi + 1, 0, Object.assign({ f0:mid, f1:w.f1, n:w.n, th:w.th, rot:(w.rot | 0) }, w.rg !== undefined ? { rg:w.rg } : {}, w.colA ? { colA:w.colA } : {}, w.colB ? { colB:w.colB } : {}));
+      w.f1 = mid;
+      RF.divSel = bi + 1;
+      syncRoofTop(); buildRoofUI(); roofDraw();
+    };
     const add = el('button', { class:'btn small', text:'+ ' + t('Divide the largest part'),
       title:t('Split the widest part in two at its middle — set each side below'), onclick:() => {
         const M2 = roofModel(G, RF);
         let bi = 0;
         M2.zones.forEach((z, i) => { if (z.a1 - z.a0 > M2.zones[bi].a1 - M2.zones[bi].a0) bi = i; });
-        const w = RF.zones[bi], mid = (w.f0 + w.f1) / 2;
-        RF.zones.splice(bi + 1, 0, Object.assign({ f0:mid, f1:w.f1, n:w.n, th:w.th, rot:(w.rot | 0) }, w.rg !== undefined ? { rg:w.rg } : {}, w.colA ? { colA:w.colA } : {}, w.colB ? { colB:w.colB } : {}));
-        w.f1 = mid;
-        syncRoofTop(); buildRoofUI(); roofDraw();
+        splitBi(bi);
       } });
     if (!canSplit) add.disabled = true;
     divBox.appendChild(add);
+    /* the mirror button: splitting the narrowest part refines where the
+       detail is — a small açoteia beside a wide pitched roof, or the other
+       way round — while the wide parts stand untouched */
+    const canSplitSmall = M.zones.length < 3 && M.zones.length > 0 && M.zones.every(z => z.a1 - z.a0 >= 2);
+    const addSmall = el('button', { class:'btn small', text:'+ ' + t('Divide the smallest part'),
+      title:t('Split the narrowest part in two at its middle — set each side below'), onclick:() => {
+        const M2 = roofModel(G, RF);
+        let bi = 0;
+        M2.zones.forEach((z, i) => { if (z.a1 - z.a0 < M2.zones[bi].a1 - M2.zones[bi].a0) bi = i; });
+        splitBi(bi);
+      } });
+    if (!canSplitSmall) addSmall.disabled = true;
+    divBox.appendChild(addSmall);
     if (M.zones.length > 1) divBox.appendChild(el('button', { class:'btn small', text:'\u21c4 ' + t('Invert'),
       title:t('Swap every part’s type and pitch with its mirror image'), onclick:() => {
         const zs = RF.zones, n = zs.length;
@@ -8100,7 +8172,7 @@ function buildRoof(host) {
         }
         syncRoofTop(); buildRoofUI(); roofDraw();
       } }));
-    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: divide the longest side (up to three parts), give each part its slopes and pitch, and drag the division on the model or above. Lettered on the model, coloured from the list on the right: pick Part A or Part B, then its colour — a gable’s two slopes each their own — and turn each part in quarter turns with its Rotate 90° Part A / Part B button, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
+    divBox.appendChild(hint('roof-divide', 'One building, several roofs — as Algarve houses set a flat açoteia beside a pitched roof: divide the longest side, or the shortest side turned 90°, into up to three parts, give each part its slopes and pitch, and drag the numbered division on the model or above — pick its number to select it, then slide it where it is needed. Lettered on the model, coloured from the list on the right: pick Part A or Part B, then its colour — a gable’s two slopes each their own — and turn each part in quarter turns with its Rotate 90° Part A / Part B button, to face another solar orientation; the parapet can run on the whole roof or on one part alone. Each eave grows past its own wall, one side wider than another, and counts as shade on the glass beneath it. Badges read the largest part.'));
     buildRoofColUI(); buildRoofSideUI();
   }
   buildRoofUI();
@@ -8601,12 +8673,14 @@ if (F.chim || F.par) {
           desk.block(q[0] - 12, q[1] - 12, q[0] + 12, q[1] + 12);
         });
       }
-      /* the divisions between roof parts, draggable along the longest side */
-      M.zones.slice(1).forEach(z => {
+      /* the numbered divisions between roof parts, draggable across the cut side — click a handle to select it */
+      M.zones.slice(1).forEach((z, j) => {
+        const num = j + 1, sel = RF.divSel === num;
         const cx = M.axis === 'x' ? z.a0 : bb[0], cy = M.axis === 'x' ? bb[1] : z.a0;
         const a = proj(cx, cy, H0), b = proj(cx, cy, M.ridge + 0.5);
-        ctx.save(); ctx.setLineDash([4, 3]); stroke(ctx, '#0D9488', 1.4); seg(ctx, a[0], a[1], b[0], b[1]); ctx.restore();
-        ctx.beginPath(); ctx.arc(a[0], a[1], 6.5, 0, 6.284); ctx.fillStyle = '#fff'; ctx.fill(); stroke(ctx, '#0D9488', 2); ctx.stroke();
+        ctx.save(); ctx.setLineDash([4, 3]); stroke(ctx, sel ? '#B45309' : '#0D9488', sel ? 2.4 : 1.4); seg(ctx, a[0], a[1], b[0], b[1]); ctx.restore();
+        ctx.beginPath(); ctx.arc(a[0], a[1], sel ? 9 : 6.5, 0, 6.284); ctx.fillStyle = '#fff'; ctx.fill(); stroke(ctx, sel ? '#B45309' : '#0D9488', sel ? 2.5 : 2); ctx.stroke();
+        label(ctx, String(num), a[0], a[1], sel ? '#B45309' : '#0D9488', FM(10, '700'), 'center', 'middle');
       });
 
       /* the collector field: dark-blue PV modules with their cell lines, or
@@ -9052,6 +9126,7 @@ if (F.chim || F.par) {
       clientX - r.left, clientY - r.top);
     if (!q) return;   // edge-on view: slide the Division slider instead
     const bb = M.pl.bbox, s0 = M.axis === 'x' ? bb[0] : bb[1];
+    RF.divSel = ddiv;
     setDiv(ddiv, q[0] - s0);
     roofDraw();
   };
@@ -9207,7 +9282,7 @@ if (F.chim || F.par) {
     const dh = divHandleAt(ev.clientX, ev.clientY);
     if (dh >= 0) {
       ev.preventDefault();
-      ddiv = dh;
+      ddiv = dh; RF.divSel = dh;
       try { rcv.setPointerCapture(ev.pointerId); } catch (err) {}
       rcv.style.cursor = 'ew-resize';
       return;
@@ -9663,13 +9738,14 @@ function buildOpenings(host) {
               const live = faceUnits(curFace), at = live.indexOf(u);
               if (at < 0) return;
               const a0 = sp.a, w0 = W - Dw, b0 = w.uc - w.w / 2;
-              let cum = 0;
-              live.forEach((q, j) => { if (j < at) cum += EV(q).frac; });
+              /* independent anchors: the window keeps its left edge and
+                 shrinks in place, the door takes the freed stretch beside
+                 it — every other unit stays exactly where it was */
               const Wu = WV(u);
               Wu.frac = w0 / bandW;
-              Wu.off = clamp((a0 + w0 / 2) - (b0 + (cum + Wu.frac / 2) * bandW), -30, 30);
-              const dOff = clamp((a0 + w0 + Dw / 2) - (b0 + (cum + Wu.frac + (Dw / bandW) / 2) * bandW), -30, 30);
-              live.splice(at + 1, 0, { on:true, frac:Dw / bandW, off:dOff, door:true, up:0 });
+              Wu.pos = clamp((a0 + w0 / 2 - b0) / bandW, 0, 1);
+              Wu.off = 0;
+              live.splice(at + 1, 0, { on:true, frac:Dw / bandW, pos:clamp((a0 + w0 + Dw / 2 - b0) / bandW, 0, 1), off:0, door:true, up:0 });
               if (nFl > 1) { const nu = live[at + 1]; for (let kf = 0; kf < nFl; kf++) if (kf !== FL) unitFloorW(nu, kf).on = false; }
               OPEN[curFace].sel = at + 1;
               OPEN[curFace].laid = true;
@@ -9690,6 +9766,16 @@ function buildOpenings(host) {
         OPEN[curFace].laid = true;
         updateTexts(); refreshOpenings();
       }, v => fmt(v, 0) + '%');
+      /* every window stands on its own anchor: sliding it along the wall
+         moves nothing else — the drag's black node does the same */
+      const ps = rangeCtl('Position', 0, 100, 1, Math.round(clamp(isFinite(EV(u).pos) ? EV(u).pos : 0.5, 0, 1) * 100), v => {
+        const us = faceUnits(curFace), w = us[i];
+        if (!w) { buildUnitUI(); return; }
+        WV(w).pos = clamp(v / 100, 0, 1);
+        WV(w).off = 0;
+        OPEN[curFace].laid = true;
+        updateTexts(); refreshOpenings();
+      }, v => fmt(v, 0) + '%');
       /* a lone window resizes too: shrinking it frees wall to compose with */
       const r = { m:el('div', { class:'hint' }) };
       const mvL = el('button', { class:'btn small', text:'\u2039', title:t('Move window to the previous face'), 'aria-label':t('Move window to the previous face'), onclick:() => stepFace(i, -1) });
@@ -9701,6 +9787,7 @@ function buildOpenings(host) {
       rows.push(r);
       unitBox.appendChild(line);
       unitBox.appendChild(sh);
+      unitBox.appendChild(ps);
     });
     const minus = el('button', { class:'btn small', text:'\u2212', title:t('One window fewer'), 'aria-label':t('One window fewer'), onclick:() => {
       const us = faceUnits(curFace);
@@ -9716,9 +9803,22 @@ function buildOpenings(host) {
       if (sgg && !bnd) { OPEN[curFace].wwr = 0.15; toast(t('Glass started at 15% to receive it')); }
       const band0 = sgg && segWindow(sgg, G);
       const bandW0 = band0 ? band0.w : 0;
-      if (!us.length) us.push({ on:true, frac:0.25, off:0, up:0 });
-      else if (bandW0 > 0) us.push({ on:true, frac:clamp(1.2 / bandW0, 0.05, 0.5), off:0, up:0 });
-      else us.push({ on:true, frac:0.25, off:0, up:0 });
+      const want = bandW0 > 0 ? clamp(1.2 / bandW0, 0.05, 0.5) : 0.25;
+      /* a new window takes the widest free stretch of the band — never
+         stacked on its neighbours, never moving them */
+      let npos = 0.5;
+      if (band0 && bandW0 > 0) {
+        const bb0 = band0.uc - band0.w / 2;
+        const occ = glassSpans(curFace, bb0, bb0 + band0.w, sgg.len, FL)
+          .filter(s => { const e = unitFloor(us[s.ui], FL); return e.on; })
+          .map(s => [clamp((s.a - bb0) / bandW0, 0, 1), clamp((s.b - bb0) / bandW0, 0, 1)])
+          .sort((p, q) => p[0] - q[0]);
+        let bg0 = 0, bg1 = 1, best = 1, prev = 0;
+        occ.forEach(([a, b]) => { if (a - prev > best) { best = a - prev; bg0 = prev; bg1 = a; } prev = Math.max(prev, b); });
+        if (1 - prev > best) { bg0 = prev; bg1 = 1; }
+        npos = clamp((bg0 + bg1) / 2, 0, 1);
+      }
+      us.push({ on:true, frac:want, pos:npos, off:0, up:0 });
       OPEN[curFace].sel = us.length - 1;
       OPEN[curFace].laid = true;
       buildUnitUI(); refreshOpenings();
@@ -10551,8 +10651,17 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     const live = faceUnits(f1), at = live.indexOf(u);
     if (at < 0) return false;
     live.splice(at, 1);
+    /* independent anchors: width kept in metres, centre dropped where the
+       pointer left it — or kept at its own relative spot when stepped
+       across with the arrows; stale per-floor geometry is dropped so no
+       floor jumps to the old facade's layout */
     u.frac = Math.min(1, Math.max(0.05, wd / tW.w));
-    u.off = atU === null || atU === undefined ? 0 : Math.max(-30, Math.min(30, atU - tW.uc));
+    const tb0 = tW.uc - tW.w / 2;
+    u.pos = (atU === null || atU === undefined)
+      ? (isFinite(+u.pos) ? clamp(+u.pos, 0, 1) : 0.5)
+      : clamp((atU - tb0) / Math.max(0.3, tW.w), 0, 1);
+    u.off = 0;
+    if (Array.isArray(u.floors)) u.floors.forEach(F => { if (F && typeof F === 'object') { delete F.frac; delete F.pos; delete F.off; } });
     dst.push(u);
     OPEN[f2].laid = true; OPEN[f1].laid = true;
     OPEN[f2].sel = dst.length - 1; OPEN[f1].sel = -1;
@@ -10806,10 +10915,10 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     const w = pw;
     if (!w) return;
     const nf = clamp(1.2 / Math.max(0.6, w.w), 0.05, 0.5);
-    us.push({ on:true, frac:nf, off:0, up:0 });
+    /* planted exactly where clicked: its own anchor on the band, so no
+       other window moves to receive it */
+    us.push({ on:true, frac:nf, pos:clamp((inv.u - (w.uc - w.w / 2)) / Math.max(0.3, w.w), 0, 1), off:0, up:0 });
     const ni = us.length - 1;
-    const sp = glassSpans(curFace, w.uc - w.w / 2, w.uc + w.w / 2, psg.len)[ni];
-    if (sp) us[ni].off = Math.max(-30, Math.min(30, inv.u - (sp.a + sp.b) / 2));
     OPEN[curFace].sel = ni;
     OPEN[curFace].selK = Math.max(0, Math.min(nFloorsU() - 1, Math.floor(inv.z / G.fh)));
     OPEN[curFace].laid = true;
@@ -17235,6 +17344,7 @@ function toDecisionsJSON() {
         balconies:balcGeo(MASS).all.map(B => B.ok ? { mode:B.mode === 'out' ? 'projecting' : 'recessed', width:B.w, depth:B.d, floors:B.levels, facade:segFace(B.sg), corner:B.corner, wrap:!!B.wrap } : { built:false, why:B.why }),
         planArea:+planModel(MASS).area.toFixed(1), wallColour:colourOf(fin) },
       roof:{ type:['flat', 'shed', 'gable', 'hip'][ROOF.n], pitch:ROOF.n === 0 ? 0 : ROOF.th,
+        divisionAxis:ROOF.divAxis === 'cross' ? 'short side' : 'long side',
         zones:(ROOF.zones || []).map((z, i) => Object.assign({ part:'ABC'[i], type:['flat', 'shed', 'gable', 'hip'][z.n], pitch:z.n === 0 ? 0 : z.th, from:+z.f0.toFixed(3), to:+z.f1.toFixed(3) },
           z.n === 2 && Math.abs(ridgeFrac(z) - 0.5) > 1e-3 ? { ridgeAt:ridgeFrac(z), rearPitch:+rearPitch(z.th, ridgeFrac(z)).toFixed(1) } : {})), roofColour:colourOf(rfin),
         parapets:(ROOF.zones || []).filter(z => z.par && z.par.on).map(z => ({ roof:(ROOF.zones || []).indexOf(z) + 1, height:+z.par.h.toFixed(2) })),
@@ -17561,6 +17671,8 @@ function applyStudy(o) {
         'lock' in z.chim ? { lock:z.chim.lock !== false } : {}) } : {})) : undefined;
   } else delete ROOF.zones;
   if (isFinite(+R0.roofSel)) ROOF.roofSel = Math.max(-1, Math.min(2, Math.round(+R0.roofSel)));
+  ROOF.divAxis = R0.divAxis === 'cross' ? 'cross' : 'long';
+  ROOF.divSel = isFinite(+R0.divSel) ? Math.round(+R0.divSel) : -1;
   ['S', 'N', 'E', 'W'].forEach(f => {
     const s = o.open && o.open[f];
     if (!s || typeof s !== 'object') return;
@@ -17579,12 +17691,13 @@ function applyStudy(o) {
     if (Array.isArray(s.units) && s.units.length) {
       const vu = s.units.filter(w => w && isFinite(+w.frac) && +w.frac > 0).slice(0, 6)
         .map(w => {
-          const o = { on:w.on !== false, frac:+w.frac, door:!!w.door, gel:!!w.gel, off:isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0, up:isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0, ht:isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined, sl:isFinite(+w.sl) ? Math.max(-0.5, Math.min(2.5, +w.sl)) : undefined };
+          const o = { on:w.on !== false, frac:+w.frac, pos:isFinite(+w.pos) ? +w.pos : undefined, door:!!w.door, gel:!!w.gel, off:isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0, up:isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0, ht:isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined, sl:isFinite(+w.sl) ? Math.max(-0.5, Math.min(2.5, +w.sl)) : undefined };
           if (Array.isArray(w.floors)) {
             const fl = w.floors.slice(0, 3).map(F => {
               if (!F || typeof F !== 'object') return undefined;
               const e = {};
               if (isFinite(+F.frac) && +F.frac > 0) e.frac = +F.frac;
+              if (isFinite(+F.pos)) e.pos = +F.pos;
               if (isFinite(+F.off)) e.off = Math.max(-30, Math.min(30, +F.off));
               if (isFinite(+F.up)) e.up = Math.max(-30, Math.min(30, +F.up));
               if ('on' in F) e.on = !!F.on;
@@ -18846,7 +18959,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
     MASS.form = 'rect'; MASS.wing = null; MASS.patio.on = false;   // the import sizes the bar; breaks stay parametric
   }
   ENV.plot = null;
-  ROOF = { n:2, th:Math.round(Math.abs(site.lat)), col:null, sol:{ tech:'none', cols:4, rows:2 }, par:{ on:false, h:0.6 }, bei:{ on:false, d:0.15, ends:true }, chim:null };
+  ROOF = { n:2, th:Math.round(Math.abs(site.lat)), col:null, divAxis:'long', divSel:-1, sol:{ tech:'none', cols:4, rows:2 }, par:{ on:false, h:0.6 }, bei:{ on:false, d:0.15, ends:true }, chim:null };
   /* One entry per local facade (S/N/E/W, matching the Roof tab's convention
      of true-south regardless of the plan's chosen rotation), each holding
      the window and its shading devices. wwr is a fraction of that facade's
@@ -19928,11 +20041,19 @@ Object.assign(PT, {
   "Type": "Tipo",
   "Part": "Parte",
   "Division": "Divisão",
+  "Division direction": "Direção da divisão",
+  "Long side": "Lado maior",
+  "Short side (90°)": "Lado menor (90°)",
+  "Select division": "Escolher divisão",
+  "Cut along the longest side": "Cortar ao longo do lado maior",
+  "Cut along the shortest side instead — the same parts turned 90°": "Cortar ao longo do lado menor — as mesmas partes rodadas 90°",
   "Divide the largest part": "Dividir a parte maior",
+  "Divide the smallest part": "Dividir a parte menor",
   "Invert": "Inverter",
   "Swap every part’s type and pitch with its mirror image": "Troca o tipo e a inclinação de cada parte com a sua imagem espelhada",
   "Merge this part into its neighbour": "Unir esta parte à vizinha",
   "Split the widest part in two at its middle — set each side below": "Divide a parte mais larga em duas a meio — defina cada lado abaixo",
+  "Split the narrowest part in two at its middle — set each side below": "Divide a parte mais estreita em duas a meio — defina cada lado abaixo",
   "along the length": "ao longo do comprimento",
   "along the depth": "ao longo da profundidade",
   "Winter ideal": "Ideal de Inverno",
@@ -20024,6 +20145,7 @@ Object.assign(PT, {
   "Shading fit /100": "Ajuste do sombreamento /100",
   "Windows": "Janelas",
   "Share": "Quota",
+  "Position": "Posição",
   "Built": "Construído",
   "of wall": "da parede",
   "One window fewer": "Menos uma janela",
@@ -20461,7 +20583,7 @@ Object.assign(PT_HINT, {
   'roof-score':
     'Uma só pontuação lê a inclinação. <b>Inclinação · % do melhor</b> é o sol do ano na vertente virada para a fachada principal à sua inclinação, como parte do sol à melhor inclinação para essa direcção neste local — encontrada grau a grau, a partir da irradiação do próprio local (ver os colectores abaixo): a produção dos colectores escolhidos ou, sem nenhum, o sol no plano, que é o que o fotovoltaico lê. Muda devagar perto da melhor inclinação — 10° de desvio custam cerca de 1 a 2 % — pelo que qualquer inclinação que um telhado aguente pontua alto; só cai depressa muito longe dela. O calibre verde junto à vertente desenha as regras práticas de Galloway e Lechner para o sol do meio-dia numa vertente a sul — Inverno %1°, Verão %2°, anual %3° — sobre o balanço deste local de %4 meses de aquecimento (média abaixo de 18 °C) para %5 de arrefecimento (acima de 22 °C); arraste a vertente até ficar paralela a um raio para o tomar. A melhor inclinação para todo o ano fica perto do valor anual, mais baixa onde o sol de verão é forte. As faixas de cor 97/90 são cortes didácticos desta aplicação. Uma cobertura plana não tem inclinação a avaliar: os seus colectores tomam a sua própria estrutura.',
   'roof-divide':
-    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: divida o lado maior (até três partes), dê a cada parte as suas águas e inclinação, e arraste a divisão no modelo ou acima. Com letras no modelo, com cor na lista à direita: escolha a Parte A ou a Parte B e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode cada parte em quartos de volta com o seu botão Rodar 90° Parte A / Parte B, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
+    'Um edifício, várias coberturas — como as casas algarvias juntam uma açoteia a um telhado inclinado: divida o lado maior, ou o lado menor rodado 90°, em até três partes, dê a cada parte as suas águas e inclinação, e arraste a divisão numerada no modelo ou acima — escolha o seu número para a seleccionar e deslize-a para onde for preciso. Com letras no modelo, com cor na lista à direita: escolha a Parte A ou a Parte B e depois a sua cor — as duas vertentes de uma cobertura de duas águas cada uma a sua — e rode cada parte em quartos de volta com o seu botão Rodar 90° Parte A / Parte B, para outra orientação solar; a platibanda pode correr em toda a cobertura ou só numa parte. Cada beirado cresce para lá da sua parede, um lado mais largo do que outro, e conta como sombra no vidro por baixo dele. As notas lêem a parte maior.',
   'ori-roof':
     'Uma superfície a sul recolhe o máximo quando o raio do meio-dia lhe chega quase perpendicular: <b>Inverno = latitude + 15°, Verão = latitude − 15°, anual = latitude</b> (Galloway; Lechner) — aqui <b>%1° / %2° / %3°</b>. %4. Os telhados tradicionais portugueses de telha ficam muito mais baixos, pelo que os colectores pedem em geral a sua própria estrutura — a tensão é a lição.',
   'ori-ff':
