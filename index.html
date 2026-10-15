@@ -18096,7 +18096,8 @@ function collectConstructionHandoff() {
         floor:{ footprintArea:r2(footprint), perimeter:r2(perim) }, brickVentilation:r2(tot.gel + cGel) },
       finishes:{ wall:(MASS.col === undefined ? null : MASS.col), roof:(ROOF.col === undefined ? null : ROOF.col) },
       notes:['U-values, layer build-ups, interior assemblies, prices and glazing spec stay manual in the receiver — this app does not decide them.',
-        'Exterior paving is not modelled here; ground-slab area/perimeter carry the footprint instead.']
+        'Exterior paving is not modelled here; ground-slab area/perimeter carry the footprint instead.',
+        'Outline perimeter includes patio inner edges, as the app draws the outline; floor area is net of patio.']
     }
   };
   return { ok:true, payload };
