@@ -4277,6 +4277,43 @@ function canopyFrame(hit) {
     .map(u => box(at(u - h, nC - h), at(u + h, nC + h), 0, zBot));
   return { posts, beam:box(at(hit.u0, nC - bw), at(hit.u1, nC + bw), zBot, zTop), n:N, span:(w - 2 * inset) / (N - 1) };
 }
+/** Stone for canvas loops, kin to the embasamento. */
+const STONE_FILL = '#A9A294';
+const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_IDEAL = 0.28;
+/** A stone stair up to a projecting balcony: a solid masonry flight parallel
+    to the facade, alongside the balcony, top tread flush with its slab.
+    B is a balcOne result whose entry carries stair (set by the Roof tab's
+    eave-canopy button); returns null without one, {ok:false,why} with no
+    room along the wall. World boxes, same convention as canopyFrame.box. */
+function stairFor(B, G) {
+  if (!B || !B.ok || B.mode !== 'out' || !B.b || !B.b.stair) return null;
+  const ks = (B.levels || []).filter(k => k >= 2);
+  if (!ks.length) return null;
+  const k = Math.max.apply(null, ks), zTop = (k - 1) * G.fh;
+  if (!(zTop > 1.0)) return null;
+  const n = Math.max(2, Math.ceil(zTop / STAIR_RISER_MAX)), riser = zTop / n;
+  const sg = B.sg, len = sg.len, tx = (sg.b[0] - sg.a[0]) / len, ty = (sg.b[1] - sg.a[1]) / len;
+  const roomL = B.u0, roomR = len - B.u1;
+  const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
+  const tread = Math.min(STAIR_TREAD_IDEAL, room / n);
+  if (!(tread >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for the stair along this wall', level:k, zTop };
+  const sw = Math.min(STAIR_W, B.d);
+  const P = (u, v) => [sg.a[0] + tx * u + sg.n[0] * v, sg.a[1] + ty * u + sg.n[1] * v];
+  const boxes = [];
+  for (let i = 0; i < n; i++) {
+    const a = side > 0 ? B.u1 + i * tread : B.u0 - (i + 1) * tread, zt = zTop - i * riser;
+    const p = P(a, 0), q = P(a + tread, sw);
+    boxes.push([Math.min(p[0], q[0]), Math.min(p[1], q[1]), 0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), zt]);
+  }
+  return { ok:true, boxes, n, riser, tread, run:n * tread, side, level:k, zTop, sw, why:null };
+}
+/** One CSV-ready line for a balcony's stair, or '' without one. */
+function stairCsv(B, G) {
+  if (!B || !B.b || !B.b.stair) return '';
+  const st = stairFor(B, G);
+  if (!st || !st.ok) return ', stair does not fit along this wall';
+  return ', stone stair ' + st.n + ' steps × ' + fmt(st.riser * 100, 0) + ' cm, run ' + fmt(st.run, 2) + ' m';
+}
 /** The side faces of a world box that a viewer sees, as [quad, outward normal] pairs. */
 function boxSides(B) {
   const [x0, y0, z0, x1, y1, z1] = B;
@@ -7244,6 +7281,14 @@ function buildSite(host) {
         const dep = pts => pts.reduce((a, q) => { const w = rot(q[0], q[1], beta); return a + plateDepth(w[0], w[1], q[2]); }, 0) / pts.length;
         /* the projecting balconies: slab tops, the edges facing the camera, the parapets both ways */
         BS.solids.forEach(sl => { if (sl.kind === 'par' || seesL(sl.n)) faces.push({ balc:sl, pts:sl.pts }); });
+        balcGeo(MASS).ok.forEach(B => {
+          if (B.mode !== 'out' || !B.b.stair) return;
+          const st = stairFor(B, MASS);
+          if (!st || !st.ok) return;
+          st.boxes.forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
+            if (nn[2] !== 0 || seesL(nn)) faces.push({ pts:q, ns:nn[1] !== 0, stone:true });
+          }));
+        });
         RM.walls.forEach(wl => {
           const sg = wl.sg;
           if (!segSeen(sg)) return;
@@ -7279,7 +7324,7 @@ function buildSite(host) {
               seg(ctx, a[0], a[1], b[0], b[1]); desk.line(a[0], a[1], b[0], b[1]); });
             return;
           }
-          ctx.fillStyle = opaque(wallFill(fc.ns ? 0.14 : 0.08, fc.ns ? 0.82 : 1));   // local north/south walls a touch darker, as the bar always drew them
+          ctx.fillStyle = fc.stone ? STONE_FILL : opaque(wallFill(fc.ns ? 0.14 : 0.08, fc.ns ? 0.82 : 1));   // local north/south walls a touch darker, as the bar always drew them
           ctx.fill();
           stroke(ctx, CH.ink, 1.4); ctx.stroke();
           if (!fc.sg) return;
@@ -7537,7 +7582,7 @@ function buildSite(host) {
       ['Patio w × d (m)', G.patio && G.patio.on && G.patio.ok !== false ? G.patio.ew + ' × ' + G.patio.ed : ''],
       ...balcGeo(G).all.map((B, i) => ['Balcony ' + (i + 1), !B.ok ? 'not built: ' + B.why
         : (B.mode === 'out' ? 'projecting' : 'recessed (loggia)') + ' ' + +B.w.toFixed(1) + ' × ' + +B.d.toFixed(1) + ' m, faces ' + COMPASS8_EN[Math.round(((G.rot + Math.atan2(-B.n[0], -B.n[1]) / RAD) % 360 + 360) % 360 / 45) % 8]
-          + ', floor' + (B.levels.length > 1 ? 's ' : ' ') + B.levels.join('+') + (B.wrap ? ', round the corner' : B.corner ? ', at the corner' : '') + ', ' + +(B.area * B.levels.length).toFixed(1) + ' m²']),
+          + ', floor' + (B.levels.length > 1 ? 's ' : ' ') + B.levels.join('+') + (B.wrap ? ', round the corner' : B.corner ? ', at the corner' : '') + ', ' + +(B.area * B.levels.length).toFixed(1) + ' m²' + stairCsv(B, G)]),
       ['Plan area (m²)', +planOf().area.toFixed(1)],
       ['Outline perimeter (m)', +planOf().perimeter.toFixed(1)],
       ['Own shade on the walls, 21 Dec (%)', +selfShade(355).toFixed(1)],
@@ -8431,6 +8476,35 @@ function buildRoof(host) {
       + (dropHeld ? ' · ' + t('drop held to keep root 2.1 m clear') : '')
       + ' · ' + (fr.n ? fr.n + ' ' + t('timber posts') + ', ' + t('spans of') + ' ' + fmt(fr.span, 2) + ' m' : t('hung from the wall, no posts up to 0.5 m'));
   };
+  /** A balcony under the eave canopy, with its stone stair: projecting, on
+      the middle (upper) floor, centred on the canopy and as wide as it. */
+  function addCanopyBalcony() {
+    const RZ2 = RF.zones[roofEditIdx()], c = RZ2 && RZ2.canopy;
+    if (!c) { toast(t('Turn the eave canopy on first')); return; }
+    if (G.fl < 2) { toast(t('Two storeys raise this canopy to the top')); return; }
+    if (G.balc.length >= BALC_MAX) { toast(t('No room for more balconies')); return; }
+    if (G.balc.some(b => b.fromCanopy)) { toast(t('The canopy balcony is already placed')); return; }
+    const M = roofModel(G, RF), hit = canopySpanFor(M.pl.segs, c, G.fl * G.fh, M);
+    if (!hit) { toast(t('That wall cannot take a window')); return; }
+    const tx = (hit.sg.b[0] - hit.sg.a[0]) / hit.sg.len, ty = (hit.sg.b[1] - hit.sg.a[1]) / hit.sg.len;
+    const um = (hit.u0 + hit.u1) / 2;
+    const entry = { f:segFace(hit.sg), x:+((hit.sg.a[0] + tx * um).toFixed(2)), y:+((hit.sg.a[1] + ty * um).toFixed(2)),
+      mode:'out', w:Math.min(+(c.w || 3), 8), d:1.5, lv:2, corner:0, fromCanopy:true, stair:{ w:STAIR_W } };
+    G.balc.push(entry);
+    const B = balcGeo(G).all[G.balc.length - 1];
+    if (!B || !B.ok) {
+      G.balc.pop();
+      toast(t(B ? B.why : 'That wall cannot take a window'));
+      buildCanopyUI(); roofDraw();
+      return;
+    }
+    const st = stairFor(B, G);
+    if (!st || !st.ok) {
+      entry.stair = null;
+      toast(t('Balcony placed — ') + t((st && st.why) || 'no room for the stair along this wall'));
+    } else toast(t('Balcony and stone stair placed — drag the balcony on Site to move both'));
+    buildCanopyUI(); roofDraw();
+  }
   function buildCanopyUI() {
     canBox.innerHTML = '';
     canWCtl = canDCtl = canPCtl = canHCtl = canSays = null;
@@ -8459,6 +8533,44 @@ function buildRoof(host) {
     canSays = canBox.appendChild(el('p', { class:'hint' }));
     canopyWords();
     canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it, its diamond at the wall up and down to set how far it hangs below the eave. The pitch falls the canopy away from the wall; its depth is measured level. The slab reads 0.07 m thick. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.' }));
+    /* upper floor under a tall canopy: on two storeys the posts run to the
+       top, and a balcony can stand on the upper floor beneath them, reached
+       by a stone stair alongside it —utto, drag the balcony on Site */
+    if (G.fl >= 2) {
+      canBox.appendChild(el('div', { class:'gh', text:'Upper floor' }));
+      const cb = G.balc.find(b => b.fromCanopy);
+      if (!cb) {
+        canBox.appendChild(el('button', { class:'btn small', text:'+ Balcony + stair under canopy',
+          title:t('Stand a projecting balcony on the upper floor under this canopy, with a stone stair up to it'),
+          onclick:() => { addCanopyBalcony(); } }));
+        canBox.appendChild(el('p', { class:'hint', text:t('Two levels: a balcony on the upper floor under this canopy, reached by a stone stair alongside it. It lands in the balcony list on Site, where it drags along the walls like any balcony.') }));
+      } else {
+        const B = balcGeo(G).all[G.balc.indexOf(cb)];
+        const wantStair = !!cb.stair;
+        const st = B && B.ok && wantStair ? stairFor(B, G) : null;
+        const says = el('p', { class:'hint' });
+        says.textContent = B && B.ok
+          ? t('Balcony') + ' ' + fmt(B.w, 1) + ' × ' + fmt(B.d, 1) + ' m · ' + t('floor') + ' ' + B.levels.join('+')
+            + (st && st.ok ? ' · ' + t('stone stair') + ' ' + st.n + ' × ' + fmt(st.riser * 100, 0) + ' cm'
+              : wantStair ? ' · ' + t('stair does not fit along this wall') : ' · ' + t('stone stair off'))
+          : t(B ? B.why : 'Balcony cannot be built here');
+        canBox.appendChild(says);
+        canBox.appendChild(checkCtl(t('Stone stair'), !!cb.stair, v => {
+          if (v) {
+            const B2 = balcGeo(G).all[G.balc.indexOf(cb)];
+            const probe = B2 && B2.ok ? Object.assign({}, B2, { b:Object.assign({}, B2.b, { stair:{ w:STAIR_W } }) }) : null;
+            const s2 = probe ? stairFor(probe, G) : null;
+            if (!s2 || !s2.ok) { toast(t((s2 && s2.why) || 'A stair needs a projecting balcony')); buildCanopyUI(); roofDraw(); return; }
+            cb.stair = { w:STAIR_W };
+          } else cb.stair = null;
+          buildCanopyUI(); roofDraw();
+        }));
+        canBox.appendChild(el('button', { class:'btn small', text:'× ' + t('Remove balcony'), title:t('Remove this balcony and its stair'),
+          onclick:() => { const at = G.balc.indexOf(cb); if (at >= 0) G.balc.splice(at, 1); buildCanopyUI(); roofDraw(); } }));
+      }
+    } else {
+      canBox.appendChild(el('p', { class:'hint', text:t('Two storeys raise this canopy to the top, with room for a balcony and its stair beneath it.') }));
+    }
   }
   buildCanopyUI();
   roofSide.appendChild(el('div', { class:'gh', text:'Chimney' }));
@@ -8746,6 +8858,15 @@ function buildRoof(host) {
         const fr = canopyFrame(cpH);
         fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
           if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) faces.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26' });
+        }));
+      });
+      /* stone stairs up to canopy balconies, flight by flight in stone */
+      balcGeo(MASS).ok.forEach(B => {
+        if (B.mode !== 'out' || !B.b.stair) return;
+        const st = stairFor(B, MASS);
+        if (!st || !st.ok) return;
+        st.boxes.forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
+          if (camSees(A, nn[0], nn[1], nn[2])) faces.push({ pts:q, fill:STONE_FILL });
         }));
       });
       const depth = F => F.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / F.pts.length;
@@ -10692,6 +10813,15 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
             if (camSees(A, -tx, -ty, 0)) items.push({ pts:slabO.sideA, fill:sideFill, d:wD - 0.065 });
           }
         }
+      });
+      /* stone stairs to canopy balconies, flight by flight in stone */
+      balcGeo(MASS).ok.forEach(B => {
+        if (B.mode !== 'out' || !B.b.stair) return;
+        const st = stairFor(B, MASS);
+        if (!st || !st.ok) return;
+        st.boxes.forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
+          if (camSees(A, nn[0], nn[1], nn[2])) items.push({ pts:q, fill:STONE_FILL });
+        }));
       });
       Mm.steps.forEach(st => {
         if (!camSees(A, st.n[0], st.n[1], 0)) return;
@@ -16592,6 +16722,12 @@ style === 'sketch' ? '#EFEBE0'
         if (!sl.pts || sl.pts.length < 3) return;
         items.push({ pts:sl.pts, fill:'rgba(190,185,175,.92)', d:dc(sl.pts) });
       });
+      balcGeo(MASS).ok.forEach(B => {
+        if (B.mode !== 'out' || !B.b.stair) return;
+        const st = stairFor(B, MASS);
+        if (!st || !st.ok) return;
+        st.boxes.forEach(Bx => boxSides(Bx).forEach(([q]) => items.push({ pts:q, fill:'#A9A294', d:dc(q) })));
+      });
     } catch (e) {}
     /* solar collection above the tiles, held for the pass past the sorted
        massing (see below): a whole slope's averaged depth would bury them */
@@ -17450,6 +17586,14 @@ function exportModel() {
       add('balcony', 'Balcony ' + no + ' slab, floor ' + k, 'AA-BALCONY', B.rects.reduce((acc, r) => acc.concat(box(r[0], r[1], z - BALC_SLAB, r[2], r[3], z)), []), { depth:B.d, width:B.w, mat:'AA_Slab' });
       add('railing', 'Balcony ' + no + ' parapet, floor ' + k, 'AA-BALCONY', BSx.solids.filter(sl => sl.B === B && sl.k === k && sl.kind === 'par').map(sl => [sl.pts, sl.n]));
     });
+  });
+  bgx.ok.forEach(B => {
+    if (B.mode !== 'out' || !B.b.stair) return;
+    const st = stairFor(B, G);
+    if (!st || !st.ok) return;
+    const no = bgx.all.indexOf(B) + 1;
+    add('stair', 'Stone stair to Balcony ' + no, 'AA-STONE', st.boxes.reduce((acc, Bx) => acc.concat(boxSides(Bx)), []),
+      { steps:st.n, riser:+st.riser.toFixed(3), tread:+st.tread.toFixed(2), run:+st.run.toFixed(2), floor:st.level, mat:'AA_Stone' });
   });
   Ls.forEach(L => {
     const pars = [];
