@@ -18006,13 +18006,28 @@ function studyJSON() {
     its "Continue a saved assessment" loader accepts the file as-is and its
     future backend can read the same payload from localStorage key
     'arca-handoff-construction' ({kind:'architecture-advisor-handoff',
-    handoffVersion:1, savedAt, payload}).
+    handoffVersion:2, savedAt, payload}).
+    Areas are orientation-first: BUDGET elements carry byOrientation splits by
+    true solar compass (8-wind) plus horizontal (F) where it applies —
+    opaque walls net, glazing, glazed doors and skylights each know their
+    facing, since different technologies apply per facing and per position
+    (facade / roof slope / skylight / horizontal).
     Contract v1. Receiver BEWARE: version below pins the session shape the
     file was validated against (their loader ignores version, checks app).
     Fields this app cannot know (interior assemblies, prices, glazing spec)
     are left out so the receiver keeps its defaults. */
 const CA_HANDOFF_VERSION = '2.42.0';
 const CA_RW_SIZES = { '55x78':[0.55, 0.78], '78x98':[0.78, 0.98], '78x140':[0.78, 1.40], '114x118':[1.14, 1.18] };  // mirrors RW_SIZES in buildOpenings
+const CA_COMPASS8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const caZero8 = () => ({ N:0, NE:0, E:0, SE:0, S:0, SW:0, W:0, NW:0 });
+/* plan-frame vector of a true azimuth (same turn the app draws), inverted by
+   search so a slope's downhill direction reads back its solar facing */
+const caPlanVec = (az, rot) => { const a = (rot - 180) * Math.PI / 180, X = Math.sin(az * Math.PI / 180), Y = Math.cos(az * Math.PI / 180); return [X * Math.cos(a) - Y * Math.sin(a), X * Math.sin(a) + Y * Math.cos(a)]; };
+function slopeCompass(dx, dy, rot) {
+  let best = 'N', bd = -2;
+  CA_COMPASS8.forEach((c, i) => { const v = caPlanVec(i * 45, rot), d = (dx * v[0] + dy * v[1]) / (Math.hypot(dx, dy) || 1); if (d > bd) { bd = d; best = c; } });
+  return best;
+}
 function collectConstructionHandoff() {
   if (!STATE.site || !MASS || !ROOF || !OPEN) return { ok:false, reason:'no-study' };
   const G = MASS, RF = ROOF, H0 = G.fl * G.fh;
@@ -18048,12 +18063,16 @@ function collectConstructionHandoff() {
       units:units.map(q => ({ area:r2(q.area), width:r2(q.w), door:q.door, gel:q.gel })) };
     tot.wall += wall; tot.glass += glass; tot.doors += doors; tot.gel += gel;
   });
-  /* clerestory step walls: same spans the tab uses, band from the lower roof */
+  /* clerestory step walls: same spans the tab uses, band from the lower roof,
+     accumulated by each run's own true facing */
   let cWall = 0, cGlass = 0, cDoors = 0, cGel = 0;
+  const cWallO = caZero8(), cGlassO = caZero8(), cDoorO = caZero8(), cGelO = caZero8();
   if (OPEN.C) {
     const us = faceUnits('C');
     stepWinList(Mm, H0, RF).forEach(x => {
-      cWall += x.w.glass / (OPEN.C.wwr || 1);
+      const comp = stepCompassEN(x.sg.n, G.rot);
+      const wHere = x.w.glass / (OPEN.C.wwr || 1);
+      cWall += wHere; cWallO[comp] += wHere;
       const u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
       x.w.rows.forEach(r => {
         glassSpans('C', u0, u1, x.sg.len, 0).forEach(sp => {
@@ -18062,31 +18081,65 @@ function collectConstructionHandoff() {
           const e = unitFloor(u, 0);
           const vv = spanVC(u, r.sill, r.head, x.w.base, x.w.ceil);
           const a = Math.max(0, sp.b - sp.a) * Math.max(0, vv[1] - vv[0]);
-          if (e.door) cDoors += a; else if (e.gel) cGel += a; else cGlass += a;
+          if (e.door) { cDoors += a; cDoorO[comp] += a; } else if (e.gel) { cGel += a; cGelO[comp] += a; } else { cGlass += a; cGlassO[comp] += a; }
         });
       });
     });
   }
+  /* roof windows sit on slopes: map each slope count to that slope's true
+     facing (flat roofs take skylights, bucket F = horizontal) */
   const rwz = CA_RW_SIZES[RWIN.size] || CA_RW_SIZES['78x140'];
-  const rwArea = ((RWIN.s || 0) + (RWIN.n || 0) + (RWIN.e || 0) + (RWIN.w || 0)) * rwz[0] * rwz[1];
-  const roofArea = Mm.pieces.reduce((a, pc) => { const t = (pc.f && pc.f.t) || 0; return a + (pc.area || 0) * Math.sqrt(1 + t * t); }, 0);
+  const rwUnit = rwz[0] * rwz[1];
+  const skyO = caZero8(); let skyF = 0;
+  if (RF.n === 0) skyF = (RWIN.s || 0) * rwUnit;
+  else {
+    const slopeOf = { s:'S', n:'N', e:'E', w:'W' };
+    Object.keys(slopeOf).forEach(k => {
+      const n = RWIN[k] || 0;
+      if (!n || !per[slopeOf[k]]) return;
+      skyO[per[slopeOf[k]].compass] += n * rwUnit;
+    });
+  }
+  const rwArea = skyF + Object.keys(skyO).reduce((a, k) => a + skyO[k], 0);
+  /* roof slopes by true facing (downhill direction); flat pieces bucket F */
+  const roofO = caZero8(); let roofF = 0, roofArea = 0;
+  Mm.pieces.forEach(pc => {
+    const t = (pc.f && pc.f.t) || 0, a = (pc.area || 0) * Math.sqrt(1 + t * t);
+    roofArea += a;
+    if (t < 0.02 || !pc.f) roofF += a;
+    else roofO[slopeCompass(-pc.f.a, -pc.f.b, G.rot)] += a;
+  });
+  /* compass buckets: walls opaque net, glass, doors (vertical: facades +
+     clerestory; horizontal/glazed: roof + skylights separate) */
+  const wallO = caZero8(), glassO = caZero8(), doorO = caZero8();
+  FACES4.forEach(f => {
+    const p = per[f], c = p.compass, op = Math.max(0, p.wall - p.glass - p.doors - p.gel);
+    wallO[c] += op; glassO[c] += p.glass; doorO[c] += p.doors;
+  });
+  CA_COMPASS8.forEach(c => { const op = Math.max(0, (cWallO[c] || 0) - (cGlassO[c] || 0) - (cDoorO[c] || 0) - (cGelO[c] || 0)); wallO[c] += op; glassO[c] += cGlassO[c] || 0; doorO[c] += cDoorO[c] || 0; });
+  const glassTot = tot.glass + cGlass, doorTot = tot.doors + cDoors;
+  CA_COMPASS8.forEach(c => { glassO[c] += skyO[c] || 0; });
+  const winTot = glassTot + doorTot + rwArea;
   const plan = planModel(G);
   const footprint = plan.area || 0;
   const perim = ((plan.segs || []).reduce((a, sg) => a + (sg.len || 0), 0));
   const S = STATE.site;
-  const opaqueExt = (tot.wall + cWall) - (tot.glass + cGlass) - (tot.doors + cDoors) - (tot.gel + cGel);
+  const rO = o => { const r = {}; CA_COMPASS8.forEach(c => { r[c] = r2(o[c] || 0); }); return r; };
   const payload = {
     app:'Construction Advisor PT', version:CA_HANDOFF_VERSION, savedAt:new Date().toISOString(),
     site:{ conc:S.place || S.nuts, nuts:S.nuts, alt:S.alt, use:S.use === 'cs' ? 'cs' : 'hab', operation:S.operation === 'renovation' ? 'renovation' : 'new' },
     state:{
       FLR_STATE:{ area:r2(footprint), perim:r2(perim) },
       BUDGET_STATE:{
-        roof:{ area:r1(roofArea) }, ground:{ area:r1(footprint) },
-        wext:{ area:r2(Math.max(0, opaqueExt)) }, win:{ area:r2(tot.glass + tot.doors + cGlass + cDoors + rwArea) }
+        roof:Object.assign({ area:r1(roofArea) }, { byOrientation:Object.assign(rO(roofO), { F:r1(roofF) }) }),
+        ground:{ area:r1(footprint) },
+        wext:Object.assign({ area:r2(CA_COMPASS8.reduce((a, c) => a + wallO[c], 0)) }, { byOrientation:rO(wallO) }),
+        win:Object.assign({ area:r2(winTot) },
+          { byOrientation:rO(glassO), skylights:Object.assign({ area:r1(rwArea) }, { byOrientation:Object.assign(rO(skyO), { F:r1(skyF) }) }), doors:{ area:r2(doorTot), byOrientation:rO(doorO) } })
       }
     },
     meta:{
-      handoff:{ kind:'architecture-advisor-handoff', handoffVersion:1,
+      handoff:{ kind:'architecture-advisor-handoff', handoffVersion:2,
         from:{ app:APP.name, version:APP.version }, receiverPinned:CA_HANDOFF_VERSION },
       site:{ lat:S.lat, lon:S.lon },
       building:{ stories:G.fl, floorHeight:G.fh, length:G.L, depth:G.D, form:G.form || 'rect', rotation:G.rot, patio:(G.patio && G.patio.on) ? G.patio : null,
@@ -18095,9 +18148,11 @@ function collectConstructionHandoff() {
         roofWindows:{ area:r1(rwArea), size:RWIN.size }, roof:{ type:['flat', 'shed', 'gable', 'hip'][RF.n], pitch:RF.n === 0 ? 0 : RF.th, slopeArea:r1(roofArea) },
         floor:{ footprintArea:r2(footprint), perimeter:r2(perim) }, brickVentilation:r2(tot.gel + cGel) },
       finishes:{ wall:(MASS.col === undefined ? null : MASS.col), roof:(ROOF.col === undefined ? null : ROOF.col) },
-      notes:['U-values, layer build-ups, interior assemblies, prices and glazing spec stay manual in the receiver — this app does not decide them.',
+      notes:['Areas split by true solar compass (8-wind) + horizontal (F): walls opaque net, glazing, glazed doors and skylights each carry their facing — different technologies apply per facing.',
+        'U-values, layer build-ups, interior assemblies, prices and glazing spec stay manual in the receiver — this app does not decide them.',
         'Exterior paving is not modelled here; ground-slab area/perimeter carry the footprint instead.',
-        'Outline perimeter includes patio inner edges, as the app draws the outline; floor area is net of patio.']
+        'Outline perimeter includes patio inner edges, as the app draws the outline; floor area is net of patio.',
+        'Brick ventilation has no receiver field and travels in meta only.']
     }
   };
   return { ok:true, payload };
@@ -18105,7 +18160,7 @@ function collectConstructionHandoff() {
 function continueToConstruction() {
   const r = collectConstructionHandoff();
   if (!r.ok) { toast('Open a study first — set the site, then continue'); return; }
-  try { localStorage.setItem('arca-handoff-construction', JSON.stringify({ kind:'architecture-advisor-handoff', handoffVersion:1, savedAt:r.payload.savedAt, payload:r.payload })); } catch (e) {}
+  try { localStorage.setItem('arca-handoff-construction', JSON.stringify({ kind:'architecture-advisor-handoff', handoffVersion:2, savedAt:r.payload.savedAt, payload:r.payload })); } catch (e) {}
   download(new Blob([JSON.stringify(r.payload, null, 2)], { type:'application/json' }), cadStem() + '-construction-handoff.json');
   toast('Study packed for Construction Advisor');
   setTimeout(() => window.open('https://ncorticos.github.io/construction-advisor-pt/', '_blank'), 600);
