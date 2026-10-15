@@ -17999,6 +17999,116 @@ function studyJSON() {
     readout:JSON.parse(toDecisionsJSON())
   }, null, 2);
 }
+/** Handoff to Construction Advisor PT (same-origin continuation).
+    Collects everything that app needs and this one knows — site (SCE zones
+    match by construction), measured envelope areas, glazing/door splits —
+    into the receiver's own session shape ({app, version, site, state}), so
+    its "Continue a saved assessment" loader accepts the file as-is and its
+    future backend can read the same payload from localStorage key
+    'arca-handoff-construction' ({kind:'architecture-advisor-handoff',
+    handoffVersion:1, savedAt, payload}).
+    Contract v1. Receiver BEWARE: version below pins the session shape the
+    file was validated against (their loader ignores version, checks app).
+    Fields this app cannot know (interior assemblies, prices, glazing spec)
+    are left out so the receiver keeps its defaults. */
+const CA_HANDOFF_VERSION = '2.42.0';
+const CA_RW_SIZES = { '55x78':[0.55, 0.78], '78x98':[0.78, 0.98], '78x140':[0.78, 1.40], '114x118':[1.14, 1.18] };  // mirrors RW_SIZES in buildOpenings
+function collectConstructionHandoff() {
+  if (!STATE.site || !MASS || !ROOF || !OPEN) return { ok:false, reason:'no-study' };
+  const G = MASS, RF = ROOF, H0 = G.fl * G.fh;
+  const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
+  const Mm = roofModel(G, RF), pl = Mm.pl;
+  const FACES4 = ['S', 'N', 'E', 'W'];
+  const per = {}, tot = { wall:0, glass:0, doors:0, gel:0 };
+  FACES4.forEach(f => {
+    const o = OPEN[f];
+    if (!o) return;
+    const us = faceUnits(f);
+    const ws = pl.segs.filter(sg => segFace(sg) === f).map(sg => ({ sg, w:segWindow(sg, G) })).filter(x => x.w);
+    let wall = 0, glass = 0, doors = 0, gel = 0;
+    const units = us.map(u => { const e = unitFloor(u, 0); return { area:0, w:0, door:!!e.door, gel:!!e.gel }; });
+    ws.forEach(x => {
+      wall += x.w.glass / (o.wwr || 1);
+      const u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
+      x.w.rows.forEach((r, k) => {
+        const hTop = Math.min(r.head, H0);
+        glassSpans(f, u0, u1, x.sg.len, k).forEach(sp => {
+          const u = us[sp.ui];
+          if (!sp.on || !u) return;
+          const e = unitFloor(u, k);
+          const vv = e.door ? doorSpanV(u, hTop, k, G.fh) : unitSpanV(u, r.sill, hTop, k, G.fh);
+          const a = Math.max(0, sp.b - sp.a) * Math.max(0, vv[1] - vv[0]);
+          units[sp.ui].area += a; units[sp.ui].w += Math.max(0, sp.b - sp.a);
+          if (e.door) doors += a; else if (e.gel) gel += a; else glass += a;
+        });
+      });
+    });
+    const az = (G.rot + { S:0, N:180, E:270, W:90 }[f]) % 360;
+    per[f] = { compass:COMPASS8_EN[Math.round(az / 45) % 8], wall:r2(wall), glass:r2(glass), doors:r2(doors), gel:r2(gel),
+      units:units.map(q => ({ area:r2(q.area), width:r2(q.w), door:q.door, gel:q.gel })) };
+    tot.wall += wall; tot.glass += glass; tot.doors += doors; tot.gel += gel;
+  });
+  /* clerestory step walls: same spans the tab uses, band from the lower roof */
+  let cWall = 0, cGlass = 0, cDoors = 0, cGel = 0;
+  if (OPEN.C) {
+    const us = faceUnits('C');
+    stepWinList(Mm, H0, RF).forEach(x => {
+      cWall += x.w.glass / (OPEN.C.wwr || 1);
+      const u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
+      x.w.rows.forEach(r => {
+        glassSpans('C', u0, u1, x.sg.len, 0).forEach(sp => {
+          const u = us[sp.ui];
+          if (!sp.on || !u) return;
+          const e = unitFloor(u, 0);
+          const vv = spanVC(u, r.sill, r.head, x.w.base, x.w.ceil);
+          const a = Math.max(0, sp.b - sp.a) * Math.max(0, vv[1] - vv[0]);
+          if (e.door) cDoors += a; else if (e.gel) cGel += a; else cGlass += a;
+        });
+      });
+    });
+  }
+  const rwz = CA_RW_SIZES[RWIN.size] || CA_RW_SIZES['78x140'];
+  const rwArea = ((RWIN.s || 0) + (RWIN.n || 0) + (RWIN.e || 0) + (RWIN.w || 0)) * rwz[0] * rwz[1];
+  const roofArea = Mm.pieces.reduce((a, pc) => { const t = (pc.f && pc.f.t) || 0; return a + (pc.area || 0) * Math.sqrt(1 + t * t); }, 0);
+  const plan = planModel(G);
+  const footprint = plan.area || 0;
+  const perim = ((plan.segs || []).reduce((a, sg) => a + (sg.len || 0), 0));
+  const S = STATE.site;
+  const opaqueExt = (tot.wall + cWall) - (tot.glass + cGlass) - (tot.doors + cDoors) - (tot.gel + cGel);
+  const payload = {
+    app:'Construction Advisor PT', version:CA_HANDOFF_VERSION, savedAt:new Date().toISOString(),
+    site:{ conc:S.place || S.nuts, nuts:S.nuts, alt:S.alt, use:S.use === 'cs' ? 'cs' : 'hab', operation:S.operation === 'renovation' ? 'renovation' : 'new' },
+    state:{
+      FLR_STATE:{ area:r2(footprint), perim:r2(perim) },
+      BUDGET_STATE:{
+        roof:{ area:r1(roofArea) }, ground:{ area:r1(footprint) },
+        wext:{ area:r2(Math.max(0, opaqueExt)) }, win:{ area:r2(tot.glass + tot.doors + cGlass + cDoors + rwArea) }
+      }
+    },
+    meta:{
+      handoff:{ kind:'architecture-advisor-handoff', handoffVersion:1,
+        from:{ app:APP.name, version:APP.version }, receiverPinned:CA_HANDOFF_VERSION },
+      site:{ lat:S.lat, lon:S.lon },
+      building:{ stories:G.fl, floorHeight:G.fh, length:G.L, depth:G.D, form:G.form || 'rect', rotation:G.rot, patio:(G.patio && G.patio.on) ? G.patio : null,
+        sunspace:(typeof SUNSP !== 'undefined' && SUNSP && SUNSP.on) ? { face:SUNSP.face, depth:SUNSP.depth, widthFrac:SUNSP.widthFrac } : null },
+      envelope:{ perFacade:per, clerestory:{ wall:r2(cWall), glass:r2(cGlass), doors:r2(cDoors), gel:r2(cGel) },
+        roofWindows:{ area:r1(rwArea), size:RWIN.size }, roof:{ type:['flat', 'shed', 'gable', 'hip'][RF.n], pitch:RF.n === 0 ? 0 : RF.th, slopeArea:r1(roofArea) },
+        floor:{ footprintArea:r2(footprint), perimeter:r2(perim) }, brickVentilation:r2(tot.gel + cGel) },
+      finishes:{ wall:(MASS.col === undefined ? null : MASS.col), roof:(ROOF.col === undefined ? null : ROOF.col) },
+      notes:['U-values, layer build-ups, interior assemblies, prices and glazing spec stay manual in the receiver — this app does not decide them.',
+        'Exterior paving is not modelled here; ground-slab area/perimeter carry the footprint instead.']
+    }
+  };
+  return { ok:true, payload };
+}
+function continueToConstruction() {
+  const r = collectConstructionHandoff();
+  if (!r.ok) { toast('Open a study first — set the site, then continue'); return; }
+  try { localStorage.setItem('arca-handoff-construction', JSON.stringify({ kind:'architecture-advisor-handoff', handoffVersion:1, savedAt:r.payload.savedAt, payload:r.payload })); } catch (e) {}
+  download(new Blob([JSON.stringify(r.payload, null, 2)], { type:'application/json' }), cadStem() + '-construction-handoff.json');
+  toast('Study packed for Construction Advisor');
+  setTimeout(() => window.open('https://ncorticos.github.io/construction-advisor-pt/', '_blank'), 600);
+}
 /** The live state back from a study file, clamped into the current plan's
     limits so an older file cannot break a newer application. Arrays stay the
     same objects — Ventilation holds them by reference. */
@@ -19385,6 +19495,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
   });
   tl.appendChild(el('button', { class:'tab cadbtn', type:'button', text:'Export 3D ▾', onclick:toggleCadMenu }));
   tl.appendChild(el('button', { class:'tab cadbtn', id:'tabSave', type:'button', text:'Save study ▾', onclick:toggleSaveMenu }));
+  tl.appendChild(el('button', { class:'tab cadbtn', type:'button', text:'Continue to Construction ▸', onclick:continueToConstruction }));
   activate(TABS.some(x => x.key === keepTab) ? keepTab : TABS[0].key);
   if (keepScroll) { window.scrollTo(0, scrollY0); requestAnimationFrame(() => window.scrollTo(0, scrollY0)); setTimeout(() => window.scrollTo(0, scrollY0), 200); }
 
