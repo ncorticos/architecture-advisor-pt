@@ -4280,39 +4280,106 @@ function canopyFrame(hit) {
 /** Stone for canvas loops, kin to the embasamento. */
 const STONE_FILL = '#A9A294';
 const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_IDEAL = 0.28;
-/** A stone stair up to a projecting balcony: a solid masonry flight parallel
-    to the facade, alongside the balcony, top tread flush with its slab.
-    B is a balcOne result whose entry carries stair (set by the Roof tab's
-    eave-canopy button); returns null without one, {ok:false,why} with no
-    room along the wall. World boxes, same convention as canopyFrame.box. */
-function stairFor(B, G) {
-  if (!B || !B.ok || B.mode !== 'out' || !B.b || !B.b.stair) return null;
-  const ks = (B.levels || []).filter(k => k >= 2);
-  if (!ks.length) return null;
-  const k = Math.max.apply(null, ks), zTop = (k - 1) * G.fh;
-  if (!(zTop > 1.0)) return null;
-  const n = Math.max(2, Math.ceil(zTop / STAIR_RISER_MAX)), riser = zTop / n;
-  const sg = B.sg, len = sg.len, tx = (sg.b[0] - sg.a[0]) / len, ty = (sg.b[1] - sg.a[1]) / len;
-  const roomL = B.u0, roomR = len - B.u1;
-  const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
-  const tread = Math.min(STAIR_TREAD_IDEAL, room / n);
-  if (!(tread >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for the stair along this wall', level:k, zTop };
-  const sw = Math.min(STAIR_W, B.d);
+/** A straight masonry flight parallel to a wall: from the landing level
+    zTop down n risers to the ground, top tread flush with the landing edge
+    uEdge, running toward dirSign. World boxes, canopyFrame.box convention. */
+function flightBoxes(sg, uEdge, dirSign, zTop, riser, n, tread, sw) {
+  const len = sg.len, tx = (sg.b[0] - sg.a[0]) / len, ty = (sg.b[1] - sg.a[1]) / len;
   const P = (u, v) => [sg.a[0] + tx * u + sg.n[0] * v, sg.a[1] + ty * u + sg.n[1] * v];
   const boxes = [];
   for (let i = 0; i < n; i++) {
-    const a = side > 0 ? B.u1 + i * tread : B.u0 - (i + 1) * tread, zt = zTop - i * riser;
+    const a = dirSign > 0 ? uEdge + i * tread : uEdge - (i + 1) * tread, zt = zTop - i * riser;
     const p = P(a, 0), q = P(a + tread, sw);
     boxes.push([Math.min(p[0], q[0]), Math.min(p[1], q[1]), 0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), zt]);
   }
-  return { ok:true, boxes, n, riser, tread, run:n * tread, side, level:k, zTop, sw, why:null };
+  return { boxes, endU:dirSign > 0 ? uEdge + n * tread : uEdge - n * tread };
+}
+/** Top landing level of a balcony's stair: the highest floor it serves. */
+function stairTopOf(B, G) {
+  const ks = (B.levels || []).filter(k => k >= 2);
+  if (!ks.length) return null;
+  const k = Math.max.apply(null, ks), zTop = (k - 1) * G.fh;
+  return zTop > 1.0 ? { k, zTop } : null;
+}
+/** The wall meeting this wall's end at a corner, if any: same outline point
+    within a hair, running another way — where a stair can turn. */
+function cornerWallFor(sg, side, segs) {
+  const E = side > 0 ? sg.b : sg.a;
+  const tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len;
+  let best = null, bd = 0.02;
+  for (const q of segs || []) {
+    if (q === sg || q.len < 1) continue;
+    const qx = (q.b[0] - q.a[0]) / q.len, qy = (q.b[1] - q.a[1]) / q.len;
+    if (Math.abs(qx * tx + qy * ty) > 0.99) continue;
+    const da = Math.hypot(q.a[0] - E[0], q.a[1] - E[1]), db = Math.hypot(q.b[0] - E[0], q.b[1] - E[1]);
+    const d = Math.min(da, db);
+    if (d < bd) { bd = d; best = { sg:q, dir:da <= db ? 1 : -1 }; }
+  }
+  return best;
+}
+/** Straight flight alongside the balcony, as before. */
+function buildStraight(B, G) {
+  const tp = stairTopOf(B, G);
+  if (!tp) return null;
+  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n;
+  const sg = B.sg, len = sg.len;
+  const roomL = B.u0, roomR = len - B.u1;
+  const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
+  const tread = Math.min(STAIR_TREAD_IDEAL, room / n);
+  if (!(tread >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
+  const sw = Math.min(STAIR_W, B.d);
+  const uEdge = side > 0 ? B.u1 : B.u0;
+  const f = flightBoxes(sg, uEdge, side, tp.zTop, riser, n, tread, sw);
+  return { ok:true, boxes:f.boxes, n, riser, tread, run:n * tread, side, level:tp.k, zTop:tp.zTop, sw, wrapped:false, why:null };
+}
+/** L-shaped flight turning the corner at the stair's end: down to a stone
+    landing at the corner, then down the next wall. Same total risers. */
+function buildWrapped(B, G, segs) {
+  const tp = stairTopOf(B, G);
+  if (!tp) return null;
+  const sg = B.sg, len = sg.len;
+  const roomL = B.u0, roomR = len - B.u1;
+  const side = roomR >= roomL ? 1 : -1, run1 = Math.max(roomR, roomL);
+  if (run1 < 0.5) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
+  const cw = cornerWallFor(sg, side, segs);
+  if (!cw) return { ok:false, why:'no corner this way to turn', level:tp.k, zTop:tp.zTop };
+  const run2max = cw.sg.len - 0.3;
+  if (run2max < 0.5) return { ok:false, why:'no room round the corner', level:tp.k, zTop:tp.zTop };
+  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n;
+  const n1 = Math.max(1, Math.min(n - 1, Math.round(n * run1 / (run1 + run2max))));
+  const n2 = n - n1, t1 = run1 / n1;
+  let t2 = Math.min(STAIR_TREAD_IDEAL, run2max / n2);
+  if (!(t1 >= STAIR_TREAD_MIN) || !(t2 >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
+  const sw = Math.min(STAIR_W, B.d), zMid = tp.zTop - n1 * riser;
+  const uEdge = side > 0 ? B.u1 : B.u0;
+  const f1 = flightBoxes(sg, uEdge, side, tp.zTop, riser, n1, t1, sw);
+  const C = side > 0 ? sg.b : sg.a;
+  const land = [Math.min(C[0] - sw / 2, C[0] + sw / 2), Math.min(C[1] - sw / 2, C[1] + sw / 2), 0,
+    Math.max(C[0] - sw / 2, C[0] + sw / 2), Math.max(C[1] - sw / 2, C[1] + sw / 2), zMid];
+  const q = cw.sg, qu = cw.dir > 0 ? 0 : q.len;
+  const f2 = flightBoxes(q, qu, cw.dir, zMid, riser, n2, t2, sw);
+  return { ok:true, boxes:f1.boxes.concat([land], f2.boxes), n, riser, tread:(run1 + n2 * t2) / n, run:run1 + n2 * t2, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
+}
+/** The stair, straight or turning the corner when asked (b.stair.wrap):
+    straight with no flag; null everywhere without one. cornerAvail tells
+    the UI whether the corner question is worth asking. */
+function stairFor(B, G) {
+  if (!B || !B.ok || B.mode !== 'out' || !B.b || !B.b.stair) return null;
+  const segs = planModel(G).segs;
+  if (B.b.stair.wrap) {
+    const w = buildWrapped(B, G, segs);
+    if (w && w.ok) return Object.assign(w, { cornerAvail:true });
+  }
+  const s = buildStraight(B, G);
+  if (!s) return null;
+  return Object.assign(s, { cornerAvail:!!(buildWrapped(B, G, segs) || {}).ok });
 }
 /** One CSV-ready line for a balcony's stair, or '' without one. */
 function stairCsv(B, G) {
   if (!B || !B.b || !B.b.stair) return '';
   const st = stairFor(B, G);
   if (!st || !st.ok) return ', stair does not fit along this wall';
-  return ', stone stair ' + st.n + ' steps × ' + fmt(st.riser * 100, 0) + ' cm, run ' + fmt(st.run, 2) + ' m';
+  return ', stone stair ' + st.n + ' steps × ' + fmt(st.riser * 100, 0) + ' cm, run ' + fmt(st.run, 2) + ' m' + (st.wrapped ? ', turns the corner' : '');
 }
 /** The side faces of a world box that a viewer sees, as [quad, outward normal] pairs. */
 function boxSides(B) {
@@ -8476,6 +8543,30 @@ function buildRoof(host) {
       + (dropHeld ? ' · ' + t('drop held to keep root 2.1 m clear') : '')
       + ' · ' + (fr.n ? fr.n + ' ' + t('timber posts') + ', ' + t('spans of') + ' ' + fmt(fr.span, 2) + ' m' : t('hung from the wall, no posts up to 0.5 m'));
   };
+  /** Readout for a canopy balcony: dims, stair, corner state. */
+  function canopyBalconyText(cb) {
+    const B = balcGeo(G).all[G.balc.indexOf(cb)];
+    if (!B || !B.ok) return t(B ? B.why : 'Balcony cannot be built here');
+    const st = cb.stair ? stairFor(B, G) : null;
+    let s = t('Balcony') + ' ' + fmt(B.w, 1) + ' \u00d7 ' + fmt(B.d, 1) + ' m \u00b7 ' + t('floor') + ' ' + B.levels.join('+');
+    if (!cb.stair) return s + ' \u00b7 ' + t('stone stair off');
+    if (st && st.ok) return s + ' \u00b7 ' + t('stone stair') + ' ' + st.n + ' \u00d7 ' + fmt(st.riser * 100, 0) + ' cm' + (st.wrapped ? ' \u00b7 ' + t('turns the corner') : '');
+    return s + ' \u00b7 ' + t('stair does not fit along this wall');
+  }
+  /** The three as one: a canopy nudge carries its balconies (same zone,
+      same face) — position and width; depth stays the balcony's own. */
+  function syncCanopyBalcony(c, zi) {
+    if (!c || !G.balc) return;
+    let targets = G.balc.filter(b => b.fromCanopy && b.canopyZi === zi);
+    if (!targets.length) {
+      const fm = G.balc.filter(b => b.fromCanopy && b.f === c.f);
+      if (fm.length === 1) targets = fm;
+    }
+    targets.forEach(b => {
+      b.f = c.f; b.x = +c.x.toFixed(2); b.y = +c.y.toFixed(2); b.w = Math.min(+(c.w || 3), 8);
+      if (canBox && canBox._cbSays) canBox._cbSays.textContent = canopyBalconyText(b);
+    });
+  }
   /** A balcony under the eave canopy, with its stone stair: projecting, on
       the middle (upper) floor, centred on the canopy and as wide as it. */
   function addCanopyBalcony() {
@@ -8489,7 +8580,7 @@ function buildRoof(host) {
     const tx = (hit.sg.b[0] - hit.sg.a[0]) / hit.sg.len, ty = (hit.sg.b[1] - hit.sg.a[1]) / hit.sg.len;
     const um = (hit.u0 + hit.u1) / 2;
     const entry = { f:segFace(hit.sg), x:+((hit.sg.a[0] + tx * um).toFixed(2)), y:+((hit.sg.a[1] + ty * um).toFixed(2)),
-      mode:'out', w:Math.min(+(c.w || 3), 8), d:1.5, lv:2, corner:0, fromCanopy:true, stair:{ w:STAIR_W } };
+      mode:'out', w:Math.min(+(c.w || 3), 8), d:1.5, lv:2, corner:0, fromCanopy:true, canopyZi:roofEditIdx(), stair:{ w:STAIR_W } };
     G.balc.push(entry);
     const B = balcGeo(G).all[G.balc.length - 1];
     if (!B || !B.ok) {
@@ -8525,7 +8616,7 @@ function buildRoof(host) {
     canBox.appendChild(tgl);
     if (!on) return;
     const c = RZ.canopy;
-    canWCtl = rangeCtl('Canopy width', 1, 8, 0.1, clamp(+c.w || 3, 1, 8), v => { c.w = +v.toFixed(1); canopyWords(); roofDraw(); }, v => fmt(v, 1) + ' m');
+    canWCtl = rangeCtl('Canopy width', 1, 8, 0.1, clamp(+c.w || 3, 1, 8), v => { c.w = +v.toFixed(1); syncCanopyBalcony(c, roofEditIdx()); canopyWords(); roofDraw(); }, v => fmt(v, 1) + ' m');
     canDCtl = rangeCtl('Canopy depth', 0.6, 4, 0.05, clamp(+c.d || 1.5, 0.6, 4), v => { c.d = +v.toFixed(2); canopyWords(); roofDraw(); }, v => fmt(v, 2) + ' m');
     canPCtl = rangeCtl('Canopy pitch', 0, 45, 1, clamp(+c.p || 0, 0, 45), v => { c.p = Math.round(v); canopyWords(); roofDraw(); }, v => fmt(v, 0) + '°');
     canHCtl = rangeCtl('Canopy drop', 0.05, 1.5, 0.05, canopyDrop(c), v => { c.drop = +v.toFixed(2); canopyWords(); roofDraw(); }, v => fmt(v, 2) + ' m');
@@ -8535,7 +8626,8 @@ function buildRoof(host) {
     canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it, its diamond at the wall up and down to set how far it hangs below the eave. The pitch falls the canopy away from the wall; its depth is measured level. The slab reads 0.07 m thick. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.' }));
     /* upper floor under a tall canopy: on two storeys the posts run to the
        top, and a balcony can stand on the upper floor beneath them, reached
-       by a stone stair alongside it —utto, drag the balcony on Site */
+       by a stone stair alongside it — drag the balcony on Site to move both,
+       and the three follow the canopy as one */
     if (G.fl >= 2) {
       canBox.appendChild(el('div', { class:'gh', text:'Upper floor' }));
       const cb = G.balc.find(b => b.fromCanopy);
@@ -8545,26 +8637,34 @@ function buildRoof(host) {
           onclick:() => { addCanopyBalcony(); } }));
         canBox.appendChild(el('p', { class:'hint', text:t('Two levels: a balcony on the upper floor under this canopy, reached by a stone stair alongside it. It lands in the balcony list on Site, where it drags along the walls like any balcony.') }));
       } else {
-        const B = balcGeo(G).all[G.balc.indexOf(cb)];
-        const wantStair = !!cb.stair;
-        const st = B && B.ok && wantStair ? stairFor(B, G) : null;
         const says = el('p', { class:'hint' });
-        says.textContent = B && B.ok
-          ? t('Balcony') + ' ' + fmt(B.w, 1) + ' × ' + fmt(B.d, 1) + ' m · ' + t('floor') + ' ' + B.levels.join('+')
-            + (st && st.ok ? ' · ' + t('stone stair') + ' ' + st.n + ' × ' + fmt(st.riser * 100, 0) + ' cm'
-              : wantStair ? ' · ' + t('stair does not fit along this wall') : ' · ' + t('stone stair off'))
-          : t(B ? B.why : 'Balcony cannot be built here');
+        says.textContent = canopyBalconyText(cb);
         canBox.appendChild(says);
+        canBox._cbSays = says;
         canBox.appendChild(checkCtl(t('Stone stair'), !!cb.stair, v => {
           if (v) {
             const B2 = balcGeo(G).all[G.balc.indexOf(cb)];
-            const probe = B2 && B2.ok ? Object.assign({}, B2, { b:Object.assign({}, B2.b, { stair:{ w:STAIR_W } }) }) : null;
-            const s2 = probe ? stairFor(probe, G) : null;
-            if (!s2 || !s2.ok) { toast(t((s2 && s2.why) || 'A stair needs a projecting balcony')); buildCanopyUI(); roofDraw(); return; }
+            const mkProbe = wrap => B2 && B2.ok ? Object.assign({}, B2, { b:Object.assign({}, B2.b, { stair:{ w:STAIR_W, wrap:!!wrap } }) }) : null;
+            const okS = mkProbe(false), rS = okS ? stairFor(okS, G) : null;
+            const okW = mkProbe(true), rW = okW ? stairFor(okW, G) : null;
+            if ((!rS || !rS.ok) && (!rW || !rW.ok)) { toast(t(((rS && rS.why) || (rW && rW.why) || 'A stair needs a projecting balcony'))); buildCanopyUI(); roofDraw(); return; }
             cb.stair = { w:STAIR_W };
           } else cb.stair = null;
           buildCanopyUI(); roofDraw();
         }));
+        const B3 = balcGeo(G).all[G.balc.indexOf(cb)];
+        if (B3 && B3.ok && cb.stair && (stairFor(B3, G) || {}).cornerAvail) {
+          canBox.appendChild(checkCtl(t('Turn the corner'), !!(cb.stair && cb.stair.wrap), v => {
+            const B4 = balcGeo(G).all[G.balc.indexOf(cb)];
+            if (!B4 || !B4.ok || !cb.stair) return;
+            if (v) {
+              cb.stair.wrap = true;
+              const s4 = stairFor(B4, G);
+              if (!s4 || !s4.ok || !s4.wrapped) { cb.stair.wrap = false; toast(t('No corner this way to turn')); }
+            } else cb.stair.wrap = false;
+            buildCanopyUI(); roofDraw();
+          }));
+        }
         canBox.appendChild(el('button', { class:'btn small', text:'× ' + t('Remove balcony'), title:t('Remove this balcony and its stair'),
           onclick:() => { const at = G.balc.indexOf(cb); if (at >= 0) G.balc.splice(at, 1); buildCanopyUI(); roofDraw(); } }));
       }
@@ -9693,6 +9793,7 @@ if (F.chim || F.par) {
       c.w = +(u1 - hit0.u0).toFixed(1);
       const uc = hit0.u0 + c.w / 2;
       c.x = +(sg.a[0] + t[0] * uc).toFixed(2); c.y = +(sg.a[1] + t[1] * uc).toFixed(2);
+      syncCanopyBalcony(c, cdrag.zi);
       if (canWCtl && cdrag.zi === roofEditIdx()) syncCtl(canWCtl, c.w, v => fmt(v, 1) + ' m');
       canopyWords();
       roofDraw();
@@ -9727,6 +9828,7 @@ if (F.chim || F.par) {
       else got.y = +clamp(got.y, zz.a0 + 0.3, zz.a1 - 0.3).toFixed(2);
     }
     Object.assign(c, got);
+    syncCanopyBalcony(c, cdrag.zi);
     if (canDCtl && cdrag.zi === roofEditIdx()) syncCtl(canDCtl, c.d, v => fmt(v, 2) + ' m');
     canopyWords();
     roofDraw();
