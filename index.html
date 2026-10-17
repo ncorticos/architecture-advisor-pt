@@ -4277,8 +4277,26 @@ function canopyFrame(hit) {
     .map(u => box(at(u - h, nC - h), at(u + h, nC + h), 0, zBot));
   return { posts, beam:box(at(hit.u0, nC - bw), at(hit.u1, nC + bw), zBot, zTop), n:N, span:(w - 2 * inset) / (N - 1) };
 }
-/** Stone for canvas loops, kin to the embasamento. */
-const STONE_FILL = '#A9A294';
+/** Stone for canvas loops, kin to the embasamento. The treads — each box's
+    top — take the lighter tone, so a flight reads as steps, not a ramp. */
+const STONE_FILL = '#A9A294', STONE_TREAD = '#C6BFB2', STONE_UNDER = '#8D8679';
+/** The stair as one pool entry: every face of every box, tops lightened,
+    painted as a unit far-to-near — a face-by-face depth sort lets the wall
+    behind stripe the flight into a fence. sees(nn) filters by normal (null
+    keeps all faces); dpt(pts) orders the faces within and stamps the
+    entry's own depth for the pool. */
+function stairFaceGroup(st, sees, dpt) {
+  const faces = [];
+  st.boxes.forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
+    if (sees && !sees(nn)) return;
+    faces.push({ pts:q, fill:nn[2] > 0.5 ? STONE_TREAD : nn[2] < -0.5 ? STONE_UNDER : STONE_FILL });
+  }));
+  if (!faces.length) return null;
+  if (dpt) faces.sort((f, g) => dpt(g.pts) - dpt(f.pts));
+  const grp = { stairGrp:faces, pts:[].concat.apply([], faces.map(f => f.pts)) };
+  if (dpt) grp.d = dpt(grp.pts);
+  return grp;
+}
 const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_IDEAL = 0.28;
 /** A straight masonry flight parallel to a wall: from the landing level
     zTop down n risers to the ground, top tread flush with the landing edge
@@ -7368,9 +7386,8 @@ function buildSite(host) {
           if (B.mode !== 'out' || !B.b.stair) return;
           const st = stairFor(B, MASS);
           if (!st || !st.ok) return;
-          st.boxes.forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
-            if (nn[2] !== 0 || seesL(nn)) faces.push({ pts:q, ns:nn[1] !== 0, stone:true });
-          }));
+          const g = stairFaceGroup(st, nn => nn[2] !== 0 || seesL(nn), dep);
+          if (g) faces.push(g);
         });
         RM.walls.forEach(wl => {
           const sg = wl.sg;
@@ -7395,6 +7412,7 @@ function buildSite(host) {
         SORT_AX = null; faces.sort((p, q) => roofWallOrder(p, q) || dep(q.pts) - dep(p.pts) || (p.balc ? 1 : 0) - (q.balc ? 1 : 0)).forEach(fc => {
           const scr = fc.pts.map(q => at(q[0], q[1], beta, q[2]));
           if (fc.balc) { desk.path(scr, true); balcFace(ctx, fc.balc, P3s); return; }
+          if (fc.stairGrp) { fc.stairGrp.forEach(f => { outline(f.pts.map(q => at(q[0], q[1], beta, q[2])), true); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); }); return; }
           if (fc.import) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); return; }
           if (fc.chim || fc.par) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
           outline(scr, true);
@@ -8976,20 +8994,21 @@ function buildRoof(host) {
           if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) faces.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26' });
         }));
       });
-      /* stone stairs up to canopy balconies, flight by flight in stone */
+      /* stone stairs up to canopy balconies: one group per flight, treads
+         lightened, so the wall behind cannot stripe it into a fence */
       balcGeo(MASS).ok.forEach(B => {
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        st.boxes.forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
-          if (camSees(A, nn[0], nn[1], nn[2])) faces.push({ pts:q, fill:STONE_FILL });
-        }));
+        const g = stairFaceGroup(st, nn => camSees(A, nn[0], nn[1], nn[2]), null);
+        if (g) faces.push(g);
       });
       const depth = F => F.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / F.pts.length;
       pushImportFaces(faces);
       pushChimPar(faces, M);
       SORT_AX = A; faces.sort((p, q) => roofWallOrder(p, q) || depth(q) - depth(p)).forEach(F => {
         if (F.balc) { desk.path(F.pts.map(P3), true); balcFace(ctx, F.balc, P3); return; }
+        if (F.stairGrp) { F.stairGrp.forEach(f => { const sp = pathOf(f.pts); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); desk.path(sp, true); }); return; }
         if (F.import) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); return; }
 if (F.chim || F.par) {
           if (F.par && F.sg && F.kind) {
@@ -10932,14 +10951,13 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
           }
         }
       });
-      /* stone stairs to canopy balconies, flight by flight in stone */
+      /* stone stairs to canopy balconies: one group per flight, treads lightened */
       balcGeo(MASS).ok.forEach(B => {
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        st.boxes.forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
-          if (camSees(A, nn[0], nn[1], nn[2])) items.push({ pts:q, fill:STONE_FILL });
-        }));
+        const g = stairFaceGroup(st, nn => camSees(A, nn[0], nn[1], nn[2]), null);
+        if (g) items.push(g);
       });
       Mm.steps.forEach(st => {
         if (!camSees(A, st.n[0], st.n[1], 0)) return;
@@ -10960,6 +10978,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       pushChimPar(items, Mm);
       SORT_AX = A; items.sort((p, q) => roofWallOrder(p, q) || ((q.d === undefined ? depth(q) : q.d) - (p.d === undefined ? depth(p) : p.d))).forEach(it => {
         if (it.balc) { balcFace(ctx, it.balc, P3); return; }
+        if (it.stairGrp) { it.stairGrp.forEach(f => { pathOf(f.pts); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); }); return; }
         if (it.import) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); return; }
         if (it.chim || it.par) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
         if (it.dev) {
@@ -16844,7 +16863,8 @@ style === 'sketch' ? '#EFEBE0'
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        st.boxes.forEach(Bx => boxSides(Bx).forEach(([q]) => items.push({ pts:q, fill:'#A9A294', d:dc(q) })));
+        const g = stairFaceGroup(st, null, dc);
+        if (g) items.push(g);
       });
     } catch (e) {}
     /* solar collection above the tiles, held for the pass past the sorted
@@ -16958,6 +16978,7 @@ style === 'sketch' ? '#EFEBE0'
     items.sort((a, b) => b.d - a.d);
     const kpx = CAM_K * s;
     items.forEach(it => {
+      if (it.stairGrp) { it.stairGrp.forEach(f => poly(f.pts, f.fill, CH.ink, 1.2)); return; }
       if (it.blob) {
         const gnd = proj(FR, it.x, it.y, it.z), top = proj(FR, it.x, it.y, it.z + it.trunkH + (it.H - it.trunkH) / 2);
         if (it.trunkH > 0.2) { stroke(ctx, '#6B4A3A', Math.max(1, kpx * 0.09)); seg(ctx, gnd[0], gnd[1], top[0], top[1]); }
