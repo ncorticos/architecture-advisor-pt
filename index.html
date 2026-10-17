@@ -4333,7 +4333,11 @@ function buildStraight(B, G) {
   return { ok:true, boxes:f.boxes, n, riser, tread, run:n * tread, side, level:tp.k, zTop:tp.zTop, sw, wrapped:false, why:null };
 }
 /** L-shaped flight turning the corner at the stair's end: down to a stone
-    landing at the corner, then down the next wall. Same total risers. */
+    landing at the corner, then down the next wall. The popular rule: the
+    two flights are identical mirrors — the same step count, the same tread,
+    the same width — and the corner decides that tread: the tighter of its
+    two walls sets one tread for both, the landing closing whatever gap a
+    shorter first flight leaves against the corner. */
 function buildWrapped(B, G, segs) {
   const tp = stairTopOf(B, G);
   if (!tp) return null;
@@ -4345,20 +4349,32 @@ function buildWrapped(B, G, segs) {
   if (!cw) return { ok:false, why:'no corner this way to turn', level:tp.k, zTop:tp.zTop };
   const run2max = cw.sg.len - 0.3;
   if (run2max < 0.5) return { ok:false, why:'no room round the corner', level:tp.k, zTop:tp.zTop };
-  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n;
-  const n1 = Math.max(1, Math.min(n - 1, Math.round(n * run1 / (run1 + run2max))));
-  const n2 = n - n1, t1 = run1 / n1;
-  let t2 = Math.min(STAIR_TREAD_IDEAL, run2max / n2);
-  if (!(t1 >= STAIR_TREAD_MIN) || !(t2 >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
+  /* identical flights: an even step count, half down each wall */
+  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX));
+  const n1 = (n % 2 ? n + 1 : n) / 2, n2 = n1, nEven = n1 + n2;
+  const riser = tp.zTop / nEven;
+  /* the corner decides the tread: one tread for both flights, the tighter wall sets it */
+  const t = Math.min(STAIR_TREAD_IDEAL, run1 / n1, run2max / n2);
+  if (!(t >= STAIR_TREAD_MIN)) return { ok:false, why:'the corner leaves no room for two equal flights', level:tp.k, zTop:tp.zTop };
   const sw = Math.min(STAIR_W, B.d), zMid = tp.zTop - n1 * riser;
   const uEdge = side > 0 ? B.u1 : B.u0;
-  const f1 = flightBoxes(sg, uEdge, side, tp.zTop, riser, n1, t1, sw);
+  const f1 = flightBoxes(sg, uEdge, side, tp.zTop, riser, n1, t, sw);
   const C = side > 0 ? sg.b : sg.a;
   const land = [Math.min(C[0] - sw / 2, C[0] + sw / 2), Math.min(C[1] - sw / 2, C[1] + sw / 2), 0,
-    Math.max(C[0] - sw / 2, C[0] + sw / 2), Math.max(C[1] - sw / 2, C[1] + sw / 2), zMid];
+    Math.max(C[0] + sw / 2, C[0] - sw / 2), Math.max(C[1] + sw / 2, C[1] - sw / 2), zMid];
+  /* a shared smaller tread may leave flight 1 short of the corner: the
+     landing stretches back along its wall to meet the last step */
+  const uEnd = side > 0 ? uEdge + n1 * t : uEdge - n1 * t, gap = side > 0 ? len - uEnd : uEnd;
+  const boxes1 = f1.boxes.slice();
+  if (gap > 0.02) {
+    const tu = (sg.b[0] - sg.a[0]) / len, tv = (sg.b[1] - sg.a[1]) / len;
+    const P = (u, v) => [sg.a[0] + tu * u + sg.n[0] * v, sg.a[1] + tv * u + sg.n[1] * v];
+    const p = P(side > 0 ? uEnd : 0, 0), r = P(side > 0 ? len : uEnd, sw);
+    boxes1.push([Math.min(p[0], r[0]), Math.min(p[1], r[1]), 0, Math.max(p[0], r[0]), Math.max(p[1], r[1]), zMid]);
+  }
   const q = cw.sg, qu = cw.dir > 0 ? 0 : q.len;
-  const f2 = flightBoxes(q, qu, cw.dir, zMid, riser, n2, t2, sw);
-  return { ok:true, boxes:f1.boxes.concat([land], f2.boxes), n, riser, tread:(run1 + n2 * t2) / n, run:run1 + n2 * t2, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
+  const f2 = flightBoxes(q, qu, cw.dir, zMid, riser, n2, t, sw);
+  return { ok:true, boxes:boxes1.concat([land], f2.boxes), n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
 }
 /** The stair, straight or turning the corner when asked (b.stair.wrap):
     straight with no flag; null everywhere without one. cornerAvail tells
