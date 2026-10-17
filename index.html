@@ -4291,10 +4291,10 @@ function stairFaceGroup(st, sees, dpt) {
     if (sees && !sees(f.nn)) return;
     faces.push({ pts:f.pts, fill:f.fill });
   }));
-  if (st.landing) boxSides(st.landing).forEach(([q, nn]) => {
+  (st.landing || []).forEach(b => boxSides(b).forEach(([q, nn]) => {
     if (sees && !sees(nn)) return;
     faces.push({ pts:q, fill:nn[2] > 0.5 ? STONE_TREAD : nn[2] < -0.5 ? STONE_UNDER : STONE_FILL });
-  });
+  }));
   if (!faces.length) return null;
   if (dpt) faces.sort((f, g) => dpt(g.pts) - dpt(f.pts));
   const grp = { stairGrp:faces, pts:[].concat.apply([], faces.map(f => f.pts)) };
@@ -4319,18 +4319,24 @@ function flightBoxes(sg, uEdge, dirSign, zTop, riser, n, tread, sw) {
 }
 /** The same flight as one connected solid: a staircase profile extruded out
     from the wall, so the treads and risers are joined surfaces, not a row of
-    separate columns. Returns faces as {pts, nn, fill} — the outer side is a
-    single silhouette, each tread a horizontal rectangle, each riser the vertical
-    face that carries it down to the next tread. */
+    separate columns. Returns faces as {pts, nn, fill} — both sides of the
+    extrusion carry the full staircase silhouette, so the flight is a closed
+    solid; each tread a horizontal rectangle, each riser the vertical face that
+    carries it down to the next tread. */
 function stairFlightFaces(sg, uEdge, dirSign, zTop, riser, n, tread, sw) {
   const len = sg.len, tx = (sg.b[0] - sg.a[0]) / len, ty = (sg.b[1] - sg.a[1]) / len, nv = sg.n;
   const P = (u, v) => [sg.a[0] + tx * u + nv[0] * v, sg.a[1] + ty * u + nv[1] * v];
   const U = i => uEdge + dirSign * i * tread, Z = i => zTop - i * riser;
-  const faces = [], side = [];
-  side.push(P(U(0), sw).concat([0]), P(U(0), sw).concat([Z(0)]));
-  for (let i = 0; i < n; i++) { side.push(P(U(i + 1), sw).concat([Z(i)]), P(U(i + 1), sw).concat([Z(i + 1)])); }
-  side.push(P(U(n), sw).concat([0]));
-  faces.push({ pts:side, nn:[nv[0], nv[1], 0], fill:STONE_FILL });
+  const faces = [];
+  const profile = v => {
+    const s = [];
+    s.push(P(U(0), v).concat([0]), P(U(0), v).concat([Z(0)]));
+    for (let i = 0; i < n; i++) { s.push(P(U(i + 1), v).concat([Z(i)]), P(U(i + 1), v).concat([Z(i + 1)])); }
+    s.push(P(U(n), v).concat([0]));
+    return s;
+  };
+  faces.push({ pts:profile(sw), nn:[nv[0], nv[1], 0], fill:STONE_FILL });
+  faces.push({ pts:profile(0), nn:[-nv[0], -nv[1], 0], fill:STONE_UNDER });
   for (let i = 0; i < n; i++) faces.push({ pts:[P(U(i), 0).concat([Z(i)]), P(U(i + 1), 0).concat([Z(i)]), P(U(i + 1), sw).concat([Z(i)]), P(U(i), sw).concat([Z(i)])], nn:[0, 0, 1], fill:STONE_TREAD });
   for (let i = 0; i < n; i++) faces.push({ pts:[P(U(i + 1), 0).concat([Z(i + 1)]), P(U(i + 1), sw).concat([Z(i + 1)]), P(U(i + 1), sw).concat([Z(i)]), P(U(i + 1), 0).concat([Z(i)])], nn:[tx * dirSign, ty * dirSign, 0], fill:STONE_FILL });
   faces.push({ pts:[P(U(0), 0).concat([0]), P(U(0), 0).concat([Z(0)]), P(U(0), sw).concat([Z(0)]), P(U(0), sw).concat([0])], nn:[-tx * dirSign, -ty * dirSign, 0], fill:STONE_FILL });
@@ -4405,19 +4411,23 @@ function buildWrapped(B, G, segs) {
   const n2 = nEven - n1, zMid = tp.zTop - n1 * riser;
   const uEdge = side > 0 ? B.u1 : B.u0;
   const f1 = stairFlightFaces(sg, uEdge, side, tp.zTop, riser, n1, t, sw);
-  /* the landing is the corner platform: it reaches back along this wall to
-     the last tread, so the flight always runs into it, and forward onto the
-     next wall, where the second flight starts */
+  /* the landing is an L-shaped corner platform, fully outside both walls and
+     as wide as the flights: one leg continues this wall from the last tread
+     past the corner, the other leg reaches onto the next wall up to where the
+     second flight starts — so each flight meets the platform over its whole
+     width, with no half-width overhang */
   const tu = (sg.b[0] - sg.a[0]) / len, tv = (sg.b[1] - sg.a[1]) / len;
   const P = (u, v) => [sg.a[0] + tu * u + sg.n[0] * v, sg.a[1] + tv * u + sg.n[1] * v];
   const endU = side > 0 ? uEdge + n1 * t : uEdge - n1 * t;
   const fromU = side > 0 ? Math.min(endU, len - sw / 2) : Math.max(endU, sw / 2);
-  const toU = side > 0 ? len + sw / 2 : -sw / 2;
-  const p = P(fromU, -sw / 2), r = P(toU, sw / 2);
-  const land = [Math.min(p[0], r[0]), Math.min(p[1], r[1]), 0, Math.max(p[0], r[0]), Math.max(p[1], r[1]), zMid];
+  const box = (p, r) => [Math.min(p[0], r[0]), Math.min(p[1], r[1]), 0, Math.max(p[0], r[0]), Math.max(p[1], r[1]), zMid];
+  const legA = box(P(fromU, 0), P(side > 0 ? len + sw : -sw, sw));
   const q = cw.sg, qu = cw.dir > 0 ? sw / 2 : q.len - sw / 2;
+  const qt = (q.b[0] - q.a[0]) / q.len, quv = (q.b[1] - q.a[1]) / q.len;
+  const Q = (u, v) => [q.a[0] + qt * u + q.n[0] * v, q.a[1] + quv * u + q.n[1] * v];
+  const legB = box(Q(cw.dir > 0 ? 0 : q.len - sw / 2, 0), Q(cw.dir > 0 ? sw / 2 : q.len, sw));
   const f2 = stairFlightFaces(q, qu, cw.dir, zMid, riser, n2, t, sw);
-  return { ok:true, flights:[f1, f2], landing:land, n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
+  return { ok:true, flights:[f1, f2], landing:[legA, legB], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
 }
 /** The stair, straight or turning the corner when asked (b.stair.wrap):
     straight with no flag; null everywhere without one. cornerAvail tells
@@ -16888,7 +16898,7 @@ style === 'sketch' ? '#EFEBE0'
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        const g = stairFaceGroup(st, null, dc);
+        const g = stairFaceGroup(st, nn => nn[2] !== 0 || wallSeen(nn), dc);
         if (g) items.push(g);
       });
     } catch (e) {}
@@ -17758,7 +17768,7 @@ function exportModel() {
     const no = bgx.all.indexOf(B) + 1;
     const faces = [];
     (st.flights || []).forEach(fl => fl.forEach(f => faces.push(f.pts)));
-    if (st.landing) boxSides(st.landing).forEach(([q]) => faces.push(q));
+    (st.landing || []).forEach(b => boxSides(b).forEach(([q]) => faces.push(q)));
     add('stair', 'Stone stair to Balcony ' + no, 'AA-STONE', faces,
       { steps:st.n, riser:+st.riser.toFixed(3), tread:+st.tread.toFixed(2), run:+st.run.toFixed(2), floor:st.level, mat:'AA_Stone' });
   });
