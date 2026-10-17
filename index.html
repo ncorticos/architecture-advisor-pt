@@ -4280,17 +4280,21 @@ function canopyFrame(hit) {
 /** Stone for canvas loops, kin to the embasamento. The treads — each box's
     top — take the lighter tone, so a flight reads as steps, not a ramp. */
 const STONE_FILL = '#A9A294', STONE_TREAD = '#C6BFB2', STONE_UNDER = '#8D8679';
-/** The stair as one pool entry: every face of every box, tops lightened,
-    painted as a unit far-to-near — a face-by-face depth sort lets the wall
-    behind stripe the flight into a fence. sees(nn) filters by normal (null
-    keeps all faces); dpt(pts) orders the faces within and stamps the
-    entry's own depth for the pool. */
+/** The stair as one pool entry: every flight drawn as a connected solid, the
+    landing as its box, treads lightened, painted as a unit far-to-near — a
+    face-by-face depth sort lets the wall behind stripe the flight into a
+    fence. sees(nn) filters by normal (null keeps all faces); dpt(pts) orders
+    the faces within and stamps the entry's own depth for the pool. */
 function stairFaceGroup(st, sees, dpt) {
   const faces = [];
-  st.boxes.forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
+  (st.flights || []).forEach(fl => fl.forEach(f => {
+    if (sees && !sees(f.nn)) return;
+    faces.push({ pts:f.pts, fill:f.fill });
+  }));
+  if (st.landing) boxSides(st.landing).forEach(([q, nn]) => {
     if (sees && !sees(nn)) return;
     faces.push({ pts:q, fill:nn[2] > 0.5 ? STONE_TREAD : nn[2] < -0.5 ? STONE_UNDER : STONE_FILL });
-  }));
+  });
   if (!faces.length) return null;
   if (dpt) faces.sort((f, g) => dpt(g.pts) - dpt(f.pts));
   const grp = { stairGrp:faces, pts:[].concat.apply([], faces.map(f => f.pts)) };
@@ -4312,6 +4316,26 @@ function flightBoxes(sg, uEdge, dirSign, zTop, riser, n, tread, sw) {
     boxes.push([Math.min(p[0], q[0]), Math.min(p[1], q[1]), 0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), zt]);
   }
   return { boxes, endU:dirSign > 0 ? uEdge + n * tread : uEdge - n * tread };
+}
+/** The same flight as one connected solid: a staircase profile extruded out
+    from the wall, so the treads and risers are joined surfaces, not a row of
+    separate columns. Returns faces as {pts, nn, fill} — the outer side is a
+    single silhouette, each tread a horizontal rectangle, each riser the vertical
+    face that carries it down to the next tread. */
+function stairFlightFaces(sg, uEdge, dirSign, zTop, riser, n, tread, sw) {
+  const len = sg.len, tx = (sg.b[0] - sg.a[0]) / len, ty = (sg.b[1] - sg.a[1]) / len, nv = sg.n;
+  const P = (u, v) => [sg.a[0] + tx * u + nv[0] * v, sg.a[1] + ty * u + nv[1] * v];
+  const U = i => uEdge + dirSign * i * tread, Z = i => zTop - i * riser;
+  const faces = [], side = [];
+  side.push(P(U(0), sw).concat([0]), P(U(0), sw).concat([Z(0)]));
+  for (let i = 0; i < n; i++) { side.push(P(U(i + 1), sw).concat([Z(i)]), P(U(i + 1), sw).concat([Z(i + 1)])); }
+  side.push(P(U(n), sw).concat([0]));
+  faces.push({ pts:side, nn:[nv[0], nv[1], 0], fill:STONE_FILL });
+  for (let i = 0; i < n; i++) faces.push({ pts:[P(U(i), 0).concat([Z(i)]), P(U(i + 1), 0).concat([Z(i)]), P(U(i + 1), sw).concat([Z(i)]), P(U(i), sw).concat([Z(i)])], nn:[0, 0, 1], fill:STONE_TREAD });
+  for (let i = 0; i < n; i++) faces.push({ pts:[P(U(i + 1), 0).concat([Z(i + 1)]), P(U(i + 1), sw).concat([Z(i + 1)]), P(U(i + 1), sw).concat([Z(i)]), P(U(i + 1), 0).concat([Z(i)])], nn:[tx * dirSign, ty * dirSign, 0], fill:STONE_FILL });
+  faces.push({ pts:[P(U(0), 0).concat([0]), P(U(0), 0).concat([Z(0)]), P(U(0), sw).concat([Z(0)]), P(U(0), sw).concat([0])], nn:[-tx * dirSign, -ty * dirSign, 0], fill:STONE_FILL });
+  faces.push({ pts:[P(U(n), 0).concat([0]), P(U(n), sw).concat([0]), P(U(n), sw).concat([Z(n)]), P(U(n), 0).concat([Z(n)])], nn:[tx * dirSign, ty * dirSign, 0], fill:STONE_FILL });
+  return faces;
 }
 /** Top landing level of a balcony's stair: the highest floor it serves. */
 function stairTopOf(B, G) {
@@ -4348,8 +4372,8 @@ function buildStraight(B, G) {
   if (!(tread >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
   const sw = Math.min(STAIR_W, B.d);
   const uEdge = side > 0 ? B.u1 : B.u0;
-  const f = flightBoxes(sg, uEdge, side, tp.zTop, riser, n, tread, sw);
-  return { ok:true, boxes:f.boxes, n, riser, tread, run:n * tread, side, level:tp.k, zTop:tp.zTop, sw, wrapped:false, why:null };
+  const faces = stairFlightFaces(sg, uEdge, side, tp.zTop, riser, n, tread, sw);
+  return { ok:true, flights:[faces], landing:null, n, riser, tread, run:n * tread, side, level:tp.k, zTop:tp.zTop, sw, wrapped:false, why:null };
 }
 /** A tread that fits a wall: the shared step size, but no deeper than the
     wall can hold, and never below the minimum. */
@@ -4380,7 +4404,7 @@ function buildWrapped(B, G, segs) {
   if (t < STAIR_TREAD_MIN) return { ok:false, why:'the corner leaves no room for two flights', level:tp.k, zTop:tp.zTop };
   const n2 = nEven - n1, zMid = tp.zTop - n1 * riser;
   const uEdge = side > 0 ? B.u1 : B.u0;
-  const f1 = flightBoxes(sg, uEdge, side, tp.zTop, riser, n1, t, sw);
+  const f1 = stairFlightFaces(sg, uEdge, side, tp.zTop, riser, n1, t, sw);
   /* the landing is the corner platform: it reaches back along this wall to
      the last tread, so the flight always runs into it, and forward onto the
      next wall, where the second flight starts */
@@ -4392,8 +4416,8 @@ function buildWrapped(B, G, segs) {
   const p = P(fromU, -sw / 2), r = P(toU, sw / 2);
   const land = [Math.min(p[0], r[0]), Math.min(p[1], r[1]), 0, Math.max(p[0], r[0]), Math.max(p[1], r[1]), zMid];
   const q = cw.sg, qu = cw.dir > 0 ? sw / 2 : q.len - sw / 2;
-  const f2 = flightBoxes(q, qu, cw.dir, zMid, riser, n2, t, sw);
-  return { ok:true, boxes:f1.boxes.concat([land], f2.boxes), n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
+  const f2 = stairFlightFaces(q, qu, cw.dir, zMid, riser, n2, t, sw);
+  return { ok:true, flights:[f1, f2], landing:land, n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
 }
 /** The stair, straight or turning the corner when asked (b.stair.wrap):
     straight with no flag; null everywhere without one. cornerAvail tells
@@ -17732,7 +17756,10 @@ function exportModel() {
     const st = stairFor(B, G);
     if (!st || !st.ok) return;
     const no = bgx.all.indexOf(B) + 1;
-    add('stair', 'Stone stair to Balcony ' + no, 'AA-STONE', st.boxes.reduce((acc, Bx) => acc.concat(boxSides(Bx)), []),
+    const faces = [];
+    (st.flights || []).forEach(fl => fl.forEach(f => faces.push(f.pts)));
+    if (st.landing) boxSides(st.landing).forEach(([q]) => faces.push(q));
+    add('stair', 'Stone stair to Balcony ' + no, 'AA-STONE', faces,
       { steps:st.n, riser:+st.riser.toFixed(3), tread:+st.tread.toFixed(2), run:+st.run.toFixed(2), floor:st.level, mat:'AA_Stone' });
   });
   Ls.forEach(L => {
