@@ -4297,7 +4297,8 @@ function stairFaceGroup(st, sees, dpt) {
   if (dpt) grp.d = dpt(grp.pts);
   return grp;
 }
-const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_IDEAL = 0.28;
+const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_IDEAL = 0.28,
+  STAIR_TREAD_FILL = 0.36;
 /** A straight masonry flight parallel to a wall: from the landing level
     zTop down n risers to the ground, top tread flush with the landing edge
     uEdge, running toward dirSign. World boxes, canopyFrame.box convention. */
@@ -4354,11 +4355,10 @@ function buildStraight(B, G) {
     wall can hold, and never below the minimum. */
 function treadFor(run, n) { return Math.min(STAIR_TREAD_IDEAL, run / n); }
 /** L-shaped flight turning the corner at the stair's end: down to a stone
-    landing at the corner, then down the next wall. Each flight is split in
-    half by step count and takes its own natural tread — sized to the wall
-    it runs along — so the first flight reaches the corner on its own steps
-    instead of leaving a gap a solid block has to fill. The landing is only
-    the square at the corner, where the two flights meet. */
+    landing at the corner, then down the next wall. The first flight is given
+    as many steps as its wall holds at a generous tread, so it runs the whole
+    way and meets the landing: the corner is where the two flights join at one
+    level, with no gap between them to bridge. Both flights share that tread. */
 function buildWrapped(B, G, segs) {
   const tp = stairTopOf(B, G);
   if (!tp) return null;
@@ -4370,22 +4370,30 @@ function buildWrapped(B, G, segs) {
   if (!cw) return { ok:false, why:'no corner this way to turn', level:tp.k, zTop:tp.zTop };
   const run2max = cw.sg.len - 0.3;
   if (run2max < 0.5) return { ok:false, why:'no room round the corner', level:tp.k, zTop:tp.zTop };
-  /* flights split the climb in half by step count; each takes its own tread
-     from the wall it runs along, both capped at the ideal step */
-  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX));
-  const n1 = (n % 2 ? n + 1 : n) / 2, n2 = n1, nEven = n1 + n2;
-  const riser = tp.zTop / nEven;
-  const t1 = treadFor(run1, n1), t2 = treadFor(run2max, n2);
-  if (t1 < STAIR_TREAD_MIN || t2 < STAIR_TREAD_MIN) return { ok:false, why:'the corner leaves no room for two flights', level:tp.k, zTop:tp.zTop };
-  const sw = Math.min(STAIR_W, B.d), zMid = tp.zTop - n1 * riser;
+  /* one riser for the whole climb, split over however many steps each wall
+     takes; the first flight is sized to reach the landing exactly */
+  const want = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX));
+  const nEven = want + (want % 2), riser = tp.zTop / nEven, sw = Math.min(STAIR_W, B.d);
+  const reach = run1 - sw / 2;
+  let n1 = Math.max(2, Math.min(nEven - 2, Math.ceil(reach / STAIR_TREAD_FILL))), t = reach / n1;
+  if (t > STAIR_TREAD_FILL) { n1 = nEven - 2; t = STAIR_TREAD_FILL; }
+  if (t < STAIR_TREAD_MIN) return { ok:false, why:'the corner leaves no room for two flights', level:tp.k, zTop:tp.zTop };
+  const n2 = nEven - n1, zMid = tp.zTop - n1 * riser;
   const uEdge = side > 0 ? B.u1 : B.u0;
-  const f1 = flightBoxes(sg, uEdge, side, tp.zTop, riser, n1, t1, sw);
-  const C = side > 0 ? sg.b : sg.a;
-  const land = [Math.min(C[0] - sw / 2, C[0] + sw / 2), Math.min(C[1] - sw / 2, C[1] + sw / 2), 0,
-    Math.max(C[0] + sw / 2, C[0] - sw / 2), Math.max(C[1] + sw / 2, C[1] - sw / 2), zMid];
-  const q = cw.sg, qu = cw.dir > 0 ? 0 : q.len;
-  const f2 = flightBoxes(q, qu, cw.dir, zMid, riser, n2, t2, sw);
-  return { ok:true, boxes:f1.boxes.concat([land], f2.boxes), n:nEven, riser, tread:Math.max(t1, t2), run:n1 * t1 + n2 * t2, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
+  const f1 = flightBoxes(sg, uEdge, side, tp.zTop, riser, n1, t, sw);
+  /* the landing is the corner platform: it reaches back along this wall to
+     the last tread, so the flight always runs into it, and forward onto the
+     next wall, where the second flight starts */
+  const tu = (sg.b[0] - sg.a[0]) / len, tv = (sg.b[1] - sg.a[1]) / len;
+  const P = (u, v) => [sg.a[0] + tu * u + sg.n[0] * v, sg.a[1] + tv * u + sg.n[1] * v];
+  const endU = side > 0 ? uEdge + n1 * t : uEdge - n1 * t;
+  const fromU = side > 0 ? Math.min(endU, len - sw / 2) : Math.max(endU, sw / 2);
+  const toU = side > 0 ? len + sw / 2 : -sw / 2;
+  const p = P(fromU, -sw / 2), r = P(toU, sw / 2);
+  const land = [Math.min(p[0], r[0]), Math.min(p[1], r[1]), 0, Math.max(p[0], r[0]), Math.max(p[1], r[1]), zMid];
+  const q = cw.sg, qu = cw.dir > 0 ? sw / 2 : q.len - sw / 2;
+  const f2 = flightBoxes(q, qu, cw.dir, zMid, riser, n2, t, sw);
+  return { ok:true, boxes:f1.boxes.concat([land], f2.boxes), n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, wrapped:true, why:null };
 }
 /** The stair, straight or turning the corner when asked (b.stair.wrap):
     straight with no flag; null everywhere without one. cornerAvail tells
