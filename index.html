@@ -4470,7 +4470,25 @@ function balcScene(G) {
   bg.ok.filter(B => B.mode === 'out').forEach(B => B.levels.forEach(k => {
     const z = (k - 1) * G.fh, z0 = z - BALC_SLAB, O = B.outline;
     solids.push({ kind:'top', pts:O.map(p => [p[0], p[1], z]), n:[0, 0, 1], B, k });
-    B.par.forEach(([p, q]) => {
+    const gp = stairGap(B, G), gap = gp && gp.level === k ? gp : null;
+    const tu = B.sg ? [(B.sg.b[0] - B.sg.a[0]) / B.sg.len, (B.sg.b[1] - B.sg.a[1]) / B.sg.len] : null;
+    const uvOf = p => [(p[0] - B.sg.a[0]) * tu[0] + (p[1] - B.sg.a[1]) * tu[1], (p[0] - B.sg.a[0]) * B.sg.n[0] + (p[1] - B.sg.a[1]) * B.sg.n[1]];
+    /* the parapet open where the stair arrives: an edge on the opening's
+       line loses the stretch the opening spans */
+    const opened = ([p, q]) => {
+      if (!gap || !tu) return [[p, q]];
+      const P2 = uvOf(p), Q2 = uvOf(q), ax = gap.v !== undefined ? 1 : 0, at = gap.v !== undefined ? gap.v : gap.u;
+      if (Math.abs(P2[ax] - at) > 0.03 || Math.abs(Q2[ax] - at) > 0.03) return [[p, q]];
+      const o = 1 - ax, lo = gap.v !== undefined ? gap.u0 : gap.v0, hi = gap.v !== undefined ? gap.u1 : gap.v1;
+      const a = P2[o], b = Q2[o], L = b - a;
+      if (Math.abs(L) < 1e-6) return [[p, q]];
+      const at2 = x => { const f = (x - a) / L; return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]; };
+      const s0 = Math.min(a, b), s1 = Math.max(a, b), out = [];
+      if (lo > s0 + 0.02) out.push([s0, Math.min(lo, s1)]);
+      if (hi < s1 - 0.02) out.push([Math.max(hi, s0), s1]);
+      return out.filter(([x0, x1]) => x1 - x0 > 0.02).map(([x0, x1]) => (a <= b ? [at2(x0), at2(x1)] : [at2(x1), at2(x0)]));
+    };
+    [].concat.apply([], B.par.map(opened)).forEach(([p, q]) => {
       const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
       let nx = dy / L, ny = -dx / L;
       if (inPoly(m[0] + nx * 0.02, m[1] + ny * 0.02, O)) { nx = -nx; ny = -ny; }
@@ -4754,8 +4772,10 @@ function stairsAfterWalls(list, ptDepth, eps) {
   });
   return list;
 }
-const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_IDEAL = 0.28,
-  STAIR_TREAD_FILL = 0.36, STAIR_TREAD_MAX = 0.32;
+/* no tread deeper than 27.5 cm: with risers up to 19 cm, 2R + G stays within
+   the step relation's 60–65 cm, wherever a flight is fitted to its room */
+const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_MAX = 0.275,
+  STAIR_TREAD_IDEAL = STAIR_TREAD_MAX, STAIR_TREAD_FILL = STAIR_TREAD_MAX;
 /** A straight masonry flight parallel to a wall: from the landing level
     zTop down n risers to the ground, top tread flush with the landing edge
     uEdge, running toward dirSign. World boxes, canopyFrame.box convention. */
@@ -4900,31 +4920,69 @@ function buildWrapped(B, G, segs) {
   const f2 = stairFlightFaces(q, qu, cw.dir, zMid, riser, n2, t, sw);
   return { ok:true, flights:[f1, f2], landing:[{box:legA, nv:sg.n}, {box:legB, nv:q.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, wrapped:true, why:null };
 }
-/** Stair at 90 degrees to the facade: beside the balcony, a landing as deep
-    as the balcony at its floor — the step across onto it — and from the
-    landing's outer edge one flight straight out from the wall, down to the
-    ground. It needs only the stair's width along the wall. */
+/** Stair at 90 degrees to the facade: one flight straight out from the
+    balcony's front edge, through an opening in its parapet, down to the
+    ground. It stands where the canopy's posts leave it room — between two
+    posts, nearest the balcony's middle — so no post rises through a tread. */
 function buildPerpendicular(B, G) {
   const tp = stairTopOf(B, G);
   if (!tp) return null;
-  const sg = B.sg, len = sg.len;
-  const roomL = B.u0, roomR = len - B.u1;
-  const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
-  const sw = Math.min(STAIR_W, B.d);
-  if (room < sw) return { ok:false, why:'no room for the stair beside the balcony', level:tp.k, zTop:tp.zTop };
+  const sg = B.sg, len = sg.len, sw = Math.min(STAIR_W, B.u1 - B.u0);
+  if (sw < 0.8) return { ok:false, why:'the balcony is narrower than the stair', level:tp.k, zTop:tp.zTop };
   const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n, tread = STAIR_TREAD_IDEAL;
   const tx = (sg.b[0] - sg.a[0]) / len, ty = (sg.b[1] - sg.a[1]) / len, nv = sg.n;
-  const uEdge = side > 0 ? B.u1 : B.u0, uFar = uEdge + side * sw;
   const P = (u, v) => [sg.a[0] + tx * u + nv[0] * v, sg.a[1] + ty * u + nv[1] * v];
-  /* the flight runs along a line straight out from the wall at the balcony's
-     end: that line as a segment, its width stepping away from the balcony */
-  const a = P(uEdge, 0), b = P(uEdge, 1);
-  const out = { a, b, len:1, n:[tx * side, ty * side] };
+  /* the posts in the flight's way: the canopy over this balcony, where its
+     post line stands out past the balcony's front */
+  let ua = (B.u0 + B.u1) / 2 - sw / 2;
+  const posts = canopyPostsAt(B).filter(p => p.v + CANOPY_POST / 2 > B.d - 0.02).map(p => p.u);
+  if (posts.length) {
+    const h = CANOPY_POST / 2 + 0.05, edges = [B.u0].concat(posts.slice().sort((a, b) => a - b), [B.u1]);
+    let best = null;
+    for (let k = 0; k + 1 < edges.length; k++) {
+      const lo = edges[k] + (k ? h : 0), hi = edges[k + 1] - (k + 1 < edges.length - 1 ? h : 0);
+      if (hi - lo < sw) continue;
+      const a = clamp((B.u0 + B.u1) / 2 - sw / 2, lo, hi - sw), dist = Math.abs(a + sw / 2 - (B.u0 + B.u1) / 2);
+      if (!best || dist < best.dist) best = { a, dist };
+    }
+    if (!best) return { ok:false, why:'the canopy posts leave no room for the stair in front', level:tp.k, zTop:tp.zTop };
+    ua = best.a;
+  }
+  /* the flight runs along a line straight out from the wall: that line as a
+     segment, its width stepping along the wall */
+  const out = { a:P(ua, 0), b:P(ua, 1), len:1, n:[tx, ty] };
   const flight = stairFlightFaces(out, B.d, 1, tp.zTop - riser, riser, n - 1, tread, sw);
-  const p = P(uEdge, 0), q = P(uFar, B.d);
-  const land = [Math.min(p[0], q[0]), Math.min(p[1], q[1]), 0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), tp.zTop];
-  return { ok:true, flights:[flight], landing:[{ box:land, nv }], n, riser, tread, run:B.d + (n - 1) * tread, side, level:tp.k, zTop:tp.zTop, sw, nv,
-    mode:'perpendicular', wrapped:false, why:null };
+  return { ok:true, flights:[flight], landing:[], n, riser, tread, run:(n - 1) * tread, side:1, level:tp.k, zTop:tp.zTop, sw, nv,
+    mode:'perpendicular', wrapped:false, gap:{ v:B.d, u0:ua, u1:ua + sw }, why:null };
+}
+/** A balcony set under the eave canopy carries the canopy with it when it
+    is moved or resized on Site: the same wall and the same span, so the
+    eave stays as long as the balcony (the canopy's 8 m at most). true when
+    the balcony's width was held to that. */
+function canopyFollowsBalcony(G, i) {
+  const b = G && G.balc && G.balc[i];
+  if (!b || !b.fromCanopy || typeof ROOF === 'undefined' || !ROOF.zones) return false;
+  const z = ROOF.zones[b.canopyZi], c = z && z.canopy;
+  if (!c || typeof c !== 'object') return false;
+  const held = b.w > 8;
+  if (held) b.w = 8;
+  const B = balcGeo(G).all[i];
+  if (!B || !B.ok || !B.sg) return held;
+  const uc = (B.u0 + B.u1) / 2, len = B.sg.len, tx = (B.sg.b[0] - B.sg.a[0]) / len, ty = (B.sg.b[1] - B.sg.a[1]) / len;
+  c.f = segFace(B.sg); c.x = +(B.sg.a[0] + tx * uc).toFixed(2); c.y = +(B.sg.a[1] + ty * uc).toFixed(2); c.w = +Math.min(8, B.u1 - B.u0).toFixed(1);
+  return held;
+}
+/** The canopy posts over a balcony set under it, in the balcony's own wall
+    terms: u along the wall, v out from it. None for any other balcony. */
+function canopyPostsAt(B) {
+  const b = B.b, z = b && b.fromCanopy && typeof ROOF !== 'undefined' && ROOF.zones && ROOF.zones[b.canopyZi], c = z && z.canopy;
+  if (!c || typeof c !== 'object' || !(+c.d > 0.5)) return [];
+  const sg = B.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len;
+  const uc = (c.x - sg.a[0]) * tx + (c.y - sg.a[1]) * ty, w = +c.w || 3;
+  const u0 = clamp(uc - w / 2, 0, sg.len), u1 = clamp(uc + w / 2, 0, sg.len);
+  const fr = canopyFrame({ sg, u0, u1, d:+c.d, z0:0, z1:0 });
+  return fr.posts.map(bx => { const m = [(bx[0] + bx[3]) / 2, (bx[1] + bx[4]) / 2];
+    return { u:(m[0] - sg.a[0]) * tx + (m[1] - sg.a[1]) * ty, v:(m[0] - sg.a[0]) * sg.n[0] + (m[1] - sg.a[1]) * sg.n[1] }; });
 }
 /** Stair with a landing between two flights on the same wall: the first
     flight comes down half the climb to a landing as long as the stair is
@@ -4956,8 +5014,8 @@ function buildTreadBetween(B, G, segs) {
     a tread. It lands there when its steps at the ideal tread need the whole
     run to the corner, or stop less than a tread short of it; rather than
     squeeze every tread to fit, or leave a sliver before the corner, it runs
-    to the corner at a tread fitted to reach it exactly (kept within 22–32
-    cm), steps down one riser onto a square tread standing in the corner
+    to the corner at a tread fitted to reach it exactly (kept within
+    22–27.5 cm, a remainder going to the corner tread), steps down one riser onto a square tread standing in the corner
     outside both walls — a step of its own, where the turn is made — and
     goes on down the next wall at the same tread and riser. null where the
     flight stops short of the corner or the corner is re-entrant. */
@@ -5014,6 +5072,15 @@ function stairFor(B, G) {
   const s = buildStraight(B, G);
   if (!s) return null;
   return Object.assign(s, { cornerAvail:!!(buildWrapped(B, G, segs) || {}).ok });
+}
+/** Where a stair reaches its balcony, the parapet opens: across the front
+    edge for a stair 90° to the facade, across the end it leaves from for
+    the others. The opening in the balcony's wall terms, or null. */
+function stairGap(B, G) {
+  const st = B && B.b && B.b.stair ? stairFor(B, G) : null;
+  if (!st || !st.ok) return null;
+  if (st.gap) return Object.assign({ level:st.level }, st.gap);
+  return { level:st.level, u:st.side > 0 ? B.u1 : B.u0, v0:0, v1:st.sw };
 }
 /** One CSV-ready line for a balcony's stair, or '' without one. */
 function stairCsv(B, G) {
@@ -8435,6 +8502,7 @@ function buildSite(host) {
   };
   /** What the selected balcony came out as, in words, under its controls. */
   const balcSays = () => {
+    if (canopyFollowsBalcony(G, selB) && balcBox._w) syncCtl(balcBox._w, G.balc[selB].w, v => fmt(v, 1) + ' m');
     if (!balcNote) return;
     const B = balcGeo(G).all[selB];
     if (!B) { balcNote.textContent = ''; return; }
@@ -8728,6 +8796,7 @@ function buildSite(host) {
           if (balcBox._w) { syncCtl(balcBox._w, b.w, v => fmt(v, 1) + ' m'); syncCtl(balcBox._d, b.d, v => fmt(v, 1) + ' m'); }
         }
       }
+      canopyFollowsBalcony(G, drag.i);
       balcSays();
     } else {
       const l = toLocal(p.x, p.y);
@@ -9227,7 +9296,7 @@ function buildRoof(host) {
       if (fm.length === 1) targets = fm;
     }
     targets.forEach(b => {
-      b.f = c.f; b.x = +c.x.toFixed(2); b.y = +c.y.toFixed(2); b.w = Math.min(+(c.w || 3), 8);
+      b.f = c.f; b.x = +c.x.toFixed(2); b.y = +c.y.toFixed(2); b.w = Math.min(+(c.w || 3), 8); b.corner = 0;
       if (canBox && canBox._cbSays) canBox._cbSays.textContent = canopyBalconyText(b);
     });
   }
@@ -22112,7 +22181,8 @@ Object.assign(PT, {
   "the corner leaves no room for two flights": "o cunhal não deixa espaço para dois lanços",
   "the tread leaves no room for two flights": "o cobertor não deixa espaço para dois lanços",
   "no room for a landing between two flights along this wall": "sem espaço para um patamar entre dois lanços ao longo desta parede",
-  "no room for the stair beside the balcony": "sem espaço para a escada ao lado da varanda",
+  "the balcony is narrower than the stair": "a varanda é mais estreita do que a escada",
+  "the canopy posts leave no room for the stair in front": "os pilares do alpendre não deixam espaço para a escada à frente",
   "Upper floor": "Piso superior", "Remove balcony": "Retirar a varanda", "Remove this balcony and its stair": "Retirar esta varanda e a sua escada"
 });
 
