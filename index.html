@@ -4482,9 +4482,10 @@ function buildPerpendicular(B, G) {
   faces.push({ pts: [P(uStart, n * tread).concat([0]), P(uStart, n * tread).concat([Z(n)]), P(uEnd, n * tread).concat([Z(n)]), P(uEnd, n * tread).concat([0])], nn: [0, 0, 1], fill: STONE_FILL });
   return { ok:true, flights:[faces], landing:null, n, riser, tread, run:n * tread, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'perpendicular', wrapped:false, why:null };
 }
-/** Stair with a tread between the flights: an intermediate landing splits
-    the climb into two flights on the same wall, so the student can read
-    each flight as a separate run with a tread to pause on between them. */
+/** Stair with a tread between the flights: an intermediate landing opens a
+    gap between two flights on the same wall. The landing is a thin platform
+    at the mid level — not a full block — so each flight reads as a clean run
+    and the tread sits between them without breaking the stair's flow. */
 function buildTreadBetween(B, G, segs) {
   const tp = stairTopOf(B, G);
   if (!tp) return null;
@@ -4501,12 +4502,17 @@ function buildTreadBetween(B, G, segs) {
   const f1 = stairFlightFaces(sg, uEdge, side, tp.zTop, riser, half, t, sw);
   const endU = side > 0 ? uEdge + half * t : uEdge - half * t;
   const fromU = side > 0 ? Math.min(endU, len - sw / 2) : Math.max(endU, sw / 2);
-  const box = (p, r) => [Math.min(p[0], r[0]), Math.min(p[1], r[1]), 0, Math.max(p[0], r[0]), Math.max(p[1], r[1]), zMid];
   const tu = (sg.b[0] - sg.a[0]) / len, tv = (sg.b[1] - sg.a[1]) / len;
   const P = (u, v) => [sg.a[0] + tu * u + sg.n[0] * v, sg.a[1] + tv * u + sg.n[1] * v];
-  const treadBox = box(P(fromU, 0), P(side > 0 ? fromU + sw : fromU - sw, sw));
+  /* Thin landing platform at the mid level, spanning the stair width — a
+     proper tread between flights, not a full block cutting the wall. */
+  const LAND_H = 0.06;
+  const landBox = [Math.min(P(fromU, 0)[0], P(side > 0 ? fromU + sw : fromU - sw, sw)[0]),
+                   Math.min(P(fromU, 0)[1], P(side > 0 ? fromU + sw : fromU - sw, sw)[1]), zMid,
+                   Math.max(P(fromU, 0)[0], P(side > 0 ? fromU + sw : fromU - sw, sw)[0]),
+                   Math.max(P(fromU, 0)[1], P(side > 0 ? fromU + sw : fromU - sw, sw)[1]), zMid + LAND_H];
   const f2 = stairFlightFaces(sg, fromU, side, zMid, riser, nEven - half, t, sw);
-  return { ok:true, flights:[f1, f2], landing:[{box:treadBox, nv:sg.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'tread-between', wrapped:false, why:null };
+  return { ok:true, flights:[f1, f2], landing:[{box:landBox, nv:sg.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'tread-between', wrapped:false, why:null };
 }
 /** The stair, straight or turning the corner when asked (b.stair.wrap):
     straight with no flag; null everywhere without one. cornerAvail tells
