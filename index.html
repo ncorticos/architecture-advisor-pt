@@ -4285,16 +4285,28 @@ const STONE_FILL = '#A9A294', STONE_TREAD = '#C6BFB2', STONE_UNDER = '#8D8679';
     face-by-face depth sort lets the wall behind stripe the flight into a
     fence. sees(nn) filters by normal (null keeps all faces); dpt(pts) orders
     the faces within and stamps the entry's own depth for the pool. */
-function stairFaceGroup(st, sees, dpt) {
+function stairFaceGroup(st, sees, dpt, wallSeen) {
   const faces = [];
   (st.flights || []).forEach(fl => fl.forEach(f => {
     if (sees && !sees(f.nn)) return;
     faces.push({ pts:f.pts, fill:f.fill });
   }));
-  (st.landing || []).forEach(b => boxSides(b).forEach(([q, nn]) => {
-    if (sees && !sees(nn)) return;
-    faces.push({ pts:q, fill:nn[2] > 0.5 ? STONE_TREAD : nn[2] < -0.5 ? STONE_UNDER : STONE_FILL });
-  }));
+  (st.landing || []).forEach(l => {
+    const b = l.box !== undefined ? l.box : l;
+    const nv = l.nv !== undefined ? l.nv : st.nv;
+    boxSides(b).forEach(([q, nn]) => {
+      if (sees && !sees(nn)) return;
+      /* Landing vertical faces against its own wall: cull unless outward
+         from the wall or facing the camera. This hides the coplanar seams
+         where the two landing legs meet and where flights join the landing. */
+      if (nn[2] === 0) {
+        const outward = nn[0]*nv[0] + nn[1]*nv[1] > 1e-6;
+        const camera = wallSeen ? wallSeen(nn) : (sees ? sees(nn) : true);
+        if (!outward && !camera) return;
+      }
+      faces.push({ pts:q, fill:nn[2] > 0.5 ? STONE_TREAD : nn[2] < -0.5 ? STONE_UNDER : STONE_FILL });
+    });
+  });
   if (!faces.length) return null;
   if (dpt) faces.sort((f, g) => dpt(g.pts) - dpt(f.pts));
   const grp = { stairGrp:faces, pts:[].concat.apply([], faces.map(f => f.pts)) };
@@ -4427,7 +4439,7 @@ function buildWrapped(B, G, segs) {
   const Q = (u, v) => [q.a[0] + qt * u + q.n[0] * v, q.a[1] + quv * u + q.n[1] * v];
   const legB = box(Q(cw.dir > 0 ? 0 : q.len - sw / 2, 0), Q(cw.dir > 0 ? sw / 2 : q.len, sw));
   const f2 = stairFlightFaces(q, qu, cw.dir, zMid, riser, n2, t, sw);
-  return { ok:true, flights:[f1, f2], landing:[legA, legB], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, wrapped:true, why:null };
+  return { ok:true, flights:[f1, f2], landing:[{box:legA, nv:sg.n}, {box:legB, nv:q.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, wrapped:true, why:null };
 }
 /** Stair at 90 degrees to the facade: projects outward from the wall at
     right angles. The flight width runs along the facade and each tread
@@ -4494,7 +4506,7 @@ function buildTreadBetween(B, G, segs) {
   const P = (u, v) => [sg.a[0] + tu * u + sg.n[0] * v, sg.a[1] + tv * u + sg.n[1] * v];
   const treadBox = box(P(fromU, 0), P(side > 0 ? fromU + sw : fromU - sw, sw));
   const f2 = stairFlightFaces(sg, fromU, side, zMid, riser, nEven - half, t, sw);
-  return { ok:true, flights:[f1, f2], landing:[treadBox], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'tread-between', wrapped:false, why:null };
+  return { ok:true, flights:[f1, f2], landing:[{box:treadBox, nv:sg.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'tread-between', wrapped:false, why:null };
 }
 /** The stair, straight or turning the corner when asked (b.stair.wrap):
     straight with no flag; null everywhere without one. cornerAvail tells
@@ -16979,7 +16991,7 @@ style === 'sketch' ? '#EFEBE0'
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        const g = stairFaceGroup(st, nn => nn[2] !== 0 || (nn[0]*st.nv[0] + nn[1]*st.nv[1] >= 0) || wallSeen(nn), dc);
+        const g = stairFaceGroup(st, nn => nn[2] !== 0 || (nn[0]*st.nv[0] + nn[1]*st.nv[1] >= 0) || wallSeen(nn), dc, wallSeen);
         if (g) items.push(g);
       });
     } catch (e) {}
