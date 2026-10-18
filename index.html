@@ -17260,7 +17260,7 @@ style === 'sketch' ? '#EFEBE0'
   const stageBar = stage.appendChild(el('div', { class:'viewbar' }));
   renderPanel = makePanel(stage, { title:t('Visualization view'), note:t('The dressed massing in its ground, under the chosen sun.'),
     render:renderRender, csv:renderCSV,
-    heightFn: w => Math.round(clamp(Math.min(w * 0.74, (window.innerHeight || 900) - 190), 320, 900)) });
+    heightFn: w => Math.round(clamp(Math.min(w * 0.9, (window.innerHeight || 900) - 190), 320, 900)) });
   const pillLine = stage.appendChild(el('div', { class:'limitrow readings' }));
   const pillLook = el('span', { class:'pill ok', text:'' });
   pillLine.appendChild(pillLook);
