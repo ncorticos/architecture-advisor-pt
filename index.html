@@ -4900,78 +4900,57 @@ function buildWrapped(B, G, segs) {
   const f2 = stairFlightFaces(q, qu, cw.dir, zMid, riser, n2, t, sw);
   return { ok:true, flights:[f1, f2], landing:[{box:legA, nv:sg.n}, {box:legB, nv:q.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, wrapped:true, why:null };
 }
-/** Stair at 90 degrees to the facade: projects outward from the wall at
-    right angles. The flight width runs along the facade and each tread
-    reaches out from it, descending as it leaves the building. */
+/** Stair at 90 degrees to the facade: beside the balcony, a landing as deep
+    as the balcony at its floor — the step across onto it — and from the
+    landing's outer edge one flight straight out from the wall, down to the
+    ground. It needs only the stair's width along the wall. */
 function buildPerpendicular(B, G) {
   const tp = stairTopOf(B, G);
   if (!tp) return null;
   const sg = B.sg, len = sg.len;
   const roomL = B.u0, roomR = len - B.u1;
   const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
-  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n;
-  const tread = Math.min(STAIR_TREAD_IDEAL, room / n);
-  if (!(tread >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
   const sw = Math.min(STAIR_W, B.d);
-  const uEdge = side > 0 ? B.u1 : B.u0;
-  const uStart = side > 0 ? uEdge - sw : uEdge;
-  const uEnd = side > 0 ? uEdge : uEdge + sw;
+  if (room < sw) return { ok:false, why:'no room for the stair beside the balcony', level:tp.k, zTop:tp.zTop };
+  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n, tread = STAIR_TREAD_IDEAL;
   const tx = (sg.b[0] - sg.a[0]) / len, ty = (sg.b[1] - sg.a[1]) / len, nv = sg.n;
+  const uEdge = side > 0 ? B.u1 : B.u0, uFar = uEdge + side * sw;
   const P = (u, v) => [sg.a[0] + tx * u + nv[0] * v, sg.a[1] + ty * u + nv[1] * v];
-  const Z = i => tp.zTop - i * riser;
-  const faces = [];
-  const silhouette = u => {
-    const s = [];
-    s.push(P(u, 0).concat([0]), P(u, 0).concat([Z(0)]));
-    for (let i = 0; i < n; i++) { s.push(P(u, (i + 1) * tread).concat([Z(i)]), P(u, (i + 1) * tread).concat([Z(i + 1)])); }
-    s.push(P(u, n * tread).concat([0]));
-    return s;
-  };
-  faces.push({ pts: silhouette(uStart), nn: [-tx * side, -ty * side, 0], fill: STONE_FILL });
-  faces.push({ pts: silhouette(uEnd), nn: [tx * side, ty * side, 0], fill: STONE_FILL });
-  for (let i = 0; i < n; i++) faces.push({
-    pts: [P(uStart, i * tread).concat([Z(i)]), P(uEnd, i * tread).concat([Z(i)]), P(uEnd, (i + 1) * tread).concat([Z(i)]), P(uStart, (i + 1) * tread).concat([Z(i)])],
-    nn: [0, 0, 1], fill: STONE_TREAD
-  });
-  for (let i = 0; i < n; i++) faces.push({
-    pts: [P(uStart, (i + 1) * tread).concat([Z(i + 1)]), P(uEnd, (i + 1) * tread).concat([Z(i + 1)]), P(uEnd, (i + 1) * tread).concat([Z(i)]), P(uStart, (i + 1) * tread).concat([Z(i)])],
-    nn: [nv[0], nv[1], 0], fill: STONE_FILL
-  });
-  faces.push({ pts: [P(uStart, 0).concat([0]), P(uEnd, 0).concat([0]), P(uEnd, 0).concat([Z(0)]), P(uStart, 0).concat([Z(0)])], nn: [0, 0, -1], fill: STONE_FILL });
-  faces.push({ pts: [P(uStart, n * tread).concat([0]), P(uStart, n * tread).concat([Z(n)]), P(uEnd, n * tread).concat([Z(n)]), P(uEnd, n * tread).concat([0])], nn: [0, 0, 1], fill: STONE_FILL });
-  return { ok:true, flights:[faces], landing:null, n, riser, tread, run:n * tread, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'perpendicular', wrapped:false, why:null };
+  /* the flight runs along a line straight out from the wall at the balcony's
+     end: that line as a segment, its width stepping away from the balcony */
+  const a = P(uEdge, 0), b = P(uEdge, 1);
+  const out = { a, b, len:1, n:[tx * side, ty * side] };
+  const flight = stairFlightFaces(out, B.d, 1, tp.zTop - riser, riser, n - 1, tread, sw);
+  const p = P(uEdge, 0), q = P(uFar, B.d);
+  const land = [Math.min(p[0], q[0]), Math.min(p[1], q[1]), 0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), tp.zTop];
+  return { ok:true, flights:[flight], landing:[{ box:land, nv }], n, riser, tread, run:B.d + (n - 1) * tread, side, level:tp.k, zTop:tp.zTop, sw, nv,
+    mode:'perpendicular', wrapped:false, why:null };
 }
-/** Stair with a tread between the flights: an intermediate landing opens a
-    gap between two flights on the same wall. The landing is a thin platform
-    at the mid level — not a full block — so each flight reads as a clean run
-    and the tread sits between them without breaking the stair's flow. */
+/** Stair with a landing between two flights on the same wall: the first
+    flight comes down half the climb to a landing as long as the stair is
+    wide, standing on the ground as the flights do, and the second flight
+    goes on from its far edge one riser lower — the landing counts as one
+    tread of the climb. */
 function buildTreadBetween(B, G, segs) {
   const tp = stairTopOf(B, G);
   if (!tp) return null;
   const sg = B.sg, len = sg.len;
   const roomL = B.u0, roomR = len - B.u1;
   const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
-  if (room < 1.0) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
-  const want = Math.max(4, Math.ceil(tp.zTop / STAIR_RISER_MAX));
-  const nEven = want + (want % 2), riser = tp.zTop / nEven, sw = Math.min(STAIR_W, B.d);
-  const half = nEven / 2, zMid = tp.zTop - half * riser;
-  const uEdge = side > 0 ? B.u1 : B.u0;
-  const t = Math.min(STAIR_TREAD_IDEAL, room / nEven);
-  if (!(t >= STAIR_TREAD_MIN)) return { ok:false, why:'the tread leaves no room for two flights', level:tp.k, zTop:tp.zTop };
-  const f1 = stairFlightFaces(sg, uEdge, side, tp.zTop, riser, half, t, sw);
-  const endU = side > 0 ? uEdge + half * t : uEdge - half * t;
-  const fromU = side > 0 ? Math.min(endU, len - sw / 2) : Math.max(endU, sw / 2);
+  const n = Math.max(4, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n, sw = Math.min(STAIR_W, B.d);
+  const k1 = Math.floor((n - 1) / 2), k2 = n - 1 - k1;
+  const t = Math.min(STAIR_TREAD_IDEAL, (room - sw) / (n - 1));
+  if (!(t >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for a landing between two flights along this wall', level:tp.k, zTop:tp.zTop };
+  const uEdge = side > 0 ? B.u1 : B.u0, zL = tp.zTop - k1 * riser;
+  const u1 = uEdge + side * k1 * t, u2 = u1 + side * sw;
   const tu = (sg.b[0] - sg.a[0]) / len, tv = (sg.b[1] - sg.a[1]) / len;
   const P = (u, v) => [sg.a[0] + tu * u + sg.n[0] * v, sg.a[1] + tv * u + sg.n[1] * v];
-  /* Thin landing platform at the mid level, spanning the stair width — a
-     proper tread between flights, not a full block cutting the wall. */
-  const LAND_H = 0.06;
-  const landBox = [Math.min(P(fromU, 0)[0], P(side > 0 ? fromU + sw : fromU - sw, sw)[0]),
-                   Math.min(P(fromU, 0)[1], P(side > 0 ? fromU + sw : fromU - sw, sw)[1]), zMid,
-                   Math.max(P(fromU, 0)[0], P(side > 0 ? fromU + sw : fromU - sw, sw)[0]),
-                   Math.max(P(fromU, 0)[1], P(side > 0 ? fromU + sw : fromU - sw, sw)[1]), zMid + LAND_H];
-  const f2 = stairFlightFaces(sg, fromU, side, zMid, riser, nEven - half, t, sw);
-  return { ok:true, flights:[f1, f2], landing:[{box:landBox, nv:sg.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'tread-between', wrapped:false, why:null };
+  const p = P(u1, 0), q = P(u2, sw);
+  const landBox = [Math.min(p[0], q[0]), Math.min(p[1], q[1]), 0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), zL];
+  const f1 = stairFlightFaces(sg, uEdge, side, tp.zTop, riser, k1, t, sw);
+  const f2 = stairFlightFaces(sg, u2, side, zL - riser, riser, k2, t, sw);
+  return { ok:true, flights:[f1, f2], landing:[{ box:landBox, nv:sg.n }], n, riser, tread:t, run:(n - 1) * t + sw, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n,
+    mode:'tread-between', wrapped:false, why:null };
 }
 /** A flight along the wall that lands on the building's corner turns it by
     a tread. It lands there when its steps at the ideal tread need the whole
@@ -5028,7 +5007,9 @@ function stairFor(B, G) {
     const w = buildWrapped(B, G, segs);
     if (w && w.ok) return Object.assign(w, { cornerAvail:true });
   }
-  const c = !mode || mode === 'straight' ? buildCornerTread(B, G, segs) : null;
+  /* along the wall, round the corner or with a landing between flights: where
+     the run reaches the corner, the corner tread is that landing */
+  const c = mode !== 'perpendicular' ? buildCornerTread(B, G, segs) : null;
   if (c && c.ok) return Object.assign(c, { cornerAvail:!!(buildWrapped(B, G, segs) || {}).ok });
   const s = buildStraight(B, G);
   if (!s) return null;
@@ -5039,7 +5020,7 @@ function stairCsv(B, G) {
   if (!B || !B.b || !B.b.stair) return '';
   const st = stairFor(B, G);
   if (!st || !st.ok) return ', stair does not fit along this wall';
-  return ', stone stair ' + st.n + ' steps × ' + fmt(st.riser * 100, 0) + ' cm, run ' + fmt(st.run, 2) + ' m' + (st.byTread ? ', turns the corner by a tread' : st.wrapped ? ', turns the corner' : st.mode === 'perpendicular' ? ', 90° to the facade' : st.mode === 'tread-between' ? ', tread between flights' : '');
+  return ', stone stair ' + st.n + ' steps × ' + fmt(st.riser * 100, 0) + ' cm, run ' + fmt(st.run, 2) + ' m' + (st.byTread ? ', turns the corner by a tread' : st.wrapped ? ', turns the corner' : st.mode === 'perpendicular' ? ', 90° to the facade' : st.mode === 'tread-between' ? ', landing between flights' : '');
 }
 /** The side faces of a world box that a viewer sees, as [quad, outward normal] pairs. */
 function boxSides(B) {
@@ -9339,7 +9320,7 @@ function buildRoof(host) {
           const modes = [
             { value:'straight', label:'Along the wall' },
             { value:'perpendicular', label:'90° to the facade' },
-            { value:'tread-between', label:'Tread between flights' }
+            { value:'tread-between', label:'Landing between flights' }
           ];
           const probeW = Object.assign({}, B3, { b:Object.assign({}, B3.b, { stair:{ w:STAIR_W, wrap:true } }) });
           const rW = probeW ? stairFor(probeW, G) : null;
@@ -22123,13 +22104,15 @@ Object.assign(PT, {
   /* the stone stair to a canopy balcony */
   "Stone stair": "Escada de pedra", "stone stair": "escada de pedra", "stone stair off": "sem escada de pedra",
   "Along the wall": "Ao longo da parede", "Along the wall · turns by a tread": "Ao longo da parede · vira por um cobertor",
-  "90° to the facade": "A 90° da fachada", "Tread between flights": "Cobertor entre lanços", "Turn the corner": "Contornar o cunhal",
+  "90° to the facade": "A 90° da fachada", "Landing between flights": "Patamar entre lanços", "landing between flights": "patamar entre lanços", "Turn the corner": "Contornar o cunhal",
   "turns the corner": "contorna o cunhal", "turns the corner by a tread": "contorna o cunhal por um cobertor",
   "no corner this way to turn": "não há cunhal deste lado para contornar", "no room round the corner": "sem espaço depois do cunhal",
   "no room for the stair along this wall": "sem espaço para a escada ao longo desta parede",
   "stair does not fit along this wall": "a escada não cabe ao longo desta parede", "That stair does not fit here": "Essa escada não cabe aqui",
   "the corner leaves no room for two flights": "o cunhal não deixa espaço para dois lanços",
   "the tread leaves no room for two flights": "o cobertor não deixa espaço para dois lanços",
+  "no room for a landing between two flights along this wall": "sem espaço para um patamar entre dois lanços ao longo desta parede",
+  "no room for the stair beside the balcony": "sem espaço para a escada ao lado da varanda",
   "Upper floor": "Piso superior", "Remove balcony": "Retirar a varanda", "Remove this balcony and its stair": "Retirar esta varanda e a sua escada"
 });
 
