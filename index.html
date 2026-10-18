@@ -18933,10 +18933,18 @@ function sceBlock(o) {
 function initSetup() {
   const dl = $('#concList'), sel = $('#selNuts');
   dl.innerHTML = ''; sel.innerHTML = '';
-  Object.keys(CONCELHOS).sort((a, b) => a.localeCompare(b, 'pt'))
-    .forEach(c => dl.appendChild(el('option', { value:c })));
   NUTS_LIST.forEach(n => sel.appendChild(el('option', { value:n, text:n })));
   sel.value = 'Grande Lisboa';
+
+  /* Fill the municipality datalist with only the places of the chosen region,
+     so a student picking “RA dos Açores” never sees mainland towns. */
+  function fillConc(region) {
+    dl.innerHTML = '';
+    Object.keys(CONCELHOS).sort((a, b) => a.localeCompare(b, 'pt'))
+      .filter(c => CONCELHOS[c].includes(region))
+      .forEach(c => dl.appendChild(el('option', { value:c })));
+  }
+  fillConc(sel.value);
 
   const conc = $('#selConc'), lat = $('#inpLat'), lon = $('#inpLon'), alt = $('#inpAlt');
   const use = $('#selUse'), srcInp = $('#inpSource');
@@ -19414,8 +19422,13 @@ function initSetup() {
     const v = conc.value.trim();
     const hit = Object.keys(CONCELHOS).find(c => c.toLowerCase() === v.toLowerCase());
     if (hit) {
-      sel.value = CONCELHOS[hit][0];
-      sub.textContent = hit + ' → ' + CONCELHOS[hit].join(' / ');
+      const regs = CONCELHOS[hit];
+      /* If the place belongs to the region the student already chose, keep it;
+         otherwise adopt the place's own region (first listed). Multi-region
+         names like Calheta or Lagoa never silently switch regions. */
+      if (!regs.includes(sel.value)) sel.value = regs[0];
+      fillConc(sel.value);
+      sub.textContent = hit + ' → ' + regs.join(' / ');
       seedCoords();
       refresh();
     } else sub.textContent = t('Type a Portuguese municipality, or any name you want the exports to carry.');
@@ -19426,7 +19439,7 @@ function initSetup() {
     if (R) { lat.value = R[0]; lon.value = R[1]; }
     autoNormals();
   }
-  sel.addEventListener('change', () => { seedCoords(); refresh(); });
+  sel.addEventListener('change', () => { fillConc(sel.value); seedCoords(); refresh(); });
   lat.addEventListener('input', refresh);
   lon.addEventListener('input', refresh);
   alt.addEventListener('input', refresh);
