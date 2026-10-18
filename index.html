@@ -4336,7 +4336,6 @@ function stairFlightFaces(sg, uEdge, dirSign, zTop, riser, n, tread, sw) {
     return s;
   };
   faces.push({ pts:profile(sw), nn:[nv[0], nv[1], 0], fill:STONE_FILL });
-  faces.push({ pts:profile(0), nn:[-nv[0], -nv[1], 0], fill:STONE_UNDER });
   for (let i = 0; i < n; i++) faces.push({ pts:[P(U(i), 0).concat([Z(i)]), P(U(i + 1), 0).concat([Z(i)]), P(U(i + 1), sw).concat([Z(i)]), P(U(i), sw).concat([Z(i)])], nn:[0, 0, 1], fill:STONE_TREAD });
   for (let i = 0; i < n; i++) faces.push({ pts:[P(U(i + 1), 0).concat([Z(i + 1)]), P(U(i + 1), sw).concat([Z(i + 1)]), P(U(i + 1), sw).concat([Z(i)]), P(U(i + 1), 0).concat([Z(i)])], nn:[tx * dirSign, ty * dirSign, 0], fill:STONE_FILL });
   faces.push({ pts:[P(U(0), 0).concat([0]), P(U(0), 0).concat([Z(0)]), P(U(0), sw).concat([Z(0)]), P(U(0), sw).concat([0])], nn:[-tx * dirSign, -ty * dirSign, 0], fill:STONE_FILL });
@@ -16898,7 +16897,7 @@ style === 'sketch' ? '#EFEBE0'
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        const g = stairFaceGroup(st, nn => nn[2] !== 0 || wallSeen(nn), dc);
+        const g = stairFaceGroup(st, null, dc);
         if (g) items.push(g);
       });
     } catch (e) {}
