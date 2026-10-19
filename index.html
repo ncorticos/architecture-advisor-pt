@@ -445,6 +445,23 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .sce-ic svg{display:block; width:78px; height:68px; margin:0 auto; padding:2px 3px; box-sizing:border-box;
   border:1px solid var(--line); border-radius:8px; background:#fff}
 .sce-ic figcaption{font-size:10.5px; line-height:1.3; color:var(--ink2); margin-top:4px}
+/* the chimney picker on Roof: the place's own, its neighbours', the rest */
+.chim-gl{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:8px 0 4px}
+.chim-pick{display:flex; flex-wrap:wrap; gap:6px}
+.chim-b{width:72px; padding:3px 2px 5px; border:1px solid var(--line); border-radius:8px; background:var(--panel); cursor:pointer;
+  font:inherit; font-size:10px; line-height:1.25; color:var(--ink2); text-align:center}
+.chim-b svg{display:block; width:60px; height:52px; margin:0 auto 2px}
+.chim-b span{display:block}
+.chim-b:hover{border-color:var(--faint)}
+.chim-b[aria-pressed="true"]{border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink); color:var(--ink)}
+.chim-b.far{background:var(--wash)}
+.chim-more{margin-top:8px}
+.chim-info{margin-top:8px; padding-top:6px; border-top:1px solid var(--line2)}
+.chim-info .chim-name{font-weight:600; font-size:12.5px; margin:0 0 2px}
+.chim-info .hint{margin:2px 0}
+.chim-warn{color:#B45309}
+.chim-src a{color:inherit; text-decoration:underline; text-decoration-color:var(--faint)}
+.chim-note{margin-top:6px}
 .rec-ori{display:flex; gap:12px; align-items:flex-start; margin:8px 0 2px}
 .rec-ori figure{margin:0; flex:0 0 auto}
 .rec-ori svg{display:block; width:196px; max-width:44vw; height:auto; border:1px solid var(--line); border-radius:8px; background:#fff}
@@ -2281,122 +2298,262 @@ const SCE_SVG = (() => {
         + '<path d="M50 37Q46 42 44 45" fill="none" stroke="' + COLD + '" stroke-width="1.4"/>' + arrow(43.2, 46.5, 2.05, COLD, 3), [25, 23, 14, 8])
   };
   const svg = s => '<svg viewBox="0 0 64 56" width="64" height="56" aria-hidden="true">' + s + '</svg>';
-  /* the chimneys, in elevation on a hint of roof: the tower whitewashed,
-     brick, granite, schist or basalt after the region it stands in */
-  const BRICK = '#B0603C', STONE = '#9AA0A6', SCHIST = '#8A7A63', BASALT = '#4A4A4E', WASH = '#F4F1EA';
-  const tower = (x, w, y0, y1, fill, stroke) =>
-    '<rect x="' + x + '" y="' + y0 + '" width="' + w + '" height="' + (y1 - y0) + '" fill="' + fill + '" stroke="' + (stroke || INK) + '" stroke-width="1.2"/>';
-  const slab = (x, w, y, fill) =>
-    '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="2.2" fill="' + (fill || WASH) + '" stroke="' + INK + '" stroke-width="1.1"/>';
-  const pot = (x, y, r, fill) =>
-    '<rect x="' + (x - r) + '" y="' + y + '" width="' + (r * 2) + '" height="6" fill="' + (fill || '#C98A5E') + '" stroke="' + INK + '" stroke-width="1"/>';
-  const arch = (x, y, w, h) =>
-    '<path d="M' + x + ' ' + y + 'V' + (y - h + w / 2) + 'A' + (w / 2) + ' ' + (w / 2) + ' 0 0 1 ' + (x + w) + ' ' + (y - h + w / 2) + 'V' + y + 'Z" fill="#fff" stroke="' + INK + '" stroke-width="0.9"/>';
+  /* the chimneys, in elevation on a hint of roof, one per family of the
+     survey below: whitewash in the south and on Santa Maria, granite,
+     schist or basalt where the stone is left bare; dark is where the smoke
+     leaves */
+  const WSH = '#F4F1EA', CAPC = '#E4DED0', CLAY = '#B8653F', HOLE = '#2b2b2e',
+    GRAN = '#9EA2A6', SCH = '#7D7364', BAS = '#5A5B5F';
+  const R = (x, y, w, h, f, sw) => '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + f + '" stroke="' + INK + '" stroke-width="' + (sw || 1.1) + '"/>';
+  const Pg = (pts, f, sw) => '<polygon points="' + pts.map(p => p.join(',')).join(' ') + '" fill="' + f + '" stroke="' + INK + '" stroke-width="' + (sw || 1.1) + '"/>';
+  const H = (x, y, w, h) => '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + HOLE + '"/>';
+  const Dm = (x, y, r) => '<polygon points="' + x + ',' + (y - r) + ' ' + (x + r) + ',' + y + ' ' + x + ',' + (y + r) + ' ' + (x - r) + ',' + y + '" fill="' + HOLE + '"/>';
+  const ln = (d, w, o) => '<path d="' + d + '" fill="none" stroke="' + INK + '" stroke-width="' + (w || 0.6) + '"' + (o ? ' opacity="' + o + '"' : '') + '/>';
+  const roofL = () => g('<path d="M6 48L32 40L58 48"/>');
+  /* a stone stack under a slab lifted on corner stones */
+  const stack = (st, lid) => roofL() + R(26, 22, 12, 24, st)
+    + ln('M26 28H38M26 34H38M26 40H38M30 22V28M34 28V34M30 34V40M34 40V46', 0.6, 0.55)
+    + H(28.9, 18, 6.2, 4) + R(26.4, 18, 2.6, 4, st, 0.9) + R(35, 18, 2.6, 4, st, 0.9) + R(23.5, 15.4, 17, 2.6, lid);
   const C = {
-    /* the Algarve turret: an openwork crown under the cap, two pots */
-    algarvia: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(25, 14, 22, 46, WASH) + arch(27, 40, 4, 9) + arch(33, 40, 4, 9)
-      + '<rect x="27" y="30" width="10" height="2" fill="' + WASH + '" stroke="' + INK + '" stroke-width="0.9"/>'
-      + slab(23, 18, 19.8) + pot(28.5, 13.5, 1.6) + pot(35.5, 13.5, 1.6),
-    /* the Alentejo stack: tall and slender, one pot under a slab */
-    alentejana: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(28, 8, 14, 46, WASH)
-      + '<polygon points="28.5,20 30.5,16 32.5,20" fill="#33302c"/>'
-      + '<polygon points="33,20 35,16 37,20" fill="#33302c"/>'
-      + slab(25.5, 13, 11.8) + '<rect x="30" y="11.9" width="4" height="1.6" fill="#33302c"/>',
-    /* Lisbon whitewash: a washed stack, corbelled head, two clay pots */
-    lisboeta: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(26.5, 11, 20, 46, WASH) + slab(25, 17.8, 14) + slab(26, 12, 15.6)
-      + pot(29.5, 9.5, 1.7) + pot(34.5, 9.5, 1.7),
-    /* northern granite: a heavy mass, open flues, a single great slab */
-    nortenha: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(24, 16, 18, 46, STONE)
-      + '<rect x="28" y="18" width="3.4" height="5" fill="#2b2b2e"/><rect x="33" y="18" width="3.4" height="5" fill="#2b2b2e"/>'
-      + slab(22, 20, 15.8, STONE),
-    /* Beira schist: a stone shaft, slab cap, one pot */
-    beira: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(27, 10, 19, 46, SCHIST) + slab(25, 14, 16.8, SCHIST) + pot(32, 10.5, 1.7),
-    /* island basalt: a dark shaft with a washed crown, one pot */
-    insular: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(27, 10, 20, 46, BASALT) + tower(27, 10, 20, 27, WASH) + slab(25, 14, 17.8) + pot(32, 11.5, 1.7),
-    /* the Monchique balloon: a conical volume closed by a clay cylinder */
-    balao: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(26, 12, 32, 46, WASH)
-      + '<polygon points="26,32 38,32 34,16 30,16" fill="' + WASH + '" stroke="' + INK + '" stroke-width="1.2"/>'
-      + '<rect x="30" y="10" width="4" height="6" fill="' + WASH + '" stroke="' + INK + '" stroke-width="1"/>'
-      + slab(27.5, 9, 7.8),
-    /* the Cacela chest: a long low arca with small flues */
-    arca: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(18, 28, 34, 46, WASH) + slab(16, 32, 31.8) + pot(26, 25.5, 1.4) + pot(38, 25.5, 1.4),
-    /* the plain pot every region also builds */
-    simple: () => g('<path d="M6 48L32 40L58 48"/>')
-      + tower(29, 6, 22, 46, WASH) + slab(27.5, 9, 19.8) + pot(32, 13.5, 1.7)
+    /* the Algarve's openwork chimney: a washed turret whose crown is pierced
+       in a geometric lace, under a cornice and a small pyramid */
+    rendilhada: () => roofL() + R(27, 24, 10, 22, WSH) + R(26, 22, 12, 2, CAPC)
+      + R(26.5, 12.5, 11, 9.5, WSH) + Dm(29.2, 15.4, 1.5) + Dm(32, 15.4, 1.5) + Dm(34.8, 15.4, 1.5)
+      + Dm(29.2, 19.2, 1.5) + Dm(32, 19.2, 1.5) + Dm(34.8, 19.2, 1.5)
+      + R(25, 10.6, 14, 1.9, CAPC) + Pg([[26.5, 10.6], [32, 5.6], [37.5, 10.6]], WSH) + ln('M32 5.6V2.6', 1.1),
+    /* the tile grille: courses of tile laid one over another on posts */
+    grelha: () => roofL() + R(26.5, 23, 11, 23, WSH) + H(28, 12.5, 8, 10.5)
+      + R(26.5, 12.5, 2, 10.5, WSH, 0.9) + R(35.5, 12.5, 2, 10.5, WSH, 0.9)
+      + R(25, 21.2, 14, 1.6, CLAY, 0.9) + R(25, 18.3, 14, 1.6, CLAY, 0.9) + R(25, 15.4, 14, 1.6, CLAY, 0.9)
+      + R(24.5, 10.6, 15, 2.2, CAPC),
+    /* the Olhão balloon: a large six-sided shaft, a conical volume closed by
+       a cylinder slit all round */
+    balao: () => roofL() + R(25, 26, 14, 20, WSH) + ln('M28.6 26V46M35.4 26V46', 0.7, 0.6) + R(24, 24.2, 16, 1.8, CAPC)
+      + Pg([[24.6, 24.2], [39.4, 24.2], [35.4, 15], [28.6, 15]], WSH)
+      + R(28.6, 9, 6.8, 6, WSH) + H(29.8, 10.2, 1, 3.6) + H(31.5, 10.2, 1, 3.6) + H(33.2, 10.2, 1, 3.6)
+      + R(27.6, 7.6, 8.8, 1.4, CAPC) + Pg([[29.4, 7.6], [34.6, 7.6], [32, 4.8]], WSH, 0.9),
+    /* Monchique's skirt: a thin wall stands round the slits of the flue and
+       keeps the smoke from the sides; the cocuruto closes the top */
+    saia: () => roofL() + R(28.5, 26, 7, 20, WSH) + R(23.5, 15.5, 17, 10.5, WSH) + H(24.7, 15.5, 14.6, 1.1)
+      + R(28.5, 9.5, 7, 6, WSH) + R(27, 8.4, 10, 1.4, CAPC) + Pg([[27.6, 8.4], [36.4, 8.4], [32, 3.8]], WSH),
+    saia8: () => roofL() + R(28.5, 26, 7, 20, WSH) + R(23.5, 15.5, 17, 10.5, WSH) + ln('M27.6 15.5V26M36.4 15.5V26', 0.7, 0.6)
+      + H(24.7, 15.5, 14.6, 1.1)
+      + R(28.5, 9.5, 7, 6, WSH) + R(27, 8.4, 10, 1.4, CAPC) + Pg([[27.6, 8.4], [36.4, 8.4], [32, 3.8]], WSH),
+    /* the arca, the national type: a long low chest under a tiled lid,
+       the smoke leaving under its eaves */
+    arca: () => roofL() + R(17, 32, 30, 14, WSH) + H(20, 33.6, 4, 2.4) + H(30, 33.6, 4, 2.4) + H(40, 33.6, 4, 2.4)
+      + R(16, 30.4, 32, 1.8, CAPC) + R(16.6, 25, 30.8, 5.4, CLAY) + ln('M21 25V30.4M26 25V30.4M31 25V30.4M36 25V30.4M41 25V30.4', 0.6, 0.7),
+    /* the Alentejo's listening chimney: a broad rectangular stack, tile
+       hoods over the smoke, a cross among the symbols that guard the house */
+    escuta: () => roofL() + R(17.5, 18, 29, 28, WSH) + R(16.5, 16, 31, 2.2, CAPC)
+      + Pg([[19, 16], [26, 16], [22.5, 10.5]], CLAY) + Pg([[28.5, 16], [35.5, 16], [32, 10.5]], CLAY) + Pg([[38, 16], [45, 16], [41.5, 10.5]], CLAY)
+      + Pg([[20.6, 16], [24.4, 16], [22.5, 13]], HOLE, 0.1) + Pg([[30.1, 16], [33.9, 16], [32, 13]], HOLE, 0.1) + Pg([[39.6, 16], [43.4, 16], [41.5, 13]], HOLE, 0.1)
+      + '<path d="M32 22.5V31M28.6 25.4H35.4" stroke="#3C4A5C" stroke-width="1.5" fill="none"/>',
+    /* the saloio chimney: long and slender, its tiled lid running north-south */
+    saloia: () => roofL() + R(20, 22, 24, 24, WSH) + R(19, 20.4, 26, 1.8, CAPC)
+      + R(19.6, 15.6, 24.8, 4.8, CLAY) + ln('M24 15.6V20.4M28 15.6V20.4M32 15.6V20.4M36 15.6V20.4M40 15.6V20.4', 0.6, 0.7)
+      + H(20.4, 22.6, 2.4, 3) + H(41.2, 22.6, 2.4, 3),
+    granito: () => stack(GRAN, '#B4B8BB'),
+    xisto: () => stack(SCH, '#958A79'),
+    basalto: () => stack(BAS, '#76777B'),
+    /* the Alentejo stack: tall and slender, a fret band of triangles under the slab */
+    alentejana: () => roofL() + R(28, 14, 8, 32, WSH)
+      + '<polygon points="28.5,20 30.5,16 32.5,20" fill="#33302c"/><polygon points="33,20 35,16 37,20" fill="#33302c"/>'
+      + R(25.5, 11.8, 13, 2.2, CAPC) + '<rect x="30" y="11.9" width="4" height="1.6" fill="#33302c"/>',
+    /* the Alentejo long range: a long white range, the fret band, five flues under one slab */
+    alongada: () => roofL() + R(12, 28, 40, 18, WSH)
+      + [14, 21, 28, 35, 42].map(px => '<polygon points="' + px + ',34 ' + (px + 2.5) + ',30 ' + (px + 5) + ',34" fill="#33302c"/>').join('')
+      + R(10.5, 25.8, 43, 2.2, CAPC) + [15, 22, 29, 36, 43].map(px => H(px, 23.4, 3, 2.4)).join(''),
+    /* Santa Maria's mãos postas: two leaves leaning together over the flue */
+    maos: () => roofL() + R(25, 24, 14, 22, WSH) + R(24.4, 22.4, 15.2, 1.6, CAPC)
+      + Pg([[24.6, 22.4], [39.4, 22.4], [32, 9]], WSH) + Pg([[28.6, 21.6], [35.4, 21.6], [32, 14.6]], HOLE, 0.1),
+    /* Santa Maria's steam chimney: a round funnel on a truncated pyramid,
+       ending in a point */
+    vapor: () => roofL() + Pg([[23, 46], [41, 46], [37.5, 37], [26.5, 37]], WSH) + R(28, 14, 8, 23, WSH)
+      + ln('M30 14V37', 0.6, 0.5) + R(27, 12.4, 10, 1.6, CAPC) + H(29.2, 15.2, 1.2, 2.4) + H(31.4, 15.2, 1.2, 2.4) + H(33.6, 15.2, 1.2, 2.4)
+      + Pg([[27.6, 12.4], [36.4, 12.4], [32, 6.6]], WSH) + ln('M32 6.6V2.6', 1.1),
+    /* São Miguel: a prismatic shaft, a grille of tear-shaped openings and a
+       pointed hood */
+    coifa: () => roofL() + R(26.5, 24, 11, 22, WSH) + R(26.5, 18, 11, 6, WSH)
+      + '<path d="M29 23.2V21A1 1 0 0 1 31 21V23.2ZM31 23.2V21A1 1 0 0 1 33 21V23.2ZM33 23.2V21A1 1 0 0 1 35 21V23.2Z" fill="' + HOLE + '"/>'
+      + R(25, 16.4, 14, 1.6, CAPC) + Pg([[25.6, 16.4], [38.4, 16.4], [32, 6]], WSH)
   };
   return { B, S, C, svg };
 })();
-/* The chimney survey, as this application teaches it: six families after
-   the houses the Inquérito à Arquitectura Popular em Portugal (1961) and
-   Oliveira & Galhano (1992) record — the Algarve's openwork turret, and
-   after the UAlg survey two more Algarve crowns, Monchique's balloon
-   (a conical volume closed by a cylinder) and Cacela's long low chest — the
-   Alentejo's tall whitewashed stack, Lisbon whitewash,
-   northern granite masses, Beira schist shafts, island basalt — mapped here
-   onto the thirty NUTS III. A teaching simplification, not a census: a
-   valley can carry a neighbour's chimney, and the icons name their family. */
+/* The chimney survey, as this application teaches it. Each family is drawn
+   after what Portuguese sources record of it and where — the Algarve's
+   openwork, tile-grille, Olhão balloon and Monchique skirt chimneys, the
+   arca that is the national type, the Alentejo's listening chimney, the
+   saloio chimney of Lisbon's hinterland, Santa Maria's mãos postas and steam
+   chimneys, São Miguel's oven chimney — and the stone stacks of the granite,
+   schist and basalt country. A place offers first the chimneys its own
+   sources name, the municipality before the region; where they name none
+   the note says so, and the national arca and the neighbours' chimneys are
+   offered instead. The stone stacks are the one family drawn from the
+   material alone: the sources give the stone, not a form, so the slab on
+   corner stones is this application's reading. Measures are teaching
+   values (the Alentejo's “up to three metres” is the only one a source
+   gives). The Alentejo stack with its fret band and the Alentejo long range
+   are this application's earlier drawings, kept beside the listening
+   chimney and saying so. Every family stands on the same shaft — its
+   footprint and side pitch the student's, its foot on the roof — and
+   carries its own crown. */
+const CHIMNEY_SRC = {
+  ualg:   ['A(s) chaminé(s) do Algarve — dissertação de mestrado, Universidade do Algarve', 'https://sapientia.ualg.pt/handle/10400.1/17425'],
+  sul:    ['A chaminé tradicional no Sul de Portugal: contributo para uma história da arquitetura do Algarve', 'https://www.academia.edu/44342143'],
+  tasa:   ['A «chaminé algarvia» — Projecto TASA', 'https://projectotasa.com/chaminealgarvia-2/'],
+  monch:  ['Chaminés de Saia — Câmara Municipal de Monchique', 'https://cm-monchique.pt/pt/menu/133/chamines-de-saia.aspx'],
+  lobato: ['L. Lobato de Faria, Chaminés de escuta decoradas com símbolos de protecção', 'https://alentejoinportugal.blogspot.com/2017/03/chamines-e-simbolos.html'],
+  dalent: ['Património: símbolos de proteção nas chaminés do Alentejo — Diário do Alentejo', 'https://diariodoalentejo.pt/pt/noticias/6896/patrimonio-simbolos-de-protecao-nas-chamines-do-alentejo.aspx'],
+  saloia: ['A Casa Saloia — Folclore.pt', 'https://folclore.pt/a-casa-saloia/'],
+  folc:   ['A chaminé na arquitectura tradicional portuguesa — Folclore.pt', 'https://folclore.pt/chamine-arquitectura-tradicional/'],
+  galh:   ['E. Veiga de Oliveira & F. Galhano, Arquitectura tradicional portuguesa — Etnográfica Press', 'https://books.openedition.org/etnograficapress/6558'],
+  smaria: ['As chaminés das casas de Santa Maria — Andarilho, 2020', 'https://andarilho.pt/2020/03/20/as-chamines-das-casas-de-santa-maria/'],
+  smcasa: ['Casa Típica de Santa Maria — Explore Santa Maria', 'https://www.exploresantamaria.pt/descobrir/casa-tipica-de-santa-maria/'],
+  smigue: ['Forno, lareira e chaminé da casa micaelense — Repositório Iscte', 'https://repositorio.iscte-iul.pt/bitstream/10071/29421/1/conferenceobject_98014.pdf'],
+  psanto: ['Casa de Salão, Porto Santo — Visit Madeira', 'https://visitmadeira.com/pt/onde-ir/porto-santo/a-descoberta-da-ilha/casa-de-salao'],
+  mcolmo: ['Arquitetura popular: cobertura de uma casa de colmo — Cultura Madeira', 'https://cultura.madeira.gov.pt/sabias-que-1/521-arquitetura-popular-cobertura-de-uma-casa-de-colmo.html'],
+  xisto:  ['Aldeias do Xisto — Serra da Lousã', 'https://aldeiasdoxisto.pt/en/villages/lousa'],
+  estrela:['Aldeias da Serra da Estrela — VagaMundos', 'https://www.vagamundos.pt/visitar-aldeias-serra-da-estrela/']
+};
+/** name, where it comes from, what it is, its sources; shaft (and long,
+    longY) the footprint until the student sets one, h the shaft's height
+    above the roof, crown the head it carries (none: the shaft's own cap,
+    pots and fret, as the earlier drawings build them). */
 const CHIMNEY_FAM = {
-  algarvia:  { name:'Algarve turret', shaft:0.7, h:1.7, cap:0.1, pots:2, skewed:false,
-    colours:['#F4F1EA', '#C98A5E'] },
-  alentejana:{ name:'Alentejo stack', shaft:0.5, h:1.9, cap:0.1, pots:0, fret:true,
-    colours:['#F4F1EA', '#C98A5E'] },
-  lisboeta:  { name:'Lisbon whitewash', shaft:0.65, h:1.5, cap:0.18, pots:2,
-    colours:['#F4F1EA', '#C98A5E'] },
-  nortenha:  { name:'Northern granite', shaft:0.9, h:1.4, cap:0.16, pots:0, open:true,
-    colours:['#9AA0A6', '#2b2b2e'] },
-  beira:     { name:'Beira schist', shaft:0.7, h:1.5, cap:0.12, pots:1,
-    colours:['#8A7A63', '#C98A5E'] },
-  insular:   { name:'Island basalt', shaft:0.6, h:1.5, cap:0.12, pots:1, band:true,
-    colours:['#4A4A4E', '#F4F1EA'] },
-  balao:     { name:'Monchique balloon', shaft:0.8, h:1.0, cap:0.12, pots:0,
-    cone:{ r:0.55, h:0.7 }, drum:{ r:0.3, h:0.35 }, top:1.05,
-    colours:['#F4F1EA', '#C98A5E'] },
-  arca:      { name:'Cacela chest', shaft:0.55, h:1.05, cap:0.1, pots:2, long:1.9,
-    colours:['#F4F1EA', '#C98A5E'] },
-  alongada:  { name:'Alentejo long range', shaft:0.55, h:1.8, cap:0.12, pots:5, long:3.4, fret:true,
-    colours:['#F4F1EA', '#C98A5E'] },
-  simple:    { name:'Simple pot', shaft:0.45, h:1.2, cap:0.15, pots:1,
-    colours:['#EFE9DC', '#C98A5E'] }
+  rendilhada:{ name:'Algarve openwork chimney', where:'The Algarve',
+    desc:'A whitewashed turret whose crown is pierced in a geometric lace under a cornice — the vertical type of the Algarve.',
+    src:['ualg', 'tasa', 'sul'], shaft:0.56, h:1.2, crown:'rendilhada', colours:['#F4F1EA', '#C98A5E'] },
+  grelha:    { name:'Algarve tile-grille chimney', where:'The Algarve',
+    desc:'Courses of tile laid one over another on corner posts, the smoke leaving between them — the horizontal-grille type.',
+    src:['tasa', 'sul'], shaft:0.6, h:1.2, crown:'grelha', colours:['#F4F1EA', '#C98A5E'] },
+  balao:     { name:'Olhão balloon chimney', where:'Olhão and Fuseta',
+    desc:'A large shaft, then a conical volume closed by a cylinder slit all round: the smoke leaves through the slits.',
+    src:['ualg', 'tasa'], shaft:0.8, h:1.0, crown:'balao', colours:['#F4F1EA', '#C98A5E'] },
+  saia:      { name:'Monchique skirt chimney — cubic', where:'Monchique',
+    desc:'A wall about 10 cm thick stands round the slits of the flue and stops the smoke at the sides; the cocuruto closes the top.',
+    src:['monch', 'ualg'], shaft:0.48, h:0.9, crown:'saia', colours:['#F4F1EA', '#C98A5E'] },
+  saia8:     { name:'Monchique skirt chimney — octagonal', where:'Monchique',
+    desc:'The same skirt on eight sides — Monchique builds both, cubic and octagonal.',
+    src:['monch'], shaft:0.48, h:0.9, crown:'saia8', colours:['#F4F1EA', '#C98A5E'] },
+  arca:      { name:'Chest chimney — the national type', where:'All of Portugal; in the Algarve, Cacela Velha',
+    desc:'A long, low chest under a tiled lid, the smoke leaving under its eaves — the type found across the country.',
+    src:['ualg', 'tasa'], shaft:0.56, long:2.5, h:0.75, crown:'arca', colours:['#F4F1EA', '#C98A5E'] },
+  escuta:    { name:'Alentejo listening chimney', where:'The Alentejo',
+    desc:'A broad rectangular stack, whitewashed, over the hearth on the floor; tile hoods cover the smoke, and the face to the street often carries a cross and a date.',
+    src:['lobato', 'dalent', 'folc'], shaft:0.8, long:1.625, h:1.9, crown:'escuta', colours:['#F4F1EA', '#C98A5E'] },
+  alentejana:{ name:'Alentejo stack', where:'The Alentejo',
+    desc:'Tall and slender, a fret band of triangles under the slab — the Alentejo chimney.',
+    src:[], shaft:0.5, h:1.9, cap:0.1, pots:0, fret:true, colours:['#F4F1EA', '#C98A5E'] },
+  alongada:  { name:'Alentejo long range', where:'The Alentejo',
+    desc:'A long white range with five flues under one slab — the Alentejo long range.',
+    src:[], shaft:0.55, h:1.8, cap:0.12, pots:5, long:3.4, fret:true, colours:['#F4F1EA', '#C98A5E'] },
+  saloia:    { name:'Saloio chimney', where:'Lisbon’s hinterland — Sintra, Mafra, Ericeira',
+    desc:'Long and slender, set north–south, its tiled lid open at both ends.',
+    src:['saloia'], shaft:0.4, longY:2.75, h:1.4, crown:'saloia', colours:['#F4F1EA', '#C98A5E'] },
+  granito:   { name:'Granite stack', where:'The granite north and the Beira',
+    desc:'A granite stack whose slab lid rests on corner stones; in the rural north the chimney came late, and smoke long left through the tiles.',
+    src:['galh', 'folc', 'estrela'], shaft:0.64, h:1.1, crown:'stack', colours:['#9EA2A6', '#B4B8BB'] },
+  xisto:     { name:'Schist stack', where:'The schist country — Douro, Lousã, Pinhal',
+    desc:'The same stack in schist, the stone of the walls and roofs of the schist villages.',
+    src:['xisto', 'galh'], shaft:0.64, h:1.1, crown:'stack', colours:['#7D7364', '#958A79'] },
+  basalto:   { name:'Basalt stack', where:'Madeira and Porto Santo',
+    desc:'A stone stack in basalt — the Porto Santo house had its kitchen with an oven and a stone chimney.',
+    src:['psanto', 'mcolmo'], shaft:0.6, h:1.0, crown:'stack', colours:['#5A5B5F', '#76777B'] },
+  maos:      { name:'Santa Maria mãos postas chimney', where:'Santa Maria, Azores',
+    desc:'Rectangular, the oldest on the island and Alentejo in its origin: two leaves lean together over the flue like hands at prayer.',
+    src:['smaria', 'smcasa'], shaft:0.48, long:1.75, h:1.3, crown:'maos', colours:['#F4F1EA', '#C98A5E'] },
+  vapor:     { name:'Santa Maria steam chimney', where:'Santa Maria, Azores',
+    desc:'Round, on a truncated pyramid, ending in a point (espicho); it came at the turn of the 20th century, after the funnels of the steamships.',
+    src:['smaria', 'smcasa'], shaft:0.68, h:1.4, shaftH:0.12, crown:'vapor', colours:['#F4F1EA', '#C98A5E'] },
+  coifa:     { name:'São Miguel oven chimney', where:'São Miguel, Azores',
+    desc:'A prismatic shaft with a grille of tear-shaped openings under a pointed hood, rising from the oven built against the gable.',
+    src:['smigue'], shaft:0.6, h:1.1, crown:'coifa', colours:['#F4F1EA', '#C98A5E'] }
 };
-const CHIMNEY_NUT = {
-  'Algarve':['algarvia', 'balao', 'arca', 'simple'],
-  'Alentejo Litoral':['alentejana', 'simple'], 'Alentejo Central':['alentejana', 'simple'],
-  'Baixo Alentejo':['alentejana', 'simple'], 'Alto Alentejo':['alentejana', 'simple'],
-  'Lezíria do Tejo':['alentejana', 'simple'], 'Médio Tejo':['alentejana', 'simple'], 'Oeste':['alentejana', 'simple'],
-  'Grande Lisboa':['lisboeta', 'simple'], 'Península de Setúbal':['lisboeta', 'simple'],
-  'Minho-Lima':['nortenha', 'simple'], 'Cávado':['nortenha', 'simple'], 'Ave':['nortenha', 'simple'],
-  'Grande Porto':['nortenha', 'simple'], 'Tâmega':['nortenha', 'simple'], 'Entre Douro e Vouga':['nortenha', 'simple'],
-  'Douro':['nortenha', 'simple'], 'Alto Trás-os-Montes':['nortenha', 'simple'],
-  'Baixo Vouga':['beira', 'simple'], 'Baixo Mondego':['beira', 'simple'], 'Pinhal Litoral':['beira', 'simple'],
-  'Pinhal Interior Norte':['beira', 'simple'], 'Pinhal Interior Sul':['beira', 'simple'], 'Dão-Lafões':['beira', 'simple'],
-  'Serra da Estrela':['beira', 'simple'], 'Beira Interior Norte':['beira', 'simple'], 'Beira Interior Sul':['beira', 'simple'],
-  'Cova da Beira':['beira', 'simple'],
-  'RA da Madeira':['insular', 'simple'], 'RA dos Açores':['insular', 'simple']
+/** Keys of studies saved before this survey. */
+const CHIMNEY_OLD = { algarvia:'rendilhada', lisboeta:'saloia', nortenha:'granito', beira:'xisto', insular:'coifa', simple:'arca' };
+const chimKey = k => CHIMNEY_FAM[k] ? k : CHIMNEY_OLD[k] || 'arca';
+const chimFam = k => CHIMNEY_FAM[chimKey(k)];
+/** Per NUTS III: own — the chimneys its sources name, the first drawn by
+    default; near — the national type and the neighbours'; note — what the
+    sources say of the place itself. */
+const CHIMNEY_NUT = (() => {
+  const T = {};
+  const set = (ns, o) => ns.forEach(n => { T[n] = o; });
+  set(['Algarve'], { own:['rendilhada', 'grelha', 'balao', 'saia', 'saia8', 'arca'], near:['escuta'],
+    note:'The Algarve builds the most varied chimneys in the country: openwork turrets, tile grilles, Olhão’s balloons, Monchique’s skirts and the arca.' });
+  set(['Alentejo Central', 'Alto Alentejo'], { own:['escuta', 'alentejana', 'alongada'], near:['arca', 'saloia'],
+    note:'In the Alentejo the chimney grows imposing — the house is built round its listening chimney.' });
+  set(['Baixo Alentejo', 'Alentejo Litoral'], { own:['escuta', 'alentejana', 'alongada'], near:['arca', 'rendilhada'],
+    note:'In the Alentejo the chimney grows imposing — the house is built round its listening chimney; toward the Algarve the round and openwork forms appear.' });
+  set(['Grande Lisboa', 'Oeste'], { own:['saloia'], near:['arca', 'escuta'],
+    note:'The saloio house of Lisbon’s hinterland carries a long, slender chimney set north–south.' });
+  set(['Península de Setúbal'], { own:[], near:['escuta', 'saloia', 'arca'],
+    note:'The sources consulted name no chimney of the peninsula itself: the Alentejo’s and the saloio chimneys stand on either side, and the arca everywhere.' });
+  set(['Lezíria do Tejo', 'Médio Tejo'], { own:[], near:['arca', 'saloia', 'escuta'],
+    note:'The sources consulted name no chimney of the Ribatejo itself: the arca, the national type, comes first, the saloio and the Alentejo chimneys on either side.' });
+  set(['Minho-Lima', 'Cávado', 'Ave', 'Grande Porto', 'Tâmega', 'Entre Douro e Vouga'], { own:['granito'], near:['xisto', 'arca'],
+    note:'In the rural north the chimney was rare and came late: smoke left through the tiles of a kitchen open to the roof. Where it was built, it was built in granite.' });
+  set(['Alto Trás-os-Montes'], { own:['granito', 'xisto'], near:['arca'],
+    note:'In Trás-os-Montes the chimney was rare and came late: smoke left through the tiles or the slate. Where it was built, it was built in the local granite or schist.' });
+  set(['Douro'], { own:['xisto', 'granito'], near:['arca'],
+    note:'In the Douro the chimney is built in the schist of the terraces, or in granite.' });
+  set(['Serra da Estrela', 'Beira Interior Norte', 'Cova da Beira', 'Dão-Lafões'], { own:['granito'], near:['xisto', 'arca'],
+    note:'The granite villages of the Beira raise granite chimneys over the hearth on the floor.' });
+  set(['Beira Interior Sul'], { own:['granito', 'xisto'], near:['arca', 'escuta'],
+    note:'The Beira Baixa builds in granite and in schist, village by village.' });
+  set(['Pinhal Interior Norte', 'Pinhal Interior Sul'], { own:['xisto'], near:['granito', 'arca'],
+    note:'The schist villages build walls, roofs and chimneys in schist.' });
+  set(['Baixo Vouga', 'Baixo Mondego', 'Pinhal Litoral'], { own:[], near:['arca', 'granito', 'saloia'],
+    note:'The sources consulted name no chimney of the Beira Litoral itself: the arca, the national type, comes first.' });
+  set(['RA dos Açores'], { own:['coifa'], near:['maos', 'vapor', 'basalto'],
+    note:'The sources consulted describe the chimneys of São Miguel and Santa Maria; for the other islands São Miguel’s comes first.' });
+  set(['RA da Madeira'], { own:['basalto'], near:['arca'],
+    note:'In Madeira the kitchen stood apart under its own thatch; Porto Santo’s house had its kitchen with an oven and a stone chimney.' });
+  return T;
+})();
+/** The municipalities whose own chimney the sources name. */
+const CHIMNEY_CONC = {
+  'Monchique':  { own:['saia', 'saia8'], note:'Monchique’s chimneys wear a skirt — cubic or octagonal — against the mountain’s wind and rain; below, the hearth spans the kitchen and cures the sausages.' },
+  'Olhão':      { own:['balao'], note:'The balloon chimney belongs to Olhão and Fuseta and is sparse outside them.' },
+  'Vila Real de Santo António': { own:['arca'], note:'Cacela Velha keeps chimneys in the form of an arca, the national type.' },
+  'Vila do Porto': { own:['maos', 'vapor'], note:'Santa Maria builds two: the rectangular mãos postas, the oldest, and the round steam chimney that became the island’s mark.' },
+  'Ponta Delgada':{ own:['coifa'] }, 'Ribeira Grande':{ own:['coifa'] }, 'Vila Franca do Campo':{ own:['coifa'] },
+  'Povoação':{ own:['coifa'] }, 'Nordeste':{ own:['coifa'] },
+  'Porto Santo':{ own:['basalto'], note:'The Porto Santo house had its kitchen with an oven and a stone chimney.' }
 };
-const chimneyOf = nuts => (CHIMNEY_NUT[nuts] && CHIMNEY_NUT[nuts][0]) || 'alentejana';
-const chimneyList = nuts => { const l = CHIMNEY_NUT[nuts] || ['alentejana']; return l.indexOf('simple') >= 0 ? l.slice() : l.concat(['simple']); };
+/** Lagoa and Calheta name two municipalities: the region tells them apart. */
+const CHIMNEY_CONC_NUT = { 'Lagoa|RA dos Açores':{ own:['coifa'] } };
+/**
+ * The chimneys of the site: { own, near, all, where, note }. own are the
+ * place's own (the municipality's first, then its region's), near the
+ * national type and the neighbours', all the two in order — all[0] is the
+ * one drawn when a chimney is added.
+ */
+function chimneyPlace(site) {
+  const nuts = site && site.nuts, R = CHIMNEY_NUT[nuts] || { own:[], near:['arca'], note:null };
+  const conc = site && site.place ? CONC_BY_PLAIN[plainName(site.place)] : null;
+  const C = conc ? (CHIMNEY_CONC_NUT[conc + '|' + nuts] || (CONCELHOS[conc].indexOf(nuts) >= 0 ? CHIMNEY_CONC[conc] : null)) : null;
+  const own = [], near = [];
+  const add = (arr, k) => { if (CHIMNEY_FAM[k] && own.indexOf(k) < 0 && near.indexOf(k) < 0) arr.push(k); };
+  if (C) C.own.forEach(k => add(own, k));
+  R.own.forEach(k => add(own, k));
+  R.near.forEach(k => add(near, k));
+  if (own.indexOf('arca') < 0) add(near, 'arca');
+  return { own, near, all:own.concat(near), where:(C && conc) || nuts || '', note:(C && C.note) || R.note || null };
+}
+/** The chimney a site draws when one is added. */
+const chimneyOf = site => chimneyPlace(site).all[0] || 'arca';
+/** A chimney not picked by hand follows the site: moved to Monchique, it
+    turns into Monchique's. Returns its family's key. */
+function chimSync(ch) {
+  if (!ch) return null;
+  ch.fam = ch.picked ? chimKey(ch.fam) : chimneyOf(STATE.site);
+  return ch.fam;
+}
 /** Names and sentences for the chimney figures, in the strategy icons' own
     shape, so sceFig draws them unchanged. */
-Object.assign(SCE_ICON, {
-  algarvia:  ['Algarve turret', 'An openwork crown under the cap, two pots — the Algarve chimney.'],
-  alentejana:['Alentejo stack', 'Tall and slender, a fret band of triangles under the slab — the Alentejo chimney.'],
-  lisboeta:  ['Lisbon whitewash', 'A whitewashed stack with two clay pots — the Lisbon chimney.'],
-  nortenha:  ['Northern granite', 'A heavy mass with open flues under one great slab — the northern chimney.'],
-  beira:     ['Beira schist', 'A stone shaft with a slab cap and one pot — the Beira chimney.'],
-  insular:   ['Island basalt', 'A dark shaft with a washed crown and one pot — the island chimney.'],
-  alongada:  ['Alentejo long range', 'A long white range with five flues under one slab — the Alentejo long range.'],
-  balao:     ['Monchique balloon', 'A conical volume closed by a clay cylinder — the Monchique balloon.'],
-  arca:      ['Cacela chest', 'A long low chest with small flues — the Cacela arca.'],
-  simple:    ['Simple pot', 'A plain washed stack with one pot — every region builds one.']
-});
+Object.keys(CHIMNEY_FAM).forEach(k => { SCE_ICON[k] = [CHIMNEY_FAM[k].name, CHIMNEY_FAM[k].desc]; });
 
 /** A flat colour shaded by the face's own normal, south-west light — so a
     chimney reads round instead of one flat sheet. */
@@ -2409,13 +2566,26 @@ const shadeFill = (hex, n) => {
   const c = [v >> 16 & 255, v >> 8 & 255, v & 255].map(x => Math.round(clamp(x * f, 0, 255)));
   return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
 };
-/** Crown height above the roof surface, one rule for geometry and handles. */
-const chimTopH = (F, h) => (h === undefined ? F.h : h) + (F.cap || 0.15) + (F.pots > 0 ? 0.5 : 0.02) + (F.top || 0);
-/** Triangles [{pts:[3], fill, n}] for a chimney of the region's family,
-    standing on the roof surface at (x, y, z0): plinth, shaft, cap, pots or
-    open flues, the Algarve's openwork crown. Small enough to paint anywhere. */
+/** Crown height above the roof surface, one rule for geometry and handles:
+    the shaft's height and the family's head above it, read off the drawn
+    faces once per family. */
+const CHIM_TOP = {};
+function chimTopH(fam, h) {
+  const k = chimKey(fam), hh = h === undefined ? CHIMNEY_FAM[k].h : h;
+  if (CHIM_TOP[k] === undefined) CHIM_TOP[k] = Math.max.apply(null, [].concat.apply([], chimneyFaces(k, 0, 0, 0, 1).map(f => f.pts.map(q => q[2])))) - 1;
+  return hh + CHIM_TOP[k];
+}
+/** Faces [{pts, fill, n}] for a chimney of family famKey standing on the
+    roof surface at (x, y, z0): the shaft, its footprint and side pitch the
+    student's, its foot on the roof; then the family's crown — the sourced
+    heads (openwork, tile grille, balloon, skirt, arca lid, listening hoods,
+    saloio lid, stone slab, mãos postas, steam funnel, oven hood), or the
+    earlier cap, pots and fret. An opening is its own dark face standing a
+    hair proud of the face it is cut in, which it names as under, so a
+    painter can set it straight after that face. Small enough to paint
+    anywhere. */
 function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
-  const F0 = CHIMNEY_FAM[famKey] || CHIMNEY_FAM.alentejana;
+  const key = chimKey(famKey), F0 = CHIMNEY_FAM[key];
   const F = Object.assign({}, F0, { h:(hEff === undefined ? F0.h : hEff) });
   const tap = isFinite(+taperDeg) ? Math.max(0, +taperDeg) * RAD : 0;
   const out = [];
@@ -2468,8 +2638,8 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
     }
     face(cap, fill);   // the top as one polygon, so only its rim is inked
   };
-  const shaftC = F.colours[0], capC = (famKey === 'nortenha' || famKey === 'beira') ? F.colours[0] : '#EFE9DC', potC = '#C98A5E';
-  const w = (foot && isFinite(+foot.y)) ? +foot.y : F.shaft, h = F.h, sw = (foot && isFinite(+foot.x)) ? +foot.x : F.shaft * (F.long || 1), skirt = F.skirt ? 0.6 : 0, capT = Math.max(0.15, F.cap || 0.15);
+  const shaftC = F.colours[0], capC = '#EFE9DC', potC = '#C98A5E';
+  const w = (foot && isFinite(+foot.y)) ? +foot.y : F.shaft * (F.longY || 1), h = F.h, sw = (foot && isFinite(+foot.x)) ? +foot.x : F.shaft * (F.long || 1), skirt = F.skirt ? 0.6 : 0, capT = Math.max(0.15, F.cap || 0.15);
   const hs = h - skirt + 0.35, inset = hs * Math.tan(tap);
   const wt = Math.max(0.3, w - 2 * inset), swt = Math.max(0.3, sw - 2 * inset);
   const coneFrustum = (cx, cy, r0, r1, z1, z2, fill, n) => {
@@ -2492,7 +2662,10 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
     try { const v = zAtFn(qx, qy); return isFinite(v) ? v : null; } catch (e) { return null; }
   };
   const footZ = (sx, sy) => { const v = rawZ(x + sx * sw / 2, y + sy * w / 2); return v === null ? z0 - 0.35 : v; };
-  frustum(x, y, sw / 2, w / 2, swt / 2, wt / 2, footZ, z0 + h - skirt, shaftC, typeof zAtFn === 'function');
+  const hShaft = F.crown && F.shaftH !== undefined ? Math.min(F.shaftH, h) : h - skirt, i0 = out.length;
+  frustum(x, y, sw / 2, w / 2, swt / 2, wt / 2, footZ, z0 + hShaft, shaftC, typeof zAtFn === 'function');
+  const shaftSide = { S:out[i0], N:out[i0 + 1], W:out[i0 + 2], E:out[i0 + 3] };   // as frustum winds them
+  if (F.crown) { crown(F.crown); return out; }
   if (F.cone) {
     const cb = z0 + h, ch = F.cone.h, hwt = Math.min(swt, wt) / 2, cr0 = Math.min(F.cone.r, hwt + 0.05), dr = Math.min(F.drum.r, hwt), cr1 = Math.min(dr + 0.07, cr0);
     coneFrustum(x, y, cr0, cr1, cb, cb + ch, shaftC);
@@ -2533,6 +2706,216 @@ function chimneyFaces(famKey, x, y, z0, hEff, foot, taperDeg, zAtFn) {
     box(x - wt / 4, y - wt / 4, zt, x + wt / 4, y + wt / 4, zt + 0.02, '#2b2b2e');
   }
   return out;
+
+  /* The sourced heads, standing on the shaft's top (W × D, half sizes, at
+     z0 + h): heights above the roof at the shaft's centre, plan offsets
+     from its axis. Each face's normal is turned away from the centre of
+     the solid it bounds, so it shades as the icons are lit. */
+  function crown(kind) {
+    const WSH = '#F4F1EA', CAPC = '#E4DED0', CLAY = '#B8653F', HOLE = '#2b2b2e';
+    const W = swt / 2, D = wt / 2;
+    const P = (u, v, z) => [x + u, y + v, z0 + z];
+    const sface = (pts, fill, oc) => {
+      let nx = 0, ny = 0, nz = 0, cx = 0, cy = 0, cz = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        nx += (a[1] - b[1]) * (a[2] + b[2]); ny += (a[2] - b[2]) * (a[0] + b[0]); nz += (a[0] - b[0]) * (a[1] + b[1]);
+        cx += a[0]; cy += a[1]; cz += a[2];
+      }
+      const L = pts.length;
+      if ((nx * (cx / L - oc[0]) + ny * (cy / L - oc[1]) + nz * (cz / L - oc[2])) < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      const Ln = Math.hypot(nx, ny, nz) || 1, f = { pts, fill:shadeFill(fill, [nx, ny, nz]), n:[nx / Ln, ny / Ln, nz / Ln] };
+      out.push(f);
+      return f;
+    };
+    const rect = (u0, v0, u1, v1) => [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+    const ngon = (r, n, a0) => { const p = []; for (let k = 0; k < n; k++) { const a = (a0 || 0) + k / n * Math.PI * 2; p.push([r * Math.cos(a), r * Math.sin(a)]); } return p; };
+    const mid = pg => pg.reduce((a, q) => [a[0] + q[0] / pg.length, a[1] + q[1] / pg.length], [0, 0]);
+    /* a prism over a plan polygon from z1 to z2; its side faces, edge by
+       edge, for the openings cut in them; top:false leaves the top to what
+       sits on it */
+    const solid = (pg, z1, z2, fill, opt) => {
+      opt = opt || {};
+      const c = mid(pg), oc = P(c[0], c[1], (z1 + z2) / 2), sides = [];
+      for (let i = 0; i < pg.length; i++) {
+        const a = pg[i], b = pg[(i + 1) % pg.length];
+        sides.push(sface([P(a[0], a[1], z1), P(b[0], b[1], z1), P(b[0], b[1], z2), P(a[0], a[1], z2)], fill, oc));
+      }
+      if (opt.top !== false) sface(pg.map(q => P(q[0], q[1], z2)), opt.topFill || fill, oc);
+      return sides;
+    };
+    /* a frustum between two similar polygons, r1 = 0 a cone */
+    const taper = (pg0, pg1, z1, z2, fill, top) => {
+      const c = mid(pg0), oc = P(c[0], c[1], (z1 + z2) / 2);
+      for (let i = 0; i < pg0.length; i++) {
+        const j = (i + 1) % pg0.length;
+        const q = [P(pg0[i][0], pg0[i][1], z1), P(pg0[j][0], pg0[j][1], z1), P(pg1[j][0], pg1[j][1], z2), P(pg1[i][0], pg1[i][1], z2)];
+        sface(Math.hypot(pg1[i][0] - pg1[j][0], pg1[i][1] - pg1[j][1]) < 1e-6 ? [q[0], q[1], q[2]] : q, fill, oc);
+      }
+      if (top) sface(pg1.map(p => P(p[0], p[1], z2)), fill, oc);
+    };
+    const pyramid = (pg, z1, za, fill) => {
+      const c = mid(pg), A = P(c[0], c[1], za), oc = P(c[0], c[1], z1 + (za - z1) * 0.3);
+      for (let i = 0; i < pg.length; i++) { const a = pg[i], b = pg[(i + 1) % pg.length]; sface([P(a[0], a[1], z1), P(b[0], b[1], z1), A], fill, oc); }
+    };
+    /* a pitched lid over [u0,u1]×[v0,v1], its ridge along the longer side;
+       ends: the gable triangles' colour, or HOLE where they stand open */
+    const lid = (u0, v0, u1, v1, z1, z2, fill, ends, alongV) => {
+      const um = (u0 + u1) / 2, vm = (v0 + v1) / 2, oc = P(um, vm, z1 + (z2 - z1) * 0.3);
+      if (!alongV) {
+        sface([P(u0, v0, z1), P(u1, v0, z1), P(u1, vm, z2), P(u0, vm, z2)], fill, oc);
+        sface([P(u0, v1, z1), P(u1, v1, z1), P(u1, vm, z2), P(u0, vm, z2)], fill, oc);
+        [u0, u1].forEach(u => sface([P(u, v0, z1), P(u, v1, z1), P(u, vm, z2)], ends || fill, oc));
+      } else {
+        sface([P(u0, v0, z1), P(u0, v1, z1), P(um, v1, z2), P(um, v0, z2)], fill, oc);
+        sface([P(u1, v0, z1), P(u1, v1, z1), P(um, v1, z2), P(um, v0, z2)], fill, oc);
+        [v0, v1].forEach(v => sface([P(u0, v, z1), P(u1, v, z1), P(um, v, z2)], ends || fill, oc));
+      }
+    };
+    /* a dark opening on side face sd, over plan edge a→b (at the top of
+       the shaft when onShaft), from t0 to t1 along it and z1 to z2 up, a
+       hair proud of the face it is cut in — on a pitched shaft, of the
+       face as it leans out below the top */
+    const hole = (sd, a, b, t0, t1, z1, z2, shape, fill, onShaft) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      let nx = dy / L, ny = -dx / L;
+      if (nx * c[0] + ny * c[1] < 0) { nx = -nx; ny = -ny; }
+      const lean = z => 0.008 + (onShaft ? Math.max(0, hShaft - z) * Math.tan(tap) : 0);
+      const Q = (t, z) => P(a[0] + dx * t + nx * lean(z), a[1] + dy * t + ny * lean(z), z);
+      const tm = (t0 + t1) / 2, zm = (z1 + z2) / 2;
+      const pts = shape === 'diamond' ? [Q(tm, z1), Q(t1, zm), Q(tm, z2), Q(t0, zm)]
+        : shape === 'arch' ? [Q(t0, z1), Q(t1, z1), Q(t1, z1 + (z2 - z1) * 0.6), Q(tm, z2), Q(t0, z1 + (z2 - z1) * 0.6)]
+        : [Q(t0, z1), Q(t1, z1), Q(t1, z2), Q(t0, z2)];
+      const f = sface(pts, fill || HOLE, P(0, 0, zm));
+      f.under = sd;
+      return f;
+    };
+    const holesRound = (pg, sides, list) => pg.forEach((a, i) => { const b = pg[(i + 1) % pg.length]; list.forEach(hh => hole(sides[i], a, b, hh[0], hh[1], hh[2], hh[3], hh[4])); });
+    switch (kind) {
+      case 'rendilhada': {
+        solid(rect(-W - 0.04, -D - 0.04, W + 0.04, D + 0.04), h, h + 0.06, CAPC);
+        const cr = rect(-W + 0.01, -D + 0.01, W - 0.01, D - 0.01), z = h + 0.06;
+        const sides = solid(cr, z, z + 0.5, WSH, { top:false });
+        holesRound(cr, sides, [[0.12, 0.32, z + 0.27, z + 0.45, 'diamond'], [0.4, 0.6, z + 0.27, z + 0.45, 'diamond'], [0.68, 0.88, z + 0.27, z + 0.45, 'diamond'],
+          [0.12, 0.32, z + 0.05, z + 0.23, 'diamond'], [0.4, 0.6, z + 0.05, z + 0.23, 'diamond'], [0.68, 0.88, z + 0.05, z + 0.23, 'diamond']]);
+        solid(rect(-W - 0.07, -D - 0.07, W + 0.07, D + 0.07), z + 0.5, z + 0.57, CAPC);
+        pyramid(rect(-W + 0.02, -D + 0.02, W - 0.02, D - 0.02), z + 0.57, z + 0.86, WSH);
+        pyramid(rect(-0.025, -0.025, 0.025, 0.025), z + 0.86, z + 1.08, WSH);
+        break;
+      }
+      case 'grelha': {
+        const ps = 0.08, cuts = [0, 0.06, 0.10, 0.18, 0.22, 0.30, 0.34, 0.46];
+        /* between each course of tile: the dark flue and four posts */
+        for (let i = 0; i < cuts.length - 1; i++) {
+          const a = h + cuts[i], b = h + cuts[i + 1];
+          if (i % 2) { solid(rect(-W - 0.06, -D - 0.06, W + 0.06, D + 0.06), a, b, CLAY); continue; }
+          solid(rect(-W + 0.1, -D + 0.1, W - 0.1, D - 0.1), a, b, HOLE, { top:false });
+          [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([su, sv]) => solid(rect(su * W - (su > 0 ? ps : 0), sv * D - (sv > 0 ? ps : 0), su * W + (su < 0 ? ps : 0), sv * D + (sv < 0 ? ps : 0)), a, b, WSH, { top:false }));
+        }
+        solid(rect(-W - 0.08, -D - 0.08, W + 0.08, D + 0.08), h + 0.46, h + 0.53, CAPC);
+        break;
+      }
+      case 'balao': {
+        const r = Math.min(W, D) + 0.03;
+        solid(ngon(r + 0.02, 6, Math.PI / 6), h, h + 0.06, CAPC);
+        taper(ngon(r, 6, Math.PI / 6), ngon(0.2, 6, Math.PI / 6), h + 0.06, h + 0.5, WSH, false);
+        const cyl = ngon(0.2, 10), z = h + 0.5, sides = solid(cyl, z, z + 0.3, WSH, { top:false });
+        cyl.forEach((a, i) => { if (i % 2) return; hole(sides[i], a, cyl[(i + 1) % cyl.length], 0.25, 0.75, z + 0.05, z + 0.24); });
+        solid(ngon(0.25, 10), z + 0.3, z + 0.35, CAPC);
+        taper(ngon(0.14, 10), ngon(0, 10), z + 0.35, z + 0.5, WSH, false);
+        break;
+      }
+      case 'saia': case 'saia8': {
+        const oct = kind === 'saia8', R = Math.min(W, D);
+        const sq = s => rect(-s, -s, s, s);
+        const outer = oct ? ngon(R + 0.22, 8, Math.PI / 8) : sq(R + 0.18);
+        const inner = oct ? ngon(R + 0.12, 8, Math.PI / 8) : sq(R + 0.08);
+        const fl = oct ? ngon(R, 8, Math.PI / 8) : sq(R);
+        const zs = h, zt = h + 0.42;
+        solid(outer, zs, zt, WSH, { top:false });
+        sface(outer.map(q => P(q[0], q[1], zs)), WSH, P(0, 0, zs + 0.2));   // the skirt's floor, seen from below
+        /* the rim of the skirt, and the dark gap where the smoke rises between it and the flue */
+        for (let i = 0; i < outer.length; i++) {
+          const j = (i + 1) % outer.length;
+          sface([P(outer[i][0], outer[i][1], zt), P(outer[j][0], outer[j][1], zt), P(inner[j][0], inner[j][1], zt), P(inner[i][0], inner[i][1], zt)], CAPC, P(0, 0, zt - 0.2));
+          sface([P(inner[i][0], inner[i][1], zt - 0.01), P(inner[j][0], inner[j][1], zt - 0.01), P(fl[j][0], fl[j][1], zt - 0.01), P(fl[i][0], fl[i][1], zt - 0.01)], HOLE, P(0, 0, zt - 0.2));
+        }
+        solid(fl, zt, zt + 0.18, WSH, { top:false });
+        const cap = oct ? ngon(R + 0.06, 8, Math.PI / 8) : sq(R + 0.06);
+        solid(cap, zt + 0.18, zt + 0.23, CAPC, { top:false });
+        pyramid(cap, zt + 0.23, zt + 0.47, WSH);
+        break;
+      }
+      case 'arca': {
+        /* the smoke leaves under the lid, through slots in the long faces of the chest */
+        [[shaftSide.S, [-W, -D], [W, -D]], [shaftSide.N, [W, D], [-W, D]]].forEach(([sd, A, B]) =>
+          [0.12, 0.42, 0.72].forEach(t0 => hole(sd, A, B, t0, t0 + 0.16, h - 0.2, h - 0.05, null, null, true)));
+        solid(rect(-W - 0.06, -D - 0.06, W + 0.06, D + 0.06), h, h + 0.05, CAPC);
+        lid(-W - 0.04, -D - 0.08, W + 0.04, D + 0.08, h + 0.05, h + 0.3, CLAY, WSH, W < D);
+        break;
+      }
+      case 'escuta': {
+        /* the cross on the face toward the main facade, among the symbols the survey counts */
+        if (h > 0.9) {
+          const fz = h - 0.9;
+          hole(shaftSide.S, [-W, -D], [W, -D], 0.48, 0.52, fz, fz + 0.5, null, '#3C4A5C', true);
+          hole(shaftSide.S, [-W, -D], [W, -D], 0.42, 0.58, fz + 0.32, fz + 0.37, null, '#3C4A5C', true);
+        }
+        solid(rect(-W - 0.04, -D - 0.04, W + 0.04, D + 0.04), h, h + 0.07, CAPC, { topFill:WSH });
+        const tw = Math.min(0.17, W / 4);
+        /* three tile hoods across the stack, open to front and back */
+        [-W * 0.62, 0, W * 0.62].forEach(uc => lid(uc - tw, -D + 0.06, uc + tw, D - 0.06, h + 0.07, h + 0.3, CLAY, HOLE, true));
+        break;
+      }
+      case 'saloia': {
+        /* long and slender: the lid runs the long way, open at both ends over two dark mouths */
+        const alongV = D > W;
+        const ends = alongV ? [[shaftSide.S, [-W, -D], [W, -D]], [shaftSide.N, [W, D], [-W, D]]] : [[shaftSide.W, [-W, D], [-W, -D]], [shaftSide.E, [W, -D], [W, D]]];
+        ends.forEach(([sd, A, B]) => hole(sd, A, B, 0.2, 0.8, h - 0.22, h - 0.05, null, null, true));
+        solid(rect(-W - 0.05, -D - 0.05, W + 0.05, D + 0.05), h, h + 0.05, CAPC);
+        lid(-W - (alongV ? 0.07 : 0.02), -D - (alongV ? 0.02 : 0.07), W + (alongV ? 0.07 : 0.02), D + (alongV ? 0.02 : 0.07), h + 0.05, h + 0.25, CLAY, HOLE, alongV);
+        break;
+      }
+      case 'stack': {
+        const st = F.colours[0], sl = F.colours[1], cs = 0.11;
+        solid(rect(-W + 0.12, -D + 0.12, W - 0.12, D - 0.12), h, h + 0.2, HOLE, { top:false });
+        [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([su, sv]) => solid(rect(su * W - (su > 0 ? cs : 0), sv * D - (sv > 0 ? cs : 0), su * W + (su < 0 ? cs : 0), sv * D + (sv < 0 ? cs : 0)), h, h + 0.2, st, { top:false }));
+        solid(rect(-W - 0.1, -D - 0.1, W + 0.1, D + 0.1), h + 0.2, h + 0.29, sl);
+        break;
+      }
+      case 'maos': {
+        solid(rect(-W - 0.04, -D - 0.04, W + 0.04, D + 0.04), h, h + 0.05, CAPC, { top:false });
+        /* the two leaves, steep, their ends open under the apex */
+        const z = h + 0.05, za = z + 0.62, oc = P(0, 0, z + 0.2);
+        sface([P(-W - 0.04, -D - 0.04, z), P(W + 0.04, -D - 0.04, z), P(W + 0.04, 0, za), P(-W - 0.04, 0, za)], WSH, oc);
+        sface([P(-W - 0.04, D + 0.04, z), P(W + 0.04, D + 0.04, z), P(W + 0.04, 0, za), P(-W - 0.04, 0, za)], WSH, oc);
+        [-W - 0.04, W + 0.04].forEach(u => {
+          const end = sface([P(u, -D - 0.04, z), P(u, D + 0.04, z), P(u, 0, za)], WSH, oc), s = u < 0 ? -1 : 1;
+          const f = sface([P(u + s * 0.008, -D * 0.55, z + 0.04), P(u + s * 0.008, D * 0.55, z + 0.04), P(u + s * 0.008, 0, za - 0.2)], HOLE, oc);
+          f.under = end;
+        });
+        break;
+      }
+      case 'vapor': {
+        /* the truncated pyramid on the short plinth, the round funnel, the espicho */
+        const zb = hShaft, rT = Math.min(0.26, Math.min(W, D));
+        taper(rect(-W, -D, W, D), rect(-rT, -rT, rT, rT), zb, zb + 0.3, WSH, true);
+        const cyl = ngon(0.2, 12), z1 = zb + 0.3, z2 = Math.max(z1 + 0.4, h), sides = solid(cyl, z1, z2, WSH, { top:false });
+        [0, 3, 6, 9].forEach(i => hole(sides[i], cyl[i], cyl[(i + 1) % 12], 0.1, 0.9, z2 - 0.2, z2 - 0.06));
+        solid(ngon(0.25, 12), z2, z2 + 0.05, CAPC);
+        taper(ngon(0.22, 12), ngon(0, 12), z2 + 0.05, z2 + 0.3, WSH, false);
+        pyramid(rect(-0.02, -0.02, 0.02, 0.02), z2 + 0.3, z2 + 0.52, WSH);
+        break;
+      }
+      case 'coifa': {
+        const s = rect(-W, -D, W, D), sides = solid(s, h, h + 0.24, WSH, { top:false });
+        holesRound(s, sides, [[0.14, 0.3, h + 0.05, h + 0.2, 'arch'], [0.42, 0.58, h + 0.05, h + 0.2, 'arch'], [0.7, 0.86, h + 0.05, h + 0.2, 'arch']]);
+        solid(rect(-W - 0.06, -D - 0.06, W + 0.06, D + 0.06), h + 0.24, h + 0.28, CAPC, { top:false });
+        pyramid(rect(-W - 0.04, -D - 0.04, W + 0.04, D + 0.04), h + 0.28, h + 0.78, WSH);
+        break;
+      }
+    }
+  }
 }
 /** The parapet as triangles following each outline wall's own top profile,
     h metres above it. */
@@ -2553,17 +2936,16 @@ function parapetFaces(M, h) {
 /** The chimney's height above its own roof surface: the student's slider,
     or the family's own measure. */
 function chimEffH(ch) {
-  const F = CHIMNEY_FAM[ch.fam] || CHIMNEY_FAM.alentejana;
-  return isFinite(+ch.h) ? clamp(+ch.h, 0.3, 3) : F.h;
+  return isFinite(+ch.h) ? clamp(+ch.h, 0.3, 3) : chimFam(ch.fam).h;
 }
 /** Shaft footprint in metres, east-west by south-north: one width each
     way, the family (and its oblong) until the student sets them. */
 function chimFoot(ch) {
-  const F = CHIMNEY_FAM[ch.fam] || CHIMNEY_FAM.alentejana;
+  const F = chimFam(ch.fam);
   const base = isFinite(+ch.w) ? clamp(+ch.w, 0.3, 1.5) : F.shaft;
   return {
     x:isFinite(+ch.wx) ? clamp(+ch.wx, 0.3, 2.5) : base * (F.long || 1),
-    y:isFinite(+ch.wy) ? clamp(+ch.wy, 0.3, 2.5) : base
+    y:isFinite(+ch.wy) ? clamp(+ch.wy, 0.3, 2.5) : base * (F.longY || 1)
   };
 }
 /** Side pitch in degrees off vertical: 0 builds at 90°, straight up. */
@@ -2584,10 +2966,12 @@ function chimScore(M, ch) {
   const r = chimRule(M);
   return clamp((z + chimEffH(ch) - r.ref) / r.need, 0, 1) * 100;
 }
-/** Where the chimney first stands: the highest roof surface near the
-    plan's middle, so it starts on a ridge, not in a valley. */
+/** Where the chimney first stands: the highest roof surface near a point
+    a third of the way along the longer side, so it starts on a ridge, not
+    in a valley, and clear of the ridge's height label at the middle. */
 function placeChimney(M) {
-  const bb = M.pl.bbox, cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2;
+  const bb = M.pl.bbox, along = bb[2] - bb[0] >= bb[3] - bb[1];
+  const cx = along ? bb[0] + (bb[2] - bb[0]) / 3 : (bb[0] + bb[2]) / 2, cy = along ? (bb[1] + bb[3]) / 2 : bb[1] + (bb[3] - bb[1]) / 3;
   let best = null;
   for (let x = bb[0] + 0.4; x <= bb[2] - 0.4; x += 0.4) for (let y = bb[1] + 0.4; y <= bb[3] - 0.4; y += 0.4) {
     if (!M.pl.inside(x, y)) continue;
@@ -4086,7 +4470,25 @@ function balcScene(G) {
   bg.ok.filter(B => B.mode === 'out').forEach(B => B.levels.forEach(k => {
     const z = (k - 1) * G.fh, z0 = z - BALC_SLAB, O = B.outline;
     solids.push({ kind:'top', pts:O.map(p => [p[0], p[1], z]), n:[0, 0, 1], B, k });
-    B.par.forEach(([p, q]) => {
+    const gp = stairGap(B, G), gap = gp && gp.level === k ? gp : null;
+    const tu = B.sg ? [(B.sg.b[0] - B.sg.a[0]) / B.sg.len, (B.sg.b[1] - B.sg.a[1]) / B.sg.len] : null;
+    const uvOf = p => [(p[0] - B.sg.a[0]) * tu[0] + (p[1] - B.sg.a[1]) * tu[1], (p[0] - B.sg.a[0]) * B.sg.n[0] + (p[1] - B.sg.a[1]) * B.sg.n[1]];
+    /* the parapet open where the stair arrives: an edge on the opening's
+       line loses the stretch the opening spans */
+    const opened = ([p, q]) => {
+      if (!gap || !tu) return [[p, q]];
+      const P2 = uvOf(p), Q2 = uvOf(q), ax = gap.v !== undefined ? 1 : 0, at = gap.v !== undefined ? gap.v : gap.u;
+      if (Math.abs(P2[ax] - at) > 0.03 || Math.abs(Q2[ax] - at) > 0.03) return [[p, q]];
+      const o = 1 - ax, lo = gap.v !== undefined ? gap.u0 : gap.v0, hi = gap.v !== undefined ? gap.u1 : gap.v1;
+      const a = P2[o], b = Q2[o], L = b - a;
+      if (Math.abs(L) < 1e-6) return [[p, q]];
+      const at2 = x => { const f = (x - a) / L; return [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]; };
+      const s0 = Math.min(a, b), s1 = Math.max(a, b), out = [];
+      if (lo > s0 + 0.02) out.push([s0, Math.min(lo, s1)]);
+      if (hi < s1 - 0.02) out.push([Math.max(hi, s0), s1]);
+      return out.filter(([x0, x1]) => x1 - x0 > 0.02).map(([x0, x1]) => (a <= b ? [at2(x0), at2(x1)] : [at2(x1), at2(x0)]));
+    };
+    [].concat.apply([], B.par.map(opened)).forEach(([p, q]) => {
       const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
       let nx = dy / L, ny = -dx / L;
       if (inPoly(m[0] + nx * 0.02, m[1] + ny * 0.02, O)) { nx = -nx; ny = -ny; }
@@ -4313,8 +4715,67 @@ function stairFaceGroup(st, sees, dpt, wallSeen) {
   if (dpt) grp.d = dpt(grp.pts);
   return grp;
 }
-const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_IDEAL = 0.28,
-  STAIR_TREAD_FILL = 0.36;
+/** One pool entry per run of the stair — each flight, each landing or the
+    tread that turns the corner — so each takes its own place among the
+    walls: a single entry for an L would sit at one depth for two walls at
+    once. The runs of one stair share stairOf. */
+function stairFaceGroups(st, sees, dpt, wallSeen) {
+  const runs = (st.flights || []).map(fl => ({ flights:[fl], landing:[] }))
+    .concat((st.landing || []).map(l => ({ flights:[], landing:[l] })));
+  return runs.map(r => stairFaceGroup(Object.assign({}, st, r), sees, dpt, wallSeen)).filter(Boolean)
+    .map(g => Object.assign(g, { stairOf:st }));
+}
+/** A stair paints straight after the walls it stands wholly outside of: a
+    wall the camera sees can hide nothing on its far side from the eye. Its
+    centroid against the whole facade's buried a flight toward the far end
+    of a long facade behind it. Each run of a stair answers to its own walls
+    — the flight round a corner stands behind the first wall's plane, which
+    can hide it — and the runs keep their own order among themselves: one
+    moved after a nearer wall takes the runs in front of it along. Entries
+    flagged post (the canopy's timber) follow the same rule one face at a
+    time, in their own order with the stair; entries flagged over (the
+    canopy slab above) come after both.
+    It moves depths, never the comparator: the entry's d alone. ptDepth(x,
+    y, z) is the painter's own depth, larger farther; eps how far in front of
+    the wall, so the stair falls between what lies on the wall (frames,
+    glass, devices) and what stands out from it, as each painter layers
+    them. */
+function stairsAfterWalls(list, ptDepth, eps) {
+  eps = eps === undefined ? 1e-3 : eps;
+  const avg = pts => pts.reduce((a, q) => a + ptDepth(q[0], q[1], q[2]), 0) / pts.length;
+  const off = (v, sg) => (v[0] - sg.a[0]) * sg.n[0] + (v[1] - sg.a[1]) * sg.n[1];
+  const o = ptDepth(0, 0, 0), V = [ptDepth(1, 0, 0) - o, ptDepth(0, 1, 0) - o];
+  const walls = [];
+  list.forEach(f => {
+    const sg = f.sg || f.wallSg;
+    if (!sg || !sg.n || !f.pts || f.pts.length < 3 || f.pc || f.balc || f.chim || f.par || f.import || f.stairGrp || f.post || f.over) return;
+    if (!(sg.n[0] * V[0] + sg.n[1] * V[1] < 0)) return;   // turned toward the camera
+    if (!f.pts.every(v => Math.abs(off(v, sg)) < 0.01)) return;
+    walls.push({ sg, d:f.d !== undefined ? f.d : avg(f.pts) });
+  });
+  if (!walls.length) return list;
+  const own = g => g.d !== undefined ? g.d : avg(g.pts);
+  const front = pts => walls.filter(w => pts.every(v => off(v, w.sg) > -0.01)).reduce((m, w) => Math.min(m, w.d), Infinity);
+  const after = (d, wd, e) => wd === Infinity ? d : Math.min(d, wd - e + Math.max(0, d - wd) * 1e-6);
+  const stairs = new Map();
+  list.forEach(g => {
+    if (g.stairGrp) {
+      const k = g.stairOf || g, o = own(g);
+      if (!stairs.has(k)) stairs.set(k, []);
+      stairs.get(k).push({ g, o });
+      g.d = after(o, front(g.pts), eps);
+    } else if (g.post || g.over) g.d = after(own(g), front(g.pts), g.over ? 2 * eps : eps);
+  });
+  stairs.forEach(runs => {
+    runs.sort((a, b) => b.o - a.o);
+    for (let i = 1; i < runs.length; i++) if (runs[i].g.d >= runs[i - 1].g.d) runs[i].g.d = runs[i - 1].g.d - 1e-7;
+  });
+  return list;
+}
+/* no tread deeper than 27.5 cm: with risers up to 19 cm, 2R + G stays within
+   the step relation's 60–65 cm, wherever a flight is fitted to its room */
+const STAIR_W = 1.1, STAIR_RISER_MAX = 0.19, STAIR_TREAD_MIN = 0.22, STAIR_TREAD_MAX = 0.275,
+  STAIR_TREAD_IDEAL = STAIR_TREAD_MAX, STAIR_TREAD_FILL = STAIR_TREAD_MAX;
 /** A straight masonry flight parallel to a wall: from the landing level
     zTop down n risers to the ground, top tread flush with the landing edge
     uEdge, running toward dirSign. World boxes, canopyFrame.box convention. */
@@ -4378,6 +4839,24 @@ function cornerWallFor(sg, side, segs) {
   }
   return best;
 }
+/** That wall only where the corner stands out — the building's outer
+    corner, whose outer square is free for a stair to turn in; a re-entrant
+    corner puts the next wall across the flight. */
+function outerCornerFor(sg, side, segs) {
+  const cw = cornerWallFor(sg, side, segs);
+  if (!cw) return null;
+  const d1 = [side * (sg.b[0] - sg.a[0]) / sg.len, side * (sg.b[1] - sg.a[1]) / sg.len];
+  return cw.sg.n[0] * d1[0] + cw.sg.n[1] * d1[1] > 0.5 ? cw : null;
+}
+/** The square outside an outer corner, sw on each side, as a world box up
+    to z — reaching back along the first wall by back, where a run too short
+    for whole treads leaves a remainder. */
+function cornerSquare(sg, side, cw, sw, z, back) {
+  const C = side > 0 ? sg.b : sg.a, n1 = sg.n, n2 = cw.sg.n;
+  const pts = [[-back, 0], [-back, sw], [sw, 0], [sw, sw]].map(([a, b]) => [C[0] + n2[0] * a + n1[0] * b, C[1] + n2[1] * a + n1[1] * b]);
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  return [Math.min.apply(null, xs), Math.min.apply(null, ys), 0, Math.max.apply(null, xs), Math.max.apply(null, ys), z];
+}
 /** Straight flight alongside the balcony, as before. */
 function buildStraight(B, G) {
   const tp = stairTopOf(B, G);
@@ -4408,7 +4887,7 @@ function buildWrapped(B, G, segs) {
   const roomL = B.u0, roomR = len - B.u1;
   const side = roomR >= roomL ? 1 : -1, run1 = Math.max(roomR, roomL);
   if (run1 < 0.5) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
-  const cw = cornerWallFor(sg, side, segs);
+  const cw = outerCornerFor(sg, side, segs);
   if (!cw) return { ok:false, why:'no corner this way to turn', level:tp.k, zTop:tp.zTop };
   const run2max = cw.sg.len - 0.3;
   if (run2max < 0.5) return { ok:false, why:'no room round the corner', level:tp.k, zTop:tp.zTop };
@@ -4441,82 +4920,135 @@ function buildWrapped(B, G, segs) {
   const f2 = stairFlightFaces(q, qu, cw.dir, zMid, riser, n2, t, sw);
   return { ok:true, flights:[f1, f2], landing:[{box:legA, nv:sg.n}, {box:legB, nv:q.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, wrapped:true, why:null };
 }
-/** Stair at 90 degrees to the facade: projects outward from the wall at
-    right angles. The flight width runs along the facade and each tread
-    reaches out from it, descending as it leaves the building. */
+/** Stair at 90 degrees to the facade: one flight straight out from the
+    balcony's front edge, through an opening in its parapet, down to the
+    ground. It stands where the canopy's posts leave it room — between two
+    posts, nearest the balcony's middle — so no post rises through a tread. */
 function buildPerpendicular(B, G) {
   const tp = stairTopOf(B, G);
   if (!tp) return null;
-  const sg = B.sg, len = sg.len;
-  const roomL = B.u0, roomR = len - B.u1;
-  const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
-  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n;
-  const tread = Math.min(STAIR_TREAD_IDEAL, room / n);
-  if (!(tread >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
-  const sw = Math.min(STAIR_W, B.d);
-  const uEdge = side > 0 ? B.u1 : B.u0;
-  const uStart = side > 0 ? uEdge - sw : uEdge;
-  const uEnd = side > 0 ? uEdge : uEdge + sw;
+  const sg = B.sg, len = sg.len, sw = Math.min(STAIR_W, B.u1 - B.u0);
+  if (sw < 0.8) return { ok:false, why:'the balcony is narrower than the stair', level:tp.k, zTop:tp.zTop };
+  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n, tread = STAIR_TREAD_IDEAL;
   const tx = (sg.b[0] - sg.a[0]) / len, ty = (sg.b[1] - sg.a[1]) / len, nv = sg.n;
   const P = (u, v) => [sg.a[0] + tx * u + nv[0] * v, sg.a[1] + ty * u + nv[1] * v];
-  const Z = i => zTop - i * riser;
-  const faces = [];
-  const silhouette = u => {
-    const s = [];
-    s.push(P(u, 0).concat([0]), P(u, 0).concat([Z(0)]));
-    for (let i = 0; i < n; i++) { s.push(P(u, (i + 1) * tread).concat([Z(i)]), P(u, (i + 1) * tread).concat([Z(i + 1)])); }
-    s.push(P(u, n * tread).concat([0]));
-    return s;
-  };
-  faces.push({ pts: silhouette(uStart), nn: [-tx * side, -ty * side, 0], fill: STONE_FILL });
-  faces.push({ pts: silhouette(uEnd), nn: [tx * side, ty * side, 0], fill: STONE_FILL });
-  for (let i = 0; i < n; i++) faces.push({
-    pts: [P(uStart, i * tread).concat([Z(i)]), P(uEnd, i * tread).concat([Z(i)]), P(uEnd, (i + 1) * tread).concat([Z(i)]), P(uStart, (i + 1) * tread).concat([Z(i)])],
-    nn: [0, 0, 1], fill: STONE_TREAD
-  });
-  for (let i = 0; i < n; i++) faces.push({
-    pts: [P(uStart, (i + 1) * tread).concat([Z(i + 1)]), P(uEnd, (i + 1) * tread).concat([Z(i + 1)]), P(uEnd, (i + 1) * tread).concat([Z(i)]), P(uStart, (i + 1) * tread).concat([Z(i)])],
-    nn: [nv[0], nv[1], 0], fill: STONE_FILL
-  });
-  faces.push({ pts: [P(uStart, 0).concat([0]), P(uEnd, 0).concat([0]), P(uEnd, 0).concat([Z(0)]), P(uStart, 0).concat([Z(0)])], nn: [0, 0, -1], fill: STONE_FILL });
-  faces.push({ pts: [P(uStart, n * tread).concat([0]), P(uStart, n * tread).concat([Z(n)]), P(uEnd, n * tread).concat([Z(n)]), P(uEnd, n * tread).concat([0])], nn: [0, 0, 1], fill: STONE_FILL });
-  return { ok:true, flights:[faces], landing:null, n, riser, tread, run:n * tread, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'perpendicular', wrapped:false, why:null };
+  /* the posts in the flight's way: the canopy over this balcony, where its
+     post line stands out past the balcony's front */
+  let ua = (B.u0 + B.u1) / 2 - sw / 2;
+  const posts = canopyPostsAt(B).filter(p => p.v + CANOPY_POST / 2 > B.d - 0.02).map(p => p.u);
+  if (posts.length) {
+    const h = CANOPY_POST / 2 + 0.05, edges = [B.u0].concat(posts.slice().sort((a, b) => a - b), [B.u1]);
+    let best = null;
+    for (let k = 0; k + 1 < edges.length; k++) {
+      const lo = edges[k] + (k ? h : 0), hi = edges[k + 1] - (k + 1 < edges.length - 1 ? h : 0);
+      if (hi - lo < sw) continue;
+      const a = clamp((B.u0 + B.u1) / 2 - sw / 2, lo, hi - sw), dist = Math.abs(a + sw / 2 - (B.u0 + B.u1) / 2);
+      if (!best || dist < best.dist) best = { a, dist };
+    }
+    if (!best) return { ok:false, why:'the canopy posts leave no room for the stair in front', level:tp.k, zTop:tp.zTop };
+    ua = best.a;
+  }
+  /* the flight runs along a line straight out from the wall: that line as a
+     segment, its width stepping along the wall */
+  const out = { a:P(ua, 0), b:P(ua, 1), len:1, n:[tx, ty] };
+  const flight = stairFlightFaces(out, B.d, 1, tp.zTop - riser, riser, n - 1, tread, sw);
+  return { ok:true, flights:[flight], landing:[], n, riser, tread, run:(n - 1) * tread, side:1, level:tp.k, zTop:tp.zTop, sw, nv,
+    mode:'perpendicular', wrapped:false, gap:{ v:B.d, u0:ua, u1:ua + sw }, why:null };
 }
-/** Stair with a tread between the flights: an intermediate landing opens a
-    gap between two flights on the same wall. The landing is a thin platform
-    at the mid level — not a full block — so each flight reads as a clean run
-    and the tread sits between them without breaking the stair's flow. */
+/** A balcony set under the eave canopy carries the canopy with it when it
+    is moved or resized on Site: the same wall and the same span, so the
+    eave stays as long as the balcony (the canopy's 8 m at most). true when
+    the balcony's width was held to that. */
+function canopyFollowsBalcony(G, i) {
+  const b = G && G.balc && G.balc[i];
+  if (!b || !b.fromCanopy || typeof ROOF === 'undefined' || !ROOF.zones) return false;
+  const z = ROOF.zones[b.canopyZi], c = z && z.canopy;
+  if (!c || typeof c !== 'object') return false;
+  const held = b.w > 8;
+  if (held) b.w = 8;
+  const B = balcGeo(G).all[i];
+  if (!B || !B.ok || !B.sg) return held;
+  const uc = (B.u0 + B.u1) / 2, len = B.sg.len, tx = (B.sg.b[0] - B.sg.a[0]) / len, ty = (B.sg.b[1] - B.sg.a[1]) / len;
+  c.f = segFace(B.sg); c.x = +(B.sg.a[0] + tx * uc).toFixed(2); c.y = +(B.sg.a[1] + ty * uc).toFixed(2); c.w = +Math.min(8, B.u1 - B.u0).toFixed(1);
+  return held;
+}
+/** The canopy posts over a balcony set under it, in the balcony's own wall
+    terms: u along the wall, v out from it. None for any other balcony. */
+function canopyPostsAt(B) {
+  const b = B.b, z = b && b.fromCanopy && typeof ROOF !== 'undefined' && ROOF.zones && ROOF.zones[b.canopyZi], c = z && z.canopy;
+  if (!c || typeof c !== 'object' || !(+c.d > 0.5)) return [];
+  const sg = B.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len;
+  const uc = (c.x - sg.a[0]) * tx + (c.y - sg.a[1]) * ty, w = +c.w || 3;
+  const u0 = clamp(uc - w / 2, 0, sg.len), u1 = clamp(uc + w / 2, 0, sg.len);
+  const fr = canopyFrame({ sg, u0, u1, d:+c.d, z0:0, z1:0 });
+  return fr.posts.map(bx => { const m = [(bx[0] + bx[3]) / 2, (bx[1] + bx[4]) / 2];
+    return { u:(m[0] - sg.a[0]) * tx + (m[1] - sg.a[1]) * ty, v:(m[0] - sg.a[0]) * sg.n[0] + (m[1] - sg.a[1]) * sg.n[1] }; });
+}
+/** Stair with a landing between two flights on the same wall: the first
+    flight comes down half the climb to a landing as long as the stair is
+    wide, standing on the ground as the flights do, and the second flight
+    goes on from its far edge one riser lower — the landing counts as one
+    tread of the climb. */
 function buildTreadBetween(B, G, segs) {
   const tp = stairTopOf(B, G);
   if (!tp) return null;
   const sg = B.sg, len = sg.len;
   const roomL = B.u0, roomR = len - B.u1;
   const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
-  if (room < 1.0) return { ok:false, why:'no room for the stair along this wall', level:tp.k, zTop:tp.zTop };
-  const want = Math.max(4, Math.ceil(tp.zTop / STAIR_RISER_MAX));
-  const nEven = want + (want % 2), riser = tp.zTop / nEven, sw = Math.min(STAIR_W, B.d);
-  const half = nEven / 2, zMid = tp.zTop - half * riser;
-  const uEdge = side > 0 ? B.u1 : B.u0;
-  const t = Math.min(STAIR_TREAD_IDEAL, room / nEven);
-  if (!(t >= STAIR_TREAD_MIN)) return { ok:false, why:'the tread leaves no room for two flights', level:tp.k, zTop:tp.zTop };
-  const f1 = stairFlightFaces(sg, uEdge, side, tp.zTop, riser, half, t, sw);
-  const endU = side > 0 ? uEdge + half * t : uEdge - half * t;
-  const fromU = side > 0 ? Math.min(endU, len - sw / 2) : Math.max(endU, sw / 2);
+  const n = Math.max(4, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n, sw = Math.min(STAIR_W, B.d);
+  const k1 = Math.floor((n - 1) / 2), k2 = n - 1 - k1;
+  const t = Math.min(STAIR_TREAD_IDEAL, (room - sw) / (n - 1));
+  if (!(t >= STAIR_TREAD_MIN)) return { ok:false, why:'no room for a landing between two flights along this wall', level:tp.k, zTop:tp.zTop };
+  const uEdge = side > 0 ? B.u1 : B.u0, zL = tp.zTop - k1 * riser;
+  const u1 = uEdge + side * k1 * t, u2 = u1 + side * sw;
   const tu = (sg.b[0] - sg.a[0]) / len, tv = (sg.b[1] - sg.a[1]) / len;
   const P = (u, v) => [sg.a[0] + tu * u + sg.n[0] * v, sg.a[1] + tv * u + sg.n[1] * v];
-  /* Thin landing platform at the mid level, spanning the stair width — a
-     proper tread between flights, not a full block cutting the wall. */
-  const LAND_H = 0.06;
-  const landBox = [Math.min(P(fromU, 0)[0], P(side > 0 ? fromU + sw : fromU - sw, sw)[0]),
-                   Math.min(P(fromU, 0)[1], P(side > 0 ? fromU + sw : fromU - sw, sw)[1]), zMid,
-                   Math.max(P(fromU, 0)[0], P(side > 0 ? fromU + sw : fromU - sw, sw)[0]),
-                   Math.max(P(fromU, 0)[1], P(side > 0 ? fromU + sw : fromU - sw, sw)[1]), zMid + LAND_H];
-  const f2 = stairFlightFaces(sg, fromU, side, zMid, riser, nEven - half, t, sw);
-  return { ok:true, flights:[f1, f2], landing:[{box:landBox, nv:sg.n}], n:nEven, riser, tread:t, run:nEven * t, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, mode:'tread-between', wrapped:false, why:null };
+  const p = P(u1, 0), q = P(u2, sw);
+  const landBox = [Math.min(p[0], q[0]), Math.min(p[1], q[1]), 0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), zL];
+  const f1 = stairFlightFaces(sg, uEdge, side, tp.zTop, riser, k1, t, sw);
+  const f2 = stairFlightFaces(sg, u2, side, zL - riser, riser, k2, t, sw);
+  return { ok:true, flights:[f1, f2], landing:[{ box:landBox, nv:sg.n }], n, riser, tread:t, run:(n - 1) * t + sw, side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n,
+    mode:'tread-between', wrapped:false, why:null };
 }
-/** The stair, straight or turning the corner when asked (b.stair.wrap):
-    straight with no flag; null everywhere without one. cornerAvail tells
-    the UI whether the corner question is worth asking. */
+/** A flight along the wall that lands on the building's corner turns it by
+    a tread. It lands there when its steps at the ideal tread need the whole
+    run to the corner, or stop less than a tread short of it; rather than
+    squeeze every tread to fit, or leave a sliver before the corner, it runs
+    to the corner at a tread fitted to reach it exactly (kept within
+    22–27.5 cm, a remainder going to the corner tread), steps down one riser onto a square tread standing in the corner
+    outside both walls — a step of its own, where the turn is made — and
+    goes on down the next wall at the same tread and riser. null where the
+    flight stops short of the corner or the corner is re-entrant. */
+function buildCornerTread(B, G, segs) {
+  const tp = stairTopOf(B, G);
+  if (!tp) return null;
+  const sg = B.sg, len = sg.len;
+  const roomL = B.u0, roomR = len - B.u1;
+  const side = roomR >= roomL ? 1 : -1, room = Math.max(roomR, roomL);
+  const n = Math.max(2, Math.ceil(tp.zTop / STAIR_RISER_MAX)), riser = tp.zTop / n;
+  if (room - n * STAIR_TREAD_IDEAL >= STAIR_TREAD_MIN) return null;   // its foot clears the corner by a tread or more: straight
+  const cw = outerCornerFor(sg, side, segs);
+  if (!cw) return null;
+  /* whole treads to the corner, nearest the ideal: the corner decides the tread */
+  let k1 = Math.min(n - 1, Math.max(0, Math.round(room / STAIR_TREAD_IDEAL)));
+  let t = k1 ? room / k1 : STAIR_TREAD_IDEAL;
+  if (t > STAIR_TREAD_MAX && k1 < n - 1) { k1++; t = room / k1; }
+  t = clamp(t, STAIR_TREAD_MIN, STAIR_TREAD_MAX);
+  k1 = Math.min(k1, Math.floor(room / t + 1e-6));
+  const back = Math.max(0, room - k1 * t), k2 = n - 1 - k1;
+  if (k2 * t > cw.sg.len - 0.3) return { ok:false, why:'no room round the corner', level:tp.k, zTop:tp.zTop };
+  const sw = Math.min(STAIR_W, B.d), uEdge = side > 0 ? B.u1 : B.u0, zc = tp.zTop - k1 * riser;
+  const q = cw.sg, flights = [];
+  if (k1) flights.push(stairFlightFaces(sg, uEdge, side, tp.zTop, riser, k1, t, sw));
+  if (k2) flights.push(stairFlightFaces(q, cw.dir > 0 ? 0 : q.len, cw.dir, zc - riser, riser, k2, t, sw));
+  return { ok:true, flights, landing:[{ box:cornerSquare(sg, side, cw, sw, zc, back), nv:sg.n }], n, riser, tread:t, run:room + sw + k2 * t,
+    side, level:tp.k, zTop:tp.zTop, sw, nv:sg.n, wrapped:true, byTread:true, k1, k2, why:null };
+}
+/** The stair in the mode asked for: 90° to the facade, a tread between
+    flights, or turning the corner on its landing (mode 'wrapped', or the
+    older b.stair.wrap); along the wall otherwise — turning the corner by a
+    tread where that flight lands on one. null everywhere without one.
+    cornerAvail tells the UI whether the corner question is worth asking. */
 function stairFor(B, G) {
   if (!B || !B.ok || B.mode !== 'out' || !B.b || !B.b.stair) return null;
   const segs = planModel(G).segs;
@@ -4529,20 +5061,33 @@ function stairFor(B, G) {
     const tb = buildTreadBetween(B, G, segs);
     if (tb && tb.ok) return Object.assign(tb, { cornerAvail:false });
   }
-  if (B.b.stair.wrap) {
+  if (B.b.stair.wrap || mode === 'wrapped') {
     const w = buildWrapped(B, G, segs);
     if (w && w.ok) return Object.assign(w, { cornerAvail:true });
   }
+  /* along the wall, round the corner or with a landing between flights: where
+     the run reaches the corner, the corner tread is that landing */
+  const c = mode !== 'perpendicular' ? buildCornerTread(B, G, segs) : null;
+  if (c && c.ok) return Object.assign(c, { cornerAvail:!!(buildWrapped(B, G, segs) || {}).ok });
   const s = buildStraight(B, G);
   if (!s) return null;
   return Object.assign(s, { cornerAvail:!!(buildWrapped(B, G, segs) || {}).ok });
+}
+/** Where a stair reaches its balcony, the parapet opens: across the front
+    edge for a stair 90° to the facade, across the end it leaves from for
+    the others. The opening in the balcony's wall terms, or null. */
+function stairGap(B, G) {
+  const st = B && B.b && B.b.stair ? stairFor(B, G) : null;
+  if (!st || !st.ok) return null;
+  if (st.gap) return Object.assign({ level:st.level }, st.gap);
+  return { level:st.level, u:st.side > 0 ? B.u1 : B.u0, v0:0, v1:st.sw };
 }
 /** One CSV-ready line for a balcony's stair, or '' without one. */
 function stairCsv(B, G) {
   if (!B || !B.b || !B.b.stair) return '';
   const st = stairFor(B, G);
   if (!st || !st.ok) return ', stair does not fit along this wall';
-  return ', stone stair ' + st.n + ' steps × ' + fmt(st.riser * 100, 0) + ' cm, run ' + fmt(st.run, 2) + ' m' + (st.wrapped ? ', turns the corner' : st.mode === 'perpendicular' ? ', 90° to the facade' : st.mode === 'tread-between' ? ', tread between flights' : '');
+  return ', stone stair ' + st.n + ' steps × ' + fmt(st.riser * 100, 0) + ' cm, run ' + fmt(st.run, 2) + ' m' + (st.byTread ? ', turns the corner by a tread' : st.wrapped ? ', turns the corner' : st.mode === 'perpendicular' ? ', 90° to the facade' : st.mode === 'tread-between' ? ', landing between flights' : '');
 }
 /** The side faces of a world box that a viewer sees, as [quad, outward normal] pairs. */
 function boxSides(B) {
@@ -5166,6 +5711,23 @@ function pushImportFaces(arr, map) {
   if (!IMPORT.active || !IMPORT.show.length) return;
   for (const t of IMPORT.show) arr.push({ pts:map ? t.map(map) : t, fill:IMPFILL, import:true });
 }
+/** A chimney's openings stand a hair proud of the faces they are cut in,
+    yet a face's middle can lie nearer the eye than an opening low on it, and
+    the face would paint over its own opening. Each opening is set straight
+    after its face instead (under), by depth. dOf(entry) is the painter's
+    depth of an entry, larger farther. */
+function chimOpeningsAfter(list, dOf) {
+  list.forEach(f => { if (f.under) f.d = dOf(f.under) - 1e-4; });
+  return list;
+}
+/** A chimney's faces into a painter's list, each made by mk(face); an
+    opening keeps a link to the entry of the face it is cut in (under), so
+    the painter's pre-sort can set it straight after that face. */
+function pushChimFaces(arr, faces, mk) {
+  const ent = faces.map(mk);
+  faces.forEach((f, i) => { if (f.under) { const k = faces.indexOf(f.under); if (k >= 0) ent[i].under = ent[k]; } });
+  ent.forEach(e => arr.push(e));
+}
 /** The parapet and the chimney into any building painter's face list
     (plan-local metres; map translates, as the Environmental view does). */
 function pushChimPar(arr, M, map) {
@@ -5175,7 +5737,9 @@ function pushChimPar(arr, M, map) {
   roofChims(ROOF).forEach(({ ch }) => {
     if (!isFinite(+ch.x) || !isFinite(+ch.y) || !M.pl.inside(+ch.x, +ch.y)) return;
     const z = M.zAt(+ch.x, +ch.y);
-    if (z !== null) chimneyFaces(ch.fam, +ch.x, +ch.y, z, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy)).forEach(f => arr.push({ pts:map ? f.pts.map(map) : f.pts, fill:f.fill, chim:1 }));
+    if (z === null) return;
+    chimSync(ch);
+    pushChimFaces(arr, chimneyFaces(ch.fam, +ch.x, +ch.y, z, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy)), f => ({ pts:map ? f.pts.map(map) : f.pts, fill:f.fill, chim:1 }));
   });
 }
 
@@ -6295,9 +6859,11 @@ function buildEnvironment(host) {
     const path3 = pts3 => { ctx.beginPath(); pts3.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath(); };
     pushImportFaces(faces, wQ);
     pushChimPar(faces, M, wQ);
-    SORT_AX = null; faces.sort((p1, q1) => roofWallOrder(p1, q1) || dep(q1) - dep(p1)).forEach(f2 => {
+    const dE = f2 => f2.d !== undefined ? f2.d : dep(f2);
+    chimOpeningsAfter(faces, dE);
+    SORT_AX = null; faces.sort((p1, q1) => roofWallOrder(p1, q1) || dE(q1) - dE(p1)).forEach(f2 => {
       if (f2.balc) { balcFace(ctx, f2.balc, P3e); return; }
-      if (f2.chim || f2.par) { path3(f2.pts); ctx.fillStyle = f2.fill; ctx.fill(); stroke(ctx, CH.ink, 1.1); ctx.stroke(); return; }
+      if (f2.chim || f2.par) { path3(f2.pts); ctx.fillStyle = f2.fill; ctx.fill(); stroke(ctx, CH.ink, 1.1); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
       if (f2.import) { path3(f2.pts); ctx.fillStyle = f2.fill; ctx.fill(); return; }
       path3(f2.pts);
       if (!(f2.nb && f2.nb.ghost)) { ctx.fillStyle = f2.fill; ctx.fill(); }
@@ -7515,8 +8081,7 @@ function buildSite(host) {
           if (B.mode !== 'out' || !B.b.stair) return;
           const st = stairFor(B, MASS);
           if (!st || !st.ok) return;
-          const g = stairFaceGroup(st, nn => nn[2] !== 0 || seesL(nn), dep);
-          if (g) faces.push(g);
+          stairFaceGroups(st, nn => nn[2] !== 0 || seesL(nn), dep).forEach(g => faces.push(g));
         });
         RM.walls.forEach(wl => {
           const sg = wl.sg;
@@ -7538,12 +8103,15 @@ function buildSite(host) {
         });
         pushImportFaces(faces);
         pushChimPar(faces, RM);
-        SORT_AX = null; faces.sort((p, q) => roofWallOrder(p, q) || dep(q.pts) - dep(p.pts) || (p.balc ? 1 : 0) - (q.balc ? 1 : 0)).forEach(fc => {
+        const dO = f => f.d !== undefined ? f.d : dep(f.pts);
+        stairsAfterWalls(faces, (x, y, z) => { const w = rot(x, y, beta); return plateDepth(w[0], w[1], z); });
+        chimOpeningsAfter(faces, dO);
+        SORT_AX = null; faces.sort((p, q) => roofWallOrder(p, q) || dO(q) - dO(p) || (p.balc ? 1 : 0) - (q.balc ? 1 : 0)).forEach(fc => {
           const scr = fc.pts.map(q => at(q[0], q[1], beta, q[2]));
           if (fc.balc) { desk.path(scr, true); balcFace(ctx, fc.balc, P3s); return; }
           if (fc.stairGrp) { fc.stairGrp.forEach(f => { outline(f.pts.map(q => at(q[0], q[1], beta, q[2])), true); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); }); return; }
           if (fc.import) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); return; }
-          if (fc.chim || fc.par) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
+          if (fc.chim || fc.par) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
           outline(scr, true);
           if (fc.pc) {
             const f = fc.pc.f, kk = ROOF.n === 0 ? 1 : 0.87 + 0.11 * f.b + 0.05 * f.a;
@@ -7934,6 +8502,7 @@ function buildSite(host) {
   };
   /** What the selected balcony came out as, in words, under its controls. */
   const balcSays = () => {
+    if (canopyFollowsBalcony(G, selB) && balcBox._w) syncCtl(balcBox._w, G.balc[selB].w, v => fmt(v, 1) + ' m');
     if (!balcNote) return;
     const B = balcGeo(G).all[selB];
     if (!B) { balcNote.textContent = ''; return; }
@@ -8227,6 +8796,7 @@ function buildSite(host) {
           if (balcBox._w) { syncCtl(balcBox._w, b.w, v => fmt(v, 1) + ' m'); syncCtl(balcBox._d, b.d, v => fmt(v, 1) + ' m'); }
         }
       }
+      canopyFollowsBalcony(G, drag.i);
       balcSays();
     } else {
       const l = toLocal(p.x, p.y);
@@ -8713,7 +9283,7 @@ function buildRoof(host) {
     const st = cb.stair ? stairFor(B, G) : null;
     let s = t('Balcony') + ' ' + fmt(B.w, 1) + ' \u00d7 ' + fmt(B.d, 1) + ' m \u00b7 ' + t('floor') + ' ' + B.levels.join('+');
     if (!cb.stair) return s + ' \u00b7 ' + t('stone stair off');
-    if (st && st.ok) return s + ' \u00b7 ' + t('stone stair') + ' ' + st.n + ' \u00d7 ' + fmt(st.riser * 100, 0) + ' cm' + (st.wrapped ? ' \u00b7 ' + t('turns the corner') : '');
+    if (st && st.ok) return s + ' \u00b7 ' + t('stone stair') + ' ' + st.n + ' \u00d7 ' + fmt(st.riser * 100, 0) + ' cm' + (st.byTread ? ' \u00b7 ' + t('turns the corner by a tread') : st.wrapped ? ' \u00b7 ' + t('turns the corner') : '');
     return s + ' \u00b7 ' + t('stair does not fit along this wall');
   }
   /** The three as one: a canopy nudge carries its balconies (same zone,
@@ -8726,7 +9296,7 @@ function buildRoof(host) {
       if (fm.length === 1) targets = fm;
     }
     targets.forEach(b => {
-      b.f = c.f; b.x = +c.x.toFixed(2); b.y = +c.y.toFixed(2); b.w = Math.min(+(c.w || 3), 8);
+      b.f = c.f; b.x = +c.x.toFixed(2); b.y = +c.y.toFixed(2); b.w = Math.min(+(c.w || 3), 8); b.corner = 0;
       if (canBox && canBox._cbSays) canBox._cbSays.textContent = canopyBalconyText(b);
     });
   }
@@ -8819,11 +9389,13 @@ function buildRoof(host) {
           const modes = [
             { value:'straight', label:'Along the wall' },
             { value:'perpendicular', label:'90° to the facade' },
-            { value:'tread-between', label:'Tread between flights' }
+            { value:'tread-between', label:'Landing between flights' }
           ];
           const probeW = Object.assign({}, B3, { b:Object.assign({}, B3.b, { stair:{ w:STAIR_W, wrap:true } }) });
           const rW = probeW ? stairFor(probeW, G) : null;
-          if (rW && rW.ok && rW.wrapped) modes.push({ value:'wrapped', label:'Turn the corner' });
+          if (rW && rW.ok && rW.wrapped && !rW.byTread) modes.push({ value:'wrapped', label:'Turn the corner' });
+          const rS = stairFor(Object.assign({}, B3, { b:Object.assign({}, B3.b, { stair:{ w:STAIR_W, mode:'straight' } }) }), G);
+          if (rS && rS.ok && rS.byTread) modes[0].label = 'Along the wall · turns by a tread';
           canBox.appendChild(segCtl(null, modes, cb.stair.mode || 'straight', v => {
             const B4 = balcGeo(G).all[G.balc.indexOf(cb)];
             if (!B4 || !B4.ok || !cb.stair) return;
@@ -8850,12 +9422,37 @@ function buildRoof(host) {
   };
   /** Roof under a chimney position: inside the walls and with a surface. */
   const chimDrawable = (M, x, y) => M.pl.inside(x, y) && M.zAt(x, y) !== null;
+  let chimMore = false;
+  /** One family as a button: its figure and its name, the sentence in its title. */
+  const chimBtn = (ch, k, on, far) => {
+    const F = chimFam(k), b = el('button', { class:'chim-b' + (far ? ' far' : ''), type:'button', title:F.desc,
+      onclick:() => { ch.fam = k; ch.picked = true; buildChimUI(); roofDraw(); } });
+    b.setAttribute('aria-pressed', String(on));
+    b.innerHTML = SCE_SVG.svg(SCE_SVG.C[k]()) + '<span>' + t(F.name) + '</span>';
+    return b;
+  };
+  const chimRow = (ch, label, keys, fam, far) => {
+    if (!keys.length) return;
+    chimBox.appendChild(el('div', { class:'chim-gl', text:label }));
+    const row = el('div', { class:'chim-pick' });
+    keys.forEach(k => row.appendChild(chimBtn(ch, k, k === fam, far)));
+    chimBox.appendChild(row);
+  };
+  /* The chimney follows the site — its municipality, else its region — until
+     the student picks one; a picked chimney stays when the site moves, and
+     says so when it is not the place's own. */
   function buildChimUI() {
     chimBox.innerHTML = '';
     chimXCtl = chimYCtl = null;
-    const RZc = RF.zones[roofEditIdx()], ch = RZc.chim, fam = ch && ch.on ? chimneyOf(STATE.site.nuts) : null;
+    const RZc = RF.zones[roofEditIdx()], ch = RZc.chim, PL = chimneyPlace(STATE.site);
+    const placeNote = () => {
+      const p = el('p', { class:'hint chim-note' });
+      p.appendChild(el('b')).textContent = PL.where;
+      p.appendChild(document.createTextNode(' — ' + t(PL.note || (PL.own.length ? 'Its own chimneys come first.' : 'The sources consulted name no chimney of its own.'))));
+      return p;
+    };
     if (!(ch && ch.on)) {
-      chimBox.appendChild(el('button', { class:'btn small', text:'+ Add chimney', title:t('Raise the region’s chimney where the roof is highest'),
+      chimBox.appendChild(el('button', { class:'btn small', text:'+ Add chimney', title:'Raise the place’s own chimney where the roof is highest',
         onclick:() => {
           const M = roofModel(G, RF), at0 = placeChimney(M), Zi = roofEditIdx(), zz = M.zones[Zi];
           let at = at0;
@@ -8863,9 +9460,10 @@ function buildRoof(host) {
             if (M.axis === 'x') at = Object.assign({}, at, { x:+clamp(at.x, zz.a0 + 0.4, zz.a1 - 0.4).toFixed(2) });
             else at = Object.assign({}, at, { y:+clamp(at.y, zz.a0 + 0.4, zz.a1 - 0.4).toFixed(2) });
           }
-          RZc.chim = Object.assign({ on:true, fam:chimneyOf(STATE.site.nuts) }, at || { x:0, y:0 });
+          RZc.chim = Object.assign({ on:true, fam:chimneyOf(STATE.site), picked:false }, at || { x:0, y:0 });
           buildChimUI(); roofDraw();
         } }));
+      chimBox.appendChild(placeNote());
       return;
     }
     /* Heal a stranded chimney (plan edited under it, void under the
@@ -8878,24 +9476,35 @@ function buildRoof(host) {
         if (at) { ch.x = at.x; ch.y = at.y; }
       }
     }
-    const styles = chimneyList(STATE.site.nuts);
-    if (styles.length > 1) {
-      const row = el('div', { class:'srcrow' });
-      styles.forEach(k => {
-        const b = el('button', { class:'btn small' + (k === fam ? ' solid' : ''), type:'button', text:t(CHIMNEY_FAM[k].name),
-          title:t(CHIMNEY_FAM[k].name), onclick:() => { ch.fam = k; buildChimUI(); roofDraw(); } });
-        b.setAttribute('aria-pressed', String(k === fam));
-        row.appendChild(b);
+    const fam = chimSync(ch), F = chimFam(fam), others = Object.keys(CHIMNEY_FAM).filter(k => PL.all.indexOf(k) < 0);
+    if (others.indexOf(fam) >= 0) chimMore = true;
+    chimRow(ch, 'Of this place', PL.own, fam, false);
+    chimRow(ch, PL.own.length ? 'National type and neighbours' : 'National type and neighbours — none of its own', PL.near, fam, false);
+    const more = el('button', { class:'btn small chim-more', type:'button', text:(chimMore ? '▴ ' : '▾ ') + t('Other regions') + ' (' + others.length + ')',
+      onclick:() => { chimMore = !chimMore; buildChimUI(); } });
+    more.setAttribute('aria-expanded', String(chimMore));
+    chimBox.appendChild(more);
+    if (chimMore) chimRow(ch, 'Other regions — not of this place', others, fam, true);
+    /* what the chosen one is, where it comes from, who records it */
+    const info = el('div', { class:'chim-info' });
+    info.appendChild(el('p', { class:'chim-name', text:F.name }));
+    info.appendChild(el('p', { class:'hint' })).textContent = t('Where it comes from') + ': ' + t(F.where);
+    info.appendChild(el('p', { class:'hint', text:F.desc }));
+    if (PL.own.indexOf(fam) < 0) info.appendChild(el('p', { class:'hint chim-warn',
+      text:PL.near.indexOf(fam) >= 0 ? (fam === 'arca' ? 'The national type — not a chimney the sources give to this place.' : 'A neighbour’s chimney — not one the sources give to this place.') : 'Not a chimney of this place — it belongs to another region.' }));
+    const src = el('p', { class:'hint chim-src' });
+    if (F.src.length) {
+      src.appendChild(document.createTextNode(t('Sources') + ': '));
+      F.src.forEach((k, i) => {
+        const Sx = CHIMNEY_SRC[k];
+        if (!Sx) return;
+        if (i) src.appendChild(document.createTextNode(' · '));
+        src.appendChild(el('a', { href:Sx[1], target:'_blank', rel:'noopener noreferrer' })).textContent = Sx[0];
       });
-      chimBox.appendChild(row);
-    }
-    const fig = el('div', { class:'sce-ics' });
-    fig.innerHTML = sceFig(fam, 'C');
-    chimBox.appendChild(fig);
-    const note = el('p', { class:'hint' });
-    note.textContent = t(CHIMNEY_FAM[fam].name) + ' · ' + STATE.site.nuts;
-    chimBox.appendChild(note);
-    const F = CHIMNEY_FAM[fam] || CHIMNEY_FAM.alentejana;
+    } else src.textContent = t('No source is named for this one: it is kept from this application’s earlier drawings.');
+    info.appendChild(src);
+    chimBox.appendChild(info);
+    chimBox.appendChild(placeNote());
     const cH = rangeCtl('Height above roof', 0.3, 3.0, 0.05, isFinite(+ch.h) ? +ch.h : F.h,
       v => { ch.h = +v.toFixed(2); roofDraw(); }, v => fmt(v, 2) + ' m');
     chimBox.appendChild(cH);
@@ -8936,7 +9545,7 @@ function buildRoof(host) {
   }
   buildChimUI();
   host.appendChild(hint('roof-chimney',
-    'One chimney, drawn as the region builds them — pick its style above where the parish builds more than one. It stands where it is put and rises what the slider says; the draw score judges the crown against the rule every chimney answers to: half a metre clear of the ridge on a pitched roof, a metre clear on a flat one, so the wind draws instead of pushing back down. “To the rule” raises it exactly there. A short chimney on the lee slope smokes back into the attic — height first, then position.'));
+    'One chimney, drawn as the place builds them. The site’s municipality and region choose it: Monchique gets its skirt chimney, Olhão its balloon, the Alentejo its listening chimney, Santa Maria its mãos postas — the place’s own come first, then the arca, the type found across the country, and the neighbours’; any other region’s can be opened and picked, and is then marked as not of this place. Each family names its sources, Portuguese studies and municipal records gathered on the web; where they name no chimney of a region its note says so, and the stone stacks of the north, the Beira and Madeira take the local stone with a form this application supplies. Every family stands on the same shaft — set its widths and side pitch below — and carries its own crown. It stands where it is put and rises what the slider says; the draw score judges the crown against the rule every chimney answers to: half a metre clear of the ridge on a pitched roof, a metre clear on a flat one, so the wind draws instead of pushing back down. “To the rule” raises it exactly there. A short chimney on the lee slope smokes back into the attic — height first, then position.'));
   const pillChim = el('span', { class:'pill empty' });
   props.appendChild(pillChim);
   buildRoofColUI();
@@ -9113,19 +9722,19 @@ function buildRoof(host) {
         const sideFill = opaque(roofFillFor(zi, 'A', 0.38, colK * 0.82));
         const botFill = opaque(roofFillFor(zi, 'A', 0.42, colK * 0.62));
         if (camSees(A, n[0] * sp, n[1] * sp, cp)) {
-          faces.push({ pts:canopyPts(cpH).quad, fill:topFill, cnp:Object.assign({ zi }, cpH) });
+          faces.push({ pts:canopyPts(cpH).quad, fill:topFill, cnp:Object.assign({ zi }, cpH), over:1 });
         }
         const slab = canopySlab(cpH);
         if (slab) {
           const tx = (cpH.sg.b[0] - cpH.sg.a[0]) / cpH.sg.len, ty = (cpH.sg.b[1] - cpH.sg.a[1]) / cpH.sg.len;
-          if (camSees(A, n[0], n[1], 0)) faces.push({ pts:slab.outer, fill:sideFill });
-          if (camSees(A, tx, ty, 0)) faces.push({ pts:slab.sideB, fill:sideFill });
-          if (camSees(A, -tx, -ty, 0)) faces.push({ pts:slab.sideA, fill:sideFill });
+          if (camSees(A, n[0], n[1], 0)) faces.push({ pts:slab.outer, fill:sideFill, over:1 });
+          if (camSees(A, tx, ty, 0)) faces.push({ pts:slab.sideB, fill:sideFill, over:1 });
+          if (camSees(A, -tx, -ty, 0)) faces.push({ pts:slab.sideA, fill:sideFill, over:1 });
           if (camSees(A, -n[0] * sp, -n[1] * sp, -cp)) faces.push({ pts:slab.bottom, fill:botFill });
         }
         const fr = canopyFrame(cpH);
         fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
-          if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) faces.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26' });
+          if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) faces.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26', post:1 });
         }));
       });
       /* stone stairs up to canopy balconies: one group per flight, treads
@@ -9134,12 +9743,13 @@ function buildRoof(host) {
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        const g = stairFaceGroup(st, nn => camSees(A, nn[0], nn[1], nn[2]), null);
-        if (g) faces.push(g);
+        stairFaceGroups(st, nn => camSees(A, nn[0], nn[1], nn[2]), null).forEach(g => faces.push(g));
       });
-      const depth = F => F.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / F.pts.length;
+      const depth = F => F.d !== undefined ? F.d : F.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / F.pts.length;
       pushImportFaces(faces);
       pushChimPar(faces, M);
+      stairsAfterWalls(faces, (x, y, z) => camDepth(A, x, y, z));
+      chimOpeningsAfter(faces, depth);
       SORT_AX = A; faces.sort((p, q) => roofWallOrder(p, q) || depth(q) - depth(p)).forEach(F => {
         if (F.balc) { desk.path(F.pts.map(P3), true); balcFace(ctx, F.balc, P3); return; }
         if (F.stairGrp) { F.stairGrp.forEach(f => { const sp = pathOf(f.pts); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); desk.path(sp, true); }); return; }
@@ -9149,7 +9759,7 @@ if (F.chim || F.par) {
             const pn = F.kind === 'out' ? F.sg.n : F.kind === 'in' ? [-F.sg.n[0], -F.sg.n[1]] : null;
             if (pn ? !camSees(A, pn[0], pn[1], 0) : !camSees(A, 0, 0, 1)) return;
           }
-          const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
+          const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
         if (F.cnp) {
           /* the canopy's tiles: a channel every 0.25 m down its fall, and
              the beirado's broken line of tile ends along its edge */
@@ -9179,8 +9789,7 @@ if (F.chim || F.par) {
         if (isFinite(+ch.x) && isFinite(+ch.y) && M.pl.inside(+ch.x, +ch.y)) {
           const z = M.zAt(+ch.x, +ch.y);
           if (z !== null) {
-            const F = CHIMNEY_FAM[ch.fam] || CHIMNEY_FAM.alentejana;
-            const q = proj(+ch.x, +ch.y, z + chimTopH(F, chimEffH(ch)));
+            const q = proj(+ch.x, +ch.y, z + chimTopH(ch.fam, chimEffH(ch)));
             ctx.beginPath(); ctx.arc(q[0], q[1] - 8, 5, 0, 6.284); ctx.fillStyle = '#14171a'; ctx.fill();
             stroke(ctx, '#fff', 1.6); ctx.stroke();
           }
@@ -9446,7 +10055,7 @@ if (F.chim || F.par) {
         return hs.length ? hs.join(' | ') : 'none';
       })()],
       ['Chimneys', (() => {
-        const hs = roofChims(RF).map(({ zi, ch }) => 'Part ' + ('ABC'[zi] || String(zi + 1)) + ': ' + CHIMNEY_FAM[ch.fam].name + ' at ' + fmt(ch.x, 1) + ', ' + fmt(ch.y, 1) + ' m · ' + fmt(chimEffH(ch), 2) + ' m above roof');
+        const hs = roofChims(RF).map(({ zi, ch }) => 'Part ' + ('ABC'[zi] || String(zi + 1)) + ': ' + chimFam(ch.fam).name + ' at ' + fmt(ch.x, 1) + ', ' + fmt(ch.y, 1) + ' m · ' + fmt(chimEffH(ch), 2) + ' m above roof');
         return hs.length ? hs.join(' | ') : 'none';
       })()],
       ['Plan form (from Site)', (G.form || 'rect') + (G.patio && G.patio.on && G.patio.ok !== false ? ' + patio' : '')],
@@ -10069,8 +10678,7 @@ if (F.chim || F.par) {
     if (!M.pl.inside(+ch.x, +ch.y)) return null;
     const z = M.zAt(+ch.x, +ch.y);
     if (z === null) return null;
-    const F = CHIMNEY_FAM[ch.fam] || CHIMNEY_FAM.alentejana;
-    return { zi, x:+ch.x, y:+ch.y, z0:z, z1:z + chimTopH(F, chimEffH(ch)) };
+    return { zi, x:+ch.x, y:+ch.y, z0:z, z1:z + chimTopH(ch.fam, chimEffH(ch)) };
   };
   const chimHandleAt = (clientX, clientY) => {
     if (!roofPanel.W) return false;
@@ -11090,8 +11698,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        const g = stairFaceGroup(st, nn => camSees(A, nn[0], nn[1], nn[2]), null);
-        if (g) items.push(g);
+        stairFaceGroups(st, nn => camSees(A, nn[0], nn[1], nn[2]), null).forEach(g => items.push(g));
       });
       Mm.steps.forEach(st => {
         if (!camSees(A, st.n[0], st.n[1], 0)) return;
@@ -11110,11 +11717,13 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       const depth = it => it.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / it.pts.length - (it.dev ? 0.01 : 0);
       pushImportFaces(items);
       pushChimPar(items, Mm);
+      stairsAfterWalls(items, (x, y, z) => camDepth(A, x, y, z), 0.055);
+      chimOpeningsAfter(items, q => q.d === undefined ? depth(q) : q.d);
       SORT_AX = A; items.sort((p, q) => roofWallOrder(p, q) || ((q.d === undefined ? depth(q) : q.d) - (p.d === undefined ? depth(p) : p.d))).forEach(it => {
         if (it.balc) { balcFace(ctx, it.balc, P3); return; }
         if (it.stairGrp) { it.stairGrp.forEach(f => { pathOf(f.pts); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); }); return; }
         if (it.import) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); return; }
-        if (it.chim || it.par) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
+        if (it.chim || it.par) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
         if (it.dev) {
           const act = it.dev.f === curFace, ov = it.dev.kind === 'ov';
           poly(it.pts, ov ? (act ? 'rgba(217,119,6,.35)' : 'rgba(217,119,6,.2)') : (act ? 'rgba(220,38,38,.3)' : 'rgba(220,38,38,.18)'), ov ? '#D97706' : '#DC2626', act ? 1.4 : 1.1);
@@ -14141,10 +14750,11 @@ function buildVentilation(host) {
     });
     pushImportFaces(items);
     pushChimPar(items, M);
+    chimOpeningsAfter(items, q1 => q1.d === undefined ? depthV(q1) : q1.d);
     SORT_AX = AX; items.sort((p1, q1) => roofWallOrder(p1, q1) || ((q1.d === undefined ? depthV(q1) : q1.d) - (p1.d === undefined ? depthV(p1) : p1.d))).forEach(it => {
       if (it.balc) { balcFace(ctx, it.balc, P3v); return; }
       if (it.import) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); return; }
-      if (it.chim || it.par) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
+      if (it.chim || it.par) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
       if (it.dev) { poly(it.pts, it.dev.ov ? 'rgba(217,119,6,.22)' : 'rgba(220,38,38,.18)', it.dev.ov ? '#D97706' : '#DC2626', 1.2); return; }
       pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill();
       if (it.pc) {
@@ -16983,8 +17593,8 @@ style === 'sketch' ? '#EFEBE0'
         if (!isFinite(+ch.x) || !isFinite(+ch.y)) return;
         const zx = M.zAt(+ch.x, +ch.y);
         if (zx !== null && isFinite(zx)) {
-          chimneyFaces(ch.fam, +ch.x, +ch.y, zx, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy))
-            .forEach(f => items.push({ pts:f.pts, fill:f.fill, chim:true, d:dc(f.pts) }));
+          chimSync(ch);
+          pushChimFaces(items, chimneyFaces(ch.fam, +ch.x, +ch.y, zx, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy)), f => ({ pts:f.pts, fill:f.fill, chim:true, d:dc(f.pts) }));
         }
       } catch (e) {}
     });
@@ -16997,8 +17607,7 @@ style === 'sketch' ? '#EFEBE0'
         if (B.mode !== 'out' || !B.b.stair) return;
         const st = stairFor(B, MASS);
         if (!st || !st.ok) return;
-        const g = stairFaceGroup(st, nn => nn[2] !== 0 || (nn[0]*st.nv[0] + nn[1]*st.nv[1] >= 0) || wallSeen(nn), dc, wallSeen);
-        if (g) items.push(g);
+        stairFaceGroups(st, nn => nn[2] !== 0 || (nn[0]*st.nv[0] + nn[1]*st.nv[1] >= 0) || wallSeen(nn), dc, wallSeen).forEach(g => items.push(g));
       });
     } catch (e) {}
     /* solar collection above the tiles, held for the pass past the sorted
@@ -17109,6 +17718,8 @@ style === 'sketch' ? '#EFEBE0'
         }
       });
     };
+    stairsAfterWalls(items, depthOf, 3.5e-4);
+    chimOpeningsAfter(items, f => f.d);
     items.sort((a, b) => b.d - a.d);
     const kpx = CAM_K * s;
     items.forEach(it => {
@@ -17866,8 +18477,8 @@ function exportModel() {
     if (!st || !st.ok) return;
     const no = bgx.all.indexOf(B) + 1;
     const faces = [];
-    (st.flights || []).forEach(fl => fl.forEach(f => faces.push(f.pts)));
-    (st.landing || []).forEach(b => boxSides(b).forEach(([q]) => faces.push(q)));
+    (st.flights || []).forEach(fl => fl.forEach(f => faces.push([f.pts, f.nn])));
+    (st.landing || []).forEach(l => boxSides(l.box !== undefined ? l.box : l).forEach(f => faces.push(f)));
     add('stair', 'Stone stair to Balcony ' + no, 'AA-STONE', faces,
       { steps:st.n, riser:+st.riser.toFixed(3), tread:+st.tread.toFixed(2), run:+st.run.toFixed(2), floor:st.level, mat:'AA_Stone' });
   });
@@ -18153,7 +18764,7 @@ function toDecisionsJSON() {
           z.n === 2 && Math.abs(ridgeFrac(z) - 0.5) > 1e-3 ? { ridgeAt:ridgeFrac(z), rearPitch:+rearPitch(z.th, ridgeFrac(z)).toFixed(1) } : {})), roofColour:colourOf(rfin),
         parapets:(ROOF.zones || []).filter(z => z.par && z.par.on).map(z => ({ roof:(ROOF.zones || []).indexOf(z) + 1, height:+z.par.h.toFixed(2) })),
         beirados:(ROOF.zones || []).filter(z => z.bei && z.bei.on).map(z => ({ roof:(ROOF.zones || []).indexOf(z) + 1, projectionS:+beiSide(z.bei, 'S').toFixed(2), projectionN:+beiSide(z.bei, 'N').toFixed(2), projectionE:+beiSide(z.bei, 'E').toFixed(2), projectionW:+beiSide(z.bei, 'W').toFixed(2), gables:z.bei.ends !== false })),
-        chimneys:roofChims(ROOF).map(({ zi, ch }) => ({ roof:zi + 1, family:ch.fam, x:+ch.x.toFixed(2), y:+ch.y.toFixed(2), heightAboveRoof:isFinite(+ch.h) ? +ch.h : null, widthEW:+chimFoot(ch).x.toFixed(2), widthSN:+chimFoot(ch).y.toFixed(2), sidePitch:isFinite(+ch.taper) ? +ch.taper : null })), roofColour:colourOf(rfin),
+        chimneys:roofChims(ROOF).map(({ zi, ch }) => ({ roof:zi + 1, family:chimSync(ch), origin:chimFam(ch.fam).where, x:+ch.x.toFixed(2), y:+ch.y.toFixed(2), heightAboveRoof:isFinite(+ch.h) ? +ch.h : null, widthEW:+chimFoot(ch).x.toFixed(2), widthSN:+chimFoot(ch).y.toFixed(2), sidePitch:isFinite(+ch.taper) ? +ch.taper : null })), roofColour:colourOf(rfin),
         solar:solStudy(ROOF.sol)},
       openings:OPEN, sunspace:SUNSP, roofWindows:RWIN,
       render:{ prompt:RENDER_PROMPT,
@@ -20994,6 +21605,81 @@ Object.assign(PT, {
   "+ Add chimney": "+ Acrescentar chaminé",
   "Raise the region’s chimney where the roof is highest": "Levantar a chaminé da região onde a cobertura é mais alta",
   "Take the chimney away": "Retirar a chaminé",
+  "Raise the place’s own chimney where the roof is highest": "Levantar a chaminé própria do lugar onde a cobertura é mais alta",
+  "Of this place": "Deste lugar",
+  "National type and neighbours": "Tipo nacional e vizinhas",
+  "National type and neighbours — none of its own": "Tipo nacional e vizinhas — nenhuma própria",
+  "Other regions": "Outras regiões",
+  "Other regions — not of this place": "Outras regiões — não deste lugar",
+  "Where it comes from": "Origem",
+  "Sources": "Fontes",
+  "Its own chimneys come first.": "As chaminés próprias vêm primeiro.",
+  "The sources consulted name no chimney of its own.": "As fontes consultadas não lhe atribuem chaminé própria.",
+  "The national type — not a chimney the sources give to this place.": "O tipo nacional — não é uma chaminé que as fontes atribuam a este lugar.",
+  "A neighbour’s chimney — not one the sources give to this place.": "Uma chaminé vizinha — não é uma que as fontes atribuam a este lugar.",
+  "Not a chimney of this place — it belongs to another region.": "Não é uma chaminé deste lugar — pertence a outra região.",
+  "Algarve openwork chimney": "Chaminé algarvia rendilhada",
+  "Algarve tile-grille chimney": "Chaminé algarvia de grelha",
+  "Olhão balloon chimney": "Chaminé de balão de Olhão",
+  "Monchique skirt chimney — cubic": "Chaminé de saia de Monchique — cúbica",
+  "Monchique skirt chimney — octagonal": "Chaminé de saia de Monchique — octogonal",
+  "Chest chimney — the national type": "Chaminé de arca — o tipo nacional",
+  "Alentejo listening chimney": "Chaminé de escuta alentejana",
+  "Saloio chimney": "Chaminé saloia",
+  "Granite stack": "Chaminé de granito",
+  "Schist stack": "Chaminé de xisto",
+  "Basalt stack": "Chaminé de basalto",
+  "Santa Maria mãos postas chimney": "Chaminé de mãos postas de Santa Maria",
+  "Santa Maria steam chimney": "Chaminé de vapor de Santa Maria",
+  "São Miguel oven chimney": "Chaminé de forno micaelense",
+  "The Algarve": "O Algarve",
+  "Olhão and Fuseta": "Olhão e Fuseta",
+  "All of Portugal; in the Algarve, Cacela Velha": "Todo o país; no Algarve, Cacela Velha",
+  "The Alentejo": "O Alentejo",
+  "Lisbon’s hinterland — Sintra, Mafra, Ericeira": "A região saloia — Sintra, Mafra, Ericeira",
+  "The granite north and the Beira": "O Norte granítico e as Beiras",
+  "The schist country — Douro, Lousã, Pinhal": "As terras de xisto — Douro, Lousã, Pinhal",
+  "Madeira and Porto Santo": "Madeira e Porto Santo",
+  "Santa Maria, Azores": "Santa Maria, Açores",
+  "São Miguel, Azores": "São Miguel, Açores",
+  "A whitewashed turret whose crown is pierced in a geometric lace under a cornice — the vertical type of the Algarve.": "Uma torre caiada cuja coroa é rendilhada num jogo geométrico, sob uma cornija — o tipo vertical do Algarve.",
+  "Courses of tile laid one over another on corner posts, the smoke leaving between them — the horizontal-grille type.": "Fiadas de telha sobrepostas sobre pilaretes de canto, o fumo a sair entre elas — o tipo de grelha horizontal.",
+  "A large six-sided shaft, then a conical volume closed by a cylinder slit all round: the smoke leaves through the slits.": "Um fuste largo de seis faces, depois um volume cónico rematado por um cilindro fendido em toda a volta: o fumo sai pelas fendas.",
+  "A wall about 10 cm thick stands round the slits of the flue and stops the smoke at the sides; the cocuruto closes the top.": "Um pano de parede com cerca de 10 cm envolve as fendas da conduta e trava o fumo pelos lados; o cocuruto remata o topo.",
+  "The same skirt on eight sides — Monchique builds both, cubic and octagonal.": "A mesma saia em oito faces — Monchique constrói as duas, cúbica e octogonal.",
+  "A long, low chest under a tiled lid, the smoke leaving under its eaves — the type found across the country.": "Uma arca comprida e baixa sob uma tampa de telha, o fumo a sair sob os beirais — o tipo que se encontra por todo o país.",
+  "A broad rectangular stack, whitewashed, over the hearth on the floor; tile hoods cover the smoke, and the face to the street often carries a cross and a date.": "Um fuste retangular largo e caiado sobre a lareira térrea; capelos de telha cobrem a saída do fumo, e a face para a rua leva muitas vezes uma cruz e uma data.",
+  "Long and slender, set north–south, its tiled lid open at both ends.": "Longa e esguia, orientada norte–sul, a tampa de telha aberta nos dois topos.",
+  "A granite stack whose slab lid rests on corner stones; in the rural north the chimney came late, and smoke long left through the tiles.": "Um fuste de granito com tampa de laje assente em pedras de canto; no Norte rural a chaminé chegou tarde, e o fumo saiu muito tempo pelas telhas.",
+  "The same stack in schist, the stone of the walls and roofs of the schist villages.": "O mesmo fuste em xisto, a pedra das paredes e das coberturas das aldeias de xisto.",
+  "A stone stack in basalt — the Porto Santo house had its kitchen with an oven and a stone chimney.": "Um fuste de pedra em basalto — a casa do Porto Santo tinha a cozinha com forno e chaminé de pedra.",
+  "Rectangular, the oldest on the island and Alentejo in its origin: two leaves lean together over the flue like hands at prayer.": "Retangular, a mais antiga da ilha e de origem alentejana: duas abas encostam-se sobre a conduta como mãos postas.",
+  "Round, on a truncated pyramid, ending in a point (espicho); it came at the turn of the 20th century, after the funnels of the steamships.": "Redonda, sobre um tronco de pirâmide, rematada em espicho; chegou na viragem para o século XX, à imagem das chaminés dos navios a vapor.",
+  "A prismatic shaft with a grille of tear-shaped openings under a pointed hood, rising from the oven built against the gable.": "Um fuste prismático com grelha lacrimal sob uma coifa pontiaguda, a subir do forno encostado à empena.",
+  "The Algarve builds the most varied chimneys in the country: openwork turrets, tile grilles, Olhão’s balloons, Monchique’s skirts and the arca.": "O Algarve constrói as chaminés mais variadas do país: torres rendilhadas, grelhas de telha, os balões de Olhão, as saias de Monchique e a arca.",
+  "In the Alentejo the chimney grows imposing — the house is built round its listening chimney.": "No Alentejo a chaminé ganha imponência — a casa constrói-se em torno da sua chaminé de escuta.",
+  "In the Alentejo the chimney grows imposing — the house is built round its listening chimney; toward the Algarve the round and openwork forms appear.": "No Alentejo a chaminé ganha imponência — a casa constrói-se em torno da sua chaminé de escuta; para o Algarve surgem as formas redondas e rendilhadas.",
+  "The saloio house of Lisbon’s hinterland carries a long, slender chimney set north–south.": "A casa saloia do termo de Lisboa leva uma chaminé longa e esguia, orientada norte–sul.",
+  "The sources consulted name no chimney of the peninsula itself: the Alentejo’s and the saloio chimneys stand on either side, and the arca everywhere.": "As fontes consultadas não atribuem chaminé própria à península: a alentejana e a saloia ficam de um lado e do outro, e a arca em todo o lado.",
+  "The sources consulted name no chimney of the Ribatejo itself: the arca, the national type, comes first, the saloio and the Alentejo chimneys on either side.": "As fontes consultadas não atribuem chaminé própria ao Ribatejo: a arca, o tipo nacional, vem primeiro, a saloia e a alentejana de um lado e do outro.",
+  "In the rural north the chimney was rare and came late: smoke left through the tiles of a kitchen open to the roof. Where it was built, it was built in granite.": "No Norte rural a chaminé foi rara e tardia: o fumo saía pelas telhas de uma cozinha aberta ao telhado. Onde se construiu, foi em granito.",
+  "In Trás-os-Montes the chimney was rare and came late: smoke left through the tiles or the slate. Where it was built, it was built in the local granite or schist.": "Em Trás-os-Montes a chaminé foi rara e tardia: o fumo saía pelas telhas ou pela lousa. Onde se construiu, foi no granito ou no xisto do lugar.",
+  "In the Douro the chimney is built in the schist of the terraces, or in granite.": "No Douro a chaminé faz-se no xisto dos socalcos, ou em granito.",
+  "The granite villages of the Beira raise granite chimneys over the hearth on the floor.": "As aldeias graníticas da Beira levantam chaminés de granito sobre a lareira térrea.",
+  "The Beira Baixa builds in granite and in schist, village by village.": "A Beira Baixa constrói em granito e em xisto, aldeia a aldeia.",
+  "The schist villages build walls, roofs and chimneys in schist.": "As aldeias de xisto fazem em xisto as paredes, as coberturas e as chaminés.",
+  "The sources consulted name no chimney of the Beira Litoral itself: the arca, the national type, comes first.": "As fontes consultadas não atribuem chaminé própria à Beira Litoral: a arca, o tipo nacional, vem primeiro.",
+  "The sources consulted describe the chimneys of São Miguel and Santa Maria; for the other islands São Miguel’s comes first.": "As fontes consultadas descrevem as chaminés de São Miguel e de Santa Maria; para as outras ilhas vem primeiro a de São Miguel.",
+  "In Madeira the kitchen stood apart under its own thatch; Porto Santo’s house had its kitchen with an oven and a stone chimney.": "Na Madeira a cozinha era uma construção à parte, também de colmo; a casa do Porto Santo tinha a cozinha com forno e chaminé de pedra.",
+  "Monchique’s chimneys wear a skirt — cubic or octagonal — against the mountain’s wind and rain; below, the hearth spans the kitchen and cures the sausages.": "As chaminés de Monchique vestem saia — cúbica ou octogonal — contra o vento e a chuva da serra; por baixo, a lareira ocupa a largura da cozinha e cura os enchidos.",
+  "The balloon chimney belongs to Olhão and Fuseta and is sparse outside them.": "A chaminé de balão é de Olhão e da Fuseta, e rara fora delas.",
+  "Cacela Velha keeps chimneys in the form of an arca, the national type.": "Cacela Velha guarda chaminés em forma de arca, o tipo nacional.",
+  "Santa Maria builds two: the rectangular mãos postas, the oldest, and the round steam chimney that became the island’s mark.": "Santa Maria constrói duas: a de mãos postas, retangular e mais antiga, e a de vapor, redonda, que se tornou a imagem da ilha.",
+  "The Porto Santo house had its kitchen with an oven and a stone chimney.": "A casa do Porto Santo tinha a cozinha com forno e chaminé de pedra.",
+  "Alentejo long range": "Chaminé alongada alentejana",
+  "A long white range with five flues under one slab — the Alentejo long range.": "Uma chaminé comprida e caiada com cinco saídas sob uma só laje — a chaminé alongada alentejana.",
+  "No source is named for this one: it is kept from this application’s earlier drawings.": "Sem fonte indicada: mantém-se dos desenhos anteriores desta aplicação.",
+  "A large shaft, then a conical volume closed by a cylinder slit all round: the smoke leaves through the slits.": "Um fuste largo, depois um volume cónico rematado por um cilindro fendido em toda a volta: o fumo sai pelas fendas.",
   "No roof there — the chimney stays where it stands": "Aí não há cobertura — a chaminé fica onde está",
   "Simple pot": "Pote simples",
   "A plain washed stack with one pot — every region builds one.": "Um simples fuste caiado com um pote — todas as regiões constroem um.",
@@ -21483,7 +22169,21 @@ Object.assign(PT, {
   "Held 25 m off the house — closer is too loud": "Mantida a 25 m da casa — mais perto faz demasiado barulho",
   "Too much for one house — take the turbine down": "Demais para uma casa — retire a turbina",
   "drag to move it — it stays 25 m off the house": "arraste para a mover — fica sempre a 25 m da casa",
-  "25 m — too close": "25 m — demasiado perto"
+  "25 m — too close": "25 m — demasiado perto",
+  /* the stone stair to a canopy balcony */
+  "Stone stair": "Escada de pedra", "stone stair": "escada de pedra", "stone stair off": "sem escada de pedra",
+  "Along the wall": "Ao longo da parede", "Along the wall · turns by a tread": "Ao longo da parede · vira por um cobertor",
+  "90° to the facade": "A 90° da fachada", "Landing between flights": "Patamar entre lanços", "landing between flights": "patamar entre lanços", "Turn the corner": "Contornar o cunhal",
+  "turns the corner": "contorna o cunhal", "turns the corner by a tread": "contorna o cunhal por um cobertor",
+  "no corner this way to turn": "não há cunhal deste lado para contornar", "no room round the corner": "sem espaço depois do cunhal",
+  "no room for the stair along this wall": "sem espaço para a escada ao longo desta parede",
+  "stair does not fit along this wall": "a escada não cabe ao longo desta parede", "That stair does not fit here": "Essa escada não cabe aqui",
+  "the corner leaves no room for two flights": "o cunhal não deixa espaço para dois lanços",
+  "the tread leaves no room for two flights": "o cobertor não deixa espaço para dois lanços",
+  "no room for a landing between two flights along this wall": "sem espaço para um patamar entre dois lanços ao longo desta parede",
+  "the balcony is narrower than the stair": "a varanda é mais estreita do que a escada",
+  "the canopy posts leave no room for the stair in front": "os pilares do alpendre não deixam espaço para a escada à frente",
+  "Upper floor": "Piso superior", "Remove balcony": "Retirar a varanda", "Remove this balcony and its stair": "Retirar esta varanda e a sua escada"
 });
 
 /* --- the long captions, keyed by identifier ----------------------------- */
@@ -21574,7 +22274,7 @@ Object.assign(PT_HINT, {
   'open-wwr':
     'As faixas de WWR seguem a classificação de Ching &amp; Shapiro (baixa &lt;10%, moderada 10–20%, alta 20–30%, muito alta &gt;30%; p.242), lida à luz da orientação de Lechner — o sul recebe mais vidro, o norte o menos das fachadas com sol, e este/oeste são minimizados onde o clima pende para quente (pp.130–132, 416). A faixa mostrada para %1 neste clima é <b>%2–%3%</b>. O norte fica entre 5 e 10 % e começa em 5 %: quase não recebe sol de Inverno e perde calor todo o ano. É uma escolha bioclimática desta aplicação, não uma regra do SCE — o regulamento não fixa máximo para o vidro a norte; dispensa do requisito de factor solar os vãos orientados no quadrante norte e qualquer espaço cujos envidraçados não excedam 5 % da sua área de <i>pavimento</i> (Portaria n.º 138-I/2021). O RGEU fixa antes o mínimo: cada compartimento precisa de vãos com pelo menos 1/10 da sua área, e nunca menos de 1,08 m² (art. 71.º), e a leitura do lado norte diz quantos compartimentos o seu vidro pode servir. É uma síntese própria desta aplicação entre fontes, não um número único citável — trate-a como uma meta a atingir, não um teste de aprovação. Cada lado é avaliado pelo sentido para onde realmente fica virado depois de rodada a planta no Local, e a sua razão vão/parede aplica-se a todas as paredes da planta desse lado — de uma ala, de um recuo, de um pátio. Com dois ou três pisos, esse vidro reparte-se por igual entre eles: cada parede recebe uma janela por piso, todas da mesma largura, com peitoril e padieira medidos a partir de cada piso e a padieira 0,10 m abaixo do piso de cima. A caixa Ajuste WWR faz a média deste teste nos quatro lados.',
   'roof-chimney':
-    'Uma chaminé, desenhada como a região as constrói — escolha o estilo acima onde a freguesia constrói mais do que um. Assenta onde a pousar e sobe o que o cursor disser; a nota de tiragem julga a coroa pela regra a que todo o chaminé responde: meio metro acima da cumeeira numa cobertura inclinada, um metro acima numa plana, para o vento puxar em vez de empurrar para baixo. “Para a regra” sobe-a exactamente até lá. Uma chaminé curta na vertente de sotavento enfumaça o sótão — primeiro a altura, depois a posição.',
+    'Uma chaminé, desenhada como o lugar as constrói. O concelho e a região do sítio escolhem-na: Monchique recebe a sua chaminé de saia, Olhão o seu balão, o Alentejo a sua chaminé de escuta, Santa Maria a de mãos postas — primeiro as do lugar, depois a arca, o tipo que se encontra por todo o país, e as das vizinhas; a de qualquer outra região pode abrir-se e escolher-se, e fica então assinalada como não sendo deste lugar. Cada família indica as suas fontes, estudos portugueses e registos municipais reunidos na web; onde não atribuem chaminé a uma região, a nota di-lo, e as chaminés de pedra do Norte, das Beiras e da Madeira tomam a pedra do lugar numa forma que esta aplicação propõe. Todas assentam no mesmo fuste — as larguras e a inclinação das faces acertam-se abaixo — e cada uma leva a sua coroa. Assenta onde a pousar e sobe o que o cursor disser; a nota de tiragem julga a coroa pela regra a que toda a chaminé responde: meio metro acima da cumeeira numa cobertura inclinada, um metro acima numa plana, para o vento puxar em vez de empurrar para baixo. “Para a regra” sobe-a exatamente até lá. Uma chaminé curta na vertente de sotavento enfumaça o sótão — primeiro a altura, depois a posição.',
   'open-shape':
     'Vidro alto, luz funda; vidro largo, luz uniforme. A luz natural alcança cerca do dobro da altura da verga para dentro da sala (Lechner, <i>Heating, Cooling, Lighting</i>), por isso uma verga mais alta ilumina mais fundo — uma verga a 2,1 m chega a cerca de 4 m — enquanto uma janela mais larga espalha essa luz para os lados e deixa parede por baixo para o aquecimento, o lugar habitual do radiador sob o vidro. Janelas em fita, compridas e baixas, iluminam a sala de modo uniforme de ponta a ponta (Ching &amp; Shapiro, sobre dimensão, posição e uniformidade da luz natural). A nota Forma pondera as duas: profundidade a partir da verga contra a profundidade da sala para onde este lado se vira, largura a partir da largura média contra um generoso vão de 2,4 m. Como o ajuste WWR, é uma síntese própria desta aplicação entre fontes, não um número de nenhum livro — compare lados com ela; uma janela a sul alta e estreita e uma comprida e baixa podem ambas sair-se bem, por razões diferentes.',
   'open-shading':
