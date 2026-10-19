@@ -19027,7 +19027,10 @@ function studyJSON() {
     mass:MASS, roof:ROOF, open:OPEN, sunsp:SUNSP, rwin:RWIN, turb:TURB, veg:SCENE.veg, walls:SCENE.walls,
     render:{ prompt:RENDER_PROMPT },
     mesh:IMPORT.active ? { name:IMPORT.name, L:+IMPORT.L.toFixed(2), D:+IMPORT.D.toFixed(2), H:+IMPORT.H.toFixed(2) } : null,
-    readout:JSON.parse(toDecisionsJSON())
+    readout:JSON.parse(toDecisionsJSON()),
+    /* the Construction Advisor's own hand-off rides along, so this one file
+       also opens there: site, coordinates, altitude, areas by facing */
+    construction:(() => { try { const r = collectConstructionHandoff(); return r.ok ? r.payload : null; } catch (e) { return null; } })()
   }, null, 2);
 }
 /** Handoff to Construction Advisor PT (same-origin continuation).
@@ -19188,13 +19191,22 @@ function collectConstructionHandoff() {
   };
   return { ok:true, payload };
 }
+/* The study travels in the address itself (#aa=…, the fragment never leaves
+   the browser), so the other app opens with it whatever its storage allows;
+   the tab is opened inside the click, where no pop-up blocker stops it. The
+   shared localStorage key stays as a second route, and Save study's file
+   carries the same hand-off for later. */
+const CA_URL = 'https://ncorticos.github.io/construction-advisor-pt/';
 function continueToConstruction() {
   const r = collectConstructionHandoff();
   if (!r.ok) { toast('Open a study first — set the site, then continue'); return; }
   try { localStorage.setItem('arca-handoff-construction', JSON.stringify({ kind:'architecture-advisor-handoff', handoffVersion:2, savedAt:r.payload.savedAt, payload:r.payload })); } catch (e) {}
-  download(new Blob([JSON.stringify(r.payload, null, 2)], { type:'application/json' }), cadStem() + '-construction-handoff.json');
-  toast('Study packed for Construction Advisor');
-  setTimeout(() => window.open('https://ncorticos.github.io/construction-advisor-pt/', '_blank'), 600);
+  const w = window.open(CA_URL + '#aa=' + encodeURIComponent(JSON.stringify(r.payload)), '_blank');
+  if (w) toast('Study sent to Construction Advisor — it opens in a new tab');
+  else {
+    download(new Blob([JSON.stringify(r.payload, null, 2)], { type:'application/json' }), cadStem() + '-construction-handoff.json');
+    toast('The browser blocked the new tab — the study was saved as a file: open it in Construction Advisor');
+  }
 }
 /** The live state back from a study file, clamped into the current plan's
     limits so an older file cannot break a newer application. Arrays stay the
@@ -21334,6 +21346,9 @@ Object.assign(PT, {
   "(clamped to the plan limits)": "(limitado aos limites da planta)",
   "Import removed.": "Importação removida.",
   "Save study ▾": "Guardar estudo ▾",
+  "Continue to Construction ▸": "Continuar para a Construção ▸",
+  "Study sent to Construction Advisor — it opens in a new tab": "Estudo enviado para o Construction Advisor — abre num novo separador",
+  "The browser blocked the new tab — the study was saved as a file: open it in Construction Advisor": "O navegador bloqueou o novo separador — o estudo foi guardado num ficheiro: abra-o no Construction Advisor",
   "Save the study, to continue later": "Guardar o estudo, para continuar mais tarde",
   "Study (.json)": "Estudo (.json)",
   "Decisions (.json)": "Decisões (.json)",
