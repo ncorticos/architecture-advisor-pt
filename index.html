@@ -2933,6 +2933,31 @@ function parapetFaces(M, h) {
   });
   return out;
 }
+/** Where a stair reaches the roof, the parapet opens across its landing:
+    one { a, b, u0, u1 } per roof stair, the wall by its end points. */
+function roofStairGaps(G) {
+  if (!G || !G.rstair || !G.rstair.length) return [];
+  return G.rstair.map(s => roofStairGeo(G, ROOF, s)).filter(B => B.ok).map(B => ({ a:B.sg.a, b:B.sg.b, u0:B.u0, u1:B.u1 }));
+}
+/** A parapet quad with the stretch of any opening on its wall taken out.
+    Its along-the-wall edges run p0→p1 and p3→p2, as the roof model builds
+    every run, cap and inner face. */
+function parapetOpened(pp, gaps) {
+  const q = pp.quad, sg = pp.sg;
+  const g = sg && gaps.find(o => Math.hypot(o.a[0] - sg.a[0], o.a[1] - sg.a[1]) < 1e-3 && Math.hypot(o.b[0] - sg.b[0], o.b[1] - sg.b[1]) < 1e-3);
+  if (!g) return [q];
+  const L = sg.len, tx = (sg.b[0] - sg.a[0]) / L, ty = (sg.b[1] - sg.a[1]) / L;
+  const uOf = p => (p[0] - sg.a[0]) * tx + (p[1] - sg.a[1]) * ty;
+  const a = uOf(q[0]), b = uOf(q[1]);
+  if (Math.abs(b - a) < 1e-6 || Math.abs(uOf(q[3]) - a) > 0.3) return [q];
+  const lerp = (p, r, f) => [p[0] + (r[0] - p[0]) * f, p[1] + (r[1] - p[1]) * f, p[2] + (r[2] - p[2]) * f];
+  const cut = (x0, x1) => { const f0 = (x0 - a) / (b - a), f1 = (x1 - a) / (b - a); return [lerp(q[0], q[1], f0), lerp(q[0], q[1], f1), lerp(q[3], q[2], f1), lerp(q[3], q[2], f0)]; };
+  const lo = Math.min(a, b), hi = Math.max(a, b), out = [];
+  if (g.u0 >= hi || g.u1 <= lo) return [q];
+  if (g.u0 > lo + 0.01) out.push(a < b ? cut(a, g.u0) : cut(g.u0, a));
+  if (g.u1 < hi - 0.01) out.push(a < b ? cut(g.u1, b) : cut(b, g.u1));
+  return out;
+}
 /** The chimney's height above its own roof surface: the student's slider,
     or the family's own measure. */
 function chimEffH(ch) {
@@ -4818,6 +4843,7 @@ function stairFlightFaces(sg, uEdge, dirSign, zTop, riser, n, tread, sw) {
 }
 /** Top landing level of a balcony's stair: the highest floor it serves. */
 function stairTopOf(B, G) {
+  if (B.roofTop !== undefined) return B.roofTop > 1.0 ? { k:'roof', zTop:B.roofTop } : null;
   const ks = (B.levels || []).filter(k => k >= 2);
   if (!ks.length) return null;
   const k = Math.max.apply(null, ks), zTop = (k - 1) * G.fh;
@@ -5072,6 +5098,52 @@ function stairFor(B, G) {
   const s = buildStraight(B, G);
   if (!s) return null;
   return Object.assign(s, { cornerAvail:!!(buildWrapped(B, G, segs) || {}).ok });
+}
+/** A stair up a facade to a flat roof, as the Algarve builds it to the
+    açoteia: a masonry landing against the wall at the roof's level, as wide
+    and deep as the stair, and the flight down from it in any of the stair
+    modes. s = { f, at, mode }: the facade, where along its longest wall (0
+    to 1) and how the flight goes. Shaped as a balcony, so every stair
+    builder takes it; ok:false with why where the roof there is not flat. */
+const RSTAIR_LAND = 1.1, RSTAIR_MAX = 2;
+function roofStairGeo(G, RF, s) {
+  const res = { b:s, ok:false, why:null };
+  const segs = planModel(G).segs.filter(sg => segFace(sg) === s.f && sg.len >= RSTAIR_LAND + 0.4);
+  if (!segs.length) { res.why = 'no wall faces that way'; return res; }
+  const sg = segs.reduce((p, q) => q.len > p.len ? q : p), len = sg.len;
+  const t = [(sg.b[0] - sg.a[0]) / len, (sg.b[1] - sg.a[1]) / len], n = sg.n, w = RSTAIR_LAND;
+  const P = (u, v) => [sg.a[0] + t[0] * u + n[0] * v, sg.a[1] + t[1] * u + n[1] * v];
+  const uc = clamp((isFinite(+s.at) ? +s.at : 0.5) * len, w / 2, len - w / 2), u0 = uc - w / 2, u1 = uc + w / 2;
+  /* the roof just behind the landing: there, and level over a metre */
+  const M = roofModel(G, RF), zAt = (u, v) => { const q = P(u, v); return M.zAt(q[0], q[1]); };
+  const z = zAt(uc, -0.3);
+  if (z === null || !isFinite(z)) { res.why = 'no roof behind this wall'; return res; }
+  if ([[u0 + 0.05, -0.3], [u1 - 0.05, -0.3], [uc, -1.0]].some(([u, v]) => { const z2 = zAt(u, v); return z2 === null || Math.abs(z2 - z) > 0.03; })) {
+    res.why = 'the roof is not flat here — make this part a flat roof (açoteia) on Roof';
+    return res;
+  }
+  return Object.assign(res, { ok:true, b:{ stair:{ w:STAIR_W, mode:s.mode || 'straight' }, roof:true }, sg, t, n, P, len, u0, u1, w, d:RSTAIR_LAND,
+    levels:[], mode:'out', corner:0, roofTop:z });
+}
+/** Every stair of the study, built: the balconies' and the roofs', each a
+    roof stair carrying its landing up to the roof. */
+function stairsOf(G) {
+  const out = [];
+  balcGeo(G).ok.forEach(B => {
+    if (B.mode !== 'out' || !B.b.stair) return;
+    const st = stairFor(B, G);
+    if (st && st.ok) out.push({ B, st });
+  });
+  (G.rstair || []).forEach(s => {
+    const B = roofStairGeo(G, ROOF, s);
+    if (!B.ok) return;
+    const st = stairFor(B, G);
+    if (!st || !st.ok) return;
+    const p = B.P(B.u0, 0), q = B.P(B.u1, B.d);
+    st.landing = (st.landing || []).concat([{ box:[Math.min(p[0], q[0]), Math.min(p[1], q[1]), 0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), B.roofTop], nv:B.sg.n }]);
+    out.push({ B, st });
+  });
+  return out;
 }
 /** Where a stair reaches its balcony, the parapet opens: across the front
     edge for a stair 90° to the facade, across the end it leaves from for
@@ -5732,7 +5804,10 @@ function pushChimFaces(arr, faces, mk) {
     (plan-local metres; map translates, as the Environmental view does). */
 function pushChimPar(arr, M, map) {
   if (!M) return;
-  if (M.paras && M.paras.length) M.paras.forEach(pp => arr.push({ pts:map ? pp.quad.map(map) : pp.quad, fill:'#E9E5DD', par:1, sg:pp.sg, kind:pp.kind }));
+  if (M.paras && M.paras.length) {
+    const gaps = roofStairGaps(MASS);
+    M.paras.forEach(pp => parapetOpened(pp, gaps).forEach(q => arr.push({ pts:map ? q.map(map) : q, fill:'#E9E5DD', par:1, sg:pp.sg, kind:pp.kind })));
+  }
   if (M.skins) M.skins.forEach(sk => arr.push({ pts:map ? sk.quad.map(map) : sk.quad, fill:opaque(roofFillFor(sk.zi, sk.grp, 0.28, 0.8)), par:1 }));
   roofChims(ROOF).forEach(({ ch }) => {
     if (!isFinite(+ch.x) || !isFinite(+ch.y) || !M.pl.inside(+ch.x, +ch.y)) return;
@@ -8077,10 +8152,7 @@ function buildSite(host) {
         const dep = pts => pts.reduce((a, q) => { const w = rot(q[0], q[1], beta); return a + plateDepth(w[0], w[1], q[2]); }, 0) / pts.length;
         /* the projecting balconies: slab tops, the edges facing the camera, the parapets both ways */
         BS.solids.forEach(sl => { if (sl.kind === 'par' || seesL(sl.n)) faces.push({ balc:sl, pts:sl.pts }); });
-        balcGeo(MASS).ok.forEach(B => {
-          if (B.mode !== 'out' || !B.b.stair) return;
-          const st = stairFor(B, MASS);
-          if (!st || !st.ok) return;
+        stairsOf(MASS).forEach(({ st }) => {
           stairFaceGroups(st, nn => nn[2] !== 0 || seesL(nn), dep).forEach(g => faces.push(g));
         });
         RM.walls.forEach(wl => {
@@ -8563,6 +8635,38 @@ function buildSite(host) {
   renderBalc();
   rail.appendChild(el('div', { class:'gh', text:'Balconies' }));
   rail.appendChild(balcBox);
+  /* the stair up a facade to the flat roof — the Algarve's way onto the
+     açoteia, where the roof is lived on: on any wall, anywhere along it,
+     its flight run in any of the stair modes */
+  const rstBox = el('div', { class:'rgroup' });
+  G.rstair = Array.isArray(G.rstair) ? G.rstair : [];
+  function renderRoofStairs() {
+    rstBox.innerHTML = '';
+    G.rstair.forEach((s, i) => {
+      const B = roofStairGeo(G, ROOF, s), st = B.ok ? stairFor(B, G) : null;
+      const says = el('p', { class:'hint' + (B.ok && st && st.ok ? '' : ' bad') });
+      says.textContent = !B.ok ? t(B.why) : st && st.ok
+        ? t('Roof at') + ' ' + fmt(B.roofTop, 2) + ' m \u00b7 ' + st.n + ' \u00d7 ' + fmt(st.riser * 100, 0) + ' cm \u00b7 ' + t('run') + ' ' + fmt(st.run, 2) + ' m'
+          + (st.byTread ? ' \u00b7 ' + t('turns the corner by a tread') : st.wrapped ? ' \u00b7 ' + t('turns the corner') : '')
+        : t((st && st.why) || 'That stair does not fit here');
+      if (G.rstair.length > 1) rstBox.appendChild(el('div', { class:'hint', text:t('Stair to the roof') + ' ' + (i + 1) }));
+      rstBox.appendChild(segCtl(t('Facade'), ['S', 'E', 'N', 'W'].map(f => ({ value:f, label:faceDir(f) })), s.f, v => { s.f = v; renderRoofStairs(); labDraw(); }));
+      rstBox.appendChild(rangeCtl('Along the wall', 0, 100, 1, Math.round((isFinite(+s.at) ? +s.at : 0.5) * 100), v => { s.at = v / 100; renderRoofStairs(); labDraw(); }, v => fmt(v, 0) + ' %'));
+      const modes = [{ value:'straight', label:'Along the wall' }, { value:'perpendicular', label:'90° to the facade' },
+        { value:'tread-between', label:'Landing between flights' }, { value:'wrapped', label:'Turn the corner' }];
+      rstBox.appendChild(segCtl(null, modes, s.mode || 'straight', v => { s.mode = v; renderRoofStairs(); labDraw(); }));
+      rstBox.appendChild(says);
+      rstBox.appendChild(el('button', { class:'btn small', text:'× ' + t('Remove'), title:t('Take this stair away'),
+        onclick:() => { G.rstair.splice(i, 1); renderRoofStairs(); labDraw(); } }));
+    });
+    if (G.rstair.length < RSTAIR_MAX) rstBox.appendChild(el('button', { class:'btn small', text:'+ ' + t('Stair to the roof'),
+      title:t('A masonry stair up a facade to the flat roof, as the Algarve reaches its açoteia'),
+      onclick:() => { G.rstair.push({ f:'E', at:0.5, mode:'straight' }); renderRoofStairs(); labDraw(); } }));
+    rstBox.appendChild(el('p', { class:'hint', text:t('The roof must be flat where the stair arrives — set that part to Flat on Roof, with a parapet if you want one: it opens where the stair lands. The landing stands against the wall at the roof’s level; the flight takes 19 cm risers at most and treads of 27.5 cm at most.') }));
+  }
+  renderRoofStairs();
+  rail.appendChild(el('div', { class:'gh', text:'Stair to the roof' }));
+  rail.appendChild(rstBox);
   optGrp.appendChild(el('div', { class:'gh', text:'Optimum' }));
   optGrp.appendChild(el('div', { class:'rgroup' }, [snap]));
   /* the rule the optimum follows, and the site's own figures it read */
@@ -9739,10 +9843,7 @@ function buildRoof(host) {
       });
       /* stone stairs up to canopy balconies: one group per flight, treads
          lightened, so the wall behind cannot stripe it into a fence */
-      balcGeo(MASS).ok.forEach(B => {
-        if (B.mode !== 'out' || !B.b.stair) return;
-        const st = stairFor(B, MASS);
-        if (!st || !st.ok) return;
+      stairsOf(MASS).forEach(({ st }) => {
         stairFaceGroups(st, nn => camSees(A, nn[0], nn[1], nn[2]), null).forEach(g => faces.push(g));
       });
       const depth = F => F.d !== undefined ? F.d : F.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / F.pts.length;
@@ -11694,10 +11795,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
         }
       });
       /* stone stairs to canopy balconies: one group per flight, treads lightened */
-      balcGeo(MASS).ok.forEach(B => {
-        if (B.mode !== 'out' || !B.b.stair) return;
-        const st = stairFor(B, MASS);
-        if (!st || !st.ok) return;
+      stairsOf(MASS).forEach(({ st }) => {
         stairFaceGroups(st, nn => camSees(A, nn[0], nn[1], nn[2]), null).forEach(g => items.push(g));
       });
       Mm.steps.forEach(st => {
@@ -14723,6 +14821,29 @@ function buildVentilation(host) {
       const P = (u, z) => st.ax === 'x' ? [st.a[0], st.a[1] + u, z] : [st.a[0] + u, st.a[1], z];
       items.push({ pts:st.prof.map(q => P(q[0], q[1])).concat(st.prof.slice().reverse().map(q => P(q[0], q[2]))), fill:wallCol(st.n[1] !== 0) });
     });
+    /* the eave canopies, their posts, and the stone stairs, as on Roof: the
+       wind meets them as it meets the rest of the house */
+    roofCanopies(RF).forEach(({ zi, c }) => {
+      const cpH = canopySpanFor(M.pl.segs, c, H0, M);
+      if (!cpH) return;
+      const n = cpH.sg.n, sp = Math.sin(cpH.p * RAD), cp = Math.cos(cpH.p * RAD);
+      const colK = 0.87 - 0.11 * n[1] - 0.05 * n[0];
+      if (sees3v([n[0] * sp, n[1] * sp, cp])) items.push({ pts:canopyPts(cpH).quad, fill:opaque(roofFillFor(zi, 'A', 0.2 + 0.3 * (1 - colK), colK)), over:1 });
+      const slab = canopySlab(cpH), side = opaque(roofFillFor(zi, 'A', 0.38, colK * 0.82));
+      if (slab) {
+        const tx = (cpH.sg.b[0] - cpH.sg.a[0]) / cpH.sg.len, ty = (cpH.sg.b[1] - cpH.sg.a[1]) / cpH.sg.len;
+        if (wallSeen(n)) items.push({ pts:slab.outer, fill:side, over:1 });
+        if (wallSeen([tx, ty])) items.push({ pts:slab.sideB, fill:side, over:1 });
+        if (wallSeen([-tx, -ty])) items.push({ pts:slab.sideA, fill:side, over:1 });
+      }
+      const fr = canopyFrame(cpH);
+      fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
+        if (nn[2] === 0 && wallSeen(nn)) items.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26', post:1 });
+      }));
+    });
+    stairsOf(MASS).forEach(({ st }) => {
+      stairFaceGroups(st, sees3v, null).forEach(g => items.push(g));
+    });
     M.pieces.forEach(pc => {
       const f = pc.f;
       if ((-f.t * f.a * AX.c[0] - f.t * f.b * AX.c[1]) * AX.ce + AX.se <= 1e-6) return;   // a slope turned away from the camera
@@ -14750,12 +14871,15 @@ function buildVentilation(host) {
     });
     pushImportFaces(items);
     pushChimPar(items, M);
+    stairsAfterWalls(items, (x, y, z) => camDepth(x, y, z));
     chimOpeningsAfter(items, q1 => q1.d === undefined ? depthV(q1) : q1.d);
     SORT_AX = AX; items.sort((p1, q1) => roofWallOrder(p1, q1) || ((q1.d === undefined ? depthV(q1) : q1.d) - (p1.d === undefined ? depthV(p1) : p1.d))).forEach(it => {
       if (it.balc) { balcFace(ctx, it.balc, P3v); return; }
       if (it.import) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); return; }
       if (it.chim || it.par) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
       if (it.dev) { poly(it.pts, it.dev.ov ? 'rgba(217,119,6,.22)' : 'rgba(220,38,38,.18)', it.dev.ov ? '#D97706' : '#DC2626', 1.2); return; }
+      if (it.stairGrp) { it.stairGrp.forEach(f => { pathV(f.pts); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); }); return; }
+      if (it.post || it.over) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); return; }
       pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill();
       if (it.pc) {
         if (shadeHit) {
@@ -17603,10 +17727,7 @@ style === 'sketch' ? '#EFEBE0'
         if (!sl.pts || sl.pts.length < 3) return;
         items.push({ pts:sl.pts, fill:'rgba(190,185,175,.92)', d:dc(sl.pts) });
       });
-      balcGeo(MASS).ok.forEach(B => {
-        if (B.mode !== 'out' || !B.b.stair) return;
-        const st = stairFor(B, MASS);
-        if (!st || !st.ok) return;
+      stairsOf(MASS).forEach(({ st }) => {
         stairFaceGroups(st, nn => nn[2] !== 0 || (nn[0]*st.nv[0] + nn[1]*st.nv[1] >= 0) || wallSeen(nn), dc, wallSeen).forEach(g => items.push(g));
       });
     } catch (e) {}
@@ -18471,15 +18592,12 @@ function exportModel() {
       add('railing', 'Balcony ' + no + ' parapet, floor ' + k, 'AA-BALCONY', BSx.solids.filter(sl => sl.B === B && sl.k === k && sl.kind === 'par').map(sl => [sl.pts, sl.n]));
     });
   });
-  bgx.ok.forEach(B => {
-    if (B.mode !== 'out' || !B.b.stair) return;
-    const st = stairFor(B, G);
-    if (!st || !st.ok) return;
-    const no = bgx.all.indexOf(B) + 1;
+  stairsOf(G).forEach(({ B, st }, si) => {
+    const no = B.roofTop !== undefined ? 'roof ' + (si + 1) : bgx.all.indexOf(B) + 1;
     const faces = [];
     (st.flights || []).forEach(fl => fl.forEach(f => faces.push([f.pts, f.nn])));
     (st.landing || []).forEach(l => boxSides(l.box !== undefined ? l.box : l).forEach(f => faces.push(f)));
-    add('stair', 'Stone stair to Balcony ' + no, 'AA-STONE', faces,
+    add('stair', B.roofTop !== undefined ? 'Stone stair to the roof' : 'Stone stair to Balcony ' + no, 'AA-STONE', faces,
       { steps:st.n, riser:+st.riser.toFixed(3), tread:+st.tread.toFixed(2), run:+st.run.toFixed(2), floor:st.level, mat:'AA_Stone' });
   });
   Ls.forEach(L => {
@@ -19027,7 +19145,10 @@ function studyJSON() {
     mass:MASS, roof:ROOF, open:OPEN, sunsp:SUNSP, rwin:RWIN, turb:TURB, veg:SCENE.veg, walls:SCENE.walls,
     render:{ prompt:RENDER_PROMPT },
     mesh:IMPORT.active ? { name:IMPORT.name, L:+IMPORT.L.toFixed(2), D:+IMPORT.D.toFixed(2), H:+IMPORT.H.toFixed(2) } : null,
-    readout:JSON.parse(toDecisionsJSON())
+    readout:JSON.parse(toDecisionsJSON()),
+    /* the Construction Advisor's own hand-off rides along, so this one file
+       also opens there: site, coordinates, altitude, areas by facing */
+    construction:(() => { try { const r = collectConstructionHandoff(); return r.ok ? r.payload : null; } catch (e) { return null; } })()
   }, null, 2);
 }
 /** Handoff to Construction Advisor PT (same-origin continuation).
@@ -19188,13 +19309,22 @@ function collectConstructionHandoff() {
   };
   return { ok:true, payload };
 }
+/* The study travels in the address itself (#aa=…, the fragment never leaves
+   the browser), so the other app opens with it whatever its storage allows;
+   the tab is opened inside the click, where no pop-up blocker stops it. The
+   shared localStorage key stays as a second route, and Save study's file
+   carries the same hand-off for later. */
+const CA_URL = 'https://ncorticos.github.io/construction-advisor-pt/';
 function continueToConstruction() {
   const r = collectConstructionHandoff();
   if (!r.ok) { toast('Open a study first — set the site, then continue'); return; }
   try { localStorage.setItem('arca-handoff-construction', JSON.stringify({ kind:'architecture-advisor-handoff', handoffVersion:2, savedAt:r.payload.savedAt, payload:r.payload })); } catch (e) {}
-  download(new Blob([JSON.stringify(r.payload, null, 2)], { type:'application/json' }), cadStem() + '-construction-handoff.json');
-  toast('Study packed for Construction Advisor');
-  setTimeout(() => window.open('https://ncorticos.github.io/construction-advisor-pt/', '_blank'), 600);
+  const w = window.open(CA_URL + '#aa=' + encodeURIComponent(JSON.stringify(r.payload)), '_blank');
+  if (w) toast('Study sent to Construction Advisor — it opens in a new tab');
+  else {
+    download(new Blob([JSON.stringify(r.payload, null, 2)], { type:'application/json' }), cadStem() + '-construction-handoff.json');
+    toast('The browser blocked the new tab — the study was saved as a file: open it in Construction Advisor');
+  }
 }
 /** The live state back from a study file, clamped into the current plan's
     limits so an older file cannot break a newer application. Arrays stay the
@@ -19213,6 +19343,8 @@ function applyStudy(o) {
   MASS.patio = M0.patio && typeof M0.patio === 'object'
     ? Object.assign({ on:false, w:4, d:3, cx:0, cy:0 }, M0.patio, { on:!!M0.patio.on }) : { on:false, w:4, d:3, cx:0, cy:0 };
   MASS.balc = Array.isArray(M0.balc) ? M0.balc.filter(b => b && typeof b === 'object') : [];
+  MASS.rstair = Array.isArray(M0.rstair) ? M0.rstair.filter(r => r && typeof r === 'object' && ['S', 'E', 'N', 'W'].indexOf(r.f) >= 0).slice(0, RSTAIR_MAX)
+    .map(r => ({ f:r.f, at:clamp(isFinite(+r.at) ? +r.at : 0.5, 0, 1), mode:['straight', 'perpendicular', 'tread-between', 'wrapped'].indexOf(r.mode) >= 0 ? r.mode : 'straight' })) : [];
   fixWing(MASS); fixPatio(MASS);
   const R0 = o.roof || {};
   ROOF.n = [0, 1, 2, 3].indexOf(R0.n) >= 0 ? R0.n : 2;
@@ -21334,6 +21466,9 @@ Object.assign(PT, {
   "(clamped to the plan limits)": "(limitado aos limites da planta)",
   "Import removed.": "Importação removida.",
   "Save study ▾": "Guardar estudo ▾",
+  "Continue to Construction ▸": "Continuar para a Construção ▸",
+  "Study sent to Construction Advisor — it opens in a new tab": "Estudo enviado para o Construction Advisor — abre num novo separador",
+  "The browser blocked the new tab — the study was saved as a file: open it in Construction Advisor": "O navegador bloqueou o novo separador — o estudo foi guardado num ficheiro: abra-o no Construction Advisor",
   "Save the study, to continue later": "Guardar o estudo, para continuar mais tarde",
   "Study (.json)": "Estudo (.json)",
   "Decisions (.json)": "Decisões (.json)",
@@ -22183,7 +22318,13 @@ Object.assign(PT, {
   "no room for a landing between two flights along this wall": "sem espaço para um patamar entre dois lanços ao longo desta parede",
   "the balcony is narrower than the stair": "a varanda é mais estreita do que a escada",
   "the canopy posts leave no room for the stair in front": "os pilares do alpendre não deixam espaço para a escada à frente",
-  "Upper floor": "Piso superior", "Remove balcony": "Retirar a varanda", "Remove this balcony and its stair": "Retirar esta varanda e a sua escada"
+  "Upper floor": "Piso superior", "Remove balcony": "Retirar a varanda", "Remove this balcony and its stair": "Retirar esta varanda e a sua escada",
+  "Stair to the roof": "Escada para a cobertura", "Roof at": "Cobertura a", "run": "desenvolvimento",
+  "Take this stair away": "Retirar esta escada",
+  "A masonry stair up a facade to the flat roof, as the Algarve reaches its açoteia": "Uma escada de alvenaria por uma fachada até à cobertura plana, como no Algarve se sobe à açoteia",
+  "The roof must be flat where the stair arrives — set that part to Flat on Roof, with a parapet if you want one: it opens where the stair lands. The landing stands against the wall at the roof’s level; the flight takes 19 cm risers at most and treads of 27.5 cm at most.": "A cobertura tem de ser plana onde a escada chega — ponha essa parte como Plana em Cobertura, com platibanda se quiser: abre-se onde a escada chega. O patamar encosta à parede ao nível da cobertura; o lanço tem espelhos de 19 cm no máximo e cobertores de 27,5 cm no máximo.",
+  "the roof is not flat here — make this part a flat roof (açoteia) on Roof": "a cobertura não é plana aqui — ponha esta parte como cobertura plana (açoteia) em Cobertura",
+  "no roof behind this wall": "não há cobertura atrás desta parede"
 });
 
 /* --- the long captions, keyed by identifier ----------------------------- */
