@@ -295,6 +295,7 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
 .foot-refs{margin-top:30px; padding-top:20px; border-top:1px solid var(--line)}
 .foot-refs ul{margin:0; padding:0; list-style:none; columns:2; column-gap:34px}
 @media(max-width:900px){.foot-refs ul{columns:1}}
+body.in-study .foot-refs{display:none}
 .foot-refs h6.archreg{margin:14px 0 4px; font-size:12px; font-weight:650; color:var(--ink2)}
 .foot-refs ul.archlist{margin:0 0 6px}
 .foot-refs .archicons{display:flex; flex-wrap:wrap; gap:6px 14px; margin:4px 0 8px}
@@ -22530,6 +22531,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
   app.innerHTML = '';
   app.hidden = false;
   $('#empty').hidden = true;
+  document.body.classList.add('in-study');
   $('#tabsNav').hidden = false;
   $('#sitechip').classList.add('on');
   $('#chipLoc').textContent = site.place || site.nuts;
@@ -22707,6 +22709,7 @@ function siteTitle() { return APP.tag + '—' + (STATE.site ? (STATE.site.place 
 $('#btnReload').addEventListener('click', () => {
   $('#app').hidden = true;
   $('#empty').hidden = false;
+  document.body.classList.remove('in-study');
   $('#tabsNav').hidden = true;
   $('#sitechip').classList.remove('on');
   document.title = siteTitle();
