@@ -940,7 +940,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.107.0',
+  version:     '1.108.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -7640,7 +7640,7 @@ function buildSite(host) {
   const stick = () => benchStage(stage);
   /* Csa and Csb take the optimum adapted to Portugal (ptOptimum); other
      classes interpolate Olgyay's own anchors. */
-  const OI = ptOptimum(K.code, C.t, S.nuts) || ({
+  const OI = vernOptimum(C) || ptOptimum(K.code, C.t, S.nuts) || ({
                Cfb:{ az:170, r:1.4 }, Cfa:{ az:170, r:1.4 }, Csc:{ az:170, r:1.4 },
                BSk:{ az:160, r:1.3 }, BSh:{ az:160, r:1.3 } }[K.code] || { az:163, r:1.4 });
   const OPT_NAME = OI.pt ? 'Optimum for Portugal' : 'Olgyay optimum';
@@ -7956,7 +7956,7 @@ function buildSite(host) {
   const cD = rangeCtl('Depth', 4, 16, 0.5, G.D, v => { G.D = v; labDraw(); }, v => fmt(v, 1) + ' m');
   const cR = rangeCtl('Main facade faces', 0, 360, 1, G.rot, v => { G.rot = v; labDraw(); }, v => fmt(v, 0) + '°');
   const cF = numCtl('Floors above ground', 1, 3, 1, G.fl, v => { G.fl = v; renderBalc(); labDraw(); }, null);   // the balconies' floors follow
-  const cFH = numCtl('Floor height', 2.4, 4.5, 0.1, G.fh, v => {
+  const cFH = numCtl('Floor height', 2.0, 4.5, 0.1, G.fh, v => {
     G.fh = +v.toFixed(1); cFH.input.value = G.fh.toFixed(1); labDraw();
   }, 'm');
 
@@ -18388,17 +18388,655 @@ const RENDER_PTNAME = { whitewash:'cal', plaster:'reboco', azulejo:'azulejo', re
   dtimber:'porta de madeira', dgreen:'porta verde', dblue:'porta azul', dred:'porta sangue-de-boi', dmetal:'porta metálica', dglass:'porta de vidro',
   tile:'telha lusa', canudo:'telha de canudo', slate:'ardósia', metal:'zinco', gravel:'seixo', green:'ajardinada', white:'branca', thatch:'colmo' };
 /* --------------------------------------------------------------- 8. BOOT -- */
+/* ==================================== 7c. THE ISLANDS' VERNACULAR HOUSE ==
+   The popular house of the archipelagos as a design model. Olgyay's optimum
+   stands on four American cities and the Portuguese reading of it on the
+   mainland's Csa and Csb; neither knows an island where the climate changes
+   every hundred metres up the slope and from one face of the ridge to the
+   other. On a site in the Região Autónoma da Madeira this module reads the
+   altitude and the face of the island the site stands on, names the
+   traditional house that was built there, and lays its features — plan,
+   storeys, roof, openings, the passive systems and the finishes — over
+   every tab: what the model asks for, what the student's model has, a tick
+   or a cross, and the source each figure comes from. Figures the sources
+   give are marked as such; where they give none and the model still needs
+   a number, the number is a teaching inference and is marked so.
+
+   Sources (Portuguese, Madeira only):
+   · Mestre, V. (1997), Levantamento da arquitectura popular do arquipélago
+     da Madeira, Universidade de Évora — the survey itself: dimensions,
+     orientation, the blind rear facade, the climate the house answers;
+   · Mestre, V. (2002), Arquitectura popular da Madeira — via the author's
+     entry «Arquitetura popular» in Aprender Madeira;
+   · Câmara Municipal de Santana, Santana Madeira Biosfera — the thatched
+     houses and their recovery;
+   · Teixeira, C. R. Q. (2009), A arquitectura vernacular da Madeira, UBI —
+     five houses surveyed in Camacha;
+   · Silva & Menezes, Elucidário Madeirense, «Indústria agrícola» — the four
+     agricultural zones by altitude;
+   · Miranda et al., «Clima observado», Observatório Regional do Clima da
+     Madeira — temperature and rainfall against altitude and face;
+   · IFCN, the laurissilva and its altitude on each face;
+   · Visit Madeira, «Casa de Salão» — the clay roof of Porto Santo.
+   The table is built per region so the Azores can follow with their own.
+   ====================================================================== */
+
+/** A bilingual cell: {en, pt} by language, a plain string through t(). */
+const VL = o => o == null ? '' : typeof o === 'string' ? t(o) : (LANG === 'pt' ? (o.pt || o.en) : o.en);
+
+const VERN_SRC = {
+  MVT:{ tag:'Mestre 1997', cite:'Mestre, V. (1997). <i>Levantamento da arquitectura popular do arquipélago da Madeira: bases para a sua reabilitação enquanto património cultural</i> (dissertação de mestrado, orient. Fernando Távora). Évora: Universidade de Évora.',
+    url:null },
+  MES:{ tag:'Mestre 2002', cite:'Mestre, V. (2002). <i>Arquitectura popular da Madeira</i>. Lisboa: Argumentum. Typologies as summarised by the author in «Arquitetura popular», <i>Aprender Madeira</i>.',
+    url:'https://aprenderamadeira.net/article/arquitetura-popular' },
+  SMB:{ tag:'CM Santana', cite:'Câmara Municipal de Santana — Santana Madeira Biosfera. <i>Casas de colmo</i> e <i>Recuperação das casas de colmo</i>.',
+    url:'https://santanamadeirabiosfera.pt/biosfera/projetos/recuperacao-das-casas-de-colmo' },
+  TEI:{ tag:'Teixeira 2009', cite:'Teixeira, C. R. Q. (2009). <i>A arquitectura vernacular da Madeira: tradição, identidade e sustentabilidade</i> (dissertação de mestrado). Covilhã: Universidade da Beira Interior.',
+    url:'http://hdl.handle.net/10400.6/1746' },
+  ELU:{ tag:'Elucidário', cite:'Silva, F. A. da, &amp; Menezes, C. A. de. «Indústria agrícola». <i>Elucidário Madeirense</i>. Funchal (ed. digital).',
+    url:'https://elucidariomadeirense.pt/en/articles/1780' },
+  CLI:{ tag:'Miranda et al.', cite:'Miranda, P. M. A., et al. «Clima observado». In <i>Clima e alterações climáticas na Madeira</i>. Observatório Regional do Clima da Madeira.',
+    url:'https://observatorioclima.madeira.gov.pt/wp-content/uploads/pdfs/02_clima_observado.pdf' },
+  IFC:{ tag:'IFCN', cite:'IFCN — Instituto das Florestas e Conservação da Natureza. <i>Laurissilva do Til — Madeira</i>.',
+    url:'https://ifcn.madeira.gov.pt/images/Doc_Artigos/Divulgacao/publicacoes/livros/Laurissilva-do-til-Madeira.pdf' },
+  VMD:{ tag:'Visit Madeira', cite:'Associação de Promoção da Região Autónoma da Madeira. «Casa de Salão». <i>Visit Madeira</i>.',
+    url:'https://visitmadeira.com/pt/onde-ir/porto-santo/a-descoberta-da-ilha/casa-de-salao' },
+  INF:{ tag:'inference', cite:'Teaching inference: the sources describe the feature but give no figure; the number makes the model drawable and is not a measurement.', url:null }
+};
+const vSrc = k => VERN_SRC[k] ? '<span class="vsrc' + (k === 'INF' ? ' inf' : '') + '" title="' + VERN_SRC[k].cite.replace(/<[^>]+>/g, '').replace(/"/g, '&quot;') + '">'
+  + (k === 'INF' ? VL({ en:'inference', pt:'inferência' }) : VERN_SRC[k].tag) + '</span>' : '';
+
+/* --- where on the island: altitude belt and face of the ridge ------------ */
+/** The main ridge of Madeira, west to east, as latitude against longitude:
+    Paul da Serra, Encumeada, Pico Ruivo–Areeiro, Santo da Serra, Caniçal.
+    North of it the face is the trade-wind face. A teaching approximation
+    of the watershed, close enough to tell Santana from Camacha. */
+const MD_RIDGE = [[-17.27, 32.83], [-17.15, 32.77], [-17.05, 32.76], [-16.98, 32.755], [-16.93, 32.76], [-16.87, 32.745], [-16.80, 32.73], [-16.72, 32.75], [-16.65, 32.745]];
+const mdRidgeLat = lo => {
+  const R = MD_RIDGE;
+  if (lo <= R[0][0]) return R[0][1];
+  for (let i = 1; i < R.length; i++) if (lo <= R[i][0]) {
+    const a = R[i - 1], b = R[i], f = (lo - a[0]) / (b[0] - a[0]);
+    return a[1] + f * (b[1] - a[1]);
+  }
+  return R[R.length - 1][1];
+};
+const isPortoSanto = (la, lo) => la > 32.95 && la < 33.15 && lo > -16.45 && lo < -16.2;
+const isMadeira = S => !!S && isFinite(S.lat) && isFinite(S.lon) && S.lat > 32.55 && S.lat < 33.15 && S.lon > -17.35 && S.lon < -16.2;
+const inCurral = (la, lo) => la > 32.69 && la < 32.75 && lo > -17.0 && lo < -16.93;
+
+/** The agricultural zones of the Elucidário, read as the belts the house was built in. */
+const MD_BANDS = [
+  { key:'litoral', max:300, name:{ en:'Coastal belt, 0–300 m', pt:'Faixa litoral, 0–300 m' } },
+  { key:'media', max:750, name:{ en:'Mid slope, 300–750 m', pt:'Meia encosta, 300–750 m' } },
+  { key:'serra', max:1e4, name:{ en:'Serra, above 750 m', pt:'Serra, acima de 750 m' } }
+];
+const MD_FACE = { N:{ en:'north face', pt:'vertente norte' }, S:{ en:'south face', pt:'vertente sul' }, PS:{ en:'Porto Santo', pt:'Porto Santo' } };
+
+/** What the belt and the face mean for the house, with their sources. */
+const MD_CLIMATE = {
+  'litoral-S':[
+    [{ en:'First agricultural zone, from the sea to 200–300 m: sugar cane, banana, vines, cereals and vegetables.', pt:'Primeira zona agrícola, do mar aos 200–300 m: cana-de-açúcar, bananeira, vinha, cereais e hortícolas.' }, 'ELU'],
+    [{ en:'The dry, sunny side: under 600 mm of rain a year around Funchal; mean annual temperature 18–19 °C on the coast.', pt:'A vertente seca e soalheira: menos de 600 mm de chuva por ano na zona do Funchal; temperatura média anual de 18–19 °C no litoral.' }, 'CLI'],
+    [{ en:'Winter is hardly felt by the sea. The design problem is the summer: shade, mass and the breeze.', pt:'O Inverno é pouco sensível nas zonas ribeirinhas. O problema de projecto é o Verão: sombra, massa e brisa.' }, 'TEI'],
+    [{ en:'The breezes — terral and embate — keep the house aired; in summer the leste, the east wind from Africa, brings sudden dry, close heat.', pt:'As brisas — o terral e o embate — garantem o arejamento contínuo; no Verão o leste, vindo da costa africana, traz calor seco e abafado.' }, 'MVT']],
+  'litoral-N':[
+    [{ en:'First agricultural zone, from the sea to 200–300 m.', pt:'Primeira zona agrícola, do mar aos 200–300 m.' }, 'ELU'],
+    [{ en:'The north face is wetter, gets little sun and is exposed to strong winds; at the same altitude it rains much more than in the south.', pt:'A vertente norte é mais húmida, recebe pouco sol e está exposta a ventos fortes; à mesma altitude chove muito mais do que no sul.' }, 'TEI'],
+    [{ en:'The winds blow from the north and north-east: the face of the dominant winds.', pt:'Os ventos sopram de Norte e Nordeste: a encosta dos ventos dominantes.' }, 'MVT'],
+    [{ en:'The laurissilva, the cloud forest, starts at about 300 m on this face.', pt:'A laurissilva começa por volta dos 300 m nesta vertente.' }, 'IFC']],
+  'media-S':[
+    [{ en:'Second agricultural zone, up to 700–750 m — and cultivation generally stops there.', pt:'Segunda zona agrícola, até aos 700–750 m — e o cultivo geralmente não vai além disso.' }, 'ELU'],
+    [{ en:'Temperature falls with height: from 18–19 °C mean on the coast to 8 °C on the peaks, about 0.6 °C every 100 m. Winter now asks for heat.', pt:'A temperatura desce com a altitude: de 18–19 °C de média no litoral a 8 °C nos picos, cerca de 0,6 °C por cada 100 m. O Inverno já pede calor.' }, 'CLI'],
+    [{ en:'Clouds and fog park at about 500 m in winter, a little higher in summer: above that line the house lives in the cloud.', pt:'As nuvens e nevoeiros “estacionam” à cota 500 no Inverno, subindo um pouco no Verão: acima dessa linha a casa vive dentro da nuvem.' }, 'MVT'],
+    [{ en:'The laurissilva begins at about 700 m on the south face.', pt:'Na vertente sul a laurissilva começa por volta dos 700 m.' }, 'IFC']],
+  'media-N':[
+    [{ en:'Second agricultural zone, up to 700–750 m.', pt:'Segunda zona agrícola, até aos 700–750 m.' }, 'ELU'],
+    [{ en:'Cold, wet and windy: the north face at this height is inside the cloud forest belt (300–1300 m) and gets the most rain on the island.', pt:'Frio, húmido e ventoso: a esta altitude a vertente norte está na faixa da laurissilva (300–1300 m) e recebe a maior precipitação da ilha.' }, 'IFC'],
+    [{ en:'About 0.6 °C less every 100 m than the coast; clouds and fog park at about 500 m in winter.', pt:'Cerca de 0,6 °C a menos por cada 100 m em relação ao litoral; as nuvens e nevoeiros estacionam à cota 500 no Inverno.' }, 'MVT']],
+  'serra':[
+    [{ en:'Above 700–750 m the land gave firewood, scrub, broom and grazing — not fields. The permanent rural house stopped with the fields.', pt:'Acima dos 700–750 m a terra dava lenha, mato, giesta e pasto — não campos. A casa rural permanente parava com os campos.' }, 'ELU'],
+    [{ en:'Mean annual temperature falls towards 8 °C on the peaks; rain reaches about 3400 mm a year on the highest ground.', pt:'A temperatura média anual desce até cerca de 8 °C nos picos; a precipitação chega a cerca de 3400 mm por ano no ponto mais alto.' }, 'CLI'],
+    [{ en:'It snows near the summits in winter; the ground below them is cold and in thick fog.', pt:'Junto aos cumes neva no Inverno; as zonas sob a sua influência têm temperaturas baixas e neblinas cerradas.' }, 'MVT']],
+  'PS':[
+    [{ en:'A low island, its highest point little over 500 m: less rain than Madeira and much more wind, about 20 km/h on average.', pt:'Uma ilha baixa, com o ponto mais alto pouco acima dos 500 m: menos chuva que a Madeira e muito mais vento, cerca de 20 km/h em média.' }, 'CLI'],
+    [{ en:'Cereal country: the grain silos (covas) beside the houses and the windmills.', pt:'Terra de cereal: os silos (covas) junto às casas e os moinhos de vento.' }, 'MES']]
+};
+
+/* Two rules the survey finds in every linear house, thatch or tile: no
+   openings in the back, turned to the winter weather and the dominant
+   winds, and the front to the east and the south, rarely the west. */
+const vBlindBack = () => ({ tab:'openings', label:{ en:'Openings in the rear facade', pt:'Vãos na fachada de tardoz' }, model:{ en:'none — the back to the winter and the wind', pt:'nenhum — as costas à invernia e ao vento' }, get:() => vCount(['N']).all, lo:0, hi:0, unit:'', src:'MVT' });
+const vFrontES = () => ({ tab:'site', label:{ en:'Main facade facing', pt:'Orientação da fachada principal' }, model:{ en:'east to south, rarely west', pt:'nascente a sul, raramente poente' }, get:() => MASS.rot, lo:80, hi:200, unit:{ en:'° azimuth', pt:'° de azimute' }, src:'MVT' });
+
+/* --- the models ----------------------------------------------------------
+   Each model: where it was built, a summary, the massing the tabs can
+   draw (model), and its features, each tagged with the tab it belongs to
+   and its source. A feature with a check is scored live against the
+   student's model; one without is a characteristic to know and to draw.
+   Openings are given per local facade, S being the main long facade. */
+const vOff = () => [{ on:false, frac:1, pos:0.5 }];
+const MD_TYPES = {
+  'md-santana':{
+    name:{ en:'Santana thatched house (casa de colmo)', pt:'Casa de colmo de Santana' },
+    where:{ en:'North face — Santana, São Jorge, Faial; coast and mid slope', pt:'Vertente norte — Santana, São Jorge, Faial; litoral e meia encosta' },
+    summary:{ en:'A timber frame under a steep thatched roof that comes down almost to the ground; the gable front carries the door. Built of the wood and the cereal straw the north face had in abundance; the kitchen and the palheiro (byre) stand apart, also thatched.',
+      pt:'Uma estrutura de madeira sob uma cobertura de colmo de forte inclinação que desce quase ao chão; a empena da frente recebe a porta. Feita da madeira e da palha de cereal que a vertente norte tinha em abundância; a cozinha e o palheiro ficam à parte, também de colmo.' },
+    model:{ L:7, D:4.5, fl:1, fh:2.0, rot:180, form:'rect',
+      roof:{ n:2, th:60, bei:0.3 },
+      open:{ S:{ wwr:0.02, units:vOff() }, N:{ wwr:0.02, units:vOff() },
+        E:{ wwr:0.16, sillZ:0.8, headZ:1.8, units:[{ on:true, frac:0.55, pos:0.5, door:true }, { on:true, frac:0.2, pos:0.15 }, { on:true, frac:0.2, pos:0.85 }] },
+        W:{ wwr:0.04, sillZ:1.0, headZ:1.6, units:[{ on:true, frac:1, pos:0.5 }] } },
+      render:{ en:'timber walls, thatch roof, red door', pt:'paredes de madeira, telhado de colmo, porta vermelha' },
+      walls:{ en:'timber boards on a timber frame; in the casa de meio-fio, basalt walls 0.90–1.10 m high under the roof', pt:'tábuas sobre estrutura de madeira; na casa de meio-fio, muros de basalto de 0,90–1,10 m de altura sob a cobertura' } },
+    feats:[
+      { tab:'site', label:{ en:'Plan length', pt:'Comprimento da planta' }, model:'7 m', get:() => MASS.L, lo:6, hi:8, unit:'m', src:'SMB' },
+      { tab:'site', label:{ en:'Plan width', pt:'Largura da planta' }, model:'4.64 m', get:() => MASS.D, lo:4, hi:5.5, unit:'m', src:'SMB' },
+      { tab:'site', label:{ en:'Storeys', pt:'Pisos' }, model:{ en:'1 + loft (sótão)', pt:'1 + sótão' }, get:() => MASS.fl, lo:1, hi:1, unit:'', src:'SMB' },
+      { tab:'site', label:{ en:'Wall height under the eaves', pt:'Altura da parede sob o beirado' }, model:{ en:'≈ 0 (fio) to 0.9–1.1 m (meio-fio); the app draws walls from 2.0 m', pt:'≈ 0 (de fio) a 0,9–1,1 m (meio-fio); a aplicação desenha paredes a partir de 2,0 m' }, get:() => MASS.fh, lo:2.0, hi:2.2, unit:'m', src:'MES' },
+      { tab:'site', label:{ en:'Main house area', pt:'Área da casa' }, model:'≈ 15 m² + ' + VL({ en:'kitchen ≈ 6 m² apart', pt:'cozinha ≈ 6 m² à parte' }), get:() => MASS.L * MASS.D, lo:13, hi:38, unit:'m²', src:'MES' },
+      { tab:'roof', label:{ en:'Roof form', pt:'Forma da cobertura' }, model:{ en:'two slopes to the ground, gables front and back (empena / fio)', pt:'duas águas até ao chão, empenas à frente e atrás (empena / de fio)' }, get:() => vRoof().n, set:[2], fmtv:v => ['flat', 'shed', 'gable', 'hip'][v], src:'SMB' },
+      { tab:'roof', label:{ en:'Roof pitch', pt:'Inclinação da cobertura' }, model:'60°', get:() => vRoof().th, lo:55, hi:65, unit:'°', src:'SMB' },
+      { tab:'roof', label:{ en:'Ridge height', pt:'Altura da cumeeira' }, model:'4.4 m', get:() => MASS.fl * MASS.fh + (MASS.D / 2) * Math.tan(vRoof().th * Math.PI / 180), lo:4.0, hi:6.2, unit:'m', src:'SMB',
+        note:{ en:'4.4 m with the roof on the ground; with the app’s 2.0 m wall the same 60° roof rides higher', pt:'4,4 m com a cobertura no chão; com a parede mínima de 2,0 m da aplicação o mesmo telhado de 60° fica mais alto' } },
+      { tab:'roof', info:{ en:'Covering: wheat or rye straw (rye for the first, most regular layer, ≈ 15 cm), laid bottom to top, held by horizontal rods of folhado or heather tied with soaked wicker; straw figures (bonecos) cap the ridge.', pt:'Cobertura: palha de trigo ou centeio (centeio na primeira camada, mais regular, ≈ 15 cm), aplicada de baixo para cima, presa por varas horizontais de folhado ou urze atadas com vime demolhado; os bonecos de palha rematam a cumeeira.' }, src:'SMB' },
+      { tab:'roof', info:{ en:'Upkeep: the most worn thatch is replaced every 4–5 years; the steep pitch sheds the rain and makes the thatch last.', pt:'Manutenção: a palha mais gasta é substituída de 4 em 4 ou de 5 em 5 anos; a forte inclinação escoa a chuva e faz o colmo durar.' }, src:'SMB' },
+      { tab:'site', info:{ en:'Santana’s gable houses are wider than Machico’s, which are narrower and look taller; the frame posts are dressed timber; the loft is reached by a ladder from outside. Fio and meio-fio houses use the fall of the ground for lojas below.', pt:'As casas de empena de Santana são mais largas que as do Machico, mais estreitas e aparentemente mais altas; os prumos da armação são barrotes aparelhados; o sótão é servido por escada “de pôr” pelo exterior. As casas de fio e meio-fio aproveitam o desnível do terreno para lojas por baixo.' }, src:'MVT' },
+      { tab:'roof', info:{ en:'The meio-fio is a 20th-century innovation: the roof frame raised about 90 cm off the ground all round, on stone or cement-block walls, to free the low corner inside.', pt:'O meio-fio é uma inovação do século XX: a armação da cobertura elevada cerca de 90 cm do solo em todo o perímetro, sobre muros de pedra ou bloco de cimento, para aproveitar o esconso junto ao pavimento.' }, src:'MVT' },
+      { tab:'roof', info:{ en:'Three variants: de empena (fio) — the roof beams on the ground; de meio-fio — the roof stops ≈ 60 cm above the ground on low walls; de quatro águas — the “round” house of São Jorge.', pt:'Três variantes: de empena (de fio) — as vigas assentes no chão; de meio-fio — a cobertura termina ≈ 60 cm acima do solo sobre muros baixos; de quatro águas — a casa “redonda” de São Jorge.' }, src:'SMB' },
+      { tab:'openings', label:{ en:'Openings in the long sides', pt:'Vãos nas faces compridas' }, model:{ en:'none — the roof is the wall', pt:'nenhum — o telhado é a parede' }, get:() => vCount(['S', 'N']).all, lo:0, hi:0, unit:'', src:'SMB' },
+      { tab:'openings', label:{ en:'Door on the gable front', pt:'Porta na empena da frente' }, model:'1', get:() => vCount(['E', 'W']).doors, lo:1, hi:2, unit:'', src:'MES' },
+      { tab:'openings', label:{ en:'Windows beside the door', pt:'Janelas laterais à porta' }, model:{ en:'very often two', pt:'com grande frequência duas' }, get:() => vCount(['E', 'W']).wins, lo:1, hi:3, unit:'', src:'MVT' },
+      { tab:'openings', label:{ en:'Glazed share of all walls', pt:'Fracção envidraçada das paredes' }, model:'≤ 10 %', get:() => vWWR() * 100, lo:0, hi:10, unit:'%', src:'INF' },
+      { tab:'openings', info:{ en:'The loft (sótão) holds the seed and the harvest; it opens by a trapdoor inside or a small door in the gable reached by a ladder.', pt:'O sótão guarda a semente e a colheita; abre por um alçapão interior ou por uma pequena porta na empena, servida por escada de mão.' }, src:'SMB' },
+      { tab:'ventilation', info:{ en:'Thatch and timber damp the swings: the house stays mild in winter and in summer; good natural ventilation is counted among its advantages.', pt:'O colmo e a madeira amortecem as oscilações: a casa mantém-se amena no Inverno e no Verão; a boa ventilação natural conta-se entre as suas vantagens.' }, src:'SMB' },
+      { tab:'ventilation', info:{ en:'The kitchen stands apart, its own thatched volume: the fire and the smoke kept away from the sleeping house.', pt:'A cozinha fica à parte, num volume próprio de colmo: o lume e o fumo longe da casa de dormir.' }, src:'SMB' },
+      { tab:'visualization', label:{ en:'Wall finish', pt:'Acabamento da parede' }, model:{ en:'timber', pt:'madeira' }, get:() => vRender().wall, set:['timber', 'logs'], src:'SMB' },
+      { tab:'visualization', label:{ en:'Roof finish', pt:'Acabamento da cobertura' }, model:{ en:'thatch', pt:'colmo' }, get:() => vRender().roof, set:['thatch'], src:'SMB' },
+      { tab:'visualization', label:{ en:'Door and shutter colour', pt:'Cor da porta e dos tapa-sóis' }, model:{ en:'red, green or brown', pt:'vermelho, verde ou castanho' }, get:() => vRender().door, set:['dred', 'dgreen', 'dtimber'], src:'TEI' }
+    ] },
+
+  'md-redonda':{
+    name:{ en:'Round house of São Jorge (casa redonda)', pt:'Casa redonda de São Jorge' },
+    where:{ en:'North face — São Jorge and the Santana border', pt:'Vertente norte — São Jorge e limite de Santana' },
+    summary:{ en:'All timber, on a plan near the square under a four-slope thatch — hence “round”. A cross of partitions makes a sala and two bedrooms; the kitchen, apart, has its oven inside and no chimney: the smoke rises into the roof.',
+      pt:'Toda em madeira, de planta próxima do quadrado sob colmo de quatro águas — daí “redonda”. Uma divisória em cruz faz uma sala e dois quartos; a cozinha, à parte, tem o forno dentro e não tem chaminé: o fumo sobe para a cobertura.' },
+    model:{ L:6, D:5.5, fl:1, fh:2.0, rot:180, form:'rect',
+      roof:{ n:3, th:50, bei:0.3 },
+      open:{ S:{ wwr:0.12, sillZ:0.8, headZ:1.8, units:[{ on:true, frac:0.6, pos:0.5, door:true }, { on:true, frac:0.3, pos:0.15 }] },
+        N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.04, sillZ:1.0, headZ:1.6, units:[{ on:true, frac:1, pos:0.5 }] }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'timber walls, thatch roof, timber door', pt:'paredes de madeira, telhado de colmo, porta de madeira' },
+      walls:{ en:'timber boards; later masonry walls let two loft levels in (Feiteira de Cima)', pt:'tábuas de madeira; mais tarde paredes de alvenaria permitiram dois níveis de sótão (Feiteira de Cima)' } },
+    feats:[
+      { tab:'site', label:{ en:'Plan proportion', pt:'Proporção da planta' }, model:{ en:'near the square', pt:'próxima do quadrado' }, get:() => MASS.L / MASS.D, lo:1, hi:1.25, unit:'', src:'MES' },
+      { tab:'site', label:{ en:'Storeys', pt:'Pisos' }, model:'1', get:() => MASS.fl, lo:1, hi:1, unit:'', src:'MES' },
+      { tab:'site', info:{ en:'Plan: a central cross of board partitions — sala and two bedrooms; kitchen in a separate volume with an interior oven.', pt:'Planta: divisória central em cruz, de tabuado — sala e dois quartos; cozinha em volume separado com forno interior.' }, src:'MES' },
+      { tab:'roof', label:{ en:'Roof form', pt:'Forma da cobertura' }, model:{ en:'four slopes (hip)', pt:'quatro águas' }, get:() => vRoof().n, set:[3], fmtv:v => ['flat', 'shed', 'gable', 'hip'][v], src:'SMB' },
+      { tab:'roof', label:{ en:'Roof pitch', pt:'Inclinação da cobertura' }, model:{ en:'steep, thatch', pt:'acentuada, de colmo' }, get:() => vRoof().th, lo:45, hi:60, unit:'°', src:'INF' },
+      { tab:'openings', label:{ en:'Glazed share of all walls', pt:'Fracção envidraçada das paredes' }, model:'≤ 10 %', get:() => vWWR() * 100, lo:0, hi:10, unit:'%', src:'INF' },
+      { tab:'openings', info:{ en:'The later, larger version adds a corridor, a dining room, and sliding timber windows and doors.', pt:'A versão posterior, maior, junta um corredor, uma sala de jantar e janelas e portas de correr em madeira.' }, src:'MES' },
+      { tab:'ventilation', info:{ en:'No chimney: the smoke of the kitchen oven finds its way out through the thatch.', pt:'Sem chaminé: o fumo do forno da cozinha sai por entre a palha.' }, src:'MES' },
+      { tab:'visualization', label:{ en:'Wall finish', pt:'Acabamento da parede' }, model:{ en:'timber', pt:'madeira' }, get:() => vRender().wall, set:['timber', 'logs'], src:'MES' },
+      { tab:'visualization', label:{ en:'Roof finish', pt:'Acabamento da cobertura' }, model:{ en:'thatch', pt:'colmo' }, get:() => vRender().roof, set:['thatch'], src:'MES' }
+    ] },
+
+  'md-camacha':{
+    name:{ en:'Thatched stone house of the uplands (Camacha)', pt:'Casa de colmo em alvenaria das terras altas (Camacha)' },
+    where:{ en:'South and east faces, mid slope — Camacha (720 m), Rochão, Machico valley; the type most spread over the island', pt:'Vertentes sul e leste, meia encosta — Camacha (720 m), Rochão, vale de Machico; a tipologia mais disseminada na ilha' },
+    summary:{ en:'Thick basalt walls under a four-slope thatch on small trusses. The bedroom body is rendered and whitewashed; the kitchen is a separate volume of exposed stone with its oven inside and no chimney. Two rooms in the roof space (sótão), lojas below where the slope allows.',
+      pt:'Paredes grossas de basalto sob colmo de quatro águas em pequenas asnas. O corpo dos quartos é rebocado e caiado; a cozinha é um volume separado de pedra à vista, com forno interior e sem chaminé. Dois quartos no desvão (sótão), lojas por baixo onde o declive o permite.' },
+    model:{ L:6, D:4, fl:1, fh:2.0, rot:180, form:'rect',
+      roof:{ n:3, th:40, bei:0.3 },
+      open:{ S:{ wwr:0.12, sillZ:0.9, headZ:1.8, units:[{ on:true, frac:0.6, pos:0.35, door:true }, { on:true, frac:0.35, pos:0.78 }] },
+        N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.04, sillZ:1.0, headZ:1.6, units:[{ on:true, frac:1, pos:0.5 }] } },
+      render:{ en:'whitewash walls, thatch roof, green door', pt:'paredes caiadas, telhado de colmo, porta verde' },
+      walls:{ en:'basalt masonry 0.50–0.60 m, two faces filled with rubble and earth (“paredes cortadas”), dry joint or earth mortar', pt:'alvenaria de basalto de 0,50–0,60 m, duas faces cheias de cascalho e terra (“paredes cortadas”), junta seca ou argamassa de terra' } },
+    feats:[
+      { tab:'site', label:{ en:'Plan of the bedroom body', pt:'Planta do corpo dos quartos' }, model:'6 × 4 m (24 m²)', get:() => MASS.L * MASS.D, lo:20, hi:33, unit:'m²', src:'TEI' },
+      { tab:'site', label:{ en:'Plan length', pt:'Comprimento da planta' }, model:{ en:'6 m, ± 0.20–0.30 m', pt:'6 m, ± 0,20–0,30 m' }, get:() => MASS.L, lo:5.5, hi:6.5, unit:'m', src:'MVT' },
+      { tab:'site', label:{ en:'Plan width', pt:'Largura da planta' }, model:{ en:'4 m, ± 0.20–0.30 m', pt:'4 m, ± 0,20–0,30 m' }, get:() => MASS.D, lo:4, hi:4.5, unit:'m', src:'MVT' },
+      vFrontES(),
+      { tab:'site', label:{ en:'Ceiling height', pt:'Pé-direito' }, model:{ en:'rarely over 2 m — a man’s height', pt:'raramente acima de 2 m — a altura de um homem' }, get:() => MASS.fh, lo:2.0, hi:2.4, unit:'m', src:'TEI' },
+      { tab:'site', label:{ en:'Storeys', pt:'Pisos' }, model:{ en:'1 (+ sótão); 2 where sobradada', pt:'1 (+ sótão); 2 quando sobradada' }, get:() => MASS.fl, lo:1, hi:2, unit:'', src:'TEI' },
+      { tab:'site', info:{ en:'In its most elementary form the kitchen is the “mother house”: a partition of upright planks, stopping at the wall head, divides off one room to sleep in; floor of rolled pebbles, walls unrendered, four-slope roof.', pt:'Na forma mais elementar a cozinha é a “casa-mãe”: um tabique de pranchas ao alto, até ao início da armação, separa um compartimento de dormir; pavimento de calhau rolado, paredes por rebocar, cobertura de quatro águas.' }, src:'MVT' },
+      { tab:'site', info:{ en:'Several volumes on the plot: the bedrooms (one surveyed 26.2 m², 5.19 m high), a two-storey body (32.6 m², 6.33 m, storage below), and the kitchen apart against fire.', pt:'Vários volumes no terreno: os quartos (um levantado com 26,2 m², 5,19 m de altura), um corpo sobradado (32,6 m², 6,33 m, arrumos em baixo) e a cozinha à parte, contra o fogo.' }, src:'TEI' },
+      { tab:'roof', label:{ en:'Roof form', pt:'Forma da cobertura' }, model:{ en:'four slopes (also two or three)', pt:'quatro águas (também duas ou três)' }, get:() => vRoof().n, set:[2, 3], fmtv:v => ['flat', 'shed', 'gable', 'hip'][v], src:'TEI' },
+      { tab:'roof', label:{ en:'Roof pitch', pt:'Inclinação da cobertura' }, model:'35–45°', get:() => vRoof().th, lo:35, hi:45, unit:'°', src:'TEI' },
+      { tab:'roof', info:{ en:'Thatch of white wheat or rye — rye preferred, taller and sheds the winter rain better — 30–50 cm thick, sewn to the battens with a 12 cm iron needle and twisted black wicker; a pine pole left under the eave for the next re-thatching.', pt:'Colmo de trigo branco ou de centeio — preferido o centeio, mais alto e que escoa melhor a chuva de Inverno — com 30–50 cm de espessura, cosido ao ripado com agulha de ferro de 12 cm e vime preto torcido; uma vara de pinheiro deixada sob o beiral para a próxima colmatação.' }, src:'TEI' },
+      { tab:'openings', label:{ en:'Doors', pt:'Portas' }, model:{ en:'rarely more than two', pt:'raramente mais de duas' }, get:() => vCount().doors, lo:1, hi:2, unit:'', src:'TEI' },
+      vBlindBack(),
+      { tab:'openings', label:{ en:'Windows', pt:'Janelas' }, model:{ en:'one or two, small', pt:'uma ou duas, pequenas' }, get:() => vCount().wins, lo:1, hi:2, unit:'', src:'TEI' },
+      { tab:'openings', label:{ en:'Glazed share of all walls', pt:'Fracção envidraçada das paredes' }, model:'≤ 10 %', get:() => vWWR() * 100, lo:0, hi:10, unit:'%', src:'INF' },
+      { tab:'openings', info:{ en:'Plank doors, sometimes with a postigo (a small hatch to air and look out); outside the window the tapa-sóis — hinged shutters of horizontal slats — shade and ventilate.', pt:'Portas de tábuas ao alto, por vezes com postigo para arejar e espreitar; por fora da janela os tapa-sóis — portadas de ripas horizontais — sombreiam e ventilam.' }, src:'TEI' },
+      { tab:'ventilation', info:{ en:'Mass: the 0.50–0.57 m stone walls keep the temperature steady winter and summer; the thatch, 30–50 cm, insulates.', pt:'Massa: as paredes de pedra de 0,50–0,57 m mantêm a temperatura estável no Inverno e no Verão; o colmo, de 30–50 cm, isola.' }, src:'TEI' },
+      { tab:'ventilation', info:{ en:'Smoke: no chimney in the kitchen — the smoke leaves through the straw and the dry-jointed walls, and it protects the thatch and the timber from woodworm.', pt:'Fumo: a cozinha não tem chaminé — o fumo sai pelos filamentos da palha e pelas paredes de junta seca, e protege a palha e a madeira do caruncho.' }, src:'TEI' },
+      { tab:'ventilation', info:{ en:'The cost the type accepts: with the kitchen apart, the hearth does not warm the bedrooms.', pt:'O preço que a tipologia aceita: com a cozinha à parte, o lume não aquece os quartos.' }, src:'TEI' },
+      { tab:'visualization', label:{ en:'Wall finish (bedroom body)', pt:'Acabamento da parede (corpo dos quartos)' }, model:{ en:'rendered and whitewashed; kitchen in exposed stone', pt:'rebocado e caiado; cozinha em pedra à vista' }, get:() => vRender().wall, set:['whitewash', 'plaster', 'basalt'], src:'TEI' },
+      { tab:'visualization', label:{ en:'Roof finish', pt:'Acabamento da cobertura' }, model:{ en:'thatch', pt:'colmo' }, get:() => vRender().roof, set:['thatch'], src:'TEI' },
+      { tab:'visualization', label:{ en:'Door and shutter colour', pt:'Cor da porta e dos tapa-sóis' }, model:{ en:'green (Camacha); also blue or red', pt:'verde (Camacha); também azul ou vermelho' }, get:() => vRender().door, set:['dgreen', 'dblue', 'dred'], src:'TEI' },
+      { tab:'visualization', info:{ en:'Two colours always: the ground (lime white, ochre or pink) and a band of 13–16 cm round doors and windows in grey or dark red, repeated in a soco 55–70 cm high along the foot of the wall.', pt:'Sempre duas cores: o fundo (branco da cal, ocre ou rosa) e uma moldura de 13–16 cm em volta de portas e janelas, cinzenta ou vermelho-escuro, repetida num soco de 55–70 cm ao longo da base da parede.' }, src:'TEI' }
+    ] },
+
+  'md-elementar':{
+    name:{ en:'Single-storey house of the south coast (casa elementar térrea)', pt:'Casa elementar térrea da costa sul' },
+    where:{ en:'South face, coast and gentle mid-slope platforms — Caniço, Santa Cruz, São Roque, Fajã da Ovelha, Calheta; found all over the island', pt:'Vertente sul, litoral e plataformas suaves a meia encosta — Caniço, Santa Cruz, São Roque, Fajã da Ovelha, Calheta; um pouco por toda a ilha' },
+    summary:{ en:'A low rectangular volume under a flattened four-slope roof — door, window, door. Inside, the kitchen is separated from the two or three communicating bedrooms by a solid masonry wall. In front, on a gentle platform, the terreiro paved with rolled pebbles, closed by a low wall with rendered benches, cooled by the latada on timber brackets set in the wall: the most lived-in room of the farm. The back has no openings.',
+      pt:'Um volume baixo, rectangular, de telhado “abatido” de quatro águas — porta, janela e porta. Dentro, a cozinha separa-se dos dois ou três quartos comunicantes por uma sólida parede de alvenaria. À frente, numa plataforma suave, o terreiro empedrado de calhau rolado, fechado por murete com bancos corridos rebocados e caiados, refrescado pela latada apoiada em cachorros encastrados na parede: o “compartimento” mais habitado da unidade agrícola. As traseiras não têm vãos.' },
+    model:{ L:7, D:4.5, fl:1, fh:2.2, rot:170, form:'rect',
+      roof:{ n:3, th:20, bei:0.3, latada:true },
+      open:{ S:{ wwr:0.16, sillZ:0.9, headZ:1.9, units:[{ on:true, frac:0.28, pos:0.18, door:true }, { on:true, frac:0.2, pos:0.5 }, { on:true, frac:0.28, pos:0.82, door:true }] },
+        N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.03, sillZ:1.1, headZ:1.7, units:[{ on:true, frac:1, pos:0.5 }] } },
+      render:{ en:'whitewash walls, barrel tile roof, green door', pt:'paredes caiadas, telha de canudo, porta verde' },
+      walls:{ en:'stone masonry, whitewashed; door and window frames in cut stone or painted', pt:'alvenaria de pedra caiada; molduras de portas e janelas em cantaria ou pintadas' } },
+    feats:[
+      vFrontES(),
+      { tab:'site', label:{ en:'Plan length', pt:'Comprimento da planta' }, model:{ en:'7 m on average, rarely over 10 m', pt:'7 m em média, raramente acima de 10 m' }, get:() => MASS.L, lo:6, hi:10, unit:'m', src:'MVT' },
+      { tab:'site', label:{ en:'Plan width', pt:'Largura da planta' }, model:{ en:'rarely over 5 m', pt:'raramente acima de 5 m' }, get:() => MASS.D, lo:4, hi:5, unit:'m', src:'MVT' },
+      { tab:'site', label:{ en:'Wall height', pt:'Altura das paredes' }, model:{ en:'2.20 m — in practically every model', pt:'2,20 m — em praticamente todos os modelos' }, get:() => MASS.fh, lo:2.0, hi:2.4, unit:'m', src:'MVT' },
+      { tab:'site', label:{ en:'Storeys', pt:'Pisos' }, model:'1', get:() => MASS.fl, lo:1, hi:1, unit:'', src:'MVT' },
+      { tab:'site', info:{ en:'Earlier, straw-roofed version: three communicating rooms and the kitchen against one end, with a walled terraço-alpendre in front.', pt:'Versão anterior, de cobertura de palha: três divisões comunicantes e a cozinha encostada a um topo, com um terraço-alpendre murado à frente.' }, src:'MES' },
+      { tab:'roof', label:{ en:'Roof form', pt:'Forma da cobertura' }, model:{ en:'four slopes, “abatido”', pt:'quatro águas, “abatido”' }, get:() => vRoof().n, set:[3], fmtv:v => ['flat', 'shed', 'gable', 'hip'][v], src:'MVT' },
+      { tab:'roof', label:{ en:'Roof pitch', pt:'Inclinação da cobertura' }, model:{ en:'very low, the sprocket (contrafeito) almost flat at the eave', pt:'muito baixa, o contrafeito quase plano junto ao beiral' }, get:() => vRoof().th, lo:12, hi:25, unit:'°', src:'MVT',
+        note:{ en:'the steep four-slope roof with a loft is post-war, with the Marseille tile', pt:'o telhado de quatro águas íngreme, com sótão, é do pós-guerra, com a telha marselha' } },
+      { tab:'roof', info:{ en:'Covering through time: straw first, then telha de canudo, then Marseille tile, then cement Marseille tile.', pt:'A cobertura ao longo do tempo: palha primeiro, depois telha de canudo, depois telha marselha, depois marselha de cimento.' }, src:'MES' },
+      { tab:'openings', label:{ en:'Doors on the main facade', pt:'Portas na fachada principal' }, model:{ en:'door, window, door — sometimes two and two', pt:'porta, janela e porta — por vezes duas e duas' }, get:() => vCount(['S']).doors, lo:2, hi:3, unit:'', src:'MVT' },
+      { tab:'openings', label:{ en:'Windows', pt:'Janelas' }, model:{ en:'one, sometimes two', pt:'uma, por vezes duas' }, get:() => vCount().wins, lo:1, hi:2, unit:'', src:'MVT' },
+      vBlindBack(),
+      { tab:'openings', info:{ en:'The old window had no glass: wooden postigos, one or two to a window, let in light and air; glazed postigos appear in the 18th century.', pt:'A janela antiga não tinha vidros: postigos de madeira, um ou dois por janela, deixavam entrar a luz e o ar; os postigos de vidro aparecem no século XVIII.' }, src:'MVT' },
+      { tab:'openings', label:{ en:'Glazed share of all walls', pt:'Fracção envidraçada das paredes' }, model:'≤ 12 %', get:() => vWWR() * 100, lo:0, hi:12, unit:'%', src:'INF' },
+      { tab:'ventilation', label:{ en:'Vine pergola (latada) over the south terrace', pt:'Latada sobre o terraço a sul' }, model:{ en:'yes — the shade of summer', pt:'sim — a sombra do Verão' }, get:() => vLatada(), lo:2, hi:5, unit:{ en:'m deep', pt:'m de fundo' }, src:'MES',
+        note:{ en:'drawn as the canopy on the main facade (Roof tab, eaves)', pt:'desenhada como o alpendre da fachada principal (separador Cobertura, beirado)' } },
+      { tab:'ventilation', info:{ en:'Houses hidden under the latada, which cut the heat of summer; the terrace was the summer room — work, meals on feast days.', pt:'As casas escondidas sob a latada, que reduzia o calor do Verão; o terraço era a sala de Verão — trabalho, refeições em dias de festa.' }, src:'MES' },
+      { tab:'ventilation', info:{ en:'The latada is timber on brackets (cachorros) set in the wall; from the low wall’s planters rise vines or passion fruit. The kitchen is associated with the latada as its outdoor extension.', pt:'A latada é de madeira, apoiada num grupo de cachorros encastrados na parede; dos alegretes do murete elevam-se os pés de vinha ou de maracujá. A cozinha associa-se à latada como prolongamento para o exterior.' }, src:'MVT' },
+      { tab:'visualization', label:{ en:'Wall finish', pt:'Acabamento da parede' }, model:{ en:'whitewash', pt:'caiado' }, get:() => vRender().wall, set:['whitewash', 'plaster'], src:'MES' },
+      { tab:'visualization', label:{ en:'Roof finish', pt:'Acabamento da cobertura' }, model:{ en:'telha de canudo (or straw before it)', pt:'telha de canudo (ou palha antes dela)' }, get:() => vRender().roof, set:['canudo', 'tile', 'thatch'], src:'MES' },
+      { tab:'visualization', info:{ en:'White lime with grey pigment on the soco and the frames, or a faded ochre; frames limewashed grey or iron-oxide red, or in orange tuff or basalt.', pt:'Caiação branca com pigmento cinzento no soco e nas molduras dos vãos, ou com tom ocre esbatido; molduras caiadas com pigmento cinzento ou vermelho de óxido de ferro, ou de tufo alaranjado, ou de basalto.' }, src:'MVT' }
+    ] },
+
+  'md-doispisos':{
+    name:{ en:'Two-storey house of the lombos (casa elementar de dois pisos)', pt:'Casa elementar de dois pisos dos lombos' },
+    where:{ en:'South-west, mid slope — Prazeres, Lombos, Ingriota, Lombo das Terças (Calheta, Ponta do Sol)', pt:'Sudoeste, meia encosta — Prazeres, Lombos, Ingriota, Lombo das Terças (Calheta, Ponta do Sol)' },
+    summary:{ en:'The house on the slope: lojas (storerooms, or a stone lagar) on the ground floor, two rooms above — four in the compact version, on a cross plan — reached by a steep timber stair with a trapdoor, or by an outside stair and balcony at one end; a terrace in front; a deep four-slope roof with a long overhang.',
+      pt:'A casa da encosta: lojas (ou um lagar de pedra) no rés-do-chão, dois quartos por cima — quatro na versão compacta, em planta cruzada — servidos por escada íngreme de madeira com alçapão, ou por escada exterior e balcão num topo; um terraço à frente; cobertura de quatro águas funda, com beiral comprido.' },
+    model:{ L:7, D:5, fl:2, fh:2.2, rot:160, form:'rect',
+      roof:{ n:3, th:25, bei:0.6 },
+      open:{ S:{ wwr:0.10, sillZ:0.9, headZ:1.8, units:[{ on:true, frac:0.45, pos:0.25, door:true, floors:[{ door:true }, { door:false }] }, { on:true, frac:0.45, pos:0.75, door:true, floors:[{ door:true }, { door:false }] }] },
+        N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.05, sillZ:0.9, headZ:1.8, units:[{ on:true, frac:1, pos:0.5, floors:[{ on:false }, { on:true, door:true }] }] }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'whitewash walls, tile roof, green door', pt:'paredes caiadas, telhado de telha, porta verde' },
+      walls:{ en:'stone masonry; the ground floor in the slope', pt:'alvenaria de pedra; o rés-do-chão na encosta' } },
+    feats:[
+      { tab:'site', label:{ en:'Storeys', pt:'Pisos' }, model:{ en:'2 — lojas below, rooms above', pt:'2 — lojas em baixo, quartos em cima' }, get:() => MASS.fl, lo:2, hi:2, unit:'', src:'MES' },
+      { tab:'site', label:{ en:'Floor height', pt:'Altura de piso' }, model:{ en:'≈ 2 m, a man’s height', pt:'≈ 2 m, a altura de um homem' }, get:() => MASS.fh, lo:2.0, hi:2.6, unit:'m', src:'TEI' },
+      vFrontES(),
+      { tab:'site', info:{ en:'It uses the natural fall of the ground to gain a storey or half of one; the balcão at the level of the road or of a levelled platform; usually two lojas below, apart or through a plank partition. On the lombos (ridges) each house stands alone, perpendicular to the road, never in a row.', pt:'Aproveita o desnível natural do terreno para ganhar mais um piso ou meio piso; o balcão de acesso ao nível da rua ou de uma plataforma nivelada; em baixo normalmente duas lojas, separadas por parede mestra ou por tabique com porta. Nos lombos cada casa é individual, perpendicular à via, nunca lado a lado em correnteza.' }, src:'MVT' },
+      { tab:'site', info:{ en:'Rooms: two at most in the simple version; in the compact one four, with a hierarchy that keeps visitors from the family.', pt:'Divisões: no máximo duas na versão simples; na compacta quatro, com uma hierarquia que separa visitas e família.' }, src:'MES' },
+      { tab:'roof', label:{ en:'Roof form', pt:'Forma da cobertura' }, model:{ en:'four slopes, deep', pt:'quatro águas, funda' }, get:() => vRoof().n, set:[3], fmtv:v => ['flat', 'shed', 'gable', 'hip'][v], src:'MES' },
+      { tab:'roof', label:{ en:'Eave overhang', pt:'Beiral' }, model:{ en:'long', pt:'comprido' }, get:() => vEave(), lo:0.4, hi:1.0, unit:'m', src:'MES' },
+      { tab:'roof', label:{ en:'Roof pitch', pt:'Inclinação da cobertura' }, model:{ en:'moderate (tile)', pt:'moderada (telha)' }, get:() => vRoof().th, lo:22, hi:35, unit:'°', src:'INF' },
+      { tab:'openings', label:{ en:'Doors on the ground floor', pt:'Portas no piso térreo' }, model:{ en:'normally two — the windows on the two-storey facade', pt:'normalmente duas — as janelas na fachada de dois pisos' }, get:() => vCount(['S']).doors, lo:1, hi:3, unit:'', src:'MVT' },
+      vBlindBack(),
+      { tab:'openings', label:{ en:'Glazed share of all walls', pt:'Fracção envidraçada das paredes' }, model:'≤ 10 %', get:() => vWWR() * 100, lo:0, hi:10, unit:'%', src:'INF' },
+      { tab:'ventilation', info:{ en:'The lojas half in the ground are the cool store; the house lives above the damp, warmed by the slope and the sun.', pt:'As lojas meio enterradas são o armazém fresco; a casa vive acima da humidade, aquecida pela encosta e pelo sol.' }, src:'INF' },
+      { tab:'ventilation', info:{ en:'Kitchen without oven in the house; the oven, where there is one, stands outside.', pt:'Cozinha sem forno na casa; o forno, quando existe, fica fora.' }, src:'MES' },
+      { tab:'visualization', label:{ en:'Wall finish', pt:'Acabamento da parede' }, model:{ en:'whitewashed stone', pt:'pedra caiada' }, get:() => vRender().wall, set:['whitewash', 'plaster', 'basalt'], src:'INF' },
+      { tab:'visualization', label:{ en:'Roof finish', pt:'Acabamento da cobertura' }, model:{ en:'tile', pt:'telha' }, get:() => vRender().roof, set:['tile', 'canudo'], src:'INF' }
+    ] },
+
+  'md-curral':{
+    name:{ en:'Two-slope house of Curral das Freiras', pt:'Casa elementar de duas águas do Curral das Freiras' },
+    where:{ en:'Deep interior valley, south side — Curral das Freiras (Câmara de Lobos); a model of its own', pt:'Vale interior profundo, lado sul — Curral das Freiras (Câmara de Lobos); um modelo exclusivo' },
+    summary:{ en:'Bedrooms and kitchen in separate volumes, each under two slopes with a loft. The upper door, in the gable, opens on two bedrooms parted by planks or a curtain; the ground floor, entered from the long facade, is storage, farm work and meals; no stair inside. A house of marked poverty: very little room, no hearth — the fire between stones on the floor.',
+      pt:'Quartos e cozinha em volumes separados, cada um de duas águas com aproveitamento do sótão. A entrada superior, pela fachada-empena, dá para dois quartos divididos por tabique de pranchas ou por cortinas; o piso térreo, pela fachada comprida, serve de arrumos, apoio à lavoura e refeições; sem ligação interior entre pisos. Uma casa de pobreza mais notória: extrema exiguidade do espaço, ausência de lar — o fogo entre pedras no chão.' },
+    model:{ L:6, D:4, fl:2, fh:2.2, rot:180, form:'rect',
+      roof:{ n:2, th:35, bei:0.3 },
+      open:{ S:{ wwr:0.08, sillZ:0.9, headZ:1.8, units:[{ on:true, frac:0.5, pos:0.35, door:true, floors:[{ door:true }, { on:false }] }, { on:true, frac:0.4, pos:0.72, floors:[{ on:false }, { on:true }] }] },
+        N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.06, sillZ:0.9, headZ:1.8, units:[{ on:true, frac:1, pos:0.5, floors:[{ on:false }, { on:true, door:true }] }] }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'basalt stone walls, thatch roof, timber door', pt:'paredes de pedra basáltica, telhado de colmo, porta de madeira' },
+      walls:{ en:'elementary stone masonry', pt:'alvenaria de pedra elementar' } },
+    feats:[
+      { tab:'site', label:{ en:'Storeys', pt:'Pisos' }, model:{ en:'2, using the slope', pt:'2, aproveitando o declive' }, get:() => MASS.fl, lo:2, hi:2, unit:'', src:'MVT' },
+      vFrontES(),
+      { tab:'site', info:{ en:'Two volumes: bedrooms and kitchen apart — the app draws the bedroom body; place the kitchen as a second, smaller volume beside it.', pt:'Dois volumes: quartos e cozinha separados — a aplicação desenha o corpo dos quartos; coloque a cozinha como um segundo volume, menor, ao lado.' }, src:'MES' },
+      { tab:'roof', label:{ en:'Roof form', pt:'Forma da cobertura' }, model:{ en:'two slopes', pt:'duas águas' }, get:() => vRoof().n, set:[2], fmtv:v => ['flat', 'shed', 'gable', 'hip'][v], src:'MES' },
+      { tab:'roof', label:{ en:'Roof pitch', pt:'Inclinação da cobertura' }, model:{ en:'thatch, then zinc or tile', pt:'colmo, depois zinco ou telha' }, get:() => vRoof().th, lo:30, hi:45, unit:'°', src:'INF' },
+      { tab:'openings', label:{ en:'Door on the long facade (lower floor)', pt:'Porta na fachada comprida (piso de baixo)' }, model:'1', get:() => vCount(['S', 'N']).doors, lo:1, hi:2, unit:'', src:'MES' },
+      { tab:'openings', label:{ en:'Door in the gable (upper floor)', pt:'Porta na empena (piso de cima)' }, model:'1', get:() => vCount(['E', 'W']).doors, lo:1, hi:1, unit:'', src:'MVT' },
+      vBlindBack(),
+      { tab:'ventilation', info:{ en:'A valley floor of cold air and short sun: the house sits in the slope and keeps its openings few.', pt:'Um fundo de vale de ar frio e sol curto: a casa encaixa-se na encosta e mantém poucos vãos.' }, src:'INF' },
+      { tab:'visualization', label:{ en:'Wall finish', pt:'Acabamento da parede' }, model:{ en:'stone (later whitewashed)', pt:'pedra (depois caiada)' }, get:() => vRender().wall, set:['basalt', 'stone', 'whitewash'], src:'MES' }
+    ] },
+
+  'md-salao':{
+    name:{ en:'Porto Santo clay-roofed house (casa de salão)', pt:'Casa de salão do Porto Santo' },
+    where:{ en:'Porto Santo', pt:'Porto Santo' },
+    summary:{ en:'A single storey of two or three rooms, in a row or in esquadria (an L), under a roof of salão — a sandy clay 7–10 cm thick laid on trunks or beams, with brush or, for the better-off, boards — on two or four slopes. Additions became bedrooms, stables or adegas; the grain silos (covas) and the windmills stood near.',
+      pt:'Um só piso de duas ou três divisões, em linha ou em esquadria, sob uma cobertura de salão — um barro arenoso de 7–10 cm sobre troncos ou vigas, com mato ou, nas casas mais abastadas, tabuado — de duas ou quatro águas. Os acrescentos fizeram-se quartos, estábulos ou adegas; as covas de cereal e os moinhos ficavam perto.' },
+    model:{ L:8, D:4, fl:1, fh:2.4, rot:180, form:'L', wing:{ w:3, e:3, side:1, face:-1 },
+      roof:{ n:2, th:15, bei:0.15 },
+      open:{ S:{ wwr:0.12, sillZ:0.9, headZ:1.8, units:[{ on:true, frac:0.4, pos:0.3, door:true }, { on:true, frac:0.3, pos:0.72 }] },
+        N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.03, sillZ:1.0, headZ:1.6, units:[{ on:true, frac:1, pos:0.5 }] }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'whitewash walls, green door', pt:'paredes caiadas, porta verde' },
+      walls:{ en:'calcarenite (pedra de areia) masonry, rendered with poor sand-and-lime mortars or left exposed; partitions of cane (canavieira) filled with straw, fern, wood shavings or small stones, finished in lime', pt:'alvenaria de pedra calcária (pedra de areia), rebocada com argamassas pobres de areia e cal ou à vista; divisórias de canavieira cheias de palha, feiteira, aparas ou pedra miúda, rebocadas a cal' } },
+    feats:[
+      { tab:'site', label:{ en:'Storeys', pt:'Pisos' }, model:'1', get:() => MASS.fl, lo:1, hi:1, unit:'', src:'MES' },
+      { tab:'site', label:{ en:'Plan', pt:'Planta' }, model:{ en:'in a row, or in esquadria (L)', pt:'em linha, ou em esquadria (L)' }, get:() => MASS.form, set:['rect', 'L'], fmtv:v => v, src:'MES' },
+      { tab:'roof', label:{ en:'Roof form', pt:'Forma da cobertura' }, model:{ en:'two or four slopes', pt:'duas ou quatro águas' }, get:() => vRoof().n, set:[2, 3], fmtv:v => ['flat', 'shed', 'gable', 'hip'][v], src:'MES' },
+      { tab:'roof', label:{ en:'Roof pitch', pt:'Inclinação da cobertura' }, model:{ en:'low, to hold the clay', pt:'baixa, para segurar o barro' }, get:() => vRoof().th, lo:8, hi:22, unit:'°', src:'INF' },
+      { tab:'roof', label:{ en:'Eave', pt:'Beirado' }, model:{ en:'a cornija lintel of dressed stones 10–15 cm out', pt:'uma “cornija lintel” de pedras aparelhadas, 10–15 cm em balanço' }, get:() => vEave(), lo:0.08, hi:0.2, unit:'m', src:'MVT' },
+      { tab:'roof', info:{ en:'The frame: logs and poles 50 cm apart (“mãos-dadas”) for four slopes on plates nailed to a beam on the walls; for two slopes, triangular gables carry the ridge log. Over it a lining of boxwood boards with tile, or — most usual — dry fern, cedar twigs, cane or palm leaves; then 7–10 cm of salão, the yellowish island clay, broken only by a box-shaped chimney.', pt:'A armação: toros e varas de 50 em 50 cm (“mãos-dadas”) nas quatro águas, sobre frechais pregados a uma viga pousada nas paredes; nas duas águas, empenas triangulares suportam o toro central. Por cima, forro de tabuado de caixote com telha, ou — o mais vulgar — mato seco de feiteira, rama de cedro, caniço ou folhas de palmeira; depois 7–10 cm de salão, o barro amarelado da ilha, interrompido apenas por uma chaminé paralelepipédica.' }, src:'MVT' },
+      { tab:'openings', label:{ en:'Glazed share of all walls', pt:'Fracção envidraçada das paredes' }, model:'≤ 10 %', get:() => vWWR() * 100, lo:0, hi:10, unit:'%', src:'INF' },
+      { tab:'ventilation', info:{ en:'The salão roof breathes: drying cracks let air through and keep the house cool in summer; with the winter rain it swells and turns watertight.', pt:'A cobertura de salão respira: as fendas da secagem deixam passar o ar e refrescam a casa no Verão; com a chuva de Inverno incha e torna-se impermeável.' }, src:'VMD' },
+      vBlindBack(),
+      { tab:'visualization', label:{ en:'Wall finish', pt:'Acabamento da parede' }, model:{ en:'sand-and-lime render, or the calcarenite exposed', pt:'reboco de areia e cal, ou a pedra calcária à vista' }, get:() => vRender().wall, set:['whitewash', 'plaster', 'limestone'], src:'MVT' },
+      { tab:'visualization', info:{ en:'The Visualization palette has no salão: leave the roof in an earth tone and name it in the drawing.', pt:'A paleta da Visualização não tem salão: deixe a cobertura num tom de terra e identifique-a no desenho.' }, src:'INF' }
+    ] }
+};
+
+/* --- reading the student's model ------------------------------------------ */
+/** Doors, windows and all openings on the facades given, every storey. */
+function vCount(faces) {
+  const out = { doors:0, wins:0, all:0 };
+  if (!OPEN) return out;
+  const n = nFloorsU();
+  (faces || ['S', 'N', 'E', 'W']).forEach(f => {
+    if (!OPEN[f]) return;
+    faceUnits(f).forEach(u => { for (let k = 0; k < n; k++) {
+      const F = unitFloor(u, k);
+      if (!F.on || !(F.frac > 0)) continue;
+      out.all++; if (F.door) out.doors++; else out.wins++;
+    } });
+  });
+  return out;
+}
+/** Glazed share of the four walls together, area-weighted, switched-off units out. */
+function vWWR() {
+  if (!OPEN || !MASS) return 0;
+  const h = MASS.fl * MASS.fh, A = { S:MASS.L * h, N:MASS.L * h, E:MASS.D * h, W:MASS.D * h };
+  let g = 0, a = 0;
+  ['S', 'N', 'E', 'W'].forEach(f => { a += A[f]; if (OPEN[f]) g += A[f] * OPEN[f].wwr * Math.min(1, glassShare(f)); });
+  return a ? g / a : 0;
+}
+/* The roof lives in its parts (ROOF.zones) once the Roof tab has read it;
+   the globals are only what a part is made from. The main part is the widest. */
+const vZones = () => ROOF && Array.isArray(ROOF.zones) && ROOF.zones.length ? ROOF.zones : null;
+const vRoof = () => {
+  const Z = vZones();
+  if (!Z) return { n:ROOF.n, th:ROOF.th };
+  const z = Z.reduce((a, b) => (b.f1 - b.f0) > (a.f1 - a.f0) ? b : a);
+  return { n:z.n, th:z.th };
+};
+const vEave = () => {
+  const Z = vZones();
+  if (Z) return Z.reduce((a, z) => Math.max(a, z.bei && z.bei.on ? beiSide(z.bei, 'S') : 0), 0);
+  return ROOF && ROOF.bei && ROOF.bei.on ? beiSide(ROOF.bei, 'S') : 0;
+};
+const vLatada = () => {
+  const Z = vZones(), c = Z ? (Z.find(z => z.canopy && z.canopy.f === 'S') || {}).canopy : ROOF && ROOF.bei && ROOF.bei.canopy;
+  return c && c.f === 'S' ? +c.d || 0 : 0;
+};
+/** The finishes the Visualization tab is wearing, by key, its prompt read as it reads it. */
+function vRender() {
+  let p = typeof RENDER_PROMPT === 'string' && RENDER_PROMPT ? RENDER_PROMPT : '';
+  const r = p ? parseRenderPrompt(p) : null;
+  const reg = renderRegionFor(STATE.site && STATE.site.nuts);
+  return { wall:(r && r.wall ? r.wall.key : reg.wall && reg.wall.key) || null,
+    roof:(r && r.roof ? r.roof.key : reg.roof && reg.roof.key) || null,
+    door:r && r.door ? r.door.key : null };
+}
+
+/* --- the site's place on the island and its model ------------------------- */
+const vSiteKey = S => S ? S.lat.toFixed(4) + ',' + S.lon.toFixed(4) : '';
+/** Where the site is: belt, face, the candidate models and the one in use. */
+function vernRead() {
+  const S = STATE.site;
+  if (!isMadeira(S)) return null;
+  if (!STATE.vern || STATE.vern.sk !== vSiteKey(S)) STATE.vern = { sk:vSiteKey(S), face:'auto', type:null, open:{} };
+  const V = STATE.vern, ps = isPortoSanto(S.lat, S.lon);
+  const autoFace = ps ? 'PS' : (S.lat > mdRidgeLat(S.lon) ? 'N' : 'S');
+  const face = ps ? 'PS' : (V.face === 'N' || V.face === 'S' ? V.face : autoFace);
+  const alt = +S.alt || 0;
+  const band = MD_BANDS.find(b => alt < b.max) || MD_BANDS[2];
+  let cand;
+  if (face === 'PS') cand = ['md-salao'];
+  else if (face === 'N') cand = ['md-santana', 'md-redonda', 'md-camacha'];
+  else if (band.key === 'litoral') cand = ['md-elementar', 'md-doispisos', 'md-camacha'];
+  else if (inCurral(S.lat, S.lon)) cand = ['md-curral', 'md-camacha', 'md-doispisos', 'md-elementar'];
+  else if (S.lon < -17.03) cand = ['md-doispisos', 'md-elementar', 'md-camacha', 'md-curral'];
+  /* below the winter cloud (≈ 500 m) the tiled house of the platforms;
+     inside it, the thick-walled thatched house of the uplands */
+  else cand = alt < 500 ? ['md-elementar', 'md-camacha', 'md-doispisos', 'md-curral'] : ['md-camacha', 'md-elementar', 'md-doispisos', 'md-curral'];
+  const type = V.type && MD_TYPES[V.type] ? V.type : cand[0];
+  const clim = face === 'PS' ? 'PS' : band.key === 'serra' ? 'serra' : band.key + '-' + face;
+  return { S, V, alt, band, face, autoFace, cand, type, T:MD_TYPES[type], clim, serra:band.key === 'serra' && face !== 'PS' };
+}
+/** The Site tab's optimum on a Madeira site: the model's own plan and facing. */
+function vernOptimum(C) {
+  const R = vernRead();
+  if (!R) return null;
+  const m = R.T.model, Tc = Math.min(...C.t);
+  return { pt:true, A:Math.max(...C.t) - Tc, Tc, az:m.rot, r:+(m.L / m.D).toFixed(2), fl:m.fl, type:R.type };
+}
+/** Mean annual temperature the altitude alone predicts, from the observatory's
+    coast and peak means: 18.5 °C at the sea, ≈ 0.6 °C less every 100 m. */
+const vTalt = alt => 18.5 - 0.006 * Math.max(0, alt);
+
+/* --- writing the model into the tabs -------------------------------------- */
+function vernApply(scope) {
+  const R = vernRead();
+  if (!R) return;
+  const m = R.T.model, all = scope === 'all';
+  if (all || scope === 'site') {
+    MASS.L = m.L; MASS.D = m.D; MASS.fl = m.fl; MASS.fh = m.fh; MASS.rot = m.rot;
+    MASS.form = m.form; MASS.wing = m.wing ? Object.assign({}, m.wing) : null;
+    MASS.patio = { on:false, w:4, d:3, cx:0, cy:0 }; MASS.balc = []; MASS.rstair = [];
+    fixWing(MASS); fixPatio(MASS);
+  }
+  if (all || scope === 'roof' || scope === 'ventilation') {
+    const r = m.roof;
+    ROOF.n = r.n; ROOF.th = r.th; delete ROOF.zones; ROOF.roofSel = -1;
+    ROOF.par = { on:false, h:0.6 };
+    ROOF.bei = { on:r.bei > 0, d:r.bei, ends:true };
+    if (r.latada) ROOF.bei.canopy = { f:'S', x:0, y:0, w:Math.min(8, Math.max(1, MASS.L - 2)), d:3, p:0, drop:0.15 };
+  }
+  if (all || scope === 'openings') {
+    ['S', 'N', 'E', 'W'].forEach(f => {
+      const o = m.open[f] || { wwr:0.02, units:vOff() };
+      OPEN[f] = { wwr:o.wwr, sillZ:o.sillZ || 0.9, headZ:o.headZ || 1.8, ovD:0, ovN:1, ovL:0, ovR:0, finD:0, finN:0, finSide:'both',
+        units:JSON.parse(JSON.stringify(o.units)) };
+    });
+  }
+  if (all || scope === 'visualization') RENDER_PROMPT = VL(m.render);
+  mountApp(STATE.site, null, STATE.tab, true, true);
+  toast(VL({ en:'Model applied: ', pt:'Modelo aplicado: ' }) + VL(R.T.name));
+}
+
+/* --- the panel, on every tab ----------------------------------------------- */
+const VERN_TABS = { environment:null, site:'site', roof:'roof', openings:'openings', ventilation:'ventilation', visualization:'visualization' };
+const VERN_TABNAME = { site:'Site', roof:'Roof', openings:'Openings and Shadowing', ventilation:'Ventilation', visualization:'Visualization' };
+const vVal = (f, v) => v == null || v === '' ? '—' : f.fmtv ? f.fmtv(v) : typeof v === 'number' ? fmt(v, Math.abs(v) < 10 && v % 1 ? (f.unit === '' ? 2 : 1) : 0) + (f.unit ? ' ' + VL(f.unit) : '') : String(v);
+const vOk = f => {
+  let v; try { v = f.get(); } catch (e) { return { v:null, ok:null }; }
+  if (f.set) return { v, ok:f.set.indexOf(v) >= 0 };
+  return { v, ok:isFinite(v) && v >= f.lo - 1e-6 && v <= f.hi + 1e-6 };
+};
+const vScore = (T, tab) => { const fs = T.feats.filter(f => f.get && (!tab || f.tab === tab)); return { ok:fs.filter(f => vOk(f).ok).length, n:fs.length }; };
+
+function vernStyle() {
+  if ($('#vernCSS')) return;
+  document.head.appendChild(el('style', { id:'vernCSS', text:
+    '.vern{border:1px solid var(--line);border-left:3px solid var(--c3);border-radius:8px;background:var(--wash);margin:0 0 16px;max-width:1100px}'
+    + '.vern>summary{cursor:pointer;padding:9px 14px;font-size:13px;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}'
+    + '.vern>summary::-webkit-details-marker{display:none}'
+    + '.vern>summary:before{content:"▸";color:var(--muted);font-size:11px}.vern[open]>summary:before{content:"▾"}'
+    + '.vern .vt{font-weight:650}.vern .vm{color:var(--muted);font-size:12px}'
+    + '.vern .vb{padding:4px 14px 14px;font-size:12.5px}'
+    + '.vern .vrow{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:4px 0 10px}'
+    + '.vern .vrow label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-right:6px}'
+    + '.vern select{font:inherit;font-size:12.5px;padding:3px 6px;border:1px solid var(--line);border-radius:5px;background:#fff;max-width:100%}.vern .vrow>span{max-width:100%;min-width:0;display:flex;align-items:center;flex-wrap:wrap}'
+    + '.vern table{border-collapse:collapse;width:100%;margin:6px 0 4px;font-size:12px}'
+    + '.vern th{text-align:left;font-weight:600;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--line);padding:4px 6px}'
+    + '.vern td{border-bottom:1px solid var(--line2);padding:5px 6px;vertical-align:top}'
+    + '.vern td.vk{width:26px;text-align:center;font-weight:700}.vern td.vk.ok{color:#3f6212}.vern td.vk.no{color:#9f2420}'
+    + '.vern ul{margin:4px 0 8px;padding-left:18px}.vern li{margin:3px 0}'
+    + '.vern .vsrc{display:inline-block;font-size:10px;padding:0 5px;border-radius:9px;background:#e6f0ee;color:#115e56;margin-left:4px;white-space:nowrap;cursor:help}'
+    + '.vern .vsrc.inf{background:#f4ecdc;color:#7a5410}'
+    + '.vern .vbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}'
+    + '.vern .vbtns button{font:inherit;font-size:12px;padding:5px 11px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer}'
+    + '.vern .vbtns button.pri{background:var(--c3);border-color:var(--c3);color:#fff}'
+    + '.vern .vwarn{background:#fbe6e6;color:#7f1d1d;border-radius:6px;padding:7px 10px;margin:6px 0}'
+    + '.vern h4{font-size:12px;margin:12px 0 2px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink2)}'
+    + '.vern .vsum{color:var(--ink2);max-width:900px}'
+    + '.vern .vrefs{font-size:11px;color:var(--muted)}.vern .vrefs li{margin:2px 0}'
+    + '@media (max-width:640px){.vern .vb{padding:4px 10px 12px}.vern td,.vern th{padding:4px 3px}}' }));
+}
+
+/** The checklist of one tab's features (or every tab's). */
+function vTable(T, tab) {
+  const fs = T.feats.filter(f => f.get && (!tab || f.tab === tab));
+  if (!fs.length) return null;
+  const rows = fs.map(f => {
+    const r = vOk(f);
+    return '<tr><td>' + VL(f.label) + (f.note ? '<div class="vm">' + VL(f.note) + '</div>' : '') + (tab ? '' : '<div class="vm">' + t(VERN_TABNAME[f.tab]) + '</div>') + '</td>'
+      + '<td>' + VL(f.model) + vSrc(f.src) + '</td><td>' + vVal(f, r.v) + '</td>'
+      + '<td class="vk ' + (r.ok ? 'ok' : 'no') + '">' + (r.ok ? '✓' : '✗') + '</td></tr>';
+  }).join('');
+  return el('div', { style:'overflow-x:auto' }, [el('table', { html:'<thead><tr><th>' + VL({ en:'Characteristic', pt:'Característica' }) + '</th><th>' + VL({ en:'The model', pt:'O modelo' })
+    + '</th><th>' + VL({ en:'Yours', pt:'O seu' }) + '</th><th></th></tr></thead><tbody>' + rows + '</tbody>' })]);
+}
+const vInfos = (T, tab) => {
+  const fs = T.feats.filter(f => f.info && (!tab || f.tab === tab));
+  return fs.length ? el('ul', { html:fs.map(f => '<li>' + VL(f.info) + vSrc(f.src) + '</li>').join('') }) : null;
+};
+function vCSV(R) {
+  const q = s => '"' + String(s).replace(/<[^>]+>/g, '').replace(/"/g, '""') + '"';
+  const lines = [[VL({ en:'Tab', pt:'Separador' }), VL({ en:'Characteristic', pt:'Característica' }), VL({ en:'The model', pt:'O modelo' }), VL({ en:'Yours', pt:'O seu' }), 'OK', VL({ en:'Source', pt:'Fonte' })].map(q).join(',')];
+  R.T.feats.forEach(f => {
+    const r = f.get ? vOk(f) : null;
+    lines.push([t(VERN_TABNAME[f.tab]), f.get ? VL(f.label) : VL(f.info), f.get ? VL(f.model) : '', r ? vVal(f, r.v) : '', r ? (r.ok ? 'yes' : 'no') : '', VERN_SRC[f.src].cite].map(q).join(','));
+  });
+  download(new Blob(['﻿' + lines.join('\n')], { type:'text/csv;charset=utf-8' }), slugify(sitePrefix() + 'madeira-' + R.type) + '.csv');
+}
+
+/** Mounts the panel at the head of a page; keeps it in step with the model. */
+function vernMount(host, tabKey) {
+  if (!isMadeira(STATE.site)) return;
+  vernStyle();
+  const box = el('details', { class:'vern' });
+  const head = host.querySelector('.pagehead');
+  host.insertBefore(box, head ? head.nextSibling : host.firstChild);
+  const draw = () => {
+    const R = vernRead();
+    if (!R) return;
+    const tab = VERN_TABS[tabKey], T = R.T;
+    const wasOpen = R.V.open[tabKey] != null ? R.V.open[tabKey] : tabKey === 'environment';
+    box.open = wasOpen;
+    const sc = vScore(T, tab), all = vScore(T, null);
+    box.innerHTML = '';
+    box.appendChild(el('summary', { html:'<span class="vt">' + VL({ en:'Madeira vernacular', pt:'Vernáculo da Madeira' }) + ' · ' + VL(T.name) + '</span>'
+      + '<span class="vm">' + fmt(R.alt, 0) + ' m · ' + VL(R.face === 'PS' ? MD_FACE.PS : MD_FACE[R.face]) + (R.face === 'PS' ? '' : ' · ' + VL(R.band.name)) + '</span>'
+      + '<span class="pill ' + (sc.n && sc.ok === sc.n ? 'ok' : sc.ok ? 'empty' : 'bad') + '">' + (tab && sc.n ? sc.ok + ' / ' + sc.n + ' ' + VL({ en:'on this tab', pt:'neste separador' }) + ' · ' : '')
+      + all.ok + ' / ' + all.n + ' ' + VL({ en:'in all', pt:'no total' }) + '</span>' }));
+    box.querySelector('summary').addEventListener('click', () => { R.V.open[tabKey] = !box.open; });
+    const b = box.appendChild(el('div', { class:'vb' }));
+
+    /* the choices: the face (auto from the ridge, or forced) and the model */
+    const row = b.appendChild(el('div', { class:'vrow' }));
+    if (R.face !== 'PS') {
+      const sf = el('select', { onchange:e => { R.V.face = e.target.value; R.V.type = null; refreshAll(); } });
+      [['auto', VL({ en:'Auto', pt:'Auto' }) + ' (' + VL(MD_FACE[R.autoFace]) + ')'], ['N', VL(MD_FACE.N)], ['S', VL(MD_FACE.S)]]
+        .forEach(([v, l]) => sf.appendChild(el('option', { value:v, text:l, selected:(R.V.face || 'auto') === v ? 'selected' : null })));
+      row.appendChild(el('span', null, [el('label', { text:VL({ en:'Face of the island', pt:'Vertente' }) }), sf]));
+    }
+    const st = el('select', { onchange:e => { R.V.type = e.target.value; refreshAll(); } });
+    const g1 = st.appendChild(el('optgroup', { label:VL({ en:'Built here', pt:'Construída aqui' }) }));
+    R.cand.forEach(k => g1.appendChild(el('option', { value:k, text:VL(MD_TYPES[k].name), selected:k === R.type ? 'selected' : null })));
+    const rest = Object.keys(MD_TYPES).filter(k => R.cand.indexOf(k) < 0);
+    if (rest.length) {
+      const g2 = st.appendChild(el('optgroup', { label:VL({ en:'Elsewhere on the island', pt:'Noutros lugares da ilha' }) }));
+      rest.forEach(k => g2.appendChild(el('option', { value:k, text:VL(MD_TYPES[k].name), selected:k === R.type ? 'selected' : null })));
+    }
+    row.appendChild(el('span', null, [el('label', { text:VL({ en:'Model', pt:'Modelo' }) }), st]));
+    if (R.cand.indexOf(R.type) < 0) b.appendChild(el('div', { class:'vwarn', text:VL({ en:'This model was not built on this belt and face of the island — it is studied here out of place.', pt:'Este modelo não se construía nesta faixa e vertente da ilha — está a ser estudado fora do seu lugar.' }) }));
+    if (R.serra) b.appendChild(el('div', { class:'vwarn', html:VL({ en:'<b>Above the cultivated belt.</b> Over 700–750 m there were no fields and no permanent rural house — only grazing, firewood and the palheiros. The nearest model is the highest one the sources document, the thatched stone house of Camacha at 720 m.', pt:'<b>Acima da faixa cultivada.</b> Acima dos 700–750 m não havia campos nem casa rural permanente — só pasto, lenha e palheiros. O modelo mais próximo é o mais alto que as fontes documentam, a casa de colmo em alvenaria da Camacha, a 720 m.' }) + vSrc('ELU') }));
+
+    if (!tab) {
+      /* Environmental: where the site is, what that climate asked of the house, the whole model sheet */
+      b.appendChild(el('div', { class:'vsum', html:'<b>' + VL(T.where) + '.</b> ' + VL(T.summary) }));
+      b.appendChild(el('h4', { text:VL({ en:'The belt and the face', pt:'A faixa e a vertente' }) }));
+      b.appendChild(el('ul', { html:(MD_CLIMATE[R.clim] || []).map(([s, k]) => '<li>' + VL(s) + vSrc(k) + '</li>').join('') }));
+      const C = STATE.clim, Tm = C.t.reduce((a, v) => a + v, 0) / 12, Te = vTalt(R.alt);
+      b.appendChild(el('p', { class:'vm', html:VL({ en:'Mean annual temperature of the normals in use: ', pt:'Temperatura média anual das normais em uso: ' }) + '<b>' + fmt(Tm, 1) + ' °C</b> · '
+        + VL({ en:'from the altitude alone: ', pt:'pela altitude apenas: ' }) + '<b>' + fmt(Te, 1) + ' °C</b>'
+        + (Math.abs(Tm - Te) > 1.5 ? ' — ' + VL({ en:'the normals come from a station at another height; read the house against the colder or warmer figure accordingly.', pt:'as normais vêm de uma estação a outra altitude; leia a casa contra o valor mais frio ou mais quente, conforme.' }) : '') + vSrc('CLI') }));
+      b.appendChild(el('h4', { text:VL({ en:'Walls', pt:'Paredes' }) }));
+      b.appendChild(el('p', { html:VL(T.model.walls) + ' — ' + VL({ en:'set the assembly in the Construction Advisor.', pt:'defina a solução construtiva no Construction Advisor.' }) }));
+      b.appendChild(el('h4', { text:VL({ en:'The whole model, tab by tab', pt:'O modelo inteiro, separador a separador' }) }));
+      const tb = vTable(T, null); if (tb) b.appendChild(tb);
+      b.appendChild(el('h4', { text:VL({ en:'To know and to draw', pt:'Para saber e desenhar' }) }));
+      const ul = vInfos(T, null); if (ul) b.appendChild(ul);
+    } else {
+      const tb = vTable(T, tab); if (tb) b.appendChild(tb);
+      const ul = vInfos(T, tab); if (ul) b.appendChild(ul);
+      if (tab === 'site' && T.model.wing) b.appendChild(el('p', { class:'vm', text:VL({ en:'The L wing stands for the kitchen against the house.', pt:'A ala do L representa a cozinha encostada à casa.' }) }));
+    }
+    const btns = b.appendChild(el('div', { class:'vbtns' }));
+    if (tab) btns.appendChild(el('button', { type:'button', class:'pri', text:VL({ en:'Apply the model to this tab', pt:'Aplicar o modelo a este separador' }), onclick:() => vernApply(tab) }));
+    btns.appendChild(el('button', { type:'button', class:tab ? '' : 'pri', text:VL({ en:'Apply the whole model', pt:'Aplicar o modelo inteiro' }), onclick:() => vernApply('all') }));
+    btns.appendChild(el('button', { type:'button', text:VL({ en:'Checklist CSV', pt:'Lista de verificação CSV' }), onclick:() => vCSV(R) }));
+    const refs = Array.from(new Set(T.feats.map(f => f.src).concat(['ELU', 'CLI']))).filter(k => k !== 'INF');
+    b.appendChild(el('ul', { class:'vrefs', html:refs.map(k => '<li>' + VERN_SRC[k].cite + (VERN_SRC[k].url ? ' <a href="' + VERN_SRC[k].url + '" target="_blank" rel="noopener noreferrer">link</a>' : '') + '</li>').join('')
+      + '<li>' + VERN_SRC.INF.cite + '</li>' }));
+  };
+  box._draw = draw;
+  draw();
+  /* the checks follow the model: any edit on the page, and every return to it */
+  let pend = 0;
+  const later = () => { if (pend) return; pend = requestAnimationFrame(() => { pend = 0; if (!box.contains(document.activeElement) || document.activeElement === document.body) draw(); }); };
+  ['input', 'change', 'pointerup', 'keyup'].forEach(ev => host.addEventListener(ev, e => { if (!box.contains(e.target)) later(); }));
+  const prev = host._refresh;
+  host._refresh = () => { if (typeof prev === 'function') prev(); draw(); };
+}
+/** A choice on one tab redraws every built tab's panel and the Site optimum. */
+function refreshAll() {
+  const keep = STATE.tab;
+  mountApp(STATE.site, null, keep, true, true);
+}
+/** Each page as before, the panel at its head on a Madeira site. */
+const withVern = (key, build) => host => { build(host); try { vernMount(host, key); } catch (e) { console.error(e); } };
+
+Object.assign(PT_TYPE, {
+  'md-santana':'Madeira, north face — the Santana thatched house',
+  'md-redonda':'Madeira, north face — the round house of São Jorge',
+  'md-camacha':'Madeira, uplands — the thatched stone house of Camacha',
+  'md-elementar':'Madeira, south coast — the single-storey house with its latada',
+  'md-doispisos':'Madeira, the lombos — the two-storey house on the slope',
+  'md-curral':'Madeira, Curral das Freiras — the two-slope house',
+  'md-salao':'Porto Santo — the clay-roofed casa de salão',
+});
+
 const TABS = [
-  { key:'environment', label:'Environmental', build:buildEnvironment },
-  { key:'site', label:'Site', build:buildSite },
-  { key:'roof', label:'Roof', build:buildRoof },
-  { key:'openings', label:'Openings and Shadowing', build:buildOpenings },
-  { key:'ventilation', label:'Ventilation', build:buildVentilation },
-  { key:'visualization', label:'Visualization', build:buildRender }
+  { key:'environment', label:'Environmental', build:withVern('environment', buildEnvironment) },
+  { key:'site', label:'Site', build:withVern('site', buildSite) },
+  { key:'roof', label:'Roof', build:withVern('roof', buildRoof) },
+  { key:'openings', label:'Openings and Shadowing', build:withVern('openings', buildOpenings) },
+  { key:'ventilation', label:'Ventilation', build:withVern('ventilation', buildVentilation) },
+  { key:'visualization', label:'Visualization', build:withVern('visualization', buildRender) }
 ];
 
 /* --- the references, built from one list so the footer and the pages agree - */
 const REFS = [
+  ['Mestre, V. (1997). <i>Levantamento da arquitectura popular do arquipélago da Madeira: bases para a sua reabilitação enquanto património cultural</i> (dissertação de mestrado). Évora: Universidade de Évora.',
+   'The survey behind the Madeira models: houses of 6 × 4 m under thatch and about 7 × 5 m under tile with 2.20 m walls, the blind rear facade turned to the winter winds, fronts to the east and south, the clouds parked at 500 m, the salão roof of Porto Santo.', null],
+  ['Mestre, V. (2002). <i>Arquitectura popular da Madeira</i>. Lisboa: Argumentum.',
+   'The typologies of the Madeiran popular house — casa-cozinha, casa elementar, the Santana and round houses, the two-storey house of the lombos, the casa de salão of Porto Santo — that the Madeira vernacular panel offers as models.', 'https://aprenderamadeira.net/article/arquitetura-popular'],
+  ['Teixeira, C. R. Q. (2009). <i>A arquitectura vernacular da Madeira: tradição, identidade e sustentabilidade</i> (dissertação de mestrado). Universidade da Beira Interior.',
+   'Five houses surveyed in Camacha: 6 × 4 m bedroom bodies, 0.50–0.60 m stone walls, 2 m ceilings, 35–45° thatch 30–50 cm thick, few openings and their colours.', 'http://hdl.handle.net/10400.6/1746'],
+  ['Câmara Municipal de Santana. <i>Santana Madeira Biosfera — Casas de colmo; Recuperação das casas de colmo</i>.',
+   'The Santana thatched house: 7 × 4.64 m, 4.4 m high, 60° roof, its three variants and the upkeep of the thatch.', 'https://santanamadeirabiosfera.pt/biosfera/projetos/recuperacao-das-casas-de-colmo'],
+  ['Silva, F. A. da, &amp; Menezes, C. A. de. «Indústria agrícola». <i>Elucidário Madeirense</i>.',
+   'The four agricultural zones of Madeira by altitude — to 200–300 m and to 700–750 m, where cultivation stops — the belts the Madeira panel reads the site into.', 'https://elucidariomadeirense.pt/en/articles/1780'],
+  ['Miranda, P. M. A., et al. «Clima observado». Observatório Regional do Clima da Madeira.',
+   'Temperature and rainfall of Madeira against altitude and face: 18–19 °C on the coast to 8 °C on the peaks, under 600 mm at Funchal to about 3400 mm on the highest ground.', 'https://observatorioclima.madeira.gov.pt/wp-content/uploads/pdfs/02_clima_observado.pdf'],
   ['Peel, M. C., Finlayson, B. L., &amp; McMahon, T. A. (2007). Updated world map of the Köppen–Geiger climate classification. <i>Hydrology and Earth System Sciences, 11</i>(5), 1633–1644.',
    'The formalisation of Köppen–Geiger this application computes: every criterion stated as an inequality, including the aridity threshold and the summer half-year convention.', 'https://doi.org/10.5194/hess-11-1633-2007'],
   ['Olgyay, V. (1963). <i>Design with climate: Bioclimatic approach to architectural regionalism</i>. Princeton University Press.',
@@ -19300,6 +19938,7 @@ function studyJSON() {
       map:ENV.map, view:ENV.view, az:isFinite(+ENV.az) ? +(+ENV.az).toFixed(1) : 225, wide:!!ENV.wide, nb:ENV.nb !== false },
     mass:MASS, roof:ROOF, open:OPEN, sunsp:SUNSP, rwin:RWIN, turb:TURB, veg:SCENE.veg, walls:SCENE.walls,
     render:{ prompt:RENDER_PROMPT },
+    vern:STATE.vern || null,
     mesh:IMPORT.active ? { name:IMPORT.name, L:+IMPORT.L.toFixed(2), D:+IMPORT.D.toFixed(2), H:+IMPORT.H.toFixed(2) } : null,
     readout:JSON.parse(toDecisionsJSON()),
     /* the Construction Advisor's own hand-off rides along, so this one file
@@ -19495,7 +20134,7 @@ function applyStudy(o) {
   MASS.D = clamp(Math.round(fin(M0.D, 8) * 2) / 2, 4, 16);
   MASS.rot = ((fin(M0.rot, 180) % 360) + 360) % 360;
   MASS.fl = clamp(Math.round(fin(M0.fl, 1)), 1, 3);
-  MASS.fh = clamp(fin(M0.fh, 3.0), 2.4, 4.5);
+  MASS.fh = clamp(fin(M0.fh, 3.0), 2.0, 4.5);
   MASS.col = typeof M0.col === 'string' ? M0.col : null;
   MASS.form = ['rect', 'L', 'T', 'U', 'H'].indexOf(M0.form) >= 0 ? M0.form : 'rect';
   MASS.wing = MASS.form === 'rect' ? null : (M0.wing && typeof M0.wing === 'object' ? M0.wing : null);
@@ -19607,6 +20246,7 @@ function applyStudy(o) {
   SCENE.veg.length = 0;
   (Array.isArray(o.veg) ? o.veg : []).forEach(v => { if (v && typeof v.type === 'string' && isFinite(+v.x) && isFinite(+v.y)) SCENE.veg.push(v); });
   if (o.render && typeof o.render.prompt === 'string') RENDER_PROMPT = o.render.prompt.slice(0, 500);
+  if (o.vern && typeof o.vern === 'object' && typeof o.vern.sk === 'string') STATE.vern = Object.assign({ face:'auto', type:null, open:{} }, o.vern);
   SCENE.walls.length = 0;
   (Array.isArray(o.walls) ? o.walls : []).forEach(w => { if (w && isFinite(+w.x) && isFinite(+w.y) && ['x', 'y'].indexOf(w.along) >= 0) SCENE.walls.push(w); });
   const E0 = o.env || {};
@@ -21187,6 +21827,13 @@ Object.assign(STATIC_PT, {
 
 /* --- everything the pages ask for through t() --------------------------- */
 Object.assign(PT, {
+  "Madeira, north face — the Santana thatched house": "Madeira, vertente norte — a casa de colmo de Santana",
+  "Madeira, north face — the round house of São Jorge": "Madeira, vertente norte — a casa redonda de São Jorge",
+  "Madeira, uplands — the thatched stone house of Camacha": "Madeira, terras altas — a casa de colmo em alvenaria da Camacha",
+  "Madeira, south coast — the single-storey house with its latada": "Madeira, costa sul — a casa elementar térrea com latada",
+  "Madeira, the lombos — the two-storey house on the slope": "Madeira, os lombos — a casa elementar de dois pisos na encosta",
+  "Madeira, Curral das Freiras — the two-slope house": "Madeira, Curral das Freiras — a casa elementar de duas águas",
+  "Porto Santo — the clay-roofed casa de salão": "Porto Santo — a casa de salão",
   /* the turning plate on Site */
   "Turn the plate anticlockwise": "Rodar o prato no sentido contrário ao dos ponteiros do relógio",
   "Turn the plate clockwise": "Rodar o prato no sentido dos ponteiros do relógio",
