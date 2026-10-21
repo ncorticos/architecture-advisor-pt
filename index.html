@@ -940,7 +940,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.106.0',
+  version:     '1.107.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4394,7 +4394,8 @@ function balcOne(G, pl, fl, b) {
   const lo = b.mode === 'out' ? 2 : 1, lv = b.lv === 'all' ? null : clamp(Math.round(+b.lv || fl), 1, fl);
   const levels = [];
   for (let k = lo; k <= fl; k++) if (lv === null || k === lv) levels.push(k);
-  if (!levels.length) { res.why = 'a projecting balcony needs an upper floor'; return Object.assign(res, { sg, u0, u1, w }); }
+  if (!levels.length) { res.why = fl < 2 ? 'on one storey a projecting balcony is the eave canopy over its wall' : 'a projecting balcony needs an upper floor';
+    return Object.assign(res, { sg, u0, u1, w, eave:fl < 2 }); }
   let d = Math.round(clamp(b.d, 0.6, 3) * 10) / 10, rectsUV = [], wrap = 0, par = [];
   if (b.mode === 'in') {
     /* at least 1.5 m of building kept behind the loggia, all along it */
@@ -5051,10 +5052,57 @@ function canopyFollowsBalcony(G, i) {
   const held = b.w > 8;
   if (held) b.w = 8;
   const B = balcGeo(G).all[i];
-  if (!B || !B.ok || !B.sg) return held;
+  if (!B || !B.sg || !(B.ok || B.eave)) return held;
   const uc = (B.u0 + B.u1) / 2, len = B.sg.len, tx = (B.sg.b[0] - B.sg.a[0]) / len, ty = (B.sg.b[1] - B.sg.a[1]) / len;
   c.f = segFace(B.sg); c.x = +(B.sg.a[0] + tx * uc).toFixed(2); c.y = +(B.sg.a[1] + ty * uc).toFixed(2); c.w = +Math.min(8, B.u1 - B.u0).toFixed(1);
+  if (balcIsEave(G, b)) c.d = +clamp(+b.d || 1.5, 0.6, 4).toFixed(2);   // on one storey the balcony is the canopy: its depth too
   return held;
+}
+/** On one storey there is no upper floor to stand a projecting balcony on:
+    there it is the eave canopy (alpendre) over its stretch of wall. */
+function balcIsEave(G, b) { return !!b && b.mode === 'out' && Math.max(1, Math.round(G.fl || 1)) < 2; }
+/** Every one-storey projecting balcony tied to a canopy of the roof part
+    over its wall — that part's own canopy if it has one no balcony holds,
+    else a new one (made by the balcony, so it goes with it) — and kept on
+    the balcony's wall, span and depth. A recessed one lets its canopy go. */
+function balcEavesSync(G) {
+  if (typeof ROOF === 'undefined' || !G || !Array.isArray(G.balc) || !G.balc.length) return;
+  const M = roofModel(G, ROOF);
+  if (!ROOF.zones || !ROOF.zones.length) return;
+  const one = Math.max(1, Math.round(G.fl || 1)) < 2;
+  G.balc.forEach((b, i) => {
+    if (!b) return;
+    if (one && b.mode !== 'out' && b.fromCanopy) { balcDropCanopy(G, b); return; }
+    if (!balcIsEave(G, b)) return;
+    const z0 = b.fromCanopy ? ROOF.zones[b.canopyZi] : null;
+    if (!z0 || !z0.canopy) {
+      const B = balcGeo(G).all[i];
+      if (!B || !B.sg) return;
+      const um = (B.u0 + B.u1) / 2, tx = (B.sg.b[0] - B.sg.a[0]) / B.sg.len, ty = (B.sg.b[1] - B.sg.a[1]) / B.sg.len;
+      const mx = B.sg.a[0] + tx * um, my = B.sg.a[1] + ty * um, cAx = M.axis === 'x' ? mx : my;
+      const held = zi => G.balc.some(o => o !== b && o.fromCanopy && o.canopyZi === zi);
+      let zi = (M.zones || []).findIndex(zs => cAx >= zs.a0 - 1e-6 && cAx <= zs.a1 + 1e-6);
+      if (zi < 0 || zi >= ROOF.zones.length) zi = 0;
+      if (ROOF.zones[zi].canopy && held(zi)) {
+        zi = ROOF.zones.findIndex((z, k) => !z.canopy && !held(k));
+        if (zi < 0) return;
+      }
+      if (!ROOF.zones[zi].canopy) {
+        ROOF.zones[zi].canopy = { f:segFace(B.sg), x:+mx.toFixed(2), y:+my.toFixed(2), w:+Math.min(8, B.u1 - B.u0).toFixed(1),
+          d:+clamp(+b.d || 1.5, 0.6, 4).toFixed(2), p:15, drop:0.15 };
+        b.eave = true;
+      }
+      b.fromCanopy = true; b.canopyZi = zi;
+    }
+    canopyFollowsBalcony(G, i);
+  });
+}
+/** A balcony lets go of its canopy; one it made itself goes with it. */
+function balcDropCanopy(G, b) {
+  if (!b || !b.fromCanopy) return;
+  const z = typeof ROOF !== 'undefined' && ROOF.zones && ROOF.zones[b.canopyZi];
+  if (b.eave && z) z.canopy = null;
+  b.fromCanopy = false; b.eave = false; delete b.canopyZi;
 }
 /** The canopy posts over a balcony set under it, in the balcony's own wall
     terms: u along the wall, v out from it. None for any other balcony. */
@@ -7902,7 +7950,7 @@ function buildSite(host) {
   host._refresh = () => { stick(); refreshLab(); };   // the windows may have changed on Openings and Shadowing
 
   let labPanel = null;
-  const labDraw = () => { if (labPanel) labPanel.draw(); refreshLab(); };
+  const labDraw = () => { balcEavesSync(G); if (labPanel) labPanel.draw(); refreshLab(); };
   const syncCtl = (c, v, f) => { c.range.value = v; c.out.textContent = f(v); };
   const cL = rangeCtl('Length along main facade', 6, 24, 0.5, G.L, v => { G.L = v; labDraw(); }, v => fmt(v, 1) + ' m');
   const cD = rangeCtl('Depth', 4, 16, 0.5, G.D, v => { G.D = v; labDraw(); }, v => fmt(v, 1) + ' m');
@@ -8240,6 +8288,23 @@ function buildSite(host) {
           if (nW[0] * camDir.x + nW[1] * camDir.y + 1 <= 1e-6) return;   // a slope turned away from the camera
           faces.push({ pc, pts:pc.poly.map(q => [q[0], q[1], RM.zOf(f, q[0], q[1])]) });
         });
+        /* the eave canopies, slab and timber frame, as on Roof — on one
+           storey a projecting balcony is drawn this way */
+        roofCanopies(ROOF).forEach(({ zi, c }) => {
+          const cpH = canopySpanFor(RM.pl.segs, c, G.fl * G.fh, RM);
+          if (!cpH) return;
+          const n = cpH.sg.n, sp = Math.sin(cpH.p * RAD), cp = Math.cos(cpH.p * RAD), colK = 0.87 - 0.11 * n[1] - 0.05 * n[0];
+          const slab = canopySlab(cpH), side = opaque(roofFillFor(zi, 'A', 0.38, colK * 0.82));
+          const tx = (cpH.sg.b[0] - cpH.sg.a[0]) / cpH.sg.len, ty = (cpH.sg.b[1] - cpH.sg.a[1]) / cpH.sg.len;
+          const fr = canopyFrame(cpH);
+          fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
+            if (nn[2] === 0 && seesL(nn)) faces.push({ cano:1, pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26' });
+          }));
+          if (seesL(n)) faces.push({ cano:1, pts:slab.outer, fill:side });
+          if (seesL([tx, ty, 0])) faces.push({ cano:1, pts:slab.sideB, fill:side });
+          if (seesL([-tx, -ty, 0])) faces.push({ cano:1, pts:slab.sideA, fill:side });
+          faces.push({ cano:1, pts:canopyPts(cpH).quad, fill:opaque(roofFillFor(zi, 'A', 0.2 + 0.3 * (1 - colK), colK)), top:[n[0] * sp, n[1] * sp, cp] });
+        });
         pushImportFaces(faces);
         pushChimPar(faces, RM);
         const dO = f => f.d !== undefined ? f.d : dep(f.pts);
@@ -8250,7 +8315,7 @@ function buildSite(host) {
           if (fc.balc) { desk.path(scr, true); balcFace(ctx, fc.balc, P3s); return; }
           if (fc.stairGrp) { fc.stairGrp.forEach(f => { outline(f.pts.map(q => at(q[0], q[1], beta, q[2])), true); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); }); return; }
           if (fc.import) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); return; }
-          if (fc.chim || fc.par) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
+          if (fc.chim || fc.par || fc.cano) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
           outline(scr, true);
           if (fc.pc) {
             const f = fc.pc.f, kk = ROOF.n === 0 ? 1 : 0.87 + 0.11 * f.b + 0.05 * f.a;
@@ -8630,13 +8695,17 @@ function buildSite(host) {
   /** A local direction in the plan as the compass point it really faces. */
   const dirOf = v => COMPASS8[Math.round(((G.rot + Math.atan2(-v[0], -v[1]) / RAD) % 360 + 360) % 360 / 45) % 8];
   let balcWallBtns = [], balcNote = null;
-  /** A new balcony: on the longest wall of the main facade, in its middle. */
+  /** A new balcony: projecting, in the middle of the wall the view shows
+      most — its length times how squarely it faces the camera, the main
+      facade first on a tie. On one storey it is the eave canopy over it. */
   const addBalc = () => {
-    const pl = planOf(), ss = pl.segs.filter(sg => segFace(sg) === 'S' && sg.len >= 1.2);
-    const sg = (ss.length ? ss : pl.segs).reduce((p, q) => q.len > p.len ? q : p);
-    const up = G.fl >= 2;
-    G.balc.push({ f:segFace(sg), x:(sg.a[0] + sg.b[0]) / 2, y:(sg.a[1] + sg.b[1]) / 2, mode:up ? 'out' : 'in',
-      w:Math.min(3, Math.floor(sg.len)), d:up ? 1.2 : 1.5, lv:'all', corner:0 });
+    const pl = planOf(), cam = camToward(), a = (G.rot - 180) * RAD, ca = Math.cos(a), sa = Math.sin(a);
+    const shows = sg => { const nx = sg.n[0] * ca + sg.n[1] * sa, ny = -sg.n[0] * sa + sg.n[1] * ca;
+      return sg.len * Math.max(0, (nx * cam.x + ny * cam.y) / Math.hypot(cam.x, cam.y)) + (segFace(sg) === 'S' ? 1e-3 : 0); };
+    const ss = pl.segs.filter(sg => sg.len >= 1.2);
+    const sg = (ss.length ? ss : pl.segs).reduce((p, q) => shows(q) > shows(p) ? q : p);
+    G.balc.push({ f:segFace(sg), x:(sg.a[0] + sg.b[0]) / 2, y:(sg.a[1] + sg.b[1]) / 2, mode:'out',
+      w:Math.min(3, Math.floor(sg.len)), d:G.fl >= 2 ? 1.2 : 1.5, lv:'all', corner:0 });
     selB = G.balc.length - 1;
   };
   /** What the selected balcony came out as, in words, under its controls. */
@@ -8645,6 +8714,13 @@ function buildSite(host) {
     if (!balcNote) return;
     const B = balcGeo(G).all[selB];
     if (!B) { balcNote.textContent = ''; return; }
+    if (!B.ok && B.eave && G.balc[selB].fromCanopy) {
+      balcNote.className = 'hint';
+      balcNote.textContent = t('Eave canopy') + ' · ' + fmt(B.w, 1) + ' × ' + fmt(clamp(+G.balc[selB].d || 1.5, 0.6, 4), 1) + ' m · ' + t('faces') + ' ' + dirOf(B.sg.n)
+        + ' — ' + t('one storey: the projecting balcony is the alpendre over this wall; its pitch, drop and posts are set on Roof');
+      return;
+    }
+    if (!B.ok && B.eave) { balcNote.textContent = t('Each roof part carries one eave canopy and this roof’s is taken — divide the roof on Roof for another, or make this balcony recessed'); balcNote.className = 'hint bad'; return; }
     if (!B.ok) { balcNote.textContent = t(B.why); balcNote.className = 'hint bad'; return; }
     const fls = B.levels.length === G.fl && G.fl > 1 ? t('every floor') : B.levels.length > 1 ? t('floors') + ' ' + B.levels.join(', ') : t('floor') + ' ' + B.levels[0];
     balcNote.className = 'hint';
@@ -8690,7 +8766,7 @@ function buildSite(host) {
     const cW = rangeCtl('Width', 1.2, 12, 0.1, b.w, v => { b.w = v; labDraw(); balcSays(); }, v => fmt(v, 1) + ' m');
     const cDp = rangeCtl('Depth', 0.6, 3, 0.1, b.d, v => { b.d = v; labDraw(); balcSays(); }, v => fmt(v, 1) + ' m');
     const rm = el('button', { class:'btn small', title:'Take this balcony away',
-      onclick:() => { G.balc.splice(selB, 1); selB = Math.min(selB, G.balc.length - 1); renderBalc(); labDraw(); } });
+      onclick:() => { balcDropCanopy(G, G.balc[selB]); G.balc.splice(selB, 1); selB = Math.min(selB, G.balc.length - 1); renderBalc(); labDraw(); } });
     rm.textContent = '× ' + t('Remove');
     balcNote = el('span', { class:'hint' });
     [cM, cLv, cF, cC, cW, cDp, el('div', { class:'balc-list' }, [rm]), balcNote].forEach(k => balcBox.appendChild(k));
@@ -9482,7 +9558,13 @@ function buildRoof(host) {
         const sg = (pick.length ? pick : all).reduce((p, q) => q.len > p.len ? q : p, all[0]);
         if (!sg) return;
         RF.zones[roofEditIdx()].canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:15, drop:0.15 };
-      } else RF.zones[roofEditIdx()].canopy = null;
+      } else {
+        /* on one storey a projecting balcony is this canopy: it goes too */
+        const zi = roofEditIdx(), was = G.balc.length;
+        for (let k = G.balc.length - 1; k >= 0; k--) { const b = G.balc[k]; if (b.fromCanopy && b.canopyZi === zi && balcIsEave(G, b)) G.balc.splice(k, 1); }
+        if (G.balc.length < was) toast(t('The projecting balcony that made this canopy is taken away with it'));
+        RF.zones[zi].canopy = null;
+      }
       buildCanopyUI(); roofDraw();
     });
     canBox.appendChild(tgl);
@@ -10404,7 +10486,7 @@ if (F.chim || F.par) {
     return rows;
   }
   solarRedraw = () => { roofDraw(); };
-  host._refresh = () => { roofCam.sync(); refreshRoof(); benchStage(stage); };   // the plan may have changed on Site since this tab was built
+  host._refresh = () => { roofCam.sync(); refreshRoof(); buildCanopyUI(); benchStage(stage); };   // a canopy may have been made by a balcony on Site   // the plan may have changed on Site since this tab was built
   host.appendChild(hint('roof-solar',
     'Choose <b>PV panels</b> and/or <b>thermal collectors</b> left of the model — one of each, or both together: electricity and heat share the slope — then size each field — by its columns and rows, or by dragging the amber point at its corner across the roof. The modules lie flush on the largest roof plane facing the main facade, whatever the plan’s wings, recesses or patio do to it — rows from 0.4 m above its lowest edge, kept 0.3 m inside it, clear of ridges, hips and valleys — so they face the direction set on Site; on a flat roof they stand in racked rows at the best pitch, spaced so the 21 December noon sun clears the row in front. The sun on the collector plane is read from the site’s own horizontal irradiation — daily shortwave radiation 1991–2020 from the ERA5 reanalysis (Hersbach et al., 2020), via Open-Meteo — carried onto the tilted plane month by month with the method of Duffie &amp; Beckman: the Erbs, Klein &amp; Duffie monthly split into beam and diffuse, the beam ratio over each month’s mean day (Klein), the isotropic sky and 20 % ground reflection. The pitch’s share of the best yield is the one pitch score on the model. PV: modules of about 20 % efficiency (0.20 kWp per m²) and a performance ratio of 0.80 (IEC 61724-1) give the electricity. Thermal: a flat-plate collector read by the EN ISO 9806 efficiency curve with typical coefficients (η0 0.78, a1 3.5, a2 0.015) at a 50 °C mean fluid against each month’s air temperature gives the heat it can collect — more than a house draws in summer, so a real system’s solar fraction is lower. A real module’s or collector’s datasheet replaces these figures. Without the site’s data the numbers rest on an assumed clearness index of 0.55 and say so. Fields stay inside a house roof — about 40 m² of PV, 20 m² of thermal — so the kilowatts stay ones a household could use; bigger asks are cut back and say so. Each field earns a rating against the best pitch — <b>good</b> from 90 %, <b>fair</b> from 70 %, <b>poor</b> below — in green, yellow and red, with the yearly kilowatt-hours and about how many homes’ share that is.'));
   refreshRoof();
@@ -21143,6 +21225,10 @@ Object.assign(PT, {
   "open on two faces": "aberta para duas fachadas",
   "no wall faces that way": "nenhuma parede está virada para esse lado",
   "a projecting balcony needs an upper floor": "uma varanda saliente precisa de um piso superior",
+  "Each roof part carries one eave canopy and this roof’s is taken — divide the roof on Roof for another, or make this balcony recessed": "Cada parte da cobertura leva um alpendre e o desta já está ocupado — divida a cobertura em Cobertura para outro, ou torne esta varanda reentrante",
+  "on one storey a projecting balcony is the eave canopy over its wall": "num só piso, uma varanda saliente é o alpendre sobre a sua parede",
+  "one storey: the projecting balcony is the alpendre over this wall; its pitch, drop and posts are set on Roof": "um só piso: a varanda saliente é o alpendre sobre esta parede; a inclinação, a descida e os prumos definem-se em Cobertura",
+  "The projecting balcony that made this canopy is taken away with it": "A varanda saliente que fazia este alpendre é retirada com ele",
   "no room behind the wall for a loggia": "não há espaço atrás da parede para uma loggia",
   "no room in front of the wall": "não há espaço à frente da parede",
   "balcony": "varanda",
