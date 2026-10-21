@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.110.0',
+  version:     '1.111.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19105,6 +19105,7 @@ Object.assign(VERN_SRC, {
     url:'https://cultura.cascais.pt/sites/default/files/anexos/gerais/new/qrcode_sala_8_pt.pdf' },
   FIA:{ tag:'Fialho 2009', cite:'Fialho, N. A. R. (2009). <i>Técnicas tradicionais de construção em Vidigueira: A taipa e as coberturas tradicionais</i> (dissertação de mestrado, orient. V. Mestre). Évora: Universidade de Évora.', url:null },
   MOU:{ tag:'Moutinho 1979', cite:'Moutinho, M. C. (1979). <i>A arquitectura popular portuguesa</i>. Lisboa: Editorial Estampa.', url:null },
+  MAR:{ tag:'Martins 2015', cite:'Martins, J. M. S. (2015). <i>A arquitectura do olival: Monte do Benjoim em Alqueva</i> (dissertação de mestrado integrado). Évora: Universidade de Évora.', url:null },
   RO2:{ tag:'Rosado 2021', cite:'Rosado, A. C. (2021). <i>A casa tradicional urbana no Alentejo: Tipos, tempos e materiais</i> (tesis doctoral, dir. M. T. Pérez Cano &amp; M. Reimão Costa). Sevilla: Universidad de Sevilla — Estremoz, Borba, Moura, Serpa, Castelo de Vide, Mértola.', url:null },
   OLI:{ tag:'Oliveira 2016', cite:'Oliveira, M. M. C. A. (2016). <i>Evolução do habitar de uma casa rural no Ribatejo: Do início do séc. XX à actualidade</i> (dissertação de mestrado). Lisboa: Universidade Lusíada — citing Pereira, Freitas &amp; Dias (1988), <i>Arquitectura popular em Portugal</i>, 3.ª ed., zona 4.',
     url:'http://hdl.handle.net/11067/2464' },
@@ -19697,7 +19698,7 @@ VERN_REGIONS.push({ key:'mainland', name:{ en:'Portuguese vernacular', pt:'Vern�
     else if (g === 'ribatejo') cand = S.nuts === 'Médio Tejo' ? ['pt-rib-vila', 'pt-ribatejo', 'pt-beira'] : alt < 15 ? ['pt-ribatejo', 'pt-avieiro', 'pt-rib-vila'] : S.lat > 39.25 ? ['pt-rib-vila', 'pt-ribatejo', 'pt-avieiro'] : ['pt-ribatejo', 'pt-rib-vila', 'pt-avieiro'];
     else if (g === 'setubal') cand = ['pt-setubal', 'pt-saloia', 'pt-alentejo'];
     /* the town house: two floors in the Marble Zone and the north, single storey beyond the Guadiana and in the south */
-    else if (g === 'alentejo') cand = S.nuts === 'Baixo Alentejo' || S.nuts === 'Alentejo Litoral' ? ['pt-alentejo', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-povoado', 'pt-ale-d', 'pt-alg-taipa'] : ['pt-alentejo', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'];
+    else if (g === 'alentejo') cand = S.nuts === 'Baixo Alentejo' || S.nuts === 'Alentejo Litoral' ? ['pt-alentejo', 'pt-monte-patio', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-povoado', 'pt-ale-d', 'pt-alg-taipa'] : ['pt-alentejo', 'pt-monte-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'];
     else {
       band = alt > 300 ? { en:'Serra', pt:'Serra' } : alt > 100 ? { en:'Barrocal', pt:'Barrocal' } : { en:'Coast', pt:'Litoral' };
       cand = alt > 300 ? ['pt-alg-serra', 'pt-alg-taipa'] : alt > 100 ? ['pt-alg-acoteia', 'pt-alg-taipa', 'pt-alg-serra']
@@ -19943,12 +19944,42 @@ Object.assign(MN_TYPES, {
 });
 Object.assign(VERN_TYPES, MN_TYPES);
 
+/* --- Martins (2015): how the olive-farm monte is laid out ------------------- */
+const MAR_LINES = [
+  vI('site', { en:'A long lineage: the Roman villa, the alcarias (small rural settlements near the towns), the herdade; the olive press (lagar) often part of the monte.', pt:'Uma linhagem longa: a villa romana, as alcarias (pequenos povoados rurais junto aos aglomerados), a herdade; o lagar muitas vezes parte integrante do monte.' }, 'MAR'),
+  vI('site', { en:'The commonest olive-farm monte is two parallel blocks facing each other across a street or terreiro, where the farm’s paths cross; small Alentejo villages share the plan, often grown from a monte and housing the estate’s workers.', pt:'A morfologia mais frequente do monte de olival desenha-se em dois blocos paralelos que definem a rua ou terreiro, onde se cruzam os caminhos da lavoura; as pequenas aldeias alentejanas têm desenho semelhante, muitas vezes derivadas de montes e habitadas pelos trabalhadores das herdades.' }, 'MAR'),
+  vI('site', { en:'Montes stand at the entrances of the estate, to mark and control them; a eucalyptus often rises beside the low, horizontal group as a landmark.', pt:'Os montes implantam-se junto das entradas da herdade, como forma de as controlar e marcar; um eucalipto ergue-se muitas vezes junto ao conjunto baixo e horizontal, como marco territorial.' }, 'MAR')
+];
+vAdd('pt-alentejo', MAR_LINES);
+Object.assign(MN_TYPES, {
+  'pt-monte-patio':{ region:'mainland',
+    name:{ en:'Alentejo courtyard monte (monte fechado)', pt:'Monte alentejano de pátio (monte fechado)' },
+    where:{ en:'The plains of the Alentejo — less frequent; Herdade dos Machados, Monte do Benjoim (Alqueva)', pt:'As planícies do Alentejo — menos frequente; Herdade dos Machados, Monte do Benjoim (Alqueva)' },
+    summary:{ en:'On flat ground the house closes on itself round a central yard: a low, long object with few openings to the outside and the larger ones turned to the inside; the yard organises and distributes the whole. Beside it a recinto for the animals, closed by low walls, without hindering the farm work. Walls of rendered and whitewashed masonry; its horizontality comes from the way it is built.',
+      pt:'Em zona plana a casa encerra-se sobre si, em volta de um pátio central: um objecto baixo e alongado, de poucas aberturas para o exterior, ficando as maiores voltadas para o interior; o pátio organiza e distribui o conjunto. Junto, um recinto para os animais, fechado por muros baixos, sem condicionar os trabalhos da lavoura. Paredes de alvenaria rebocada e caiada; a horizontalidade vem dos próprios processos construtivos.' },
+    model:{ L:20, D:14, fl:1, fh:2.6, rot:180, form:'rect', patio:{ on:true, w:12, d:6, cx:0, cy:0 }, roof:{ n:2, th:14, bei:0.35 },
+      open:{ S:vOpen([D(0.5, 0.5)], 0.03, 1.0, 2.0), N:{ wwr:0.02, units:vOff() }, E:vOpen([W(0.5, 1)], 0.02, 1.2, 1.7), W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'whitewash walls, barrel tile roof, blue door', pt:'parede caiada, telha de canudo, porta azul' },
+      walls:{ en:'masonry (taipa, stone or brick), rendered and whitewashed', pt:'alvenaria (taipa, pedra ou tijolo), rebocada e caiada' } },
+    feats:[
+      vFloors('1', 1, 1, 'MAR'),
+      vS('site', { en:'Central yard', pt:'Pátio central' }, { en:'yes — the house turned inward', pt:'sim — a casa voltada para dentro' }, () => !!(MASS.patio && MASS.patio.on), [true], 'MAR', v => v ? '✓' : '—'),
+      vN('site', { en:'Low and long', pt:'Baixo e alongado' }, { en:'a horizontal object', pt:'um objecto horizontal' }, () => MASS.L / MASS.D, 1.2, 3, 'L/D', 'MAR'),
+      vN('openings', { en:'Openings to the outside', pt:'Aberturas para o exterior' }, { en:'few — the large ones open to the yard', pt:'poucas — as maiores abrem para o pátio' }, () => vWWR() * 100, 0, 5, '%', 'MAR'),
+      vRoofN(null, { en:'two slopes', pt:'duas águas' }, [2], 'INF'),
+      vN('roof', { en:'Roof pitch', pt:'Inclinação da cobertura' }, { en:'25–27 % (≈ 14–15°)', pt:'25–27 % (≈ 14–15°)' }, () => vRoof().th, 12, 16, '°', 'FIA'),
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster', 'earth'], 'MAR')
+    ].concat(MAR_LINES) }
+});
+Object.assign(VERN_TYPES, MN_TYPES);
+
 /* --- the archetypes bibliography, under Methods and sources ----------------
    Every source the vernacular models read, in APA (7th ed.), by region from
    A to Z in the reader's language, alphabetical within each region. */
 const ARCH_BIB = [
-  { r:{ en:'Alentejo', pt:'Alentejo' }, types:['pt-alentejo', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'], refs:[
+  { r:{ en:'Alentejo', pt:'Alentejo' }, types:['pt-alentejo', 'pt-monte-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'], refs:[
     'Fialho, N. A. R. (2009). <i>Técnicas tradicionais de construção em Vidigueira: A taipa e as coberturas tradicionais</i> [Master’s dissertation, Universidade de Évora].',
+    'Martins, J. M. S. (2015). <i>A arquitectura do olival: Monte do Benjoim em Alqueva</i> [Master’s dissertation, Universidade de Évora].',
     'Rosado, A. C. (2021). <i>A casa tradicional urbana no Alentejo: Tipos, tempos e materiais</i> [Doctoral thesis, Universidad de Sevilla].',
     'Rosado, A. C. (2020). A casa urbana tradicional no Alentejo: Tipos, evolução e materialidade. <i>Kairós, 4</i>. https://doi.org/10.14195/2184-7193_4_7'] },
   { r:{ en:'Algarve', pt:'Algarve' }, types:['pt-alg-taipa', 'pt-alg-acoteia', 'pt-alg-pescadores', 'pt-alg-serra'], refs:[
