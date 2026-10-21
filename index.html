@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.109.0',
+  version:     '1.110.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19105,6 +19105,7 @@ Object.assign(VERN_SRC, {
     url:'https://cultura.cascais.pt/sites/default/files/anexos/gerais/new/qrcode_sala_8_pt.pdf' },
   FIA:{ tag:'Fialho 2009', cite:'Fialho, N. A. R. (2009). <i>Técnicas tradicionais de construção em Vidigueira: A taipa e as coberturas tradicionais</i> (dissertação de mestrado, orient. V. Mestre). Évora: Universidade de Évora.', url:null },
   MOU:{ tag:'Moutinho 1979', cite:'Moutinho, M. C. (1979). <i>A arquitectura popular portuguesa</i>. Lisboa: Editorial Estampa.', url:null },
+  RO2:{ tag:'Rosado 2021', cite:'Rosado, A. C. (2021). <i>A casa tradicional urbana no Alentejo: Tipos, tempos e materiais</i> (tesis doctoral, dir. M. T. Pérez Cano &amp; M. Reimão Costa). Sevilla: Universidad de Sevilla — Estremoz, Borba, Moura, Serpa, Castelo de Vide, Mértola.', url:null },
   OLI:{ tag:'Oliveira 2016', cite:'Oliveira, M. M. C. A. (2016). <i>Evolução do habitar de uma casa rural no Ribatejo: Do início do séc. XX à actualidade</i> (dissertação de mestrado). Lisboa: Universidade Lusíada — citing Pereira, Freitas &amp; Dias (1988), <i>Arquitectura popular em Portugal</i>, 3.ª ed., zona 4.',
     url:'http://hdl.handle.net/11067/2464' },
   NER:{ tag:'Nero 2012', cite:'Nero, A. S. (2012). <i>Arquitectura popular portuguesa na região de Lisboa e Vale do Tejo</i> (dissertação de mestrado integrado, orient. A. Borges Abel). Évora: Universidade de Évora.', url:null },
@@ -19695,7 +19696,8 @@ VERN_REGIONS.push({ key:'mainland', name:{ en:'Portuguese vernacular', pt:'Vern�
     else if (g === 'estremadura') cand = ['pt-saloia', 'pt-torreada', 'pt-alentejo'];
     else if (g === 'ribatejo') cand = S.nuts === 'Médio Tejo' ? ['pt-rib-vila', 'pt-ribatejo', 'pt-beira'] : alt < 15 ? ['pt-ribatejo', 'pt-avieiro', 'pt-rib-vila'] : S.lat > 39.25 ? ['pt-rib-vila', 'pt-ribatejo', 'pt-avieiro'] : ['pt-ribatejo', 'pt-rib-vila', 'pt-avieiro'];
     else if (g === 'setubal') cand = ['pt-setubal', 'pt-saloia', 'pt-alentejo'];
-    else if (g === 'alentejo') cand = ['pt-alentejo', 'pt-povoado', 'pt-alg-taipa'];
+    /* the town house: two floors in the Marble Zone and the north, single storey beyond the Guadiana and in the south */
+    else if (g === 'alentejo') cand = S.nuts === 'Baixo Alentejo' || S.nuts === 'Alentejo Litoral' ? ['pt-alentejo', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-povoado', 'pt-ale-d', 'pt-alg-taipa'] : ['pt-alentejo', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'];
     else {
       band = alt > 300 ? { en:'Serra', pt:'Serra' } : alt > 100 ? { en:'Barrocal', pt:'Barrocal' } : { en:'Coast', pt:'Litoral' };
       cand = alt > 300 ? ['pt-alg-serra', 'pt-alg-taipa'] : alt > 100 ? ['pt-alg-acoteia', 'pt-alg-taipa', 'pt-alg-serra']
@@ -19863,12 +19865,91 @@ MN_TYPES['pt-povoado'].feats.unshift(
   vI('site', { en:'Growing, the house joins plots and separates trade, storage and production below — shops, stores, adegas — from the family above; the kitchen moves to the back, freeing the front for the social rooms. Wealth shows in scale and in the first floor and facade — sacada windows, grilles, cornices, worked eaves — not in another way of building.', pt:'Ao crescer, a casa aglutina lotes e separa comércio, arrecadação e produção no rés-do-chão — lojas, armazéns, adegas — da vivência familiar nos pisos elevados; a cozinha desloca-se para tardoz, libertando a fachada para os espaços sociais. A classe social não muda o sistema construtivo: muda a escala e a nobilitação do primeiro andar e da fachada — janelas de sacada, gradeamentos, cimalhas, beirados trabalhados.' }, 'ROS'),
   vI('visualization', { en:'Later, non-structural partitions (tabique, adobe, tile) and corridors; in the 20th century concrete beams and slabs replacing the timber floors and roofs — a load the old walls were not built for. Rehabilitate keeping the cellular base: doors and arches opened and closed between cells are reversible.', pt:'Mais tarde, divisórias não estruturais (tabique, adobe, ladrilho) e corredores; no século XX vigas e lajes de betão armado substituindo os madeiramentos de pisos e coberturas — uma carga para a qual as paredes antigas não foram feitas. Reabilitar mantendo a base celular: portas e arcos abertos e fechados entre células são reversíveis.' }, 'ROS'));
 
+/* --- Rosado (2021): the categories and types of the Alentejo town house -----
+   A narrow front growing in depth, B short along the street, C wide front
+   growing in depth, D the wealthy house; storeys fall from north to south. */
+const ROS_LINES = [
+  vI('site', { en:'The plot sets the type: category A, a narrow front, grows in depth; B, a wide front, stays along the street; C, a wide front, grows in depth; D, the wealthy house, joins several functions under one roof.', pt:'A parcela decide o tipo: categoria A, frente estreita, cresce em profundidade; B, frente larga, mantém-se junto à rua; C, frente larga, cresce em profundidade; D, a casa abastada, reúne várias funções numa só casa.' }, 'RO2'),
+  vI('site', { en:'Medieval planned lots of 6 by 12 or 13 varas — 6.60 × 13.20–14.30 m — split into halves (3.30) or joined (9.90); frontages mostly 4.5–5.5 m, averaging about 6 m; the house itself 8.4–12.25 m deep. (1 vara = 1.10 m, 1 palmo = 0.22 m, 1 côvado = 0.55 m.)', pt:'Lotes medievais planeados de 6 por 12 ou 13 varas — 6,60 × 13,20–14,30 m — divididos ao meio (3,30) ou aglutinados (9,90); frentes sobretudo de 4,5–5,5 m, em média cerca de 6 m; a casa com 8,4–12,25 m de profundidade. (1 vara = 1,10 m, 1 palmo = 0,22 m, 1 côvado = 0,55 m.)' }, 'RO2'),
+  vI('ventilation', { en:'Walls of stone and brick masonry in earth mortar, a nearly constant 60 cm, party and cross walls alike; upper-floor partitions about 20 cm. Floors of tiles 22 × 15 to 30 × 15 cm on beams of about 20 cm and joists of 10–12 cm.', pt:'Paredes de alvenaria de pedra e tijolo assentes em argamassa de terra, com espessura quase constante de 60 cm, meãs e transversais; divisórias dos pisos elevados com cerca de 20 cm. Pavimentos de ladrilho de 22 × 15 a 30 × 15 cm sobre madres de cerca de 20 cm e barrotes de 10–12 cm.' }, 'RO2'),
+  vI('site', { en:'Storeys fall from north to south: in the Marble Zone (Estremoz, Borba) most houses have two floors, sometimes three; beyond the Guadiana (Moura, Serpa) most are single-storey, many raised only in the later 20th century. The chimney «de escuta» on the facade is commoner where the town is flatter.', pt:'O número de pisos decresce de norte para sul: na Zona dos Mármores (Estremoz, Borba) a maioria das casas tem dois pisos, por vezes três; na Margem Esquerda do Guadiana (Moura, Serpa) predominam as térreas, muitas só elevadas na segunda metade do século XX. A chaminé de escuta na fachada é mais frequente onde o declive urbano é menor.' }, 'RO2')
+];
+vAdd('pt-povoado', ROS_LINES.concat([
+  vI('site', { en:'Rosado’s subtype A1c: the linear house of two full floors, the commonest in the Marble Zone; the stair against the party wall, or turned parallel to the front (Monsaraz, 1961). In the oldest cases the kitchen sits at the front of the upper floor, its chimney climbing the facade, stone «conversadeiras» at the window beside it.', pt:'O subtipo A1c de Rosado: a casa linear de dois pisos completos, a mais frequente na Zona dos Mármores; a escada encostada à parede meã, ou rodada paralela à fachada (Monsaraz, 1961). Nos casos mais antigos a cozinha ocupa a frente do primeiro andar, a chaminé de escuta sobe na fachada, com conversadeiras na janela ao lado.' }, 'RO2')]));
+MN_TYPES['pt-povoado'].name = { en:'Alentejo town house — linear, two floors (A1c)', pt:'Casa urbana alentejana — linear, de dois pisos (A1c)' };
+Object.assign(MN_TYPES, {
+  'pt-ale-a1a':{ region:'mainland',
+    name:{ en:'Alentejo town house — linear, single storey (A1a)', pt:'Casa urbana alentejana — linear, térrea (A1a)' },
+    where:{ en:'The commonest town house of the Alentejo — above all beyond the Guadiana: Moura, Serpa, Mértola', pt:'A casa urbana mais comum do Alentejo — sobretudo na Margem Esquerda do Guadiana: Moura, Serpa, Mértola' },
+    summary:{ en:'Two or three rooms in a line, one behind the other, on one floor, on a narrow, deep plot: the casa dianteira on the street, with the door, the fire and the day’s work; the celeiro and perhaps a third room behind; a small yard. The minimal dwelling and, in a compact town, the most flexible: lots are joined and split again through doors opened and closed. 16.7 % of the houses surveyed — the commonest subtype.',
+      pt:'Duas ou três divisões alinhadas em profundidade, num só piso, numa parcela estreita e funda: a casa dianteira na rua, com a porta, o lume e a lida do dia; o celeiro e por vezes uma terceira divisão atrás; um pequeno quintal. A unidade mínima de habitação e, num tecido compacto, o mais flexível dos tipos: casas que se aglutinam e voltam a separar por portas abertas e fechadas. 16,7 % dos casos estudados — o subtipo mais frequente.' },
+    model:{ L:6, D:10, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:2, th:14, bei:0.35 },
+      open:{ S:vOpen([D(0.45, 0.6), W(0.85, 0.25)], 0.08, 1.0, 1.8), N:vOpen([D(0.5, 1)], 0.05), E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'whitewash walls, barrel tile roof, blue door', pt:'parede caiada, telha de canudo, porta azul' },
+      walls:{ en:'stone and brick masonry or taipa, ≈ 60 cm; the party walls shared', pt:'alvenaria de pedra e tijolo ou taipa, ≈ 60 cm; as paredes meãs partilhadas' } },
+    feats:[
+      vFloors('1', 1, 1, 'RO2'),
+      vN('site', { en:'Narrow front, deep plot', pt:'Frente estreita, parcela funda' }, { en:'front 4.5–6.6 m, house 8.4–12.25 m deep', pt:'frente de 4,5–6,6 m, casa com 8,4–12,25 m de fundo' }, () => MASS.D / MASS.L, 1.3, 2.8, 'D/L', 'RO2', { en:'the app’s narrowest plan is 6 m', pt:'a planta mais estreita da aplicação é de 6 m' }),
+      vN('openings', { en:'Openings to the street', pt:'Vãos para a rua' }, { en:'the door — sometimes one small window', pt:'a porta — por vezes uma pequena janela' }, () => vCount(['S']).all, 1, 2, '', 'RO2'),
+      vN('roof', { en:'Roof pitch', pt:'Inclinação da cobertura' }, { en:'25–27 % (≈ 14–15°)', pt:'25–27 % (≈ 14–15°)' }, () => vRoof().th, 12, 16, '°', 'FIA'),
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'RO2')
+    ].concat(ROS_LINES) },
+  'pt-ale-c1':{ region:'mainland',
+    name:{ en:'Alentejo town house — wide front, two rooms behind (C1)', pt:'Casa urbana alentejana — frente larga, duas câmaras a tardoz (C1)' },
+    where:{ en:'Moura and Serpa above all; also the villages of the interior (Arronches, Vila Fernando, Alter do Chão)', pt:'Sobretudo Moura e Serpa; também as aldeias do interior (Arronches, Vila Fernando, Alter do Chão)' },
+    summary:{ en:'A wide entrance room across the first bay, its hearth and chimney «de escuta» on the facade, and two rooms of almost equal size behind it, both opened from the front room — a balanced plan of three. In its older form (C1a) the two back rooms are parted by a bearing wall of 40–60 cm. Common in the 17th-century records; in Moura often wider than deep.',
+      pt:'Uma casa de entrada larga a ocupar o primeiro tramo, com lareira e chaminé de escuta na fachada, e duas divisões de dimensões muito próximas no segundo tramo, ambas acessíveis a partir da casa dianteira — uma configuração equilibrada de três compartimentos. Na forma mais antiga (C1a) as duas divisões de tardoz separam-se por parede portante de 40–60 cm. Frequente nos registos do século XVII; em Moura muitas vezes mais larga que funda.' },
+    model:{ L:8, D:7, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:2, th:14, bei:0.35 },
+      open:{ S:vOpen([D(0.35, 0.45), W(0.75, 0.3)], 0.07, 1.0, 1.8), N:vOpen([D(0.5, 1)], 0.04), E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'whitewash walls, barrel tile roof, green door', pt:'parede caiada, telha de canudo, porta verde' },
+      walls:{ en:'masonry ≈ 60 cm; the wall between the two back rooms 40–60 cm', pt:'alvenaria ≈ 60 cm; a parede entre as duas câmaras de tardoz com 40–60 cm' } },
+    feats:[
+      vFloors({ en:'1 (also sobrado or more floors)', pt:'1 (também sobradada ou de vários pisos)' }, 1, 2, 'RO2'),
+      vN('site', { en:'Wide front', pt:'Frente larga' }, { en:'about as wide as deep, or wider', pt:'quase tão larga como funda, ou mais' }, () => MASS.L / MASS.D, 0.85, 1.6, 'L/D', 'RO2'),
+      vI('ventilation', { en:'The fire stays at the front, in the entrance room, under the chimney «de escuta» on the facade; the back rooms are reached through it — no corridor yet.', pt:'O lume fica à frente, na casa de entrada, sob a chaminé de escuta na fachada; as câmaras de tardoz servem-se através dela — ainda sem corredor.' }, 'RO2'),
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'RO2')
+    ].concat(ROS_LINES) },
+  'pt-ale-b2':{ region:'mainland',
+    name:{ en:'Alentejo town house — short, along the street (B2)', pt:'Casa urbana alentejana — curta, ao longo da rua (B2)' },
+    where:{ en:'Where the plot cannot grow in depth — corners, shallow blocks; single storey beyond the Guadiana, two floors in the Marble Zone', pt:'Onde a parcela não pode crescer em profundidade — gavetos, quarteirões pouco fundos; térrea na Margem Esquerda, de dois pisos na Zona dos Mármores' },
+    summary:{ en:'One bay laid along the street, wider than deep, with at least two rooms on the front. Two times show: first, thick masonry walls between the rooms; later (19th century), thin partitions of tabique, adobe or brick dividing it into two or three parallel rooms — and the front recomposed with the door on the axis and a window each side, the chimneys made slimmer.',
+      pt:'Um só tramo disposto ao longo da rua, mais largo que fundo, com pelo menos dois compartimentos na fachada. Dois tempos: primeiro, paredes grossas de alvenaria entre as divisões; depois (século XIX), divisórias finas de tabique, adobe ou tijolo, em duas ou três divisões paralelas — e a fachada recomposta com a porta no eixo de simetria e uma janela de cada lado, as chaminés de secção reduzida.' },
+    model:{ L:9, D:4.5, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:2, th:14, bei:0.35 },
+      open:{ S:vOpen([W(0.2, 0.22), D(0.5, 0.3), W(0.8, 0.22)], 0.1, 1.0, 1.8), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'whitewash walls, barrel tile roof, blue door', pt:'parede caiada, telha de canudo, porta azul' },
+      walls:{ en:'masonry ≈ 60 cm; later thin partitions of tabique, adobe or brick', pt:'alvenaria ≈ 60 cm; depois divisórias finas de tabique, adobe ou tijolo' } },
+    feats:[
+      vN('site', { en:'Wider than deep', pt:'Mais larga que funda' }, { en:'one bay along the street', pt:'um tramo ao longo da rua' }, () => MASS.L / MASS.D, 1.5, 3, 'L/D', 'RO2'),
+      vFloors({ en:'1 (Moura, Serpa) or 2 (Estremoz, Borba)', pt:'1 (Moura, Serpa) ou 2 (Estremoz, Borba)' }, 1, 2, 'RO2'),
+      vN('openings', { en:'Front (later form)', pt:'Fachada (forma tardia)' }, { en:'door on the axis, a window each side', pt:'porta no eixo, uma janela de cada lado' }, () => vCount(['S']).all, 2, 3, '', 'RO2'),
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'RO2')
+    ].concat(ROS_LINES) },
+  'pt-ale-d':{ region:'mainland',
+    name:{ en:'Alentejo wealthy town house (D)', pt:'Casa urbana abastada alentejana (D)' },
+    where:{ en:'17th–18th-century expansions — Estremoz by the Rossio, Borba on the roads out, Moura’s southern expansion, Serpa round the Praça da República', pt:'Expansões dos séculos XVII–XVIII — Estremoz junto ao Rossio, Borba nos caminhos de saída, a expansão Sul de Moura, Serpa em redor da Praça da República' },
+    summary:{ en:'Two or more floors and several functions in one house: vaulted ground floor of coach house, stables, stores, adega or olive press, oil jars; the family upstairs. A second entrance from a back or side street straight into the yard. A corridor in depth links the front rooms to the yard — lateral (D2) or central (D3); D1 is the joined house that keeps passing through rooms. A regular first-floor facade — pilasters, friezes, cornices, stone frames or raised mouldings; a scenic stair, lit by an oculus.',
+      pt:'Dois ou mais pisos e várias funções numa só casa: rés-do-chão abobadado com cocheira, estrebaria, armazéns, adega ou lagar de azeite, talhas; a família em cima. Um segundo acesso por rua traseira ou lateral, directo ao quintal. Um corredor em profundidade liga as salas dianteiras ao quintal — lateral (D2) ou central (D3); o D1 é a casa aglutinada que mantém o atravessamento entre compartimentos. Fachada regular no primeiro andar — pilastras, frisos, cornijas, cantarias ou molduras salientes; escada cénica iluminada por óculo.' },
+    model:{ L:12, D:14, fl:2, fh:3.0, rot:180, form:'rect', roof:{ n:3, th:16, bei:0.35 },
+      open:{ S:vOpen([W(0.15, 0.14, [{ on:true }, { on:true }]), D(0.38, 0.18, [{ door:true }, { door:false }]), W(0.62, 0.14, [{ on:true }, { on:true }]), W(0.85, 0.14, [{ on:true }, { on:true }])], 0.12, 1.0, 2.2),
+        N:vOpen([D(0.5, 1, [{ door:true }, { door:false }])], 0.06), E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'whitewash walls, tile roof, green door', pt:'parede caiada, telhado de telha, porta verde' },
+      walls:{ en:'masonry ≈ 60 cm; vaulted ground floor in brick', pt:'alvenaria ≈ 60 cm; rés-do-chão abobadado em tijolo' } },
+    feats:[
+      vFloors({ en:'2 or more', pt:'2 ou mais' }, 2, 3, 'RO2'),
+      vN('openings', { en:'Regular first-floor front', pt:'Primeiro andar regular' }, { en:'a row of windows — sacada or peitoril', pt:'uma série de janelas — de sacada ou de peitoril' }, () => vCount(['S']).wins, 3, 8, '', 'RO2'),
+      vN('openings', { en:'Second entrance to the yard', pt:'Segundo acesso ao quintal' }, { en:'from a back or side street', pt:'por rua traseira ou lateral' }, () => vCount(['N', 'E', 'W']).doors, 1, 2, '', 'RO2'),
+      vWall({ en:'whitewash, stone frames', pt:'caiada, cantarias' }, ['whitewash', 'plaster', 'limestone'], 'RO2')
+    ].concat(ROS_LINES) }
+});
+Object.assign(VERN_TYPES, MN_TYPES);
+
 /* --- the archetypes bibliography, under Methods and sources ----------------
    Every source the vernacular models read, in APA (7th ed.), by region from
    A to Z in the reader's language, alphabetical within each region. */
 const ARCH_BIB = [
-  { r:{ en:'Alentejo', pt:'Alentejo' }, types:['pt-alentejo', 'pt-povoado'], refs:[
+  { r:{ en:'Alentejo', pt:'Alentejo' }, types:['pt-alentejo', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'], refs:[
     'Fialho, N. A. R. (2009). <i>Técnicas tradicionais de construção em Vidigueira: A taipa e as coberturas tradicionais</i> [Master’s dissertation, Universidade de Évora].',
+    'Rosado, A. C. (2021). <i>A casa tradicional urbana no Alentejo: Tipos, tempos e materiais</i> [Doctoral thesis, Universidad de Sevilla].',
     'Rosado, A. C. (2020). A casa urbana tradicional no Alentejo: Tipos, evolução e materialidade. <i>Kairós, 4</i>. https://doi.org/10.14195/2184-7193_4_7'] },
   { r:{ en:'Algarve', pt:'Algarve' }, types:['pt-alg-taipa', 'pt-alg-acoteia', 'pt-alg-pescadores', 'pt-alg-serra'], refs:[
     'Baganha, J. (2024). Vernacular architecture in the Sotavento region of the Algarve [A arquitetura popular do Sotavento algarvio]. <i>Journal of Traditional Building, Architecture and Urbanism, 5</i>. https://dialnet.unirioja.es/descarga/articulo/9867033.pdf',
