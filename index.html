@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.108.0',
+  version:     '1.109.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19105,6 +19105,8 @@ Object.assign(VERN_SRC, {
     url:'https://cultura.cascais.pt/sites/default/files/anexos/gerais/new/qrcode_sala_8_pt.pdf' },
   FIA:{ tag:'Fialho 2009', cite:'Fialho, N. A. R. (2009). <i>Técnicas tradicionais de construção em Vidigueira: A taipa e as coberturas tradicionais</i> (dissertação de mestrado, orient. V. Mestre). Évora: Universidade de Évora.', url:null },
   MOU:{ tag:'Moutinho 1979', cite:'Moutinho, M. C. (1979). <i>A arquitectura popular portuguesa</i>. Lisboa: Editorial Estampa.', url:null },
+  OLI:{ tag:'Oliveira 2016', cite:'Oliveira, M. M. C. A. (2016). <i>Evolução do habitar de uma casa rural no Ribatejo: Do início do séc. XX à actualidade</i> (dissertação de mestrado). Lisboa: Universidade Lusíada — citing Pereira, Freitas &amp; Dias (1988), <i>Arquitectura popular em Portugal</i>, 3.ª ed., zona 4.',
+    url:'http://hdl.handle.net/11067/2464' },
   NER:{ tag:'Nero 2012', cite:'Nero, A. S. (2012). <i>Arquitectura popular portuguesa na região de Lisboa e Vale do Tejo</i> (dissertação de mestrado integrado, orient. A. Borges Abel). Évora: Universidade de Évora.', url:null },
   RBA:{ tag:'Rota da Bairrada', cite:'Rota da Bairrada. «Casa-Museu Casa Gandaresa» (Santo António de Vagos, 1937).',
     url:'https://rotadabairrada.pt/en/where-to-go/house-museum-casa-gandareza' }
@@ -19691,7 +19693,7 @@ VERN_REGIONS.push({ key:'mainland', name:{ en:'Portuguese vernacular', pt:'Vern�
     else if (g === 'beira') cand = ['pt-beira', 'pt-tmontes'];
     else if (g === 'gandara') cand = S.nuts === 'Pinhal Litoral' ? ['pt-alpendrada', 'pt-palheiro', 'pt-gandara'] : alt < 15 ? ['pt-palheiro', 'pt-gandara', 'pt-alpendrada'] : ['pt-gandara', 'pt-palheiro', 'pt-alpendrada'];
     else if (g === 'estremadura') cand = ['pt-saloia', 'pt-torreada', 'pt-alentejo'];
-    else if (g === 'ribatejo') cand = alt < 15 ? ['pt-ribatejo', 'pt-avieiro', 'pt-alentejo'] : ['pt-ribatejo', 'pt-alentejo', 'pt-saloia'];
+    else if (g === 'ribatejo') cand = S.nuts === 'Médio Tejo' ? ['pt-rib-vila', 'pt-ribatejo', 'pt-beira'] : alt < 15 ? ['pt-ribatejo', 'pt-avieiro', 'pt-rib-vila'] : S.lat > 39.25 ? ['pt-rib-vila', 'pt-ribatejo', 'pt-avieiro'] : ['pt-ribatejo', 'pt-rib-vila', 'pt-avieiro'];
     else if (g === 'setubal') cand = ['pt-setubal', 'pt-saloia', 'pt-alentejo'];
     else if (g === 'alentejo') cand = ['pt-alentejo', 'pt-povoado', 'pt-alg-taipa'];
     else {
@@ -19808,6 +19810,47 @@ Object.assign(MN_TYPES, {
 });
 Object.assign(VERN_TYPES, MN_TYPES);
 
+/* --- the Ribatejo refined: Nero (2012) and Oliveira (2016) ------------------ */
+const RIB_MAT = { en:'What the ground gives sets the wall: stone near the serras (Santo António, Candeeiros, Aire), its grey-brown faces not yet under lime; north of the Tagus the soft limestone tufo, cut in blocks of about 50 × 30 × 20–30 cm (Torres Novas, Pernes, Santarém); taipa and adobe on the farmed plains; schist along the Zêzere, granite at Mação; mortared masonry at Abrantes, between Beira and Estremadura; at Tomar, on damp ground, the Beira Litoral way — taipa, adobe, later brick.',
+  pt:'O que o chão dá decide a parede: pedra junto às serras (Santo António, Candeeiros, Aire), o tom pardo dos paramentos que a cal ainda não cobriu; a norte do Tejo o tufo, calcário brando, cortado em blocos de cerca de 50 × 30 × 20–30 cm (Torres Novas, Pernes, Santarém); taipa e adobe nas planícies agrícolas; xisto ao longo do Zêzere, granito em Mação; alvenarias argamassadas em Abrantes, transição entre a Beira e a Estremadura; em Tomar, de solo húmido, à maneira da Beira Litoral — taipa, adobe, mais tarde tijolo.' };
+vAdd('pt-ribatejo', [
+  vI('site', { en:'The house in the plain stands alone, guarding the land like a small Alentejo monte, poorer in detail. Always one storey: rooms in succession, opening one into the next, inside a long rectangle.', pt:'A casa perdida na planície guarda o território como um pequeno monte alentejano, mais pobre em pormenores. Sempre de um só piso: divisões em sucessão, comunicando entre si, dentro de um rectângulo alongado.' }, 'NER'),
+  vI('site', RIB_MAT, 'OLI'),
+  vI('site', { en:'Wall thickness follows the material: taipa 0.50 m, adobe 0.35 m, stone 0.35 m, brick 0.25 m; tufo walls 0.50 m; bearing walls of sandstone and clay up to 0.65 m. Partitions of tabique or brick, 0.10–0.15 m.', pt:'A espessura segue o material: taipa 0,50 m, adobe 0,35 m, pedra 0,35 m, tijolo 0,25 m; paredes de tufo de 0,50 m; paredes mestras de grés e barro até 0,65 m. Divisórias de tabique ou tijolo, 0,10–0,15 m.' }, 'OLI'),
+  vI('ventilation', { en:'Keeping the earth wall dry: taipa starts 0.40 m above the ground or on a stone base, over an impermeable layer; the floor is raised about 0.20 m. The foot of the whitewashed wall gets special care against the rain splashing up from the sandy ground.', pt:'Manter seca a parede de terra: a taipa começa 0,40 m acima do chão ou sobre base de pedra, com uma camada impermeável; o pavimento eleva-se cerca de 0,20 m. A junção da parede caiada com o chão arenoso tem tratamento especial contra os salpicos da chuva.' }, 'OLI'),
+  vI('roof', { en:'Fired brick for oven vaults, arches over doors and windows, and later partitions; tijoleira floors. Floors of beaten earth in the kitchen and the windowless store, tile or tijoleira in the sala and bedrooms.', pt:'Tijolo cozido nas abóbadas dos fornos, nos arcos das portas e janelas e, mais tarde, nas divisórias; pavimentos de tijoleira. Terra batida na cozinha e no armazém sem vãos; ladrilho ou tijoleira na sala e nos quartos.' }, 'OLI'),
+  vI('visualization', { en:'Colour over the white: socos, quoins and openings — or whole walls — in black, ochre, blue, vermilion or green.', pt:'A cor sobre o branco: socos, cunhais e vãos — quando não a totalidade das paredes — a negro, ocre, azul, vermelhão ou verde.' }, 'NER'),
+  vI('site', { en:'The adega dots the landscape: the largest volume, a window to take in the grapes and a wide door to roll out the casks.', pt:'A adega pontilha a paisagem: o maior volume, a janela de entrada da uva vindimada e a larga porta de saída dos cascos.' }, 'OLI')]);
+vAdd('pt-avieiro', [
+  vN('openings', { en:'Front to the river', pt:'Frente para o rio' }, { en:'two windows, one each side of a central door', pt:'duas janelas, uma de cada lado da porta, ao centro' }, () => vCount(['S']).all, 3, 3, '', 'NER'),
+  vI('site', { en:'Always three rooms, whatever the family: the sala, the largest, with a hearth in a corner a few centimetres off the floor; two small bedrooms parted by tabiques that stop short of the ceiling — sometimes covered to make a loft for the nets; curtains of bright branches for inner doors.', pt:'Sempre três divisões, qualquer que seja a família: a sala, a maior, com a lareira a um canto, a poucos centímetros do chão; dois quartos pequenos divididos por tabiques que não chegam ao tecto — por vezes cobertos, formando um sótão para as redes; cortinas de ramagens de cores alegres em vez de portas interiores.' }, 'NER'),
+  vI('site', { en:'A long varanda on the river front with an outside stair to the ground; the stilts on tree trunks, later cement or rendered brick piers, boarded round at Palhota into a cellar for firewood and nets. Palhota: nineteen houses in two rows parallel to the river, all but one on stakes.', pt:'Uma varanda longitudinal na frente do rio, de onde desce a escada exterior; as palafitas em troncos, depois pilares de cimento ou tijolo rebocado, forradas a tábuas na Palhota formando uma cave para lenha e redes. Palhota: dezanove casas em duas filas paralelas ao rio, todas sobre estacas excepto uma.' }, 'NER'),
+  vI('roof', { en:'Always two slopes: on the Tagus tile or cane according to the family’s means (at Vieira first boards, estorno or rush, then telha caleira); at Palhota every house tiled, with a solid masonry chimney but one.', pt:'Sempre duas águas: no Tejo telha ou caniço, consoante as posses da família (na Vieira primeiro tabuado, estorno ou junco, depois telha caleira); na Palhota todas de telha, e todas com chaminé de sólida alvenaria excepto uma.' }, 'NER'),
+  vI('ventilation', { en:'The kitchen outside — a timber annex without chimney, the fire on beaten earth, or a small screen against the wind — or, at Palhota, inside the house.', pt:'A cozinha fora — anexo de madeira sem chaminé, o lume no chão de terra batida, ou um pequeno abrigo contra o vento — ou, na Palhota, dentro de casa.' }, 'NER')]);
+Object.assign(MN_TYPES, {
+  'pt-rib-vila':{ region:'mainland',
+    name:{ en:'Ribatejo village house (casa térrea do Bairro)', pt:'Casa térrea de aldeia do Ribatejo (Bairro)' },
+    where:{ en:'North of the Tagus — the Bairro and the villages of Alcanena, Torres Novas, Santarém; Vila Chã de Ourique (Cartaxo)', pt:'A norte do Tejo — o Bairro e as aldeias de Alcanena, Torres Novas, Santarém; Vila Chã de Ourique (Cartaxo)' },
+    summary:{ en:'A whitewashed parallelepiped on the village street, its openings symmetrical, under two slopes: the kitchen, the sala and the bedrooms on the ground floor, the loft (sótão) above as the family’s store. A corridor of beaten earth runs through from the front door to the back door, wide enough to carry the harvest; a windowless store beside the kitchen, whose slim chimney marks it from the street. Behind, the pátio: cistern and orchard, the adega, a second kitchen with its wood ovens, a porch for the carts. Walls of tufo and adobe 0.50 m, stone frames to the openings. Low houses turned inward: to the street only the door and one or two windows.',
+      pt:'Um paralelepípedo caiado na rua da aldeia, de aberturas simétricas, sob duas águas: a cozinha, a sala e os quartos no piso térreo, o sótão em cima como armazém da família. Um corredor de terra batida atravessa da porta da rua à do pátio, com a largura bastante para o transporte dos produtos agrícolas; um armazém sem vãos junto à cozinha, cuja chaminé delgada a denuncia da rua. Atrás, o pátio: cisterna e pomar, a adega, uma segunda cozinha com fornos de lenha, um alpendre para os carros. Paredes de tufo e adobe de 0,50 m, cantarias de pedra nos vãos. Casas baixas voltadas para dentro: para a rua só a porta e uma ou duas janelas.' },
+    model:{ L:11, D:7, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:2, th:28, bei:0.3 },
+      open:{ S:vOpen([W(0.2, 0.2), D(0.5, 0.26), W(0.8, 0.2)], 0.1), N:vOpen([D(0.5, 1)], 0.04), E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'whitewash walls, tile roof, green door', pt:'parede caiada, telhado de telha, porta verde' },
+      walls:{ en:'tufo and adobe, 0.50 m, rendered and whitewashed; stone frames to the openings', pt:'tufo e adobe, 0,50 m, rebocados e caiados; cantarias de pedra nos vãos' } },
+    feats:[
+      vFloors({ en:'1 + the loft as store', pt:'1 + sótão como armazém' }, 1, 1, 'OLI'),
+      vRoofN(null, { en:'two slopes', pt:'duas águas' }, [2], 'OLI'),
+      vN('openings', { en:'Openings to the street', pt:'Vãos para a rua' }, { en:'the door and one or two windows, symmetrical', pt:'a porta e uma ou duas janelas, simétricas' }, () => vCount(['S']).all, 2, 3, '', 'NER'),
+      vN('openings', { en:'Door to the pátio', pt:'Porta para o pátio' }, { en:'one, at the end of the corridor', pt:'uma, ao fundo do corredor' }, () => vCount(['N']).doors, 1, 1, '', 'OLI'),
+      vI('site', { en:'Inside: the central corridor in beaten earth from street door to pátio door; the kitchen among the largest rooms, with stone poiais and wall cupboards; four bedrooms and a store without openings. A two-storey annex — the loja below for the harvest, a family sala above.', pt:'Dentro: o corredor central em terra batida da porta da rua à do pátio; a cozinha entre as maiores divisões, com poiais de pedra e armários de parede; quatro quartos e um armazém sem vãos. Um anexo de dois pisos — a loja em baixo para os produtos agrícolas, uma sala da família em cima.' }, 'OLI'),
+      vI('ventilation', { en:'The pátio is the working half of the house: cistern fed by the roofs, orchard, adega in the lowest corner, a second kitchen with two wood ovens kept out of the house.', pt:'O pátio é a metade de trabalho da casa: cisterna alimentada pelos telhados, pomar, adega no canto mais baixo, uma segunda cozinha com dois fornos de lenha fora da casa.' }, 'OLI'),
+      vI('site', RIB_MAT, 'OLI'),
+      vI('visualization', { en:'Twentieth-century layers to read, not copy: the mansard on the loft, the stressed eave and stone frames of the «Casa Portuguesa» (Raul Lino) and of the «Português Suave».', pt:'Camadas do século XX a ler, não a copiar: a mansarda no sótão, o beirado acentuado e as cantarias da «Casa Portuguesa» (Raul Lino) e do «Português Suave».' }, 'OLI'),
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster', 'limestone'], 'OLI')
+    ] }
+});
+Object.assign(VERN_TYPES, MN_TYPES);
+
 /* Rosado (2020): the cell, the morada de casas, and how it grows */
 const vGroundFront = () => { if (!OPEN || !OPEN.S) return 0; return faceUnits('S').filter(u => { const F = unitFloor(u, 0); return F.on && F.frac > 0; }).length; };
 MN_TYPES['pt-povoado'].feats.unshift(
@@ -19839,8 +19882,10 @@ const ARCH_BIB = [
     'Silva, L. da. (2021). <i>Do basalto da alvenaria ao barro do «pau a pique»: A adaptação da arquitetura «popular» açoriana na colonização da Ilha de Santa Catarina</i> [Master’s dissertation, Universidade do Porto]. https://repositorio-aberto.up.pt/handle/10216/139766'] },
   { r:{ en:'Beira Litoral — Gândara', pt:'Beira Litoral — Gândara' }, types:['pt-gandara'], refs:[
     'Rota da Bairrada. (n.d.). <i>House museum Casa Gandareza</i>. https://rotadabairrada.pt/en/where-to-go/house-museum-casa-gandareza'] },
-  { r:{ en:'Estremadura, Ribatejo and the Setúbal peninsula — Lisboa e Vale do Tejo', pt:'Estremadura, Ribatejo e península de Setúbal — Lisboa e Vale do Tejo' }, types:['pt-saloia', 'pt-torreada', 'pt-ribatejo', 'pt-setubal', 'pt-avieiro'], refs:[
+  { r:{ en:'Estremadura, Ribatejo and the Setúbal peninsula — Lisboa e Vale do Tejo', pt:'Estremadura, Ribatejo e península de Setúbal — Lisboa e Vale do Tejo' }, types:['pt-saloia', 'pt-torreada', 'pt-ribatejo', 'pt-rib-vila', 'pt-setubal', 'pt-avieiro'], refs:[
     'Nero, A. S. (2012). <i>Arquitectura popular portuguesa na região de Lisboa e Vale do Tejo</i> [Master’s dissertation, Universidade de Évora].',
+    'Oliveira, M. M. C. A. (2016). <i>Evolução do habitar de uma casa rural no Ribatejo: Do início do séc. XX à actualidade</i> [Master’s dissertation, Universidade Lusíada de Lisboa]. http://hdl.handle.net/11067/2464',
+    'Pereira, N. T., Freitas, A. P. de, &amp; Dias, F. S. (1988). Zona 4: Estremadura e Ribatejo. In <i>Arquitectura popular em Portugal</i> (3rd ed.). Associação dos Arquitectos Portugueses. (Read through Oliveira, 2016.)',
     'Câmara Municipal de Cascais. (n.d.). <i>A casa saloia</i> [Exhibition text, Sala 8]. https://cultura.cascais.pt/sites/default/files/anexos/gerais/new/qrcode_sala_8_pt.pdf'] },
   { r:{ en:'Madeira', pt:'Madeira' }, types:['md-santana', 'md-redonda', 'md-camacha', 'md-elementar', 'md-doispisos', 'md-curral', 'md-salao'], refs:[
     'Associação de Promoção da Região Autónoma da Madeira. (n.d.). Casa de Salão. <i>Visit Madeira</i>. https://visitmadeira.com/pt/onde-ir/porto-santo/a-descoberta-da-ilha/casa-de-salao',
