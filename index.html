@@ -311,6 +311,12 @@ body.in-study .foot-refs{display:none}
 .foot-refs .archicons{display:flex; flex-wrap:wrap; gap:6px 14px; margin:4px 0 8px}
 .foot-refs .archicons figure{margin:0; width:92px; display:flex; flex-direction:column; align-items:center; text-align:center}
 .foot-refs .archicons figcaption{font-size:9.5px; line-height:1.25; color:var(--muted); margin-top:2px}
+/* a hovered archetype grows to twice its size over its neighbours, so its details read */
+.foot-refs .archicons figure{position:relative}
+.foot-refs .archicons figure svg{transition:transform .18s ease, filter .18s ease; transform-origin:50% 60%; position:relative; z-index:1}
+.foot-refs .archicons figure:hover{z-index:5}
+.foot-refs .archicons figure:hover svg{transform:scale(2); z-index:5; filter:drop-shadow(0 6px 10px rgba(0,0,0,.18))}
+@media (hover:none){.foot-refs .archicons figure:hover svg{transform:none; filter:none}}
 .foot-refs li{
   font-size:11.5px; color:var(--ink2); line-height:1.65; margin:0 0 9px;
   padding-left:20px; text-indent:-20px; break-inside:avoid;
@@ -966,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.149.0',
+  version:     '1.151.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23098,8 +23104,20 @@ const VM_ROOFS = {
 const VM_CHIM = {
   box:{ en:'plain stack', pt:'chaminé simples' }, alg:{ en:'Algarve pierced chimney', pt:'chaminé algarvia rendilhada' },
   ale:{ en:'great Alentejo chimney (wide, inside the wall)', pt:'grande chaminé alentejana (larga, dentro da parede)' }, az:{ en:'Azores «mãos postas»', pt:'açoriana «mãos postas»' },
-  mad:{ en:'Madeira prismatic chimney', pt:'chaminé madeirense prismática' }, esp:{ en:'great corner chimney (Esposende)', pt:'grande chaminé de cunhal (Esposende)' }, talha:{ en:'jar top (Felgar)', pt:'boca de talha (Felgar)' }
+  mad:{ en:'Madeira prismatic chimney', pt:'chaminé madeirense prismática' }, esp:{ en:'great corner chimney (Esposende)', pt:'grande chaminé de cunhal (Esposende)' }, talha:{ en:'jar top (Felgar)', pt:'boca de talha (Felgar)' },
+  rib:{ en:'Ribatejo chimney (broad, from the front wall)', pt:'chaminé ribatejana (larga, a partir da fachada)' }, gran:{ en:'stone stack under a slab (granite and schist country)', pt:'chaminé de pedra com laje (terras de granito e xisto)' },
+  sal:{ en:'saloia chimney (a little tiled hat)', pt:'chaminé saloia (com chapéu de telha)' }
 };
+/** The archetype's own chimney in the modeller: whether the house has one, as its icon draws it, and the kind its place builds. */
+function vmChimOf(k, wm) {
+  const T = VERN_TYPES[k];
+  if (!T || T.support || ['windmill', 'watermill'].indexOf(T.model.icon) >= 0) return null;   // every dwelling: where the sources say the smoke left through the tiles, the student can still take it off
+  const m = T.model, dist = typeof vDist === 'function' ? vDist(k) : [], stone = ['stone', 'granite', 'schist', 'basalt'].indexOf(wm) >= 0;
+  const kind = dist.indexOf('Faro') >= 0 ? 'alg' : dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal'].indexOf(d) >= 0) ? 'ale' : dist.indexOf('Santarém') >= 0 ? 'rib'
+    : dist[0] === 'Açores' ? 'az' : dist[0] === 'Madeira' ? 'mad' : m.chimney === 'stone' || stone ? 'gran' : dist.indexOf('Lisboa') >= 0 ? 'sal' : 'box';
+  const at = kind === 'ale' ? [0.62, 0.25] : kind === 'rib' ? [0.56, 0.02] : [0.78, 0.6];
+  return { t:'chimney', vol:0, kind, u:at[0], v:at[1], h:kind === 'ale' ? 1.5 : kind === 'rib' ? 2.0 : 1.2 };
+}
 const VM_VAR = {
   corrida:{ en:'running varanda', pt:'varanda corrida' }, reentrante:{ en:'recessed varanda', pt:'varanda reentrante' },
   envidracada:{ en:'glazed varanda', pt:'varanda envidraçada' }, sacada:{ en:'balcony (sacada)', pt:'varanda de sacada' }
@@ -23179,15 +23197,11 @@ function vmFromType(k) {
   if (m.loggia) vm.els.push({ t:'varanda', vol:0, face:'S', kind:'reentrante', pos:0.5, w:m.loggia.w, floor:(m.loggia.lv || 1) - 1 });
   if (m.roof.latada) vm.els.push({ t:'latada', vol:0, face:'S', pos:0.5, w:Math.min(8, m.L - 1), d:3 });
   else if (m.roof.porch) vm.els.push({ t:'alpendre', vol:0, face:'S', pos:0.5, w:Math.min(8, m.L - 1), d:2.2 });
-  const sumEn = (T.summary && T.summary.en) || '';
-  const noChim = /no chimney|without (a )?chimney|rarely a chimney|few chimneys|no chimneys/i.test(sumEn);
-  if (/chimney/i.test(sumEn) && !noChim && m.roof.n !== 0) {
-    const kind = dist.indexOf('Faro') >= 0 ? 'alg' : dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal'].indexOf(d) >= 0) ? 'ale' : dist[0] === 'Açores' ? 'az' : dist[0] === 'Madeira' ? 'mad' : 'box';
-    vm.els.push({ t:'chimney', vol:0, kind, u:kind === 'ale' ? 0.62 : 0.78, v:kind === 'ale' ? 0.25 : 0.6, h:kind === 'ale' ? 1.5 : 1.2 });
-  }
   if (m.icon === 'windmill') { base.kind = 'round'; base.L = base.D = Math.max(m.L, m.D); base.roof.type = 'cone'; base.roof.th = 40; base.roof.mat = rm === 'thatch' ? 'thatch' : 'timber'; }
   const ov = VM_OVR[k];
   if (ov) ov(vm, base);
+  /* the chimney the archetype's icon raises, of its place's kind — unless the sources' own model already set one */
+  if (!vm.els.some(e => e.t === 'chimney')) { const ch = vmChimOf(k, wm); if (ch) vm.els.push(ch); }
   return vm;
 }
 /* what the sources add to the archetypes the one-bar model could not draw */
@@ -23466,6 +23480,17 @@ function vmElFaces(vm, vs) {
       const k = E.kind || 'box';
       const cx = x0 + (E.u || 0.75) * v.L, cy = y0 + (E.v || 0.5) * v.D, zb = H + vmRoofAt(v, cx, cy) - 0.25, h = (E.h || 1.2) + 0.25;
       if (k === 'talha') { box(cx, cy, zb, 0.45, 0.45, h * 0.6, '#9C5A3C', o); box(cx - 0.05, cy - 0.05, zb + h * 0.6, 0.55, 0.55, 0.1, '#7E462E', o); return; }
+      if (k === 'rib') {
+        /* broad and whitewashed, rising from the front wall through the eave, past the ridge, a thin cap and two vents */
+        const w = 1.4, d = 1.0, zr = z0 + vmH(v) - 0.4, top = H + vmRoofRise(v) + 0.9;
+        box(cx, y0 - 0.05, zr, w, d, top - zr, wc, o); box(cx - 0.08, y0 - 0.13, top, w + 0.16, d + 0.16, 0.1, vmShade(wc, 0.9), o);
+        [0.22, 0.62].forEach(f2 => push([[cx + w * f2, y0 - 0.06, top - 0.45], [cx + w * f2 + 0.25, y0 - 0.06, top - 0.45], [cx + w * f2 + 0.25, y0 - 0.06, top - 0.15], [cx + w * f2, y0 - 0.06, top - 0.15]], '#2E2A26', o));
+        return; }
+      if (k === 'gran') { const sc = '#A39C8F'; box(cx, cy, zb, 0.7, 0.7, h, sc, o); box(cx - 0.12, cy - 0.12, zb + h, 0.94, 0.94, 0.1, '#7E786D', o);
+        box(cx + 0.2, cy + 0.2, zb + h + 0.1, 0.3, 0.3, 0.18, sc, o); box(cx - 0.08, cy - 0.08, zb + h + 0.28, 0.86, 0.86, 0.08, '#7E786D', o); return; }
+      if (k === 'sal') { const w = 0.6, rc = (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c; box(cx, cy, zb, w, w, h, wc, o);
+        const zt = zb + h, ap = zt + 0.35; push([[cx - 0.1, cy - 0.1, zt], [cx + w + 0.1, cy - 0.1, zt], [cx + w + 0.1, cy + w / 2, ap], [cx - 0.1, cy + w / 2, ap]], rc, o);
+        push([[cx + w + 0.1, cy + w + 0.1, zt], [cx - 0.1, cy + w + 0.1, zt], [cx - 0.1, cy + w / 2, ap], [cx + w + 0.1, cy + w / 2, ap]], vmShade(rc, 0.75), o); return; }
       const w = k === 'mad' ? 0.45 : k === 'az' ? 0.8 : k === 'ale' ? 1.2 : k === 'esp' ? 1.8 : 0.6, d = k === 'az' ? 0.5 : k === 'ale' ? 0.7 : k === 'esp' ? 1.0 : w, hh = k === 'mad' ? h + 0.4 : h;
       box(cx, cy, zb, w, d, hh, wc, o);
       if (k === 'alg') { for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) push([[cx + 0.1 + j * 0.25, cy - 0.01, zb + hh - 0.85 + i * 0.25], [cx + 0.25 + j * 0.25, cy - 0.01, zb + hh - 0.85 + i * 0.25], [cx + 0.25 + j * 0.25, cy - 0.01, zb + hh - 0.7 + i * 0.25], [cx + 0.1 + j * 0.25, cy - 0.01, zb + hh - 0.7 + i * 0.25]], '#3E4C57', o);
@@ -23678,7 +23703,7 @@ function vmElevSVG(vm, face, w, opts) {
     o.push('<circle data-hvol="' + v._i + '" cx="' + p[0] + '" cy="' + p[1] + '" r="7" fill="#1F1C19" stroke="#fff" stroke-width="2" style="cursor:ns-resize"><title>' + VL({ en:'Drag down or up: storeys of this body', pt:'Arraste para baixo ou para cima: pisos deste corpo' }) + '</title></circle>'); });
   (vm.els || []).filter(E => E.t === 'chimney').forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
     const z0 = v.raise || 0, H = z0 + vmH(v), x = v.x - v.L / 2 + (E.u || 0.75) * v.L, y = v.y - v.D / 2 + (E.v || 0.5) * v.D, uu = across ? (face === 'S' ? x : -x) : (face === 'E' ? y : -y);
-    const zb = H + vmRoofAt(v, x, y) - 0.2, zt = zb + (E.h || 1.2) + 0.2, ww = E.kind === 'ale' ? 1.2 : E.kind === 'esp' ? 1.8 : 0.6;
+    const zb = H + vmRoofAt(v, x, y) - 0.2, zt = zb + (E.h || 1.2) + 0.2, ww = E.kind === 'ale' ? 1.2 : E.kind === 'esp' ? 1.8 : E.kind === 'rib' ? 1.4 : E.kind === 'gran' ? 0.7 : 0.6;
     o.push('<polygon points="' + [[uu - ww / 2, zb], [uu + ww / 2, zb], [uu + ww / 2, zt], [uu - ww / 2, zt]].map(p => P(p[0], p[1]).join(',')).join(' ') + '" fill="#F2EFE6" stroke="#3A3530" stroke-width="1"/>'); }));
   o.push('<text x="10" y="16" font-family="sans-serif" font-size="12" fill="#3A3530">' + VL({ en:{ S:'South', E:'East', N:'North', W:'West' }[face] + ' elevation', pt:'Alçado ' + { S:'sul', E:'nascente', N:'norte', W:'poente' }[face] }) + '</text>');
   return '<svg xmlns="http://www.w3.org/2000/svg" class="vmelev" data-s="' + s.toFixed(4) + '" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' + o.join('') + '</svg>';
