@@ -966,7 +966,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.142.2',
+  version:     '1.143.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20704,8 +20704,8 @@ Object.assign(MN_TYPES, {
     where:{ en:'The high villages of the Serra de Montemuro, about 1000 m — Vale de Papas, Gralheira (Cinfães), Alhões; Castro Daire', pt:'As aldeias altas da Serra de Montemuro, por volta dos 1000 m — Vale de Papas, Gralheira (Cinfães), Alhões; Castro Daire' },
     summary:{ en:'Granite and rye straw. One storey, or two that do not connect: the ground falls, so the curral is entered below and the house above, each by its own door. A common room with the hearth on the floor and alcoves where several sleep; tiny openings; almost no chimney. The gable walls are capped with dressed slabs and edged with stones set on end (guarda-ventos); the smooth rye thatch is weighted at the ridge by a row of stones and along the eave by slabs or poles.',
       pt:'Granito e palha de centeio. Um piso, ou dois que não comunicam: o terreno desce, e entra-se no curral por baixo e na casa por cima, cada um pela sua porta. Uma sala comum com a lareira no chão e alcovas onde dormem vários; aberturas diminutas; quase nenhuma chaminé. As empenas rematam com cápeas e guarda-ventos de pedras ao cutelo; o colmaço liso de centeio é seguro no cume por uma fiada de pedras ladeiras e no beiral por lousas ou varas.' },
-    model:{ L:8, D:5.5, fl:2, fh:2.3, rot:180, form:'rect', roof:{ n:2, th:42, bei:0.3 },
-      open:{ S:vOpen([D(0.25, 0.3, [{ door:true }, { door:true }]), W(0.7, 0.15, [{ on:false }, { on:true }])], 0.03, 1.1, 1.7), N:{ wwr:0.01, units:vOff() }, E:{ wwr:0.01, units:vOff() }, W:{ wwr:0.01, units:vOff() } },
+    model:{ L:8, D:5.5, fl:2, fh:2.3, rot:180, form:'rect', roof:{ n:2, th:42, bei:0.3 }, balc:1.4, balcAt:0.14, balcStone:true, chimney:'stone',
+      open:{ S:vOpen([D(0.08, 0.13, [{ on:false }, { door:true }]), W(0.42, 0.09, [{ on:false }, { on:true }]), W(0.66, 0.09, [{ on:false }, { on:true }]), D(0.92, 0.13, [{ door:true }, { on:false }]), W(0.75, 0.06, [{ on:true }, { on:false }])], 0.1, 1.1, 1.7), N:{ wwr:0.01, units:vOff() }, E:{ wwr:0.01, units:vOff() }, W:{ wwr:0.01, units:vOff() } },
       render:{ en:'granite stone walls, thatch roof, timber door', pt:'paredes de granito, telhado de colmo, porta de madeira' },
       walls:{ en:'granite, capped by dressed slabs (cápeas) to seat the rafters; oak and chestnut roof frame, rafters 0.40–0.55 m apart', pt:'granito, rematado por cápeas aparelhadas onde assentam os caibros; armação de carvalho e castanho, caibros a 0,40–0,55 m' } },
     feats:[
@@ -21095,7 +21095,13 @@ function vIcon(key, size) {
   /* wall texture: stone courses, schist, timber boards; a darker plinth band on rendered walls */
   const tex = { stone:[0.42, 'rgba(0,0,0,.18)'], schist:[0.2, 'rgba(0,0,0,.22)'], timber:[0.24, 'rgba(0,0,0,.25)'], earth:[0.5, 'rgba(0,0,0,.12)'] }[wk];
   if (tex) { courses(P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H), H, tex[0], tex[1], 0.035); courses(P(L, 0, 0), P(L, Dd, 0), P(L, Dd, H), P(L, 0, H), H, tex[0], tex[1], 0.035);
-    if (wk === 'timber') { ticks(P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H), L, 1.2, 'rgba(255,255,255,.45)', 0.05); } }
+    if (wk === 'timber') { ticks(P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H), L, 1.2, 'rgba(255,255,255,.45)', 0.05); }
+    if (wk === 'stone') {
+      /* the stones themselves: vertical joints, staggered course by course, on both seen walls */
+      const nc = Math.max(1, Math.floor(H / tex[0])), ch = H / nc;
+      for (let k = 0; k < nc; k++) { const z0 = k * ch, z1 = z0 + ch, off = (k % 2) * 0.45 + (k % 3) * 0.17;
+        for (let u = 0.5 + off; u < L - 0.2; u += 0.9 + ((k + Math.round(u)) % 3) * 0.12) line(P(u, -0.005, z0), P(u, -0.005, z1), tex[1], 0.035);
+        for (let u = 0.4 + off; u < Dd - 0.2; u += 0.9 + ((k + Math.round(u)) % 3) * 0.12) line(P(L + 0.005, u, z0), P(L + 0.005, u, z1), tex[1], 0.035); } } }
   else if (!rz) { const bc = southBar ? barC : vShade(wc, 0.72), bh = southBar ? 0.45 : 0.35;
     face([P(0, 0, 0), P(L, 0, 0), P(L, 0, bh), P(0, 0, bh)], bc, 0.02); face([P(L, 0, 0), P(L, Dd, 0), P(L, Dd, bh), P(L, 0, bh)], southBar ? vShade(barC, 0.8) : vShade(wc, 0.6), 0.02);
     if (southBar) { [[0, 0.3], [L - 0.3, L]].forEach(([a, b]) => face([P(a, -0.01, bh), P(b, -0.01, bh), P(b, -0.01, H), P(a, -0.01, H)], vShade(barC, 1.05), 0.015));
@@ -21209,6 +21215,13 @@ function vIcon(key, size) {
       edge([P(sStart, -d, 0), P(st.dir > 0 ? last[1] : last[0], -d, 0)]);
     };
     const drawBalc = () => {
+      if (m.balcStone) {
+        /* the stone balcão: a solid landing of granite at the upper door, its stair the same stone */
+        face([P(x, -d, 0), P(x + w, -d, 0), P(x + w, -d, z), P(x, -d, z)], stone[1], 0.03);
+        face([P(x + w, -d, 0), P(x + w, 0, 0), P(x + w, 0, z), P(x + w, -d, z)], stone[2], 0.03);
+        face([P(x, -d, z), P(x + w, -d, z), P(x + w, 0, z), P(x, 0, z)], stone[0], 0.03);
+        return;
+      }
       for (let k = 0; k <= Math.round(w / 0.8); k++) { const bx = x + 0.1 + (w - 0.2) * k / Math.max(1, Math.round(w / 0.8));
         face([P(bx - 0.06, -d - 0.04, z - 0.32), P(bx + 0.06, -d - 0.04, z - 0.32), P(bx + 0.06, -d - 0.04, z - 0.14), P(bx - 0.06, -d - 0.04, z - 0.14)], dark, 0.02);
         line(P(bx, 0, z - 0.25), P(bx, -d, z - 0.25), dark, 0.07); }
@@ -21245,6 +21258,14 @@ function vIcon(key, size) {
       const N = [P(x0, Dd / 2, H + h), P(x1, Dd / 2, H + h), P(x1, Dd + e, H - dz), P(x0, Dd + e, H - dz)];
       const S = [P(x0, -e, H - dz), P(x1, -e, H - dz), P(x1, Dd / 2, H + h), P(x0, Dd / 2, H + h)];
       face(N, vShade(rc, 0.7)); face(S, rc); roofTex(S[0], S[1], S[2], S[3], sl, run);
+      if (rk === 'thatch' && wk === 'stone') {
+        const cap = (a, b) => { out.push('<line x1="' + a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) + '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '" stroke="#8E877B" stroke-width="0.42" stroke-linecap="butt"/>');
+          out.push('<line x1="' + a[0].toFixed(2) + '" y1="' + (a[1] - 0.06).toFixed(2) + '" x2="' + b[0].toFixed(2) + '" y2="' + (b[1] - 0.06).toFixed(2) + '" stroke="#CFC9BD" stroke-width="0.3" stroke-linecap="butt"/>');
+          for (let t = 0.12; t < 1; t += 0.16) { const p = lerp(a, b, t); out.push('<line x1="' + (p[0] - 0.12).toFixed(2) + '" y1="' + (p[1] - 0.2).toFixed(2) + '" x2="' + (p[0] + 0.08).toFixed(2) + '" y2="' + (p[1] + 0.08).toFixed(2) + '" stroke="rgba(0,0,0,.25)" stroke-width="0.03"/>'); } };
+        if (zi === 0) cap(S[0], S[3]);
+        if (zi === zones.length - 1) { cap(S[1], S[2]); const eT = P(x1, Dd + e, H - dz); cap(S[2], eT); }
+        for (let t = 0.04; t < 0.99; t += 0.07) { const p = lerp(S[3], S[2], t); out.push('<ellipse cx="' + p[0].toFixed(2) + '" cy="' + (p[1] - 0.06).toFixed(2) + '" rx="0.2" ry="0.12" fill="#A39C8F" stroke="rgba(0,0,0,.35)" stroke-width="0.02"/>'); }
+      }
     } else if (n === 3) { const r = Math.min(Dd, run) / 2, hh = r * Math.tan(th), sl = r / Math.cos(th || 0.01);
       const a = P(x0, -e, H - dz), b = P(x1, -e, H - dz), c = P(x1, Dd + e, H - dz), d = P(x0, Dd + e, H - dz);
       const r0 = P(x0 + r, Dd / 2, H + hh), r1 = P(Math.max(x0 + r, x1 - r), Dd / 2, H + hh);
@@ -21275,15 +21296,15 @@ function vIcon(key, size) {
   const sumEn = (T.summary && T.summary.en) || '';
   const dwelling = !T.support && !m.icon;
   const smokeOnly = VICON_NOCHIM.indexOf(key) >= 0 || /no chimney|without (a )?chimney|chimney is rare|rarely a chimney|almost no chimney|few chimneys|no chimneys|chimney.{0,10}absent/i.test(sumEn);
-  if (dwelling && smokeOnly) {
+  if (dwelling && smokeOnly && !m.chimney) {
     const sx = L * 0.62, sy = Dd * 0.5, z0 = roofZ(sx, sy) + 0.05;
     [[0, 0], [0.35, 0.25], [-0.3, 0.45]].forEach(([dx, dz], k) => { const a = P(sx + dx, sy, z0), b = P(sx + dx + 0.3, sy, z0 + 1.0 + dz), c = P(sx + dx - 0.2, sy, z0 + 2.0 + dz);
       [a, b, c].forEach(p => all.push(p));
       out.push('<path d="M' + a[0].toFixed(2) + ',' + a[1].toFixed(2) + ' Q' + (b[0] + 0.6).toFixed(2) + ',' + b[1].toFixed(2) + ' ' + c[0].toFixed(2) + ',' + c[1].toFixed(2) + '" fill="none" stroke="rgba(140,140,140,' + (0.5 - k * 0.1) + ')" stroke-width="' + (0.16 - k * 0.03).toFixed(2) + '" stroke-linecap="round"/>'); });
   }
-  if (dwelling && !smokeOnly) {
+  if (dwelling && (!smokeOnly || m.chimney)) {
     /* a painted timber house has a masonry chimney, whitewashed */
-    const wc = m.paint ? '#ECE8E0' : wcAll;
+    const wc = m.chimney === 'stone' ? '#A8A196' : m.paint ? '#ECE8E0' : wcAll;
     /* the Alentejo chimney: wide, rising from inside the wall, off the centre */
     if (chimKind === 'rib') {
       /* the Ribatejo chimney: a broad whitewashed stack rising from the front wall through the eave, past the ridge, under a thin cap */
