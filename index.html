@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.125.0',
+  version:     '1.126.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23872,6 +23872,133 @@ VM_OVR['pt-forno-sul'] = (vm, b) => { Object.assign(b, { kind:'round', L:3, D:3,
   const s = ARCH_BIB.find(x => x.r.pt === 'Estruturas de apoio à habitação'); if (s) { s.types = Object.keys(SUP_TYPES); s.refs.push('Oliveira, E. V. de, &amp; Galhano, F. (1992). <i>Arquitectura tradicional portuguesa</i>. Etnográfica Press. https://doi.org/10.4000/books.etnograficapress.6508'); }
 })();
 vernNames();
+
+/* --- v1.126: the house of Porto — the tall narrow house (casa esguia e alta) and the «ilha».
+   Oliveira & Galhano (1992), chapter III, «Casa urbana» (after their «Casas esguias do Porto e sobrados do
+   Recife», 1960–61), and Público (11 Nov 2001), «Casas altas e esguias» — quoting M. Correia Teixeira on the
+   Junta das Obras Públicas lots of 25 palmos. --- */
+Object.assign(VERN_SRC, {
+  PUB:{ tag:'Público 2001', cite:'«Casas altas e esguias». <i>Público</i>, Local Porto, 11 de novembro de 2001 — quoting M. Correia Teixeira.', url:'https://www.publico.pt/2001/11/11/jornal/casas-altas-e-esguias-164093' }
+});
+VM_WALL.azulejo = { c:'#8FB0CF', t:0.5, rho:2000, en:'rendered, faced with azulejos', pt:'rebocada, revestida a azulejo' };
+
+const PORTO_TYPES = {
+  'pt-porto-esguia':{ region:'mainland',
+    name:{ en:'Tall narrow town house of Porto (casa esguia e alta)', pt:'Casa esguia e alta do Porto' },
+    where:{ en:'Porto — the old centre and the streets opened from the late 18th century (Almada, Santa Catarina, Santo Ildefonso, Cedofeita); also Braga, Guimarães, the northern towns', pt:'Porto — o centro antigo e as ruas abertas desde o fim do século XVIII (Almada, Santa Catarina, Santo Ildefonso, Cedofeita); também Braga, Guimarães, as vilas do norte' },
+    summary:{ en:'The typical house of the city: a deep, narrow stone house between party walls on a lot of 25 palmos (5.5 m) that may run 100 m back, three storeys over the ground floor (some four to seven), two or three windows or varandas to the street, the shop or workshop below. Inside, the «alforge» plan of a vertical bourgeois life: rooms front and back, the parlour low, bedrooms (often alcoves) above, dining room and kitchen at the top for fire and smells, servants and stores in the attic, the stair in the middle lit by an oculus or skylight from a tiled hall. Old houses under four low slopes with wide eaves; from the 19th century two tall slopes running front to back, an attic window or balcony in the gable, a parapet; fronts rendered or faced with azulejos.',
+      pt:'A casa típica da cidade: uma casa de pedra funda e estreita entre paredes-meias, num lote de 25 palmos (5,5 m) que pode ir a 100 m de fundo, três andares sobre o rés-do-chão (algumas quatro a sete), duas ou três janelas ou varandas para a rua, a loja ou oficina em baixo. Por dentro, a planta «de alforge» de uma vida burguesa vertical: salas à frente e atrás, a sala de visitas em baixo, os quartos (muitas vezes de alcova) a seguir, a sala de jantar e a cozinha em cima por causa dos incêndios e dos cheiros, os sótãos para criados e arrumos, a escada a meio iluminada por óculo ou clarabóia a partir do átrio de azulejos. As casas antigas sob quatro águas baixas de beirais largos; a partir do século XIX duas águas altas no sentido frente-fundo, janela ou sacada de sótão no outão, platibanda; fachadas rebocadas ou revestidas a azulejo.' },
+    model:{ L:5.5, D:14, fl:4, fh:3.0, rot:180, form:'rect', roof:{ n:2, th:35, bei:0.3, divAxis:'y' },
+      open:{ S:vOpen([D(0.5, 0.3, [{ door:true }, { on:true }, { on:true }, { on:true }]), W(0.2, 0.18, [{ on:false }, { on:true }, { on:true }, { on:true }]), W(0.8, 0.18, [{ on:false }, { on:true }, { on:true }, { on:true }])], 0.35),
+        N:vOpen([W(0.5, 0.25, [{ on:false }, { on:true }, { on:true }, { on:true }])], 0.2), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'plaster walls, tile roof, green door', pt:'parede rebocada, telha, porta verde' },
+      walls:{ en:'granite, rendered or faced with azulejos; granite frames, cantilevered stone balconies', pt:'granito, rebocado ou revestido a azulejo; cantarias, varandas de pedra em balanço' } },
+    feats:[
+      vN('site', { en:'Street front (the lot)', pt:'Frente de rua (o lote)' }, { en:'25 palmos — 5.5 m (or multiples)', pt:'25 palmos — 5,5 m (ou múltiplos)' }, () => MASS.L, 4.5, 6.6, 'm', 'PUB'),
+      vFloors({ en:'4 with the ground floor (some 5–8)', pt:'4 com o rés-do-chão (algumas 5–8)' }, 4, 8, 'OGA'),
+      vN('site', { en:'Depth to front', pt:'Fundo / frente' }, { en:'deep and narrow, ≥ 2', pt:'funda e estreita, ≥ 2' }, () => MASS.D / MASS.L, 1.8, 6, '', 'OGA'),
+      vN('openings', { en:'Openings per floor to the street', pt:'Vãos por piso para a rua' }, { en:'two or three windows or varandas', pt:'duas ou três janelas ou varandas' }, () => vCount(['S']).all / Math.max(1, MASS.fl), 2, 3.3, '', 'OGA'),
+      vI('site', { en:'The «alforge» plan: rooms to the front and the back, the stair in the middle under an oculus or skylight; parlour low, dining room and kitchen high for fire and smells; attic for servants, stores and the oratory.', pt:'A planta «de alforge»: salas para a frente e para as traseiras, a escada a meio sob óculo ou clarabóia; sala de visitas em baixo, sala de jantar e cozinha em cima por causa dos incêndios e dos cheiros; sótão para criados, arrumos e oratório.' }, 'OGA'),
+      vI('roof', { en:'Before the 19th century: four low slopes, wide eaves on stone corbels (rain); then two tall slopes running front to back on steep side gables, an attic window or balcony in the gable, dormers, lanterns, a narrower eave with a parapet in front.', pt:'Antes do século XIX: quatro águas baixas, beirais largos sobre cachorros de cantaria (a chuva); depois duas águas altas no sentido frente-fundo sobre outões íngremes, janela ou sacada de sótão no outão, trapeiras, lanternins, beiral mais estreito com platibanda à frente.' }, 'OGA'),
+      vI('visualization', { en:'Fronts rarely of bare stone: rendered, or from the 19th century faced with azulejos — single patterns or panels imitating tapestries with a border; simple, regular, symmetric facades of windows, oculi and balconies, the top floor marked apart.', pt:'Fachadas raramente de pedra à vista: rebocadas ou, a partir do século XIX, revestidas a azulejo — padrões soltos ou painéis que imitam tapeçarias com barra; fachadas simples, regulares e simétricas de janelas, óculos e varandas, o último andar destacado.' }, 'OGA'),
+      vI('ventilation', { en:'Old shutters and lattices (rótulas, gelosias, adufas) hung from the lintel; sash or casement windows later.', pt:'Antigas portadas e rótulas, gelosias ou adufas suspensas da padieira; depois janelas de corrediça ou de duas folhas.' }, 'OGA'),
+      vWall({ en:'rendered or azulejo', pt:'rebocada ou azulejo' }, ['plaster', 'whitewash', 'tile'], 'OGA')
+    ] },
+  'pt-porto-ilha':{ region:'mainland',
+    name:{ en:'«Ilha» of Porto — rows of small houses behind the street', pt:'«Ilha» do Porto — fiadas de casas pequenas nas traseiras' },
+    where:{ en:'Porto, 19th century — in the long, narrow back gardens of the lots of the new streets', pt:'Porto, século XIX — nos quintais compridos e estreitos dos lotes das ruas novas' },
+    summary:{ en:'The other face of the narrow Porto lot: in the long gardens behind the street houses, rows of small houses, usually of one storey, reached by a narrow passage from the street — the «ilhas» of the city’s working families.',
+      pt:'A outra face do lote estreito do Porto: nos quintais compridos por trás das casas de rua, fiadas de pequenas casas, geralmente de um só piso, com acesso por um corredor estreito a partir da rua — as «ilhas» das famílias operárias da cidade.' },
+    model:{ L:4, D:4, fl:1, fh:2.6, rot:90, form:'rect', roof:{ n:1, th:15, bei:0.15 },
+      open:{ S:vOpen([D(0.35, 0.22), W(0.75, 0.15)], 0.15), N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'plaster walls, tile roof, timber door', pt:'parede rebocada, telha, porta de madeira' },
+      walls:{ en:'granite or brick, rendered', pt:'granito ou tijolo, rebocados' } },
+    feats:[
+      vFloors({ en:'usually one', pt:'geralmente um' }, 1, 2, 'PUB'),
+      vN('site', { en:'Size of each house (inference)', pt:'Dimensão de cada casa (inferência)' }, { en:'about 12–20 m²', pt:'cerca de 12–20 m²' }, () => MASS.L * MASS.D, 10, 22, 'm²', 'INF'),
+      vI('site', { en:'Draw a row along one side of the long back garden (use «houses in a row» in the modeller), the door and window on the passage, the back wall blind against the neighbour.', pt:'Desenhe uma fiada ao longo de um dos lados do quintal comprido (use «casas em banda» no modelador), porta e janela para o corredor, a parede de trás cega contra o vizinho.' }, 'INF'),
+      vI('site', { en:'Born of the same lots: 25 palmos (5.5 m) wide and up to 100 m long, laid out by the Junta das Obras Públicas.', pt:'Nascida dos mesmos lotes: 25 palmos (5,5 m) de largura e até 100 m de fundo, traçados pela Junta das Obras Públicas.' }, 'PUB')
+    ] }
+};
+Object.assign(VERN_TYPES, PORTO_TYPES);
+Object.assign(VERN_DIST, { 'pt-porto-esguia':['Porto', 'Braga'], 'pt-porto-ilha':['Porto'] });
+VM_OVR['pt-porto-esguia'] = (vm, b) => { b.roof.ridge = 'y'; b.wall.mat = 'azulejo'; b.wall.frames = 'cantaria'; b.wall.barra = null; b.wall.cunhais = true; vm.row = { n:3 };
+  vm.els = vm.els.filter(e => e.t !== 'chimney');
+  [1, 2, 3].forEach(f => vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:1.4, floor:f })); };
+VM_OVR['pt-porto-ilha'] = (vm, b) => { vm.row = { n:6 }; b.roof.ridge = 'x'; };
+(() => {
+  const mn = VERN_REGIONS.find(r => r.key === 'mainland'), P0 = mn.place;
+  mn.place = (S, V) => { const o = P0(S, V); if (!o) return o;
+    if (S.lat > 41.135 && S.lat < 41.18 && S.lon > -8.65 && S.lon < -8.57) { const c = o.cand.filter(x => x !== 'pt-porto-esguia' && x !== 'pt-porto-ilha'); o.cand = ['pt-porto-esguia', 'pt-porto-ilha'].concat(c).slice(0, 3); }
+    return o; };
+  const g = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
+  if (g) { g.types.push('pt-porto-esguia', 'pt-porto-ilha'); g.refs.push('Casas altas e esguias. (2001, November 11). <i>Público</i>. https://www.publico.pt/2001/11/11/jornal/casas-altas-e-esguias-164093'); }
+})();
+vernNames();
+
+/* Neves & Teixeira (2018): the three ages of the Porto house, after Oliveira and Fernandes */
+VERN_SRC.NTX = { tag:'Neves & Teixeira 2018', cite:'Neves, A., &amp; Teixeira, J. (2018). «A evolução da casa do Porto na primeira metade do século XX: Tipos edificatórios». In <i>construção2018 — Livro de atas</i> (pp. 1404–1418). Porto: FEUP / FAUP.', url:null };
+vAddT('pt-porto-esguia', [
+  vI('site', { en:'Three ages (Fernandes’s classification): the mercantile house of the 17th century inside the walls — small irregular lots, one front, often over five floors, the ground floor for work, one or two parallel flights; on the river front (Ribeira, Barredo, Miragaia) narrow deep lots with two street fronts round a central stair core — the matrix of all that follows.', pt:'Três idades (classificação de Fernandes): a casa mercantilista do século XVII dentro da muralha — lotes pequenos e irregulares, uma só frente, muitas vezes mais de cinco pisos, o rés-do-chão para o trabalho, escada de um ou dois lanços paralelos; na frente ribeirinha (Ribeira, Barredo, Miragaia) lotes estreitos e profundos com duas frentes de rua em volta de um núcleo central de escadas — a matriz de tudo o que se segue.' }, 'NTX'),
+  vI('ventilation', { en:'The Enlightenment house (18th century: Santo António, Santa Catarina, Cedofeita, Clérigos, Almada): taller floors, three openings per floor, sometimes a low mezzanine over the shop; the central stair now lit and aired by a skylight, which also lights the inner rooms; the kitchen still on the top floor at the back, for the smoke.', pt:'A casa iluminista (século XVIII: Santo António, Santa Catarina, Cedofeita, Clérigos, Almada): pés-direitos maiores, três vãos por piso, por vezes um entrepiso baixo sobre a loja; a escada central passa a ser iluminada e ventilada por uma clarabóia, que serve também os compartimentos interiores; a cozinha ainda no último piso, junto ao tardoz, por causa do fumo.' }, 'NTX'),
+  vI('site', { en:'The liberal house (19th century to the 1920s): a raised basement for services; the kitchen comes down to the ground floor facing the garden, often in a small volume against the back; sanitary rooms added at the back; living rooms below, bedrooms above, servants in a set-back floor or attic; the stair well becomes a closed light shaft under a great skylight.', pt:'A casa liberal (século XIX aos anos 1920): cave sobrelevada para os serviços; a cozinha desce ao rés-do-chão voltada ao logradouro, muitas vezes num pequeno volume encostado ao tardoz; instalações sanitárias acrescentadas ao tardoz; salas em baixo, quartos em cima, criados no andar recuado ou sótão; a caixa de escadas torna-se um saguão fechado sob uma grande clarabóia.' }, 'NTX'),
+  vI('visualization', { en:'Granite rubble and dressed stone for the outer, party and front walls; pine and chestnut for floors, roofs, frontais and tabiques; lime and saibro mortars; channel tile replacing the old thatch against fire, then Marseille tile from the mid-19th century, when azulejo facing of the fronts became the fashion.', pt:'Alvenaria e cantaria de granito nas paredes exteriores, de meação e fachadas; pinho e castanho nos sobrados, coberturas, frontais e tabiques; argamassas de cal e saibro; a telha de canal a substituir o antigo colmo contra o fogo, depois a telha Marselha a partir de meados do século XIX, quando se generaliza o azulejo nas fachadas.' }, 'NTX')
+]);
+VM_OVR['pt-porto-esguia'] = ((f) => (vm, b) => { f(vm, b); vm.vols.push(vmVol({ name:{ en:'Kitchen at the back (liberal house)', pt:'Cozinha no tardoz (casa liberal)' }, x:0, y:b.D / 2 + 1.5, L:3.5, D:3, fl:2, fh:3.0, roof:{ type:'shed', th:15, bei:0.2, mat:'tile', ridge:'auto', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall), open:{ S:[], E:[vmOp('w', 0.5, 0.8, 1, 1)], N:[vmOp('w', 0.5, 0.8, 1, 0)], W:[] } })); })(VM_OVR['pt-porto-esguia']);
+(() => { const g = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses'); if (g) g.refs.push('Neves, A., &amp; Teixeira, J. (2018). A evolução da casa do Porto na primeira metade do século XX: Tipos edificatórios. In <i>construção2018: Livro de atas</i> (pp. 1404–1418). FEUP/FAUP.'); })();
+
+/* Gonçalves (2014): the ilha measured, and its Lisbon counterpart, the pátio */
+VERN_SRC.GON = { tag:'Gonçalves 2014', cite:'Gonçalves, E. M. V. (2014). <i>Bairros de habitação popular no Porto, 1899–1933: A prática de uma arquitectura económica, saudável e cómoda nas vésperas do moderno</i> (tese de doutoramento, orient. R. J. G. Ramos e C. Sambricio). Porto: FAUP.', url:null };
+(() => {
+  const T = VERN_TYPES['pt-porto-ilha'];
+  T.summary = { en:'Rows of small houses of about 16 m² of useful area along narrow plots, built mostly for the working class of industrial Porto: usually one single room, its only front to the alley with a door and a tiny window; no sewer or running water, shared latrines. The rows lay behind a better street house where the promoter lived, which hid the way in. 6,020 houses in 531 ilhas were counted; made illegal, they went on being built.',
+    pt:'Bandas de pequenas casas com cerca de 16 m² de área útil ao longo de parcelas estreitas, habitadas sobretudo pelo operariado do Porto industrial: em regra um só compartimento, a única fachada voltada à viela com uma porta e uma janela diminutas; sem esgotos nem água, com retretes comuns. Os conjuntos ficavam atrás de um prédio aburguesado onde vivia o promotor, que ocultava o acesso. Contaram-se 6.020 casas em 531 ilhas; tornadas ilegais, continuaram a ser construídas.' };
+  T.model.L = 4.5; T.model.D = 4;
+  T.feats = T.feats.filter(f => !(f.src === 'INF' && f.get));
+  T.feats.push(vN('site', { en:'Useful area of each house', pt:'Área útil de cada casa' }, { en:'about 16 m² (gross about 18)', pt:'cerca de 16 m² (bruta cerca de 18)' }, () => MASS.L * MASS.D, 14, 22, 'm²', 'GON'),
+    vN('openings', { en:'Openings on the alley', pt:'Vãos para a viela' }, { en:'one door and one tiny window', pt:'uma porta e uma janela diminuta' }, () => vCount(['S']).all, 2, 2, '', 'GON'),
+    vI('ventilation', { en:'One front only: no through draught, no water, no sewer, shared latrines — the reason for the hygienist campaigns and the first public housing (the «Colónias Operárias»).', pt:'Uma só fachada: sem ventilação cruzada, sem água, sem esgotos, retretes comuns — a razão das campanhas higienistas e da primeira habitação pública (as «Colónias Operárias»).' }, 'GON'));
+  VERN_TYPES['pt-lisboa-patio'] = { region:'mainland',
+    name:{ en:'Pátio of Lisbon — workers’ houses round a common yard', pt:'Pátio de Lisboa — casas operárias em volta de um pátio comum' },
+    where:{ en:'Lisbon, inside the blocks of the industrial districts — often on old farm sites (Xabregas, Alcântara, Graça)', pt:'Lisboa, no interior dos quarteirões dos bairros industriais — muitas vezes em antigas quintas (Xabregas, Alcântara, Graça)' },
+    summary:{ en:'The Lisbon counterpart of the Porto ilha: small workers’ dwellings inside the block, put up by small investors, but more regular, modelled on the rural buildings the first industries took over, and — wages and the rental market being higher — often of more than two storeys, reached by galleries round a common yard.',
+      pt:'A contrapartida lisboeta da ilha do Porto: pequenas habitações operárias no interior do quarteirão, promovidas por pequenos investidores, mas mais regulares, tomando como modelo as estruturas rurais ocupadas pelas primeiras indústrias, e — com salários e mercado de arrendamento mais altos — muitas vezes com mais de dois pisos, servidos por galerias voltadas a um pátio comum.' },
+    model:{ L:16, D:5, fl:2, fh:2.8, rot:180, form:'rect', roof:{ n:1, th:15, bei:0.2 },
+      open:{ S:vOpen([D(0.15, 0.06, [{ door:true }, { door:true }]), W(0.3, 0.05, [{ on:true }, { on:true }]), D(0.5, 0.06, [{ door:true }, { door:true }]), W(0.65, 0.05, [{ on:true }, { on:true }]), D(0.85, 0.06, [{ door:true }, { door:true }])], 0.12), N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'whitewash walls, tile roof, timber door', pt:'parede caiada, telha, porta de madeira' },
+      walls:{ en:'rubble and brick, rendered and whitewashed; timber galleries', pt:'alvenaria e tijolo, rebocados e caiados; galerias de madeira' } },
+    feats:[ vFloors({ en:'two or more', pt:'dois ou mais' }, 2, 3, 'GON'),
+      vI('site', { en:'Inside the block, round a common yard; the upper dwellings reached by a gallery along the yard front.', pt:'No interior do quarteirão, em volta de um pátio comum; as habitações de cima servidas por uma galeria ao longo da frente do pátio.' }, 'GON'),
+      vI('site', { en:'Sizes are teaching inferences — the source describes the type, not its dimensions.', pt:'As dimensões são inferências didáticas — a fonte descreve o tipo, não as suas medidas.' }, 'INF') ] };
+  VERN_DIST['pt-lisboa-patio'] = ['Lisboa'];
+  VM_OVR['pt-lisboa-patio'] = (vm, b) => { vm.court = { on:true, x:0, y:-b.D / 2 - 4, L:b.L, D:8, h:2.4, open:'N', gate:{ face:'S', pos:0.5, w:2 } };
+    vm.els = vm.els.filter(e => e.t !== 'chimney'); vm.els.push({ t:'varanda', vol:0, face:'S', kind:'corrida', pos:0.5, w:b.L - 1, floor:1 }, { t:'stair', vol:0, face:'S', along:'par', pos:0.02, w:1.0, landing:false, porch:false }); };
+  const g = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
+  if (g) { g.types.push('pt-lisboa-patio'); g.refs.push('Gonçalves, E. M. V. (2014). <i>Bairros de habitação popular no Porto, 1899–1933: A prática de uma arquitectura económica, saudável e cómoda nas vésperas do moderno</i> [Doctoral thesis, Universidade do Porto].'); }
+  vernNames();
+})();
+
+/* Almeida et al. (2014) on the walls, and Silva (2013) on the ilha, the casa and the palacete */
+Object.assign(VERN_SRC, {
+  ALM:{ tag:'Almeida et al. 2014', cite:'Almeida, C., Guedes, J. P., Arêde, A., &amp; Costa, A. (2014). «Paredes de alvenaria de pedra de folha única: Caracterização geométrica e comportamento estrutural». <i>9.º Congresso Nacional de Mecânica Experimental</i>, Aveiro.', url:null },
+  TSS:{ tag:'Silva 2013', cite:'Silva, T. A. de S. e (2013). <i>Porto: [Re]habitar a cidade — Obsolescência urbana e a readaptação habitacional à cidade contemporânea</i> (dissertação de mestrado integrado, orient. N. Grande). Coimbra: dARQ-FCTUC — after M. C. Teixeira, <i>Habitação popular na cidade oitocentista: As ilhas do Porto</i>.', url:null }
+});
+vAddT('pt-porto-esguia', [
+  vI('visualization', { en:'The walls: the gable and party walls, shared with the neighbours and without openings, carry the timber floors, roof and stairs — one leaf of granite, 30–50 cm, thinning upward (over 45 cm when double); the front and back walls, full of openings, are double-leaf and carry only the roof trusses. Mortared joints of lime and saibro, 0.5–2 cm, stones up to 0.3–1.2 m across, shimmed; voids inside the thicker walls.', pt:'As paredes: as empenas e meeiras, comuns aos vizinhos e sem aberturas, suportam os sobrados, a cobertura e as escadas de madeira — de pano único de granito, 30–50 cm, a diminuir em altura (mais de 45 cm se de pano duplo); a fachada e o tardoz, cheios de vãos, são de pano duplo e só apoiam as asnas da cobertura. Juntas argamassadas de cal e saibro, 0,5–2 cm, pedras de 0,3 a 1,2 m, com calços; vazios no interior das paredes mais grossas.' }, 'ALM'),
+  vI('site', { en:'Two fronts, the main rooms to each for daylight, the stair in the centre under a large skylight; one street front and a long garden behind — «the best of town and country».', pt:'Duas frentes, as divisões principais voltadas a cada uma pela luz, a escada ao centro sob uma grande clarabóia; uma frente de rua e um logradouro comprido nas traseiras — «o melhor da cidade e do campo».' }, 'TSS')
+]);
+(() => {
+  const T = VERN_TYPES['pt-porto-ilha'], f = T.feats.find(q => q.src === 'GON' && q.get && q.unit === 'm²');
+  if (f) { f.lo = 10; f.hi = 22; f.model = { en:'10–20 m² (about 16 useful)', pt:'10–20 m² (cerca de 16 úteis)' }; }
+  vAddT('pt-porto-ilha', [
+    vI('site', { en:'Four layouts (M. C. Teixeira): one lot, houses along one wall with a narrow side corridor; two lots, a central corridor with houses each side; houses back to back with two side corridors; several lots, successive back-to-back rows. The corridors end in shared latrines — a kin of the English back-to-back.', pt:'Quatro formas (M. C. Teixeira): um lote, casas ao longo de um muro com um corredor lateral estreito; dois lotes, corredor central com casas de cada lado; casas costas com costas com dois corredores laterais; vários lotes, filas sucessivas costas com costas. Os corredores rematam em latrinas coletivas — parentes das «back-to-back houses» inglesas.' }, 'TSS'),
+    vI('openings', { en:'Usually one storey; sometimes two, with an inner stair or reached by an upper gallery. The corridor, half public and half private, is the shared room of the neighbours.', pt:'Normalmente um piso; por vezes dois, com escada interior ou acesso por uma galeria superior. O corredor, entre público e privado, é a sala comum da vizinhança.' }, 'TSS'),
+    vI('site', { en:'Rua de São Vítor (Bonfim), before 1896: an ilha on two Almada lots, about 11.5 m wide, the corridor central, the houses across it each with its one front, two slightly larger houses on the street.', pt:'Rua de São Vítor (Bonfim), anterior a 1896: uma ilha em dois lotes almadinos, cerca de 11,5 m de largura, corredor central, as casas transversais cada uma com a sua única frente, duas casas um pouco maiores à face da rua.' }, 'TSS')
+  ]);
+  const g = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
+  if (g) g.refs.push('Almeida, C., Guedes, J. P., Arêde, A., &amp; Costa, A. (2014). Paredes de alvenaria de pedra de folha única: Caracterização geométrica e comportamento estrutural [Paper presentation]. <i>9.º Congresso Nacional de Mecânica Experimental</i>, Aveiro.',
+    'Silva, T. A. de S. e (2013). <i>Porto: [Re]habitar a cidade — Obsolescência urbana e a readaptação habitacional à cidade contemporânea</i> [Master’s dissertation, Universidade de Coimbra].');
+})();
 
 const TABS_OLGYAY = [
   { key:'environment', label:'Environmental', build:buildEnvironment },
