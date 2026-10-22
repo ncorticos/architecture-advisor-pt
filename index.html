@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.129.0',
+  version:     '1.130.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20913,6 +20913,34 @@ const ARCH_BIB = [
    roof in the colours of its finishes, the main door on the south wall. */
 /* hexRgb gives channels in 0–1 */
 const vShade = (hex, k) => { const v = hexRgb(hex); return 'rgb(' + v.map(c => Math.round(clamp(c * 255 * k, 0, 255))).join(',') + ')'; };
+/* The town houses of the icons — drawn between their neighbours — and the
+   dwellings the sources give no chimney (the smoke through the tiles). */
+const VICON_URBAN = ['pt-porto-esguia', 'pt-porto-ilha', 'pt-lisboa-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-ale-d',
+  'pt-rib-vila', 'pt-alg-pescadores', 'pt-casa-judeus', 'pt-meia-casa', 'pt-povoa', 'pt-tavira'];
+const VICON_NOCHIM = ['pt-tmontes', 'pt-alg-trave'];
+/** The neighbours of a town house in the icon: a plain block on each side,
+    the same depth, a little lower or higher, and the street in front. */
+function vNeighbours(m, L, Dd, H, zones, P, face) {
+  const W = Math.max(3, Math.min(L * 0.6, 5)), z0 = zones[0], n = z0.n === 3 ? 2 : z0.n, th = (n === 0 ? 0 : z0.th || 20) * Math.PI / 180;
+  const block = (xa, h) => {
+    const xb = xa + W, wall = '#DDD9D1', side = '#C7C2B8', roof = '#B9A99B';
+    face([P(xa, 0, 0), P(xb, 0, 0), P(xb, 0, h), P(xa, 0, h)], wall, 0.04);
+    const top = n === 2 ? [P(xb, Dd, h), P(xb, Dd / 2, h + Dd / 2 * Math.tan(th)), P(xb, 0, h)] : n === 1 ? [P(xb, Dd, h + Dd * Math.tan(th)), P(xb, 0, h)] : [P(xb, Dd, h + 0.25), P(xb, 0, h + 0.25)];
+    face([P(xb, 0, 0), P(xb, Dd, 0)].concat(top), side, 0.04);
+    if (n === 2) face([P(xa, -0.2, h - 0.1), P(xb, -0.2, h - 0.1), P(xb, Dd / 2, h + Dd / 2 * Math.tan(th)), P(xa, Dd / 2, h + Dd / 2 * Math.tan(th))], roof, 0.04);
+    else if (n === 1) face([P(xa, -0.2, h - 0.1), P(xb, -0.2, h - 0.1), P(xb, Dd, h + Dd * Math.tan(th)), P(xa, Dd, h + Dd * Math.tan(th))], roof, 0.04);
+    else { face([P(xa, 0, h), P(xb, 0, h), P(xb, Dd, h), P(xa, Dd, h)], '#CFCAC0', 0.04); face([P(xa, 0, h), P(xb, 0, h), P(xb, 0, h + 0.25), P(xa, 0, h + 0.25)], wall, 0.03); }
+    /* a door and windows, faint, so it reads as a house */
+    const fl = Math.max(1, Math.round(h / (m.fh || 2.8)));
+    for (let k = 0; k < fl; k++) for (let j = 0; j < 2; j++) { const cx = xa + W * (j ? 0.68 : 0.3), z = k * h / fl, dr = !k && !j;
+      face([P(cx - 0.35, -0.02, z + (dr ? 0.02 : 0.9)), P(cx + 0.35, -0.02, z + (dr ? 0.02 : 0.9)), P(cx + 0.35, -0.02, z + (dr ? 2.0 : 1.9)), P(cx - 0.35, -0.02, z + (dr ? 2.0 : 1.9))], '#A9A49A', 0.02); }
+  };
+  return {
+    street: () => face([P(-W - 1, -2.2, 0), P(L + W + 1, -2.2, 0), P(L + W + 1, 0, 0), P(-W - 1, 0, 0)], '#D6D3CC', 0.03),
+    west: () => block(-W, H + 0.6),
+    east: () => block(L, Math.max(2.4, H - 0.6))
+  };
+}
 function vIcon(key, size) {
   const T = VERN_TYPES[key];
   if (!T) return '';
@@ -20936,6 +20964,12 @@ function vIcon(key, size) {
   /** Courses across a quad a-b (bottom) / d-c (top), every step of its height h. */
   const courses = (a, b, c, d, h, step, col, w) => { const n = Math.max(1, Math.floor(h / step)); for (let k = 1; k < n; k++) { const t = k / n; line(lerp(a, d, t), lerp(b, c, t), col, w); } };
   const ticks = (a, b, c, d, len, step, col, w) => { const n = Math.max(1, Math.floor(len / step)); for (let k = 1; k < n; k++) { const t = k / n; line(lerp(a, b, t), lerp(d, c, t), col, w); } };
+  /* the setting: a town house between its neighbours, a street before it; a house on its own on a disc of ground */
+  const urban = VICON_URBAN.indexOf(key) >= 0, nbr = urban ? vNeighbours(m, L, Dd, H, zones, P, face) : null;
+  const ground = () => { const R0 = Math.hypot(L, Dd) / 2 + 1.6, pts = Array.from({ length:48 }, (_, i) => { const a = i / 48 * 2 * Math.PI; return P(L / 2 + R0 * Math.cos(a), Dd / 2 + R0 * Math.sin(a), -rz); });
+    pts.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(pts) + '" fill="#E3E5D6" stroke="#C9CDB8" stroke-width="0.05"/>'); };
+  if (urban) nbr.street(); else ground();
+  if (urban) nbr.west();
   /* ground shadow */
   const sh = [P(-0.4, -0.4, -rz), P(L + 0.9, -0.4, -rz), P(L + 0.9, Dd + 0.9, -rz), P(-0.4, Dd + 0.9, -rz)];
   out.push('<polygon points="' + fmtP(sh) + '" fill="rgba(0,0,0,.10)"/>'); sh.forEach(p => all.push(p));
@@ -21127,11 +21161,23 @@ function vIcon(key, size) {
       if ((n === 2 ? Dd / 2 : Dd) * Math.tan(th) > nh + 0.05) face([P(xe, 0, H), P(xe, Dd, H)].concat(top.slice(0, -1)), vShade(wc, 0.82));
     }
   });
-  /* a chimney where the model names one */
+  /* the roof's height over a plan point, from the part it falls in */
+  const roofZ = (x, y) => { const z = zones.find(q => x >= (q.f0 || 0) * L - 1e-6 && x <= (q.f1 === undefined ? 1 : q.f1) * L + 1e-6) || zones[0], t = (z.n === 0 ? 0 : z.th) * Math.PI / 180;
+    const xa = (z.f0 || 0) * L, xb = (z.f1 === undefined ? 1 : z.f1) * L;
+    return z.n === 2 ? H + (Dd / 2 - Math.abs(y - Dd / 2)) * Math.tan(t) : z.n === 1 ? H + y * Math.tan(t) : z.n === 3 ? H + Math.max(0, Math.min(y, Dd - y, x - xa, xb - x)) * Math.tan(t) : H; };
+  /* every dwelling has its hearth: a chimney, or — where the sources say the smoke left through the tiles — a wisp of smoke over the roof */
   const sumEn = (T.summary && T.summary.en) || '';
-  if (/chimney/i.test(sumEn) && !/no chimney|without (a )?chimney|chimney is rare|rarely a chimney|almost no chimney|few chimneys|no chimneys|not.{0,20}chimney|chimney.{0,10}absent/i.test(sumEn) && zones[0].n !== 0) {
+  const dwelling = !T.support && !m.icon;
+  const smokeOnly = VICON_NOCHIM.indexOf(key) >= 0 || /no chimney|without (a )?chimney|chimney is rare|rarely a chimney|almost no chimney|few chimneys|no chimneys|chimney.{0,10}absent/i.test(sumEn);
+  if (dwelling && smokeOnly) {
+    const sx = L * 0.62, sy = Dd * 0.5, z0 = roofZ(sx, sy) + 0.05;
+    [[0, 0], [0.35, 0.25], [-0.3, 0.45]].forEach(([dx, dz], k) => { const a = P(sx + dx, sy, z0), b = P(sx + dx + 0.3, sy, z0 + 1.0 + dz), c = P(sx + dx - 0.2, sy, z0 + 2.0 + dz);
+      [a, b, c].forEach(p => all.push(p));
+      out.push('<path d="M' + a[0].toFixed(2) + ',' + a[1].toFixed(2) + ' Q' + (b[0] + 0.6).toFixed(2) + ',' + b[1].toFixed(2) + ' ' + c[0].toFixed(2) + ',' + c[1].toFixed(2) + '" fill="none" stroke="rgba(140,140,140,' + (0.5 - k * 0.1) + ')" stroke-width="' + (0.16 - k * 0.03).toFixed(2) + '" stroke-linecap="round"/>'); });
+  }
+  if (dwelling && !smokeOnly) {
     /* the Alentejo chimney: wide, rising from inside the wall, off the centre */
-    const cw = chimKind === 'ale' ? 1.1 : 0.6, cx = chimKind === 'ale' ? L * 0.66 : L * 0.72, cy = chimKind === 'ale' ? Dd * 0.3 : Dd * 0.55, th0 = zones[zones.length - 1].th * Math.PI / 180, zb = H + Math.max(0, Dd / 2 - Math.abs(cy - Dd / 2)) * Math.tan(th0) - 0.2, zt = zb + 1.3;
+    const cw = chimKind === 'ale' ? 1.1 : 0.6, cx = chimKind === 'ale' ? L * 0.66 : Math.min(L * 0.72, L - 0.9), cy = chimKind === 'ale' ? Dd * 0.3 : Dd * 0.55, zb = roofZ(cx + cw / 2, cy) - 0.2, zt = Math.max(zb + 1.3, roofZ(cx, Dd / 2) + 0.6);
     face([P(cx, cy, zb), P(cx + cw, cy, zb), P(cx + cw, cy, zt), P(cx, cy, zt)], wc, 0.05); face([P(cx + cw, cy, zb), P(cx + cw, cy + 0.6, zb), P(cx + cw, cy + 0.6, zt), P(cx + cw, cy, zt)], vShade(wc, 0.8), 0.05);
     face([P(cx - 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy + 0.65, zt), P(cx - 0.05, cy + 0.65, zt)], vShade(wc, 0.92), 0.05);
     if (chimKind === 'alg') { /* the Algarve lattice chimney: a pierced shaft and a little pointed cap */
@@ -21146,7 +21192,7 @@ function vIcon(key, size) {
     else face([P(x, -d, z), P(x + w, -d, z), P(x + w, 0, z + 0.4), P(x, 0, z + 0.4)], vShade(rc, 0.95)); }
   /* a windmill: the round tower, its cap and four sails, over the plan drawing */
   if (m.icon === 'windmill') {
-    out.length = 0; all.length = 0;
+    out.length = 0; all.length = 0; ground();
     const cx = L / 2, cy = Dd / 2, r = L / 2, Hw = H, ring = (z, rr) => Array.from({ length:24 }, (_, i) => { const a = i / 24 * 2 * Math.PI; return P(cx + rr * Math.cos(a), cy + rr * Math.sin(a), z); });
     const shd = ring(-rz, r + 0.6).map(p => [p[0] + 0.6, p[1] + 0.3]); out.push('<polygon points="' + fmtP(shd) + '" fill="rgba(0,0,0,.10)"/>'); shd.forEach(p => all.push(p));
     /* the tower: the half of the drum turned to the viewer (south-east), from silhouette to silhouette, shaded strip by strip;
@@ -21187,6 +21233,7 @@ function vIcon(key, size) {
       face([P(x - w / 2, -0.03, -rz), P(x + w / 2, -0.03, -rz), P(x + w / 2, -0.03, -rz * 0.3), P(x, -0.03, -rz * 0.12), P(x - w / 2, -0.03, -rz * 0.3)], '#2E3A40', 0.03);
       face([P(x - w / 2 - 0.2, -1.6, -rz), P(x + w / 2 + 0.2, -1.6, -rz), P(x + w / 2, -0.03, -rz), P(x - w / 2, -0.03, -rz)], 'rgba(90,140,180,.55)', 0.02); }
   }
+  if (urban && !m.icon) nbr.east();
   const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
   const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) - x0, hgt = Math.max(...ys) - y0;
   const pad = 0.5, vb = [x0 - pad, y0 - pad, w + 2 * pad, hgt + 2 * pad].map(v => +v.toFixed(2)).join(' ');
