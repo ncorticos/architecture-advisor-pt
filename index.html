@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.117.0',
+  version:     '1.118.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -18880,6 +18880,11 @@ function vernApply(scope) {
     /* a latada is a vine pergola; a porch (alpendre, varanda, gallery) a roofed canopy */
     if (r.latada || r.porch) ROOF.bei.canopy = Object.assign({ f:'S', x:0, y:0, w:Math.min(8, Math.max(1, MASS.L - 2)), d:3, p:0, drop:0.15 }, r.latada ? { kind:'pergola', cover:'vine' } : {});
     if (r.zones) ROOF.zones = JSON.parse(JSON.stringify(r.zones));
+    /* fold the eave and the porch into the roof zones now, so every tab — not only Roof — draws the porch;
+       a model that sets its own zones keeps their eaves */
+    const keep = r.zones ? ROOF.zones.map(z => z.bei) : null;
+    migrateRoofGlobals(MASS, ROOF);
+    if (keep) ROOF.zones.forEach((z, i) => { if (keep[i] === undefined) delete z.bei; else z.bei = keep[i]; });
   }
   if ((all || scope === 'site') && m.balc && MASS.fl >= 2) {
     /* the varanda on the main facade, reached by its outside stair */
@@ -19127,6 +19132,9 @@ Object.assign(VERN_SRC, {
   DEL:{ tag:'Delgado 2026', cite:'Delgado, G. F. A. (2026). <i>Entre o vernacular e o contemporâneo: Um projeto em Miranda do Douro</i> (dissertação de mestrado integrado). Porto: FAUP — reading the Zona 2 (Trás-os-Montes) of <i>Arquitectura popular em Portugal</i> (1961) and Oliveira &amp; Galhano.', url:'https://repositorio-aberto.up.pt/bitstream/10216/174514/2/780058.pdf' },
   MGA:{ tag:'Almeida 2014', cite:'Almeida, M. G. de (2014). <i>Arquitectura popular de Entre-Douro-e-Vouga</i> (dissertação de mestrado integrado, orient. A. M. T. F. Martins). Covilhã: Universidade da Beira Interior — Rio de Frades, Covêlo de Paivô, Lomba, Cabaços, Albergaria da Serra (Arouca), after M. A. Ribeiro (1999) and M. C. Teixeira (2013).', url:'https://ubibliorum.ubi.pt/server/api/core/bitstreams/41d56d22-5877-4da2-adf8-73d65273f519/content' },
   PIN:{ tag:'Pinto 2016', cite:'Pinto, S. M. L. R. (2016). <i>A tradição portuguesa das coberturas de colmo: Os casos práticos de Vale de Papas e Corte de Ouro</i> (dissertação de mestrado integrado). Lisboa: Universidade Lusíada — fieldwork in Vale de Papas (Cinfães, 1040 m), after Oliveira, Galhano &amp; Pereira (1988).', url:'http://hdl.handle.net/11067/1787' },
+  SSM:{ tag:'Marques 2021', cite:'Marques, S. S. S. (2021). <i>Caracterização das construções vernaculares do Parque Natural da Serra de Aire e Candeeiros</i> (dissertação de mestrado em Reabilitação Urbana, orient. J. Mascarenhas). Tomar: Instituto Politécnico de Tomar.', url:'https://comum.rcaap.pt/server/api/core/bitstreams/48b873b8-aed7-492b-8231-c4c1dc3e7a1c/content' },
+  JOR:{ tag:'Jorge 2005', cite:'Jorge, P. A. F. (2005). <i>A casa rural no concelho de Alcobaça em 1961: Da teorização erudita à prática popular</i> (dissertação de mestrado em Metodologias de Intervenção no Património Arquitectónico). Porto: FAUP — the building permits of Alcobaça in 1961.', url:'https://zenodo.org/records/2617158' },
+  CMG:{ tag:'CM Marinha Grande', cite:'Câmara Municipal da Marinha Grande. <i>Guia turístico da Marinha Grande</i> — «Casa alpendrada / Casa do vidreiro», Largo 5 de Outubro.', url:'https://www.cm-mgrande.pt/cmmgrande/uploads/document/file/1909/GUIATURISTICO_MG_PT_web.pdf' },
   PAN:{ tag:'André 2016', cite:'André, P. (2016). «Etnogenia, fotogenia, etnologia: arquitectura popular na primeira metade do século XX em Portugal». In P. André &amp; C. Sambricio (coord.), <i>Arquitectura popular: Tradição e vanguarda</i>, 85–143. Lisboa: DINÂMIA’CET-IUL — relaying J. Dias (1949/1951) on the north–south divide.', url:null }
 });
 
@@ -19730,6 +19738,11 @@ VERN_REGIONS.push({ key:'mainland', name:{ en:'Portuguese vernacular', pt:'Vern�
       cand = alt > 300 ? ['pt-alg-serra', 'pt-alg-trave', 'pt-alg-taipa'] : alt > 100 ? ['pt-alg-acoteia', 'pt-alg-taipa', 'pt-alg-serra']
         : S.lon < -8.55 ? ['pt-alg-taipa', 'pt-alg-acoteia', 'pt-alg-pescadores'] : ['pt-alg-acoteia', 'pt-alg-pescadores', 'pt-alg-taipa'];
     }
+    /* the limestone massif of Aire and Candeeiros cuts across four NUTS (Pinhal Litoral, Oeste, Médio Tejo, Lezíria): read it by place */
+    if (S.lat > 39.33 && S.lat < 39.66 && S.lon > -9.02 && S.lon < -8.6 && alt >= 150) { cand = ['pt-candeeiros'].concat(cand.filter(k => k !== 'pt-candeeiros')).slice(0, 3); band = { en:'Serras de Aire e Candeeiros — the limestone massif', pt:'Serras de Aire e Candeeiros — o maciço calcário' }; }
+    /* the plains round Alcobaça and Leiria: the symmetric rural house of the mid-20th century beside the older ones */
+    else if (S.nuts === 'Oeste' && S.lat > 39.4 && alt < 150) cand = ['pt-alpendrada', 'pt-alcobaca', 'pt-saloia'];
+    else if (S.nuts === 'Pinhal Litoral' && alt < 150) cand = alt < 15 ? ['pt-palheiro', 'pt-alpendrada', 'pt-alcobaca'] : ['pt-alpendrada', 'pt-alcobaca', 'pt-palheiro'];
     return { cand, face:null, faceName:MN_NAME[g], bandName:band, lines:MN_LINES[g] || [], faces:null, warn };
   } });
 
@@ -20043,6 +20056,48 @@ Object.assign(MN_TYPES, {
       vI('site', { en:'The village grows without a plan: largos open where the community has its references — the church, the fountain, a place to meet.', pt:'A aldeia cresce sem traçado: os largos abrem-se onde há referências comunitárias — a igreja, o fontanário, os pontos de socialização.' }, 'FER')
     ] },
 
+  'pt-candeeiros':{ region:'mainland',
+    name:{ en:'Aire and Candeeiros limestone house', pt:'Casa calcária das Serras de Aire e Candeeiros' },
+    where:{ en:'The limestone massif between Porto de Mós, Alcobaça, Rio Maior, Alcanena and Ourém — Mira de Aire, Serra de Santo António, Alvados, Vale de Ventos', pt:'O maciço calcário entre Porto de Mós, Alcobaça, Rio Maior, Alcanena e Ourém — Mira de Aire, Serra de Santo António, Alvados, Vale de Ventos' },
+    summary:{ en:'Limestone, timber and clay. The plain house is one low, small storey on a square or rectangle: the sala de fora at the door, which distributes and receives, the bedrooms to the north, the kitchen to the east or south with a large chimney in a corner that is also the smokehouse. The long front faces south-east, whitewashed over lime render, the frames in stone and sometimes ochre, yellow or blue; the other walls bare stone, the north almost blind. Two slopes of channel tile on battens, a projecting eave, stones on the tiles against the winter wind. Older houses keep a pial porch — cut out of the sala or added over the landing.',
+      pt:'Calcário, madeira e barro. A casa simples é um piso baixo e pequeno, quadrado ou rectangular: a sala de fora à entrada, que distribui e recebe, os quartos a norte, a cozinha a nascente ou a sul com uma grande chaminé a um canto, que é também fumeiro. A fachada maior vira a sudeste, caiada sobre reboco de cal, as cantarias de pedra e por vezes ocre, amarelo ou azul; as outras paredes em pedra à vista, a norte quase cega. Duas águas de telha caleira sobre ripado, beiral saliente, pedras sobre as telhas contra o vento de Inverno. As casas mais antigas guardam um alpendre de pial — subtraído à sala ou acrescentado sobre o patamar.' },
+    model:{ L:9, D:6, fl:1, fh:2.5, rot:150, form:'rect', roof:{ n:2, th:24, bei:0.35, porch:true },
+      open:{ S:vOpen([W(0.25, 0.2), D(0.5, 0.25), W(0.75, 0.2)], 0.08), N:{ wwr:0, units:vOff() }, E:vOpen([W(0.5, 1)], 0.03), W:{ wwr:0.01, units:vOff() } },
+      render:{ en:'whitewash walls, barrel tile roof, timber door', pt:'parede caiada, telha de canudo, porta de madeira' },
+      walls:{ en:'limestone masonry, dry where the blocks are big (high ground, near the lapiás), bound with clay or red-sand lime mortar in the hollows; one or two leaves; foundations about 0.50 m deep, widened at the quoins', pt:'alvenaria de calcário, seca onde os blocos são grandes (zonas altas, junto aos lapiás), ligada a barro ou argamassa de cal e areia vermelha nos covões; um ou dois panos; fundações a cerca de 0,50 m, alargadas nos cunhais' } },
+    feats:[
+      vFloors({ en:'1 (2 in the denser villages: loja below, house above)', pt:'1 (2 nos aglomerados mais densos: loja em baixo, casa em cima)' }, 1, 2, 'SSM'),
+      vFacing({ en:'south-east', pt:'sudeste' }, 100, 170, 'SSM'),
+      vN('openings', { en:'Openings on the north', pt:'Vãos a norte' }, { en:'almost none', pt:'quase nenhuns' }, () => vCount(['N']).all, 0, 0, '', 'SSM'),
+      vGlaze(8, 'INF'),
+      vI('openings', { en:'The front reads window/door, window/door/window or window/window/door/window; frames of plain stone; plinth, pilasters and eave band sometimes painted. A porch on a low stone parapet (pial) shelters the openings in winter and in the heat of summer.', pt:'A fachada lê-se janela/porta, janela/porta/janela ou janela/janela/porta/janela; cantarias simples; embasamento, pilastras e friso do beiral por vezes pintados. Um alpendre de pial protege os vãos no Inverno e no calor do Estio.' }, 'SSM'),
+      vRoofN(null, { en:'two slopes, channel tile', pt:'duas águas, telha caleira' }, [2], 'SSM'),
+      vPitch({ en:'relatively low', pt:'pouco inclinado' }, 18, 30, 'JOR'),
+      vI('ventilation', { en:'Bedrooms to the north, kitchen and its chimney to the east–south or west–south, the warmest corner; the animals’ pens against the bedroom walls and the attic as a hayloft insulate the house. Houses half-sunk into the slope use the ground’s inertia. Poorer houses had no chimney, only a darkened patch of tiles (respiradouro) for the smoke.', pt:'Quartos a norte, a cozinha e a sua chaminé a nascente-sul ou poente-sul, o canto mais quente; os currais encostados às paredes dos quartos e o sótão como palheiro isolam a casa. Casas semienterradas na encosta aproveitam a inércia do terreno. As mais pobres não tinham chaminé, só um respiradouro de telhas escurecidas para o fumo.' }, 'SSM'),
+      vI('site', { en:'Annexes — pens, hayloft, oven house, cart shed, wine press, cistern — line up with the house, wrap it in an L or a U against the north and north-west wind, or close a yard. Deciduous trees and horizontal vine pergolas (latadas) shade the east to south-west fronts; evergreens such as olives screen the west and north from the damp sea wind.', pt:'Os anexos — currais, palheiro, casa do forno, arrumo do carro, lagar, cisterna — alinham com a casa, envolvem-na em L ou U contra o vento de norte e noroeste, ou fecham um pátio. Árvores de folha caduca e latadas horizontais de videira sombreiam as fachadas de nascente a sudoeste; perenes como a oliveira protegem o poente e o norte do vento húmido do mar.' }, 'SSM'),
+      vWall({ en:'whitewashed front, bare limestone elsewhere', pt:'fachada caiada, calcário à vista no resto' }, ['whitewash', 'stone', 'plaster'], 'SSM'),
+      vRoofFin({ en:'channel tile', pt:'telha caleira' }, ['canudo', 'tile'], 'SSM')
+    ] },
+
+  'pt-alcobaca':{ region:'mainland',
+    name:{ en:'Symmetric rural house of Alcobaça (1950s–60s)', pt:'Casa rural simétrica de Alcobaça (anos 1950–60)' },
+    where:{ en:'The farmland of Alcobaça and the Leiria plains — half of the rural houses licensed in Alcobaça in 1961', pt:'Os campos de Alcobaça e a planície de Leiria — metade das casas rurais licenciadas em Alcobaça em 1961' },
+    summary:{ en:'A small rectangle with its long side to the road: a central door between two windows, two slopes running along the front. Inside, three ways to reach the same four rooms — through the sala to a bedroom and the kitchen; through the sala to each room on its own; or by a central corridor, with a bathroom at its end. A popular house dressed in a little erudition, from the Casa Portuguesa and then Modernism; in 1961 it was already giving way to the deeper plan with the gable to the road.',
+      pt:'Um pequeno rectângulo com a face maior para a via: porta central entre duas janelas, duas águas ao comprido da fachada. Dentro, três maneiras de chegar às mesmas quatro divisões — pela sala a um quarto e à cozinha; pela sala a cada divisão independente; ou por um corredor central, com casa de banho ao fundo. Uma casa popular vestida de alguma erudição, da Casa Portuguesa e depois do Modernismo; em 1961 já cedia o lugar à planta em profundidade, de empena para a rua.' },
+    model:{ L:9, D:6.5, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:2, th:28, bei:0.3 },
+      open:{ S:vOpen([W(0.22, 0.2), D(0.5, 0.2), W(0.78, 0.2)], 0.12), N:vOpen([W(0.3, 0.2), D(0.7, 0.2)], 0.06), E:vOpen([W(0.5, 1)], 0.04), W:vOpen([W(0.5, 1)], 0.04) },
+      render:{ en:'whitewash walls, tile roof, timber door', pt:'parede caiada, telhado de telha, porta de madeira' },
+      walls:{ en:'rendered and whitewashed masonry (inference)', pt:'alvenaria rebocada e caiada (inferência)' } },
+    feats:[
+      vFloors('1', 1, 1, 'JOR'),
+      vN('site', { en:'Long side to the road', pt:'Face maior para a via' }, { en:'yes, ridge along the front', pt:'sim, cumeeira ao comprido da fachada' }, () => MASS.L / MASS.D, 1.15, 2, 'L/D', 'JOR'),
+      vRoofN(null, { en:'two slopes along the front', pt:'duas águas ao comprido' }, [2], 'JOR'),
+      vI('openings', { en:'A symmetric front: the door on the axis, a window either side, sometimes decorated.', pt:'Uma fachada simétrica: a porta no eixo, uma janela de cada lado, por vezes decoradas.' }, 'JOR'),
+      vI('site', { en:'Type 1: the door into the sala, from it a bedroom and the kitchen, the second bedroom through the kitchen. Type 2: the sala gives on each room separately. Type 3: a central corridor, every room on its own door, a bathroom at its end.', pt:'Tipo 1: entra-se na sala, que dá para um quarto e para a cozinha; ao segundo quarto passa-se pela cozinha. Tipo 2: a sala dá para cada divisão independentemente. Tipo 3: um corredor central, cada divisão com porta própria, casa de banho ao fundo.' }, 'JOR'),
+      vPitch({ en:'tile', pt:'telha' }, 22, 32, 'INF'),
+      vWall({ en:'whitewashed', pt:'caiada' }, ['whitewash', 'plaster'], 'INF')
+    ] },
+
   'pt-freita':{ region:'mainland',
     name:{ en:'Serra da Freita house (Arouca — schist and slate)', pt:'Casa serrana da Freita (Arouca — xisto e lousa)' },
     where:{ en:'The Gralheira massif above Arouca — Rio de Frades, Covêlo de Paivô, Lomba (schist), Cabaços, Albergaria da Serra (granite)', pt:'O Maciço da Gralheira sobre Arouca — Rio de Frades, Covêlo de Paivô, Lomba (xisto), Cabaços, Albergaria da Serra (granito)' },
@@ -20131,6 +20186,12 @@ Object.assign(MN_TYPES, {
     ] }
 });
 Object.assign(VERN_TYPES, MN_TYPES);
+
+/* --- Marinha Grande and Alcobaça: the porch house in the town and by the serra -- */
+vAdd('pt-alpendrada', [
+  vI('openings', { en:'In Marinha Grande the porch house is the glass-worker’s house (casa do vidreiro), late 19th century: one low storey, the porch set into the front on two Tuscan columns standing on an open low wall — Largo 5 de Outubro, Largo Ilídio de Carvalho.', pt:'Na Marinha Grande a casa alpendrada é a casa do vidreiro, de finais do século XIX: um só piso, baixo, com o alpendre integrado na fachada sobre duas colunas toscanas assentes em murete aberto — Largo 5 de Outubro, Largo Ilídio de Carvalho.' }, 'CMG'),
+  vI('site', { en:'Toward the Serra dos Candeeiros the porch house is built of small stones without mortar (pedra ensonsa); the front porch, usually facing south, is the entrance; a low ceiling under a low-pitched roof; alcoves rather than bedrooms; the kitchen, with its outside oven and its own door, is the room most used — sometimes it is the kitchen door that faces south.', pt:'Para o lado da Serra dos Candeeiros a casa alpendrada é de pedra miúda sem argamassa (pedra ensonsa); o alpendre fronteiro, geralmente a sul, é a entrada; pé-direito reduzido sob uma cobertura de pendente baixa; alcovas e não quartos; a cozinha, com forno exterior e entrada própria, é o espaço mais usado — por vezes é a sua porta que vira a sul.' }, 'JOR')
+]);
 
 /* --- Delgado (2026) and Pinto (2016): the Trás-os-Montes house, Zona 2 ------ */
 vAdd('pt-tmontes', [
@@ -20227,6 +20288,10 @@ const ARCH_BIB = [
     'Miranda, P. M. A., et al. (n.d.). <i>Clima observado</i>. Observatório Regional do Clima da Madeira. https://observatorioclima.madeira.gov.pt/wp-content/uploads/pdfs/02_clima_observado.pdf',
     'Silva, F. A. da, &amp; Menezes, C. A. de. (n.d.). Indústria agrícola. In <i>Elucidário Madeirense</i>. https://elucidariomadeirense.pt/en/articles/1780',
     'Teixeira, C. R. Q. (2009). <i>A arquitectura vernacular da Madeira: Tradição, identidade e sustentabilidade</i> [Master’s dissertation, Universidade da Beira Interior]. http://hdl.handle.net/10400.6/1746'] },
+  { r:{ en:'Leiria, Marinha Grande and Alcobaça — Pinhal Litoral and the Serras de Aire e Candeeiros', pt:'Leiria, Marinha Grande e Alcobaça — Pinhal Litoral e Serras de Aire e Candeeiros' }, types:['pt-alpendrada', 'pt-candeeiros', 'pt-alcobaca'], refs:[
+    'Câmara Municipal da Marinha Grande. (n.d.). <i>Guia turístico da Marinha Grande</i>. https://www.cm-mgrande.pt/cmmgrande/uploads/document/file/1909/GUIATURISTICO_MG_PT_web.pdf',
+    'Jorge, P. A. F. (2005). <i>A casa rural no concelho de Alcobaça em 1961: Da teorização erudita à prática popular</i> [Master’s dissertation, Universidade do Porto]. https://zenodo.org/records/2617158',
+    'Marques, S. S. S. (2021). <i>Caracterização das construções vernaculares do Parque Natural da Serra de Aire e Candeeiros</i> [Master’s dissertation, Instituto Politécnico de Tomar]. https://comum.rcaap.pt/server/api/core/bitstreams/48b873b8-aed7-492b-8231-c4c1dc3e7a1c/content'] },
   { r:{ en:'Entre-Douro-e-Vouga and the Montemuro — the Gralheira massif', pt:'Entre-Douro-e-Vouga e o Montemuro — o Maciço da Gralheira' }, types:['pt-freita', 'pt-montemuro'], refs:[
     'Almeida, M. G. de. (2014). <i>Arquitectura popular de Entre-Douro-e-Vouga</i> [Master’s dissertation, Universidade da Beira Interior]. https://ubibliorum.ubi.pt/entities/publication/ac1905e9-6afb-413e-ae56-93ef22399338',
     'Pinto, S. M. L. R. (2016). <i>A tradição portuguesa das coberturas de colmo: Os casos práticos de Vale de Papas e Corte de Ouro</i> [Master’s dissertation, Universidade Lusíada]. http://hdl.handle.net/11067/1787'] },
