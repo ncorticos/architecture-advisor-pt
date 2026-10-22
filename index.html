@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.120.0',
+  version:     '1.121.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19217,6 +19217,9 @@ Object.assign(VERN_SRC, {
   CVA:{ tag:'Vasconcelos 2015', cite:'Vasconcelos, C. F. M. (2015). <i>A medina de Olhão: A origem da arquitectura popular de Olhão — um contributo</i> (dissertação de mestrado). Lisboa: Universidade Lusíada — after I. Afonso (2006), <i>Telhados tesouro em Faro</i>, and J. M. Fernandes (2008).', url:'http://hdl.handle.net/11067/1536' },
   CMT:{ tag:'CM Tavira', cite:'Câmara Municipal de Tavira (2021). <i>Estudos de caracterização e diagnóstico da revisão do PDM de Tavira</i>, vol. III — after O. Ribeiro, «Açoteias de Olhão e telhados de Tavira».', url:'https://cm-tavira.pt/site/wp-content/uploads/2021/04/Estudos-de-Caracterizacao-e-Diagnostico-da-Revisao-do-PDM-de-Tavira-%E2%80%93-Vol.-III.pdf' },
   SCT:{ tag:'Saraiva & Carvalho 2013', cite:'Saraiva, B., &amp; Carvalho, P. (2013). «Património judaico e turismo cultural em Trancoso». <i>TURyDES — Revista de Investigación en Turismo y Desarrollo Local</i>, 6(14). Coimbra: FLUC, CEGOT.', url:'https://agora.edu.es/descarga/articulo/8449582.pdf' },
+  MCS:{ tag:'Silva 2022', cite:'Silva, M. C. da (2022). <i>Os moinhos de vento portugueses na contemporaneidade</i> (relatório de mestrado em História da Arte). Porto: FLUP — the windmill groups of Montedor, Areosa, Abelheira, Apúlia, Pinhôa, Penacova, Fazarga, Alto de São Bento; after F. Galhano (1978).', url:'https://repositorio-aberto.up.pt/bitstream/10216/145207/2/591059.pdf' },
+  IRL:{ tag:'Lopes 2021', cite:'Lopes, I. A. R. J. (2021). «Moinhos de vento — estruturas invulgares na paisagem transmontana». <i>Revista Memória Rural</i>, 4, 96–119 — Carrazeda de Ansiães.', url:'https://museudamemoriarural.pt/revistamemoriarural/index.php/revista/article/download/124/86/' },
+  FSA:{ tag:'Almeida 2015', cite:'Almeida, F. S. (2015). <i>Património molinológico: Proposta para preservação e reutilização de um moinho</i> (dissertação de mestrado em Arquitetura e Urbanismo). Porto: Universidade Fernando Pessoa — the rodízio watermills of Ribeira Grande, São Miguel.', url:'https://bdigital.ufp.pt/server/api/core/bitstreams/9dca49ae-21f6-40bc-b381-c5ac89440d71/content' },
   PAN:{ tag:'André 2016', cite:'André, P. (2016). «Etnogenia, fotogenia, etnologia: arquitectura popular na primeira metade do século XX em Portugal». In P. André &amp; C. Sambricio (coord.), <i>Arquitectura popular: Tradição e vanguarda</i>, 85–143. Lisboa: DINÂMIA’CET-IUL — relaying J. Dias (1949/1951) on the north–south divide.', url:null }
 });
 
@@ -19958,6 +19961,62 @@ const MN_TYPES = {
       vRoofFin({ en:'channel tile', pt:'telha de canudo' }, ['canudo', 'tile'], 'INF')
     ] },
 
+  'pt-moinho-vento':{ region:'mainland',
+    name:{ en:'Fixed stone-tower windmill (moinho de torre)', pt:'Moinho de vento de torre fixa' },
+    where:{ en:'Exposed ridges and coastal dunes — the Minho coast (Montedor, Apúlia), Penacova, Leiria–Ourém, the Oeste, Sintra–Ericeira, the Algarve hills; in groups of three to seven', pt:'Cumeadas expostas e dunas do litoral — costa minhota (Montedor, Apúlia), Penacova, Leiria–Ourém, Oeste, Sintra–Ericeira, serras algarvias; em grupos de três a sete' },
+    summary:{ en:'The commonest Portuguese windmill: a round tower of stone — granite or schist in the north, stone and lime from Leiria south, rammed earth at Aljezur — about 6.2–6.5 m across outside and 4 m inside, walls up to 1.1 m, one door of about 2.0 × 1.2 m and two or three small windows, 3–5 m to the wall head. Inside a ground floor and a timber floor (sobrado) for the stones and the gearing. On the wall head a turning conical cap (capelo) of tarred boards — once thatch or rush, still in the Algarve, later zinc — turned by a tail pole (rabo) in the north or a winch (sarilho) in the south, carrying four cloth sails. On the coast the mills stand near the houses; inland on high ground away from them, on plinths where the slope demands.',
+      pt:'O moinho de vento mais comum em Portugal: uma torre redonda de pedra — granito ou xisto a norte, pedra e cal de Leiria para sul, taipa em Aljezur — com cerca de 6,2–6,5 m de diâmetro exterior e 4 m interior, paredes até 1,1 m, uma porta de cerca de 2,0 × 1,2 m e duas ou três pequenas janelas, 3–5 m até ao frechal. Dentro, um piso térreo e um sobrado para as mós e a engrenagem. Sobre o frechal, um capelo cónico giratório de tabuado alcatroado — antes de colmo ou junco, ainda no Algarve, depois chapa de zinco — movido por rabo a norte ou por sarilho a sul, com quatro velas de pano. No litoral os moinhos ficam perto das casas; no interior em cotas altas, longe delas, sobre embasamentos onde o declive o exige.' },
+    model:{ L:6, D:6, fl:2, fh:2.0, rot:180, form:'rect', icon:'windmill', roof:{ n:3, th:40, bei:0.1 },
+      open:{ S:vOpen([D(0.5, 0.3, [{ door:true }, { on:false }])], 0.05), N:{ wwr:0, units:vOff() }, E:vOpen([W(0.5, 1, [{ on:false }, { on:true }])], 0.02), W:vOpen([W(0.5, 1, [{ on:false }, { on:true }])], 0.02) },
+      render:{ en:'whitewash walls, timber roof, timber door', pt:'parede caiada, cobertura de madeira, porta de madeira' },
+      walls:{ en:'round tower of granite, schist, stone and lime or rammed earth, up to 1.1 m thick', pt:'torre redonda de granito, xisto, pedra e cal ou taipa, até 1,1 m de espessura' } },
+    feats:[
+      vFloors({ en:'2 — milling floor and sobrado', pt:'2 — piso térreo e sobrado' }, 2, 2, 'MCS'),
+      vN('site', { en:'Round plan (drawn as a square)', pt:'Planta circular (desenhada como quadrado)' }, { en:'about 6.2–6.5 m outside', pt:'cerca de 6,2–6,5 m de diâmetro' }, () => MASS.L, 5.5, 7, 'm', 'IRL'),
+      vN('site', { en:'Height to the wall head', pt:'Altura até ao frechal' }, { en:'about 3–5 m', pt:'cerca de 3–5 m' }, () => MASS.fl * MASS.fh, 3, 5, 'm', 'MCS'),
+      vGlaze(3, 'INF'),
+      vI('openings', { en:'One door, often turned away from the prevailing wind (to the north at Carrazeda), 2.0 × 1.2 m; two or three small windows; thick walls leave a 4 m room inside.', pt:'Uma porta, muitas vezes virada contra os ventos dominantes (a norte em Carrazeda), 2,0 × 1,2 m; duas ou três janelas pequenas; as paredes espessas deixam 4 m de espaço interior.' }, 'IRL'),
+      vI('roof', { en:'The turning cap (capelo) sits on a timber ring on the wall head, on wheels in the north, on a sliding frame round Coimbra; tarred boards, zinc later, thatch or rush in the Algarve. The app has no cone: a steep hip stands in for it.', pt:'O capelo giratório assenta num anel de madeira sobre o frechal, sobre rodas a norte, numa grade deslizante na zona de Coimbra; tabuado alcatroado, depois zinco, colmo ou junco no Algarve. A aplicação não tem cone: uma cobertura de quatro águas inclinada faz as vezes dele.' }, 'MCS'),
+      vI('site', { en:'Variants: towers of timber (Cadaval, Peniche, Caldas, Ourém); the small two-«ponte» tower of the Algarve hills; the turning hexagonal timber mill on two stone wheels (south of Aveiro, Miranda do Corvo, Penela, Ourém); the Azores towers with domed or conical caps.', pt:'Variantes: torres de madeira (Cadaval, Peniche, Caldas, Ourém); a pequena torre de duas «pontes» das serras algarvias; o moinho giratório hexagonal de madeira sobre duas rodas de pedra (a sul de Aveiro, Miranda do Corvo, Penela, Ourém); as torres açorianas de capelo cónico ou em cúpula.' }, 'MCS'),
+      vWall({ en:'stone, whitewashed or bare', pt:'pedra, caiada ou à vista' }, ['whitewash', 'stone', 'schist', 'plaster', 'earth'], 'MCS')
+    ] },
+
+  'pt-moinho-rodizio':{ region:'mainland',
+    name:{ en:'Horizontal-wheel watermill (moinho de rodízio)', pt:'Moinho de água de rodízio' },
+    where:{ en:'On streams and levadas all over the north and centre — the Paiva, the Pônsul, Carrazeda de Ansiães (57 surveyed), the Beira Baixa', pt:'Em ribeiros e levadas de todo o norte e centro — o Paiva, o Pônsul, Carrazeda de Ansiães (57 levantados), a Beira Baixa' },
+    summary:{ en:'A small rectangle beside the stream, its size set by the number of millstones. Water held by a weir (açude) runs along a channel (levada) into a stone chute (cubo) that jets it onto the horizontal paddle wheel (rodízio) in a low vaulted chamber (cabouco) under the floor, one chamber and one pair of stones per arch seen on the front. The milling room above holds the stones (about 1–1.2 m across), the hopper and the grain; often an annex for the animals that carried the grain. Stone laid dry — schist in the Beira Baixa, with a false-cupola roof — or in mortar, a two-slope tile roof elsewhere; small openings, a wide door to the yard where the people waited.',
+      pt:'Um pequeno rectângulo junto à ribeira, do tamanho que o número de mós pede. A água represada pelo açude corre pela levada até ao cubo de pedra, que a projecta sobre o rodízio horizontal numa câmara abobadada e baixa (o cabouco) sob o soalho, um cabouco e um casal de mós por cada arco visto na fachada. A sala de moagem por cima guarda as mós (cerca de 1–1,2 m de diâmetro), a moega e o cereal; muitas vezes um anexo para os animais que traziam o grão. Pedra a seco — xisto na Beira Baixa, com cobertura em falsa cúpula — ou argamassada, cobertura de duas águas em telha noutros lados; vãos pequenos, uma porta larga para o terreiro onde se esperava.' },
+    model:{ L:5, D:4, fl:1, fh:2.4, rot:180, form:'rect', icon:'watermill', raise:{ h:1.0, kind:'plinth' }, roof:{ n:2, th:22, bei:0.2 },
+      open:{ S:vOpen([D(0.35, 0.35), W(0.8, 0.2)], 0.08), N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'schist walls, tile roof, timber door', pt:'paredes de xisto, telhado de telha, porta de madeira' },
+      walls:{ en:'stone laid dry or in mortar; vaulted wheel chambers (caboucos) under the floor', pt:'pedra a seco ou argamassada; caboucos abobadados sob o soalho' } },
+    feats:[
+      vFloors({ en:'1 — milling room over the caboucos', pt:'1 — sala de moagem sobre os caboucos' }, 1, 1, 'FSA'),
+      vRaise({ en:'the cabouco half-storey, about 1 m', pt:'o meio piso dos caboucos, cerca de 1 m' }, 0.6, 1.5, 'FSA'),
+      vI('site', { en:'Weir (açude) across the stream, channel (levada) along the slope, a sluice to let the surplus back; the mills often follow one another down the same levada.', pt:'Açude atravessado na ribeira, levada ao longo da encosta, comporta para devolver o excesso; os moinhos sucedem-se muitas vezes ao longo da mesma levada.' }, 'FSA'),
+      vI('roof', { en:'In the Beira Baixa the mill is of schist laid dry by the «carril» technique under a false cupola; on the Pônsul two pairs of stones, one for white (wheat) and one for black (rye) bread.', pt:'Na Beira Baixa o moinho é de xisto a seco na técnica do carril, coberto em falsa cúpula; no Pônsul dois casais de mós, alveiras para o pão branco (trigo) e negreiras para o pão escuro (centeio).' }, 'SAL'),
+      vRoofN(null, { en:'two slopes (or a false cupola)', pt:'duas águas (ou falsa cúpula)' }, [2, 1], 'FSA'),
+      vWall({ en:'bare stone', pt:'pedra à vista' }, ['schist', 'stone'], 'SAL')
+    ] },
+
+  'az-moinho':{ region:'azores',
+    name:{ en:'Azores watermill with the miller’s house (Ribeira Grande)', pt:'Moinho de água açoriano com casa do moleiro (Ribeira Grande)' },
+    where:{ en:'Along the Levada da Condessa and the streams of Ribeira Grande, São Miguel — Conceição, Matriz, Ribeirinha', pt:'Ao longo da Levada da Condessa e das ribeiras da Ribeira Grande, São Miguel — Conceição, Matriz, Ribeirinha' },
+    summary:{ en:'A rectangular basalt mill of one to four millstones — more near the town, one in the far parishes — over its arched caboucos, and in the town parishes an upper floor for the miller’s family, with kitchen, sala and bedrooms; a hole in the floor fed grain to the hopper below through the night. Rough basalt with dressed quoins and frames, bare or rendered in pozzolana; two-slope roof of half-round tile on simple trusses; boarded doors and windows without glass; a wide door onto a small yard that served as threshing floor and meeting place.',
+      pt:'Um moinho rectangular de basalto, de uma a quatro moegas — mais perto da cidade, uma nas freguesias afastadas — sobre os seus caboucos em arco, e nas freguesias da cidade um piso superior para a família do moleiro, com cozinha, sala e quartos; um buraco no sobrado deixava cair o grão para a moega durante a noite. Basalto toscamente aparelhado com cunhais e molduras talhados, à vista ou rebocado a pozolana; duas águas de telha de meia-cana sobre asnas simples; portas e janelas de tábuas sem vidro; uma porta larga para um pequeno terreiro que servia de eira e de convívio.' },
+    model:{ L:8, D:5, fl:2, fh:2.5, rot:180, form:'rect', icon:'watermill', raise:{ h:1.0, kind:'plinth' }, roof:{ n:2, th:25, bei:0.25 },
+      open:{ S:vOpen([D(0.25, 0.25, [{ door:true }, { on:false }]), W(0.6, 0.15, [{ on:true }, { on:true }]), W(0.85, 0.15, [{ on:false }, { on:true }])], 0.08), N:{ wwr:0.01, units:vOff() }, E:vOpen([W(0.5, 1, [{ on:false }, { on:true }])], 0.03), W:{ wwr:0, units:vOff() } },
+      render:{ en:'basalt walls, tile roof, timber door', pt:'paredes de basalto, telhado de telha, porta de madeira' },
+      walls:{ en:'rough basalt, dressed quoins and frames, bare or rendered in pozzolana and sand', pt:'basalto toscamente aparelhado, cunhais e molduras talhados, à vista ou rebocado a pozolana e areia' } },
+    feats:[
+      vFloors({ en:'1, or 2 with the miller’s dwelling', pt:'1, ou 2 com a habitação do moleiro' }, 1, 2, 'FSA'),
+      vRaise({ en:'the arched caboucos below the milling floor', pt:'os caboucos em arco sob o piso de moagem' }, 0.6, 1.5, 'FSA'),
+      vRoofN(null, { en:'two slopes', pt:'duas águas' }, [2], 'FSA'),
+      vI('openings', { en:'One arch per millstone on the front shows the wheel chambers; doors as many as rooms; small hatches cast light on the hoppers.', pt:'Um arco por moega na fachada mostra os caboucos; portas tantas quantas as divisões; postigos que dão luz às moegas.' }, 'FSA'),
+      vWall({ en:'basalt', pt:'basalto' }, ['stone', 'plaster'], 'FSA'),
+      vRoofFin({ en:'half-round tile', pt:'telha de meia-cana' }, ['canudo', 'tile'], 'FSA')
+    ] },
+
   'pt-saloia':{ region:'mainland',
     name:{ en:'Saloia house (casa saloia, one storey)', pt:'Casa saloia (de um só piso)' },
     where:{ en:'The saloio country round Lisbon — Sintra, Mafra, Cascais, Loures; Nazaré to Espichel', pt:'A região saloia em volta de Lisboa — Sintra, Mafra, Cascais, Loures; da Nazaré ao Espichel' },
@@ -20689,6 +20748,8 @@ vAdd('pt-alpendrada', [
 
 /* --- Delgado (2026) and Pinto (2016): the Trás-os-Montes house, Zona 2 ------ */
 vAdd('pt-tmontes', [
+  vI('site', { en:'Round houses survive among the rectangular ones: Jorge Dias (1949) recorded at Vilarelho da Raia (Chaves) the largest almost circular house he knew, at Alturas do Barroso (Boticas) a round house joined to a rectangular one, and square houses under pyramidal thatch near Boticas — traces of the castro dwelling. The app draws plans as rectangles: model them as a compact square block.', pt:'Entre as casas rectangulares sobrevivem casas redondas: Jorge Dias (1949) registou em Vilarelho da Raia (Chaves) a maior casa quase circular que conheceu, em Alturas do Barroso (Boticas) uma casa redonda ligada a uma rectangular, e casas quadradas de cobertura piramidal em colmo perto de Boticas — vestígios da habitação castreja. A aplicação desenha plantas rectangulares: modele-as como um bloco quadrado compacto.' }, 'PAN'),
+  vI('roof', { en:'The round plan derives from the castro hut: a stone wall ring under a conical roof of thatch, the rafters seated on the wall rather than driven into the ground.', pt:'A planta redonda deriva da cabana castreja: um anel de parede de pedra sob uma cobertura cónica de colmo, os caibros assentes na parede e não cravados no solo.' }, 'PIN'),
   vI('site', { en:'Three types of the rustic house: the simplest with only a loja; the middle one with a side porch, continuing the neighbours’ fronts; the richest with a yard (curralada) behind a tall two-leaf carriage door. Poorer families lived on one floor beside the animals and slept in the roof space, the warmest place. Houses lean on one another with shared walls, the streets narrow and winding.', pt:'Três tipos da casa rústica: a mais simples só com uma loja; a média com alpendre lateral, na continuidade das vizinhas; a mais complexa com pátio (curralada) atrás de uma porta carral alta, de duas folhas. As famílias mais pobres viviam num só piso ao lado dos animais e dormiam no vão do telhado, o sítio mais quente. As casas encostam-se com paredes meeiras, as ruas estreitas e sinuosas.' }, 'DEL'),
   vI('ventilation', { en:'The living floor raised over the loja is drier, and the animals below warm it. The kitchen, under bare tiles (telha-vã) because the chimney is rare, is the one large room: the hearth always lit, the escano bench beside it, alcoves at the dark edges behind timber partitions. In Barroso small openings of about 50 × 50 cm in the thatch let out a little of the smoke.', pt:'O sobrado levantado sobre a loja é mais seco, e os animais aquecem-no por baixo. A cozinha, de telha-vã porque a chaminé é rara, é o grande espaço único: a lareira sempre acesa, o escano ao lado, alcovas nas zonas escuras atrás de tabiques de madeira. No Barroso pequenas aberturas de cerca de 50 × 50 cm no colmo deixam sair um pouco do fumo.' }, 'DEL'),
   vI('visualization', { en:'Walls often double: two leaves of stone tied by through-stones, the core filled with clay and rubble; bigger blocks at quoins and openings. Insulation only in the roof, where slate or schist sits over a layer of thatch. In Pitões the thatch is held against the wind by crossed poles (latas) clamped to the eaves; in Rio de Onor schist slabs cover several houses under one roof.', pt:'Paredes muitas vezes duplas: dois panos de pedra travados por perpianhos, o miolo cheio de terra argilosa e pedra miúda; blocos maiores nos cunhais e nos vãos. Isolamento só na cobertura, onde a lousa ou o xisto assentam sobre uma camada de colmo. Em Pitões o colmo é seguro contra o vento por armações de paus cruzados (latas) presas às beiradas; em Rio de Onor placas de xisto cobrem várias casas num só telhado.' }, 'DEL'),
@@ -20783,6 +20844,10 @@ const ARCH_BIB = [
     'Miranda, P. M. A., et al. (n.d.). <i>Clima observado</i>. Observatório Regional do Clima da Madeira. https://observatorioclima.madeira.gov.pt/wp-content/uploads/pdfs/02_clima_observado.pdf',
     'Silva, F. A. da, &amp; Menezes, C. A. de. (n.d.). Indústria agrícola. In <i>Elucidário Madeirense</i>. https://elucidariomadeirense.pt/en/articles/1780',
     'Teixeira, C. R. Q. (2009). <i>A arquitectura vernacular da Madeira: Tradição, identidade e sustentabilidade</i> [Master’s dissertation, Universidade da Beira Interior]. http://hdl.handle.net/10400.6/1746'] },
+  { r:{ en:'Mills — wind and water', pt:'Moinhos — de vento e de água' }, types:['pt-moinho-vento', 'pt-moinho-rodizio', 'az-moinho'], refs:[
+    'Almeida, F. S. (2015). <i>Património molinológico: Proposta para preservação e reutilização de um moinho</i> [Master’s dissertation, Universidade Fernando Pessoa]. https://bdigital.ufp.pt/server/api/core/bitstreams/9dca49ae-21f6-40bc-b381-c5ac89440d71/content',
+    'Lopes, I. A. R. J. (2021). Moinhos de vento: Estruturas invulgares na paisagem transmontana. <i>Revista Memória Rural</i>, <i>4</i>, 96–119. https://museudamemoriarural.pt/revistamemoriarural/index.php/revista/article/download/124/86/',
+    'Silva, M. C. da. (2022). <i>Os moinhos de vento portugueses na contemporaneidade</i> [Master’s report, Universidade do Porto]. https://repositorio-aberto.up.pt/bitstream/10216/145207/2/591059.pdf'] },
   { r:{ en:'Algarve — the Sotavento and Tavira', pt:'Algarve — o Sotavento e Tavira' }, types:['pt-tavira'], refs:[
     'Câmara Municipal de Tavira. (2021). <i>Estudos de caracterização e diagnóstico da revisão do PDM de Tavira</i> (Vol. III). https://cm-tavira.pt/site/wp-content/uploads/2021/04/Estudos-de-Caracterizacao-e-Diagnostico-da-Revisao-do-PDM-de-Tavira-%E2%80%93-Vol.-III.pdf',
     'Vasconcelos, C. F. M. (2015). <i>A medina de Olhão: A origem da arquitectura popular de Olhão — um contributo</i> [Master’s dissertation, Universidade Lusíada]. http://hdl.handle.net/11067/1536'] },
@@ -20943,6 +21008,33 @@ function vIcon(key, size) {
     [x + 0.1, x + w - 0.25].forEach(px => face([P(px, -d, 0), P(px + 0.15, -d, 0), P(px + 0.15, -d, z), P(px, -d, z)], '#6E4B2E', 0.03));
     if (R.latada) { for (let t = 0; t <= 1.001; t += 0.125) line(P(x + w * t, -d, z), P(x + w * t, 0, z), '#6E4B2E', 0.05); face([P(x, -d, z + 0.08), P(x + w, -d, z + 0.08), P(x + w, 0, z + 0.08), P(x, 0, z + 0.08)], 'rgba(110,150,70,.55)', 0.02); }
     else face([P(x, -d, z), P(x + w, -d, z), P(x + w, 0, z + 0.4), P(x, 0, z + 0.4)], vShade(rc, 0.95)); }
+  /* a windmill: the round tower, its cap and four sails, over the plan drawing */
+  if (m.icon === 'windmill') {
+    out.length = 0; all.length = 0;
+    const cx = L / 2, cy = Dd / 2, r = L / 2, Hw = H, ring = (z, rr) => Array.from({ length:24 }, (_, i) => { const a = i / 24 * 2 * Math.PI; return P(cx + rr * Math.cos(a), cy + rr * Math.sin(a), z); });
+    const shd = ring(-rz, r + 0.6).map(p => [p[0] + 0.6, p[1] + 0.3]); out.push('<polygon points="' + fmtP(shd) + '" fill="rgba(0,0,0,.10)"/>'); shd.forEach(p => all.push(p));
+    const lo = ring(0, r), hi = ring(Hw, r), front = [];
+    for (let i = 0; i < 24; i++) { const a = i / 24 * 2 * Math.PI; if (Math.cos(a) - Math.sin(a) > -0.2) front.push(i); }
+    const body = lo.filter((_, i) => front.indexOf(i) >= 0).concat(hi.filter((_, i) => front.indexOf(i) >= 0).reverse());
+    face(lo, vShade(wc, 0.8)); face(body, wc);
+    if (tex) courses(P(cx - r, cy, 0), P(cx + r, cy, 0), P(cx + r, cy, Hw), P(cx - r, cy, Hw), Hw, tex[0], tex[1], 0.035);
+    face([P(cx - 0.6, -0.02 + cy - r, 0.05), P(cx + 0.6, -0.02 + cy - r, 0.05), P(cx + 0.6, -0.02 + cy - r, 2.0), P(cx - 0.6, -0.02 + cy - r, 2.0)], dc, 0.05);
+    face([P(cx + r + 0.02, cy - 0.3, Hw - 1.3), P(cx + r + 0.02, cy + 0.3, Hw - 1.3), P(cx + r + 0.02, cy + 0.3, Hw - 0.6), P(cx + r + 0.02, cy - 0.3, Hw - 0.6)], '#3E4C57', 0.04);
+    const capC = rk === 'thatch' ? '#B5965A' : '#3A2E26', tip = P(cx, cy, Hw + 1.7), capRing = ring(Hw, r + 0.15);
+    capRing.forEach((p, i) => { const q = capRing[(i + 1) % 24]; if (front.indexOf(i) >= 0) face([p, q, tip], vShade(capC, 0.75 + 0.25 * Math.cos(i / 24 * 2 * Math.PI)), 0.02); });
+    const hub = P(cx - r * 0.2, cy - r - 0.6, Hw + 0.9);
+    for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + k * Math.PI / 2, ex = Math.cos(a) * 4.6, ez = Math.sin(a) * 4.6;
+      const tipS = P(cx - r * 0.2 + ex, cy - r - 0.6, Hw + 0.9 + ez), mid = P(cx - r * 0.2 + ex * 0.92 + Math.sin(a) * 0.9, cy - r - 0.6, Hw + 0.9 + ez * 0.92 - Math.cos(a) * 0.9), base = P(cx - r * 0.2 + Math.sin(a) * 0.5, cy - r - 0.6, Hw + 0.9 - Math.cos(a) * 0.5);
+      face([hub, tipS, mid, base], 'rgba(245,240,228,.92)', 0.03); line(hub, tipS, '#4A3A2C', 0.08); }
+    out.push('<circle cx="' + hub[0].toFixed(2) + '" cy="' + hub[1].toFixed(2) + '" r="0.25" fill="#3A2E26"/>');
+  }
+  /* a watermill: the arches of the wheel chambers in its plinth, the water running out */
+  if (m.icon === 'watermill' && rz > 0) {
+    const nA = Math.max(1, Math.min(4, Math.round(L / 2.5)));
+    for (let k = 0; k < nA; k++) { const x = (k + 0.5) * L / nA, w = Math.min(0.9, L / nA * 0.5);
+      face([P(x - w / 2, -0.03, -rz), P(x + w / 2, -0.03, -rz), P(x + w / 2, -0.03, -rz * 0.3), P(x, -0.03, -rz * 0.12), P(x - w / 2, -0.03, -rz * 0.3)], '#2E3A40', 0.03);
+      face([P(x - w / 2 - 0.2, -1.6, -rz), P(x + w / 2 + 0.2, -1.6, -rz), P(x + w / 2, -0.03, -rz), P(x - w / 2, -0.03, -rz)], 'rgba(90,140,180,.55)', 0.02); }
+  }
   const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
   const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) - x0, hgt = Math.max(...ys) - y0;
   const pad = 0.5, vb = [x0 - pad, y0 - pad, w + 2 * pad, hgt + 2 * pad].map(v => +v.toFixed(2)).join(' ');
