@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.128.0',
+  version:     '1.129.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21118,6 +21118,13 @@ function vIcon(key, size) {
       face([P(xa, 0, H), P(xb, 0, H), P(xb, 0, H + ph), P(xa, 0, H + ph)], wc);
       if (ph > 0.3) { line(P(xa, -0.02, H + 0.08), P(xb, -0.02, H + 0.08), lime && south ? barC : vShade(wc, 0.7), 0.08); line(P(xa, -0.02, H + ph - 0.06), P(xb, -0.02, H + ph - 0.06), lime && south ? barC : vShade(wc, 0.7), 0.06); }
       if (zi === zones.length - 1) face([P(xb, 0, H), P(xb, Dd, H), P(xb, Dd, H + ph), P(xb, 0, H + ph)], vShade(wc, 0.82));
+    }
+    /* where this part stands above the next, its east end is a gable wall rising from the lower roof — closed, not open */
+    const nx = zones[zi + 1];
+    if (nx && (n === 1 || n === 2)) {
+      const xe = (z.f1 === undefined ? 1 : z.f1) * L, nh = nx.n === 0 ? (nx.par && nx.par.on ? +nx.par.h || 0.6 : 0.25) : 0;
+      const top = n === 2 ? [P(xe, Dd, H), P(xe, Dd / 2, H + Dd / 2 * Math.tan(th)), P(xe, 0, H)] : [P(xe, Dd, H + Dd * Math.tan(th)), P(xe, 0, H)];
+      if ((n === 2 ? Dd / 2 : Dd) * Math.tan(th) > nh + 0.05) face([P(xe, 0, H), P(xe, Dd, H)].concat(top.slice(0, -1)), vShade(wc, 0.82));
     }
   });
   /* a chimney where the model names one */
