@@ -965,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.132.0',
+  version:     '1.133.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20932,21 +20932,30 @@ const VICON_URBAN = ['pt-porto-esguia', 'pt-porto-ilha', 'pt-lisboa-patio', 'pt-
   'pt-rib-vila', 'pt-alg-pescadores', 'pt-casa-judeus', 'pt-meia-casa', 'pt-povoa', 'pt-tavira'];
 const VICON_NOCHIM = ['pt-tmontes', 'pt-alg-trave'];
 /** The neighbours of a town house in the icon: a plain block on each side,
-    the same depth, a little lower or higher, and the street in front. */
-function vNeighbours(m, L, Dd, H, zones, P, face) {
-  const W = Math.max(3, Math.min(L * 0.6, 5)), z0 = zones[0], n = z0.n === 3 ? 2 : z0.n, th = (n === 0 ? 0 : z0.th || 20) * Math.PI / 180;
+    the same depth, a little lower or higher, and the street in front. They
+    are drawn as glass — every face, roof slopes on both sides, at low
+    opacity — so the house between them keeps its own volume. */
+function vNeighbours(m, L, Dd, H, zones, P, face, out) {
+  const W = Math.max(3, Math.min(L * 0.6, 5)), z0 = zones[0], n = z0.n === 3 ? 2 : z0.n, th = (n === 0 ? 0 : z0.th || 20) * Math.PI / 180, tn = Math.tan(th);
   const block = (xa, h) => {
-    const xb = xa + W, wall = '#DDD9D1', side = '#C7C2B8', roof = '#B9A99B';
-    face([P(xa, 0, 0), P(xb, 0, 0), P(xb, 0, h), P(xa, 0, h)], wall, 0.04);
-    const top = n === 2 ? [P(xb, Dd, h), P(xb, Dd / 2, h + Dd / 2 * Math.tan(th)), P(xb, 0, h)] : n === 1 ? [P(xb, Dd, h + Dd * Math.tan(th)), P(xb, 0, h)] : [P(xb, Dd, h + 0.25), P(xb, 0, h + 0.25)];
-    face([P(xb, 0, 0), P(xb, Dd, 0)].concat(top), side, 0.04);
-    if (n === 2) face([P(xa, -0.2, h - 0.1), P(xb, -0.2, h - 0.1), P(xb, Dd / 2, h + Dd / 2 * Math.tan(th)), P(xa, Dd / 2, h + Dd / 2 * Math.tan(th))], roof, 0.04);
-    else if (n === 1) face([P(xa, -0.2, h - 0.1), P(xb, -0.2, h - 0.1), P(xb, Dd, h + Dd * Math.tan(th)), P(xa, Dd, h + Dd * Math.tan(th))], roof, 0.04);
-    else { face([P(xa, 0, h), P(xb, 0, h), P(xb, Dd, h), P(xa, Dd, h)], '#CFCAC0', 0.04); face([P(xa, 0, h), P(xb, 0, h), P(xb, 0, h + 0.25), P(xa, 0, h + 0.25)], wall, 0.03); }
+    const xb = xa + W, wall = '#CFCAC0', roof = '#A8917F', i0 = out.length;
+    /* the roof's height along y, and each gable end's outline */
+    const zr = y => n === 2 ? h + (Dd / 2 - Math.abs(y - Dd / 2)) * tn : n === 1 ? h + y * tn : h;
+    const end = x => n === 2 ? [P(x, 0, 0), P(x, Dd, 0), P(x, Dd, h), P(x, Dd / 2, zr(Dd / 2)), P(x, 0, h)] : [P(x, 0, 0), P(x, Dd, 0), P(x, Dd, zr(Dd)), P(x, 0, h)];
+    /* back to front: the far wall, the west end, the far slope; then the street wall, the east end, the near slope */
+    face([P(xa, Dd, 0), P(xb, Dd, 0), P(xb, Dd, zr(Dd)), P(xa, Dd, zr(Dd))], wall, 0.03);
+    face(end(xa), wall, 0.03);
+    if (n === 2) face([P(xa, Dd / 2, zr(Dd / 2)), P(xb, Dd / 2, zr(Dd / 2)), P(xb, Dd, h), P(xa, Dd, h)], roof, 0.03);
+    face([P(xa, 0, 0), P(xb, 0, 0), P(xb, 0, h), P(xa, 0, h)], wall, 0.03);
+    face(end(xb), wall, 0.03);
+    if (n === 2) face([P(xa, 0, h), P(xb, 0, h), P(xb, Dd / 2, zr(Dd / 2)), P(xa, Dd / 2, zr(Dd / 2))], roof, 0.03);
+    else if (n === 1) face([P(xa, 0, h), P(xb, 0, h), P(xb, Dd, zr(Dd)), P(xa, Dd, zr(Dd))], roof, 0.03);
+    else face([P(xa, 0, h), P(xb, 0, h), P(xb, Dd, h), P(xa, Dd, h)], roof, 0.03);
     /* a door and windows, faint, so it reads as a house */
     const fl = Math.max(1, Math.round(h / (m.fh || 2.8)));
     for (let k = 0; k < fl; k++) for (let j = 0; j < 2; j++) { const cx = xa + W * (j ? 0.68 : 0.3), z = k * h / fl, dr = !k && !j;
-      face([P(cx - 0.35, -0.02, z + (dr ? 0.02 : 0.9)), P(cx + 0.35, -0.02, z + (dr ? 0.02 : 0.9)), P(cx + 0.35, -0.02, z + (dr ? 2.0 : 1.9)), P(cx - 0.35, -0.02, z + (dr ? 2.0 : 1.9))], '#A9A49A', 0.02); }
+      face([P(cx - 0.35, -0.02, z + (dr ? 0.02 : 0.9)), P(cx + 0.35, -0.02, z + (dr ? 0.02 : 0.9)), P(cx + 0.35, -0.02, z + (dr ? 2.0 : 1.9)), P(cx - 0.35, -0.02, z + (dr ? 2.0 : 1.9))], '#8E887E', 0.02); }
+    for (let i = i0; i < out.length; i++) out[i] = out[i].replace('<polygon ', '<polygon fill-opacity="0.22" stroke-opacity="0.55" ');
   };
   return {
     street: () => face([P(-W - 1, -2.2, 0), P(L + W + 1, -2.2, 0), P(L + W + 1, 0, 0), P(-W - 1, 0, 0)], '#D6D3CC', 0.03),
@@ -20978,7 +20987,7 @@ function vIcon(key, size) {
   const courses = (a, b, c, d, h, step, col, w) => { const n = Math.max(1, Math.floor(h / step)); for (let k = 1; k < n; k++) { const t = k / n; line(lerp(a, d, t), lerp(b, c, t), col, w); } };
   const ticks = (a, b, c, d, len, step, col, w) => { const n = Math.max(1, Math.floor(len / step)); for (let k = 1; k < n; k++) { const t = k / n; line(lerp(a, b, t), lerp(d, c, t), col, w); } };
   /* the setting: a town house between its neighbours, a street before it; a house on its own on a disc of ground */
-  const urban = VICON_URBAN.indexOf(key) >= 0, nbr = urban ? vNeighbours(m, L, Dd, H, zones, P, face) : null;
+  const urban = VICON_URBAN.indexOf(key) >= 0, nbr = urban ? vNeighbours(m, L, Dd, H, zones, P, face, out) : null;
   const ground = (gx, gy, gr) => { const R0 = gr || Math.hypot(L, Dd) / 2 + 1.6, ox = gx === undefined ? L / 2 : gx, oy = gy === undefined ? Dd / 2 : gy, pts = Array.from({ length:48 }, (_, i) => { const a = i / 48 * 2 * Math.PI; return P(ox + R0 * Math.cos(a), oy + R0 * Math.sin(a), -rz); });
     pts.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(pts) + '" fill="#E3E5D6" stroke="#C9CDB8" stroke-width="0.05"/>'); };
   if (urban) nbr.street(); else ground();
