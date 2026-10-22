@@ -911,10 +911,10 @@ details.more[open] > summary{color:var(--ink)}
     </div>
 
     <div class="foot-refs">
-      <h5><button type="button" class="refs-toggle" id="refsToggle" aria-expanded="false" aria-controls="refList"><span class="chev" aria-hidden="true">▸</span><span data-t="footMethods">Methods and sources</span></button></h5>
-      <ul id="refList" hidden></ul>
-      <h5 style="margin-top:18px" data-t="footArch">Archetypes bibliography</h5>
+      <h5 data-t="footArch">Archetypes bibliography</h5>
       <div id="archBib"></div>
+      <h5 style="margin-top:18px"><button type="button" class="refs-toggle" id="refsToggle" aria-expanded="false" aria-controls="refList"><span class="chev" aria-hidden="true">▸</span><span data-t="footMethods">Methods and sources</span></button></h5>
+      <ul id="refList" hidden></ul>
     </div>
 
     <p class="foot-legal" data-t="footLegal">
@@ -965,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.139.0',
+  version:     '1.140.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -22211,6 +22211,7 @@ function vDistTxt(k) {
 /** The tile map of the districts, above the archetypes bibliography: pick a district, see its houses. */
 function buildArchDist(box, refsBox) {
   const by = {};
+  let srcOpen = false;   // the district's sources stay folded until asked for, and keep that choice from district to district
   Object.keys(VERN_TYPES).forEach(k => vDist(k).forEach(d => (by[d] = by[d] || []).push(k)));
   box.innerHTML = '';
   box.appendChild(el('h6', { class:'archreg', text:VL({ en:'The archetypes by district', pt:'Os arquétipos por distrito' }) }));
@@ -22237,8 +22238,11 @@ function buildArchDist(box, refsBox) {
       const refs = [...new Set(ARCH_BIB.filter(g => g.types && g.types.some(k => ks.indexOf(k) >= 0)).reduce((a, g) => a.concat(g.types.every(k => ks.indexOf(k) >= 0) ? g.refs : g.refs.filter(cites)), []))]
         .sort((a, b) => a.replace(/<[^>]+>/g, '').localeCompare(b.replace(/<[^>]+>/g, ''), 'pt'));
       refsBox.innerHTML = '';
-      refsBox.appendChild(el('h6', { class:'archreg', text:VL({ en:'Sources of the archetypes of ', pt:'Fontes dos arquétipos de ' }) + d }));
-      refsBox.appendChild(el('ul', { class:'archlist', html:refs.map(r => '<li>' + linkify(r) + '</li>').join('') }));
+      const tg = refsBox.appendChild(el('button', { type:'button', class:'refs-toggle', 'aria-expanded':String(srcOpen),
+        html:'<span class="chev" aria-hidden="true">▸</span><span>' + VL({ en:'Sources of the archetypes of ', pt:'Fontes dos arquétipos de ' }) + d + ' · ' + refs.length + '</span>' }));
+      const ul = refsBox.appendChild(el('ul', { class:'archlist', html:refs.map(r => '<li>' + linkify(r) + '</li>').join('') }));
+      ul.hidden = !srcOpen;
+      tg.addEventListener('click', () => { srcOpen = !srcOpen; tg.setAttribute('aria-expanded', String(srcOpen)); ul.hidden = !srcOpen; });
     }
   };
   DISTRICTS.forEach(([d, r, c]) => {
