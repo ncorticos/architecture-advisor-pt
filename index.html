@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.130.0',
+  version:     '1.131.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20913,6 +20913,10 @@ const ARCH_BIB = [
    roof in the colours of its finishes, the main door on the south wall. */
 /* hexRgb gives channels in 0–1 */
 const vShade = (hex, k) => { const v = hexRgb(hex); return 'rgb(' + v.map(c => Math.round(clamp(c * 255 * k, 0, 255))).join(',') + ')'; };
+Object.assign(VERN_SRC, {
+  DGA:{ tag:'Dias & Galhano', cite:'Dias, J., &amp; Galhano, F. (1953/1986). <i>Aparelhos de elevar a água de rega: Contribuição para o estudo do regadio em Portugal</i>. Lisboa: Dom Quixote.', url:'https://books.openedition.org/etnograficapress/6163' },
+  GEO:{ tag:'Geoparque Algarvensis', cite:'Geoparque Algarvensis (Loulé, Silves, Albufeira). «Nora de Messines» — Património etnográfico.', url:'https://geoparquealgarvensis.pt/patrimonio-cultura/59-patrimonio-etnografico/579-nora-de-messines' }
+});
 /* The town houses of the icons — drawn between their neighbours — and the
    dwellings the sources give no chimney (the smoke through the tiles). */
 const VICON_URBAN = ['pt-porto-esguia', 'pt-porto-ilha', 'pt-lisboa-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-ale-d',
@@ -20966,7 +20970,7 @@ function vIcon(key, size) {
   const ticks = (a, b, c, d, len, step, col, w) => { const n = Math.max(1, Math.floor(len / step)); for (let k = 1; k < n; k++) { const t = k / n; line(lerp(a, b, t), lerp(d, c, t), col, w); } };
   /* the setting: a town house between its neighbours, a street before it; a house on its own on a disc of ground */
   const urban = VICON_URBAN.indexOf(key) >= 0, nbr = urban ? vNeighbours(m, L, Dd, H, zones, P, face) : null;
-  const ground = () => { const R0 = Math.hypot(L, Dd) / 2 + 1.6, pts = Array.from({ length:48 }, (_, i) => { const a = i / 48 * 2 * Math.PI; return P(L / 2 + R0 * Math.cos(a), Dd / 2 + R0 * Math.sin(a), -rz); });
+  const ground = (gx, gy, gr) => { const R0 = gr || Math.hypot(L, Dd) / 2 + 1.6, ox = gx === undefined ? L / 2 : gx, oy = gy === undefined ? Dd / 2 : gy, pts = Array.from({ length:48 }, (_, i) => { const a = i / 48 * 2 * Math.PI; return P(ox + R0 * Math.cos(a), oy + R0 * Math.sin(a), -rz); });
     pts.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(pts) + '" fill="#E3E5D6" stroke="#C9CDB8" stroke-width="0.05"/>'); };
   if (urban) nbr.street(); else ground();
   if (urban) nbr.west();
@@ -21225,6 +21229,102 @@ function vIcon(key, size) {
       line(SP(a + 0.42, 3.4), SP(a2, 4.6), 'rgba(74,58,44,.6)', 0.03);
       line(SP(a, 0), SP(a, 4.6), '#4A3A2C', 0.09); }
     out.push('<circle cx="' + hub[0].toFixed(2) + '" cy="' + hub[1].toFixed(2) + '" r="0.25" fill="#3A2E26"/>');
+  }
+  /* the support structures drawn as what they are, not as a box: a drum, a cone, a dome — each the half turned to the viewer, back to front */
+  const ang0 = -3 * Math.PI / 4, lit = a => 0.78 + 0.22 * (Math.cos(a) - Math.sin(a)) / Math.SQRT2;
+  const drum = (cx, cy, r, z0, z1, col, step, tcol) => {
+    const NA = 24, arc = z => Array.from({ length:NA + 1 }, (_, i) => { const a = ang0 + i / NA * Math.PI; return P(cx + r * Math.cos(a), cy + r * Math.sin(a), z); });
+    const lo = arc(z0), hi = arc(z1);
+    for (let i = 0; i < NA; i++) { const c = vShade(col, lit(ang0 + (i + 0.5) / NA * Math.PI)), q = [lo[i], lo[i + 1], hi[i + 1], hi[i]];
+      q.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(q) + '" fill="' + c + '" stroke="' + c + '" stroke-width="0.03"/>'); }
+    if (step) for (let z = z0 + step; z < z1 - 0.05; z += step) out.push('<polyline points="' + fmtP(arc(z)) + '" fill="none" stroke="' + tcol + '" stroke-width="0.035"/>');
+    out.push('<polyline points="' + fmtP(lo.concat(hi.slice().reverse()).concat([lo[0]])) + '" fill="none" stroke="rgba(0,0,0,.4)" stroke-width="0.05" stroke-linejoin="round"/>');
+  };
+  const disc = (cx, cy, r, z, col) => face(Array.from({ length:32 }, (_, i) => { const a = i / 32 * 2 * Math.PI; return P(cx + r * Math.cos(a), cy + r * Math.sin(a), z); }), col, 0.04);
+  const cone = (cx, cy, r, z, h, col, thatch) => { const NC = 28, cp = i => { const a = i / NC * 2 * Math.PI; return P(cx + r * Math.cos(a), cy + r * Math.sin(a), z); }, tip = P(cx, cy, z + h);
+    Array.from({ length:NC }, (_, i) => i).sort((i, j) => { const d = k => { const a = (k + 0.5) / NC * 2 * Math.PI; return Math.cos(a) - Math.sin(a); }; return d(i) - d(j); })
+      .forEach(i => face([cp(i), cp(i + 1), tip], vShade(col, lit((i + 0.5) / NC * 2 * Math.PI)), thatch ? 0.015 : 0.02));
+    if (thatch) { const lo = Array.from({ length:15 }, (_, i) => { const a = ang0 + i / 14 * Math.PI; return P(cx + r * Math.cos(a), cy + r * Math.sin(a), z); });
+      out.push('<polyline points="' + fmtP(lo) + '" fill="none" stroke="rgba(70,50,20,.6)" stroke-width="0.12"/>'); } };
+  const dome = (cx, cy, r, z, col) => { const NM = 24, NL = 6, pt = (a, b) => P(cx + r * Math.cos(b) * Math.cos(a), cy + r * Math.cos(b) * Math.sin(a), z + r * Math.sin(b));
+    const g = [];
+    for (let i = 0; i < NM; i++) for (let j = 0; j < NL; j++) { const a0 = i / NM * 2 * Math.PI, a1 = (i + 1) / NM * 2 * Math.PI, b0 = j / NL * Math.PI / 2, b1 = (j + 1) / NL * Math.PI / 2, am = (a0 + a1) / 2, bm = (b0 + b1) / 2;
+      g.push({ d:Math.cos(bm) * (Math.cos(am) - Math.sin(am)) + Math.sin(bm), q:[pt(a0, b0), pt(a1, b0), pt(a1, b1), pt(a0, b1)], c:vShade(col, 0.8 + 0.2 * (Math.cos(bm) * (Math.cos(am) - Math.sin(am)) / Math.SQRT2 + Math.sin(bm)) / 1.4) }); }
+    g.sort((p, q) => p.d - q.d).forEach(o => { o.q.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(o.q) + '" fill="' + o.c + '" stroke="' + o.c + '" stroke-width="0.03"/>'); }); };
+  const sideOpen = (cx, cy, r, a0, a1, z0, z1, fill) => { const n = 4, pts = [];
+    for (let k = 0; k <= n; k++) { const a = a0 + (a1 - a0) * k / n; pts.push(P(cx + (r + 0.02) * Math.cos(a), cy + (r + 0.02) * Math.sin(a), z0)); }
+    for (let k = n; k >= 0; k--) { const a = a0 + (a1 - a0) * k / n; pts.push(P(cx + (r + 0.02) * Math.cos(a), cy + (r + 0.02) * Math.sin(a), z1)); }
+    face(pts, fill, 0.04); };
+  const box = (x0, y0, z0, x1, y1, z1, col, top) => { face([P(x0, y0, z0), P(x1, y0, z0), P(x1, y0, z1), P(x0, y0, z1)], col, 0.04);
+    face([P(x1, y0, z0), P(x1, y1, z0), P(x1, y1, z1), P(x1, y0, z1)], vShade(col, 0.82), 0.04);
+    face([P(x0, y0, z1), P(x1, y0, z1), P(x1, y1, z1), P(x0, y1, z1)], top || vShade(col, 1.05), 0.04); };
+  const limeW = '#F1EEE7', iron = '#4E4038', clay = '#A65A36';
+  /* a vertical iron wheel in the plane x = xc: rim, spokes, hub — and, with pots, the clay alcatruzes on its rim */
+  const wheelX = (xc, yc, zc, R, pots, teeth) => {
+    const rim = Array.from({ length:41 }, (_, i) => { const t = i / 40 * 2 * Math.PI; return P(xc, yc + R * Math.cos(t), zc + R * Math.sin(t)); });
+    rim.forEach(p => all.push(p));
+    for (let k = 0; k < 8; k++) { const t = k / 8 * 2 * Math.PI; line(P(xc, yc, zc), P(xc, yc + R * Math.cos(t), zc + R * Math.sin(t)), iron, 0.06); }
+    out.push('<polyline points="' + fmtP(rim) + '" fill="none" stroke="' + iron + '" stroke-width="' + (teeth ? 0.2 : 0.13) + '"' + (teeth ? ' stroke-dasharray="0.08 0.06"' : '') + '/>');
+    if (teeth) out.push('<polyline points="' + fmtP(rim) + '" fill="none" stroke="' + iron + '" stroke-width="0.08"/>');
+    if (pots) for (let k = 0; k < pots; k++) { const t = k / pots * 2 * Math.PI, p = P(xc, yc + R * Math.cos(t), zc + R * Math.sin(t));
+      out.push('<ellipse cx="' + p[0].toFixed(2) + '" cy="' + p[1].toFixed(2) + '" rx="0.17" ry="0.12" fill="' + clay + '" stroke="rgba(0,0,0,.4)" stroke-width="0.02"/>'); }
+    const h = P(xc, yc, zc); out.push('<circle cx="' + h[0].toFixed(2) + '" cy="' + h[1].toFixed(2) + '" r="0.16" fill="' + iron + '"/>');
+  };
+  if (m.icon === 'nora') {
+    /* Dias & Galhano's iron nora of the Algarve: the whitewashed well-head with the bucket wheel over its slot, a long
+       horizontal shaft to a pier, the gearing beyond it turned by the animal's pole round its ring, the tank fed by the trough */
+    out.length = 0; all.length = 0; ground(5.0, 2.2, 6.2);
+    const gx = 8.0, gy = 3.6, rr = 2.6, ring = (rad, n) => Array.from({ length:n }, (_, i) => { const a = i / n * 2 * Math.PI; return P(gx + rad * Math.cos(a), gy + rad * Math.sin(a), 0); });
+    const o1 = ring(rr + 0.45, 48), i1 = ring(rr - 0.45, 48); o1.concat(i1).forEach(p => all.push(p));
+    out.push('<path d="M' + fmtP(o1).split(' ').join(' L') + ' Z M' + fmtP(i1).split(' ').join(' L') + ' Z" fill="#CDBF9F" fill-rule="evenodd" stroke="rgba(0,0,0,.15)" stroke-width="0.03"/>');
+    /* the well-head (bocal), the tank before it and the trough between */
+    box(0.6, 1.9, 0, 4.0, 5.3, 1.3, limeW);
+    face([P(1.8, 2.3, 1.31), P(2.8, 2.3, 1.31), P(2.8, 4.9, 1.31), P(1.8, 4.9, 1.31)], '#2B2F33', 0.03);
+    wheelX(2.3, 3.6, 2.9, 1.7, 14, false);
+    box(0.2, -1.6, 0, 3.4, 1.0, 0.9, limeW); face([P(0.45, -1.35, 0.91), P(3.15, -1.35, 0.91), P(3.15, 0.75, 0.91), P(0.45, 0.75, 0.91)], '#7FA9C4', 0.03);
+    face([P(1.6, 1.0, 1.0), P(2.0, 1.0, 1.0), P(2.0, 1.9, 1.25), P(1.6, 1.9, 1.25)], vShade(limeW, 0.85), 0.03);
+    /* the long shaft to the pier, the toothed wheel on it, the crown wheel (roda do sol) on its post, the pole */
+    line(P(2.3, 3.6, 2.9), P(6.0, 3.6, 2.9), iron, 0.14);
+    box(4.9, 3.0, 0, 5.6, 4.2, 2.7, limeW);
+    wheelX(6.0, 3.6, 2.9, 0.75, 0, true);
+    const zg = 2.15, cw = Array.from({ length:41 }, (_, i) => { const a = i / 40 * 2 * Math.PI; return P(gx + 1.15 * Math.cos(a), gy + 1.15 * Math.sin(a), zg); });
+    line(P(gx, gy, 0), P(gx, gy, zg + 0.9), '#6E4B2E', 0.16);
+    for (let k = 0; k < 6; k++) { const a = k / 6 * 2 * Math.PI; line(P(gx, gy, zg), P(gx + 1.15 * Math.cos(a), gy + 1.15 * Math.sin(a), zg), iron, 0.06); }
+    cw.forEach(p => all.push(p)); out.push('<polyline points="' + fmtP(cw) + '" fill="none" stroke="' + iron + '" stroke-width="0.2" stroke-dasharray="0.08 0.06"/><polyline points="' + fmtP(cw) + '" fill="none" stroke="' + iron + '" stroke-width="0.08"/>');
+    const pa = -Math.PI / 4 - 0.5, pe = P(gx + rr * Math.cos(pa), gy + rr * Math.sin(pa), 1.0);
+    line(P(gx, gy, zg + 0.6), pe, '#6E4B2E', 0.12); all.push(pe);
+    line(P(gx + rr * Math.cos(pa) - 0.4, gy + rr * Math.sin(pa) - 0.4, 1.0), P(gx + rr * Math.cos(pa) + 0.4, gy + rr * Math.sin(pa) + 0.4, 1.0), '#6E4B2E', 0.08);
+  }
+  if (m.icon === 'limekiln') {
+    /* the lime kiln: a squat round tower of rubble backed into a bank, loaded from the top, its arched mouth at the foot */
+    out.length = 0; all.length = 0; ground();
+    const cx = 2.5, cy = 2.5, r = 2.3, h = 3.0;
+    face([P(-0.6, 2.6, 0), P(5.6, 2.6, 0), P(5.6, 2.6, h * 0.95), P(-0.6, 2.6, h * 0.95)], '#B9AE8E', 0.03);
+    face([P(-0.6, 2.6, h * 0.95), P(5.6, 2.6, h * 0.95), P(5.6, 5.4, h * 0.95), P(-0.6, 5.4, h * 0.95)], '#D2C9A8', 0.03);
+    face([P(5.6, 2.6, 0), P(5.6, 5.4, 0), P(5.6, 5.4, h * 0.95), P(5.6, 2.6, h * 0.95)], '#A99E80', 0.03);
+    drum(cx, cy, r, 0, h, wc, tex ? tex[0] : 0.4, 'rgba(0,0,0,.18)');
+    disc(cx, cy, r, h, vShade(wc, 1.05)); disc(cx, cy, r - 0.5, h + 0.005, '#3A322C');
+    const am = -Math.PI / 2, da = 0.45 / r;
+    sideOpen(cx, cy, r, am - da, am + da, 0, 1.1, '#2A2420');
+    const ap = P(cx + (r + 0.02) * Math.cos(am), cy + (r + 0.02) * Math.sin(am), 1.25); out.push('<circle cx="' + ap[0].toFixed(2) + '" cy="' + ap[1].toFixed(2) + '" r="0.42" fill="#2A2420"/>');
+  }
+  if (m.icon === 'oven') {
+    /* the bread oven of the south: a whitewashed dome on a round base, the mouth to the front, a little flue */
+    out.length = 0; all.length = 0; ground();
+    const cx = 1.5, cy = 1.5, r = 1.5;
+    drum(cx, cy, r, 0, 0.7, wc);
+    dome(cx, cy, r, 0.7, wc);
+    const am = -Math.PI / 2, da = 0.32 / r;
+    sideOpen(cx, cy, r, am - da, am + da, 0.75, 1.3, '#2E2A26');
+    box(cx + 0.6, cy + 0.2, 1.9, cx + 0.9, cy + 0.5, 2.25, wc);
+  }
+  if (m.icon === 'roundhut') {
+    /* the shepherds' round hut: a drum of schist rubble under a conical thatch, its door to the front */
+    out.length = 0; all.length = 0; ground();
+    const r = L / 2, cx = L / 2, cy = Dd / 2, h = fh;
+    drum(cx, cy, r, 0, h, wc, tex ? tex[0] : 0, tex ? tex[1] : '');
+    sideOpen(cx, cy, r, -Math.PI / 2 - 0.4 / r, -Math.PI / 2 + 0.4 / r, 0.02, Math.min(1.7, h - 0.2), dc);
+    cone(cx, cy, r + 0.35, h - 0.1, r * 1.3, rk === 'thatch' ? '#B5965A' : rc, rk === 'thatch');
   }
   /* a watermill: the arches of the wheel chambers in its plinth, the water running out */
   if (m.icon === 'watermill' && rz > 0) {
@@ -21653,7 +21753,7 @@ const SUP_TYPES = {
     where:{ en:'The irrigated gardens of the Baixo Alentejo and the Algarve — made at Beringel and Baleizão (Beja), Loulé and Tavira', pt:'As hortas de regadio do Baixo Alentejo e do Algarve — fabricadas em Beringel e Baleizão (Beja), Loulé e Tavira' },
     summary:{ en:'A well, always: a donkey or mule walking round turns the horizontal «roda do sol», whose teeth drive the vertical «roda de água»; over it runs a double rope with 20–30 clay pots (alcatruzes) of about 2.2 litres, each pierced at the base so it sinks into the still water. The water falls into a trough and runs to the tank (tanque) and the furrows. The ring where the animal walks, the well-head and the tank are the building.',
       pt:'Sempre sobre um poço: um burro ou macho, andando em roda, move a «roda do sol» horizontal, cujos dentes accionam a «roda de água» vertical; sobre esta corre uma corda dupla com 20–30 vasos de barro (alcatruzes) de cerca de 2,2 litros, furados no fundo para mergulharem na água parada. A água cai numa calha e corre para o tanque e os regos. O círculo onde anda o animal, o bocal do poço e o tanque são a construção.' },
-    model:{ L:7, D:7, fl:1, fh:2.0, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 },
+    model:{ L:7, D:7, fl:1, fh:2.0, rot:180, form:'rect', icon:'nora', roof:{ n:0, th:0, bei:0 },
       open:{ S:vOpen([D(0.5, 0.3)], 0.1), N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
       render:{ en:'whitewash walls, timber door', pt:'parede caiada, porta de madeira' },
       walls:{ en:'rubble and lime round the well-head and the walking ring; tank in rendered masonry', pt:'alvenaria e cal no bocal do poço e no anel de marcha; tanque em alvenaria rebocada' } },
@@ -21661,7 +21761,9 @@ const SUP_TYPES = {
       vN('site', { en:'Pots on the chain (alcatruzes)', pt:'Alcatruzes no cordão' }, { en:'20–30, about 2.2 l each', pt:'20–30, cerca de 2,2 l cada' }, () => null, null, null, '', 'MR9'),
       vN('site', { en:'Walking ring (drawn as a square)', pt:'Anel de marcha (desenhado como quadrado)' }, { en:'about 6–8 m across', pt:'cerca de 6–8 m de diâmetro' }, () => MASS.L, 6, 8, 'm', 'INF'),
       vI('site', { en:'The nora draws from still water in a well; the roda de tirar água of the Beira Baixa (Fundão, Alpedrinha, Oleiros) is its river cousin, its pots fixed on the wheel itself, turned by the current.', pt:'A nora tira de água parada num poço; a roda de tirar água da Beira Baixa (Fundão, Alpedrinha, Oleiros) é a sua prima de rio, com os púcaros fixos na própria roda, movida pela corrente.' }, 'MR9'),
-      vI('ventilation', { en:'Draw it as a low open enclosure: no roof, the tank on the lowest side so the water runs by gravity to the garden.', pt:'Desenhe-a como um recinto baixo e aberto: sem cobertura, o tanque do lado mais baixo para a água correr por gravidade para a horta.' }, 'INF')
+      vI('ventilation', { en:'Draw it as a low open enclosure: no roof, the tank on the lowest side so the water runs by gravity to the garden.', pt:'Desenhe-a como um recinto baixo e aberto: sem cobertura, o tanque do lado mais baixo para a água correr por gravidade para a horta.' }, 'INF'),
+      vI('site', { en:'In the Algarve the nora is mostly of iron, with a long shaft (eixo comprido): the gearing stands a little away from the well, on its own pier, and the shaft carries the turn to the bucket wheel over the whitewashed well-head; the animal walks round the gearing, not round the well. Frequent in the barlavento, rare in most of the sotavento (Dias & Galhano).', pt:'No Algarve a nora é sobretudo de ferro, de eixo comprido: a engrenagem fica um pouco afastada do poço, sobre o seu pilar, e o eixo leva o movimento à roda dos alcatruzes sobre o bocal caiado; o animal anda em volta da engrenagem, não do poço. Frequente no barlavento, rara em quase todo o sotavento (Dias & Galhano).' }, 'DGA'),
+      vI('site', { en:'The Nora de Messines (São Bartolomeu de Messines, 19th century): spread in the Islamic period with irrigated farming and used almost to our day; many along the road to Messines de Cima watered gardens and orchards of the barrocal.', pt:'A Nora de Messines (São Bartolomeu de Messines, século XIX): difundida no período islâmico com a agricultura de regadio e usada praticamente até hoje; muitas ao longo da estrada para Messines de Cima regavam hortas e pomares do barrocal.' }, 'GEO')
     ] },
   'pt-chafurdao':{ region:'mainland', support:true,
     name:{ en:'Chafurdão — round dry-stone hut with a corbelled dome', pt:'Chafurdão — abrigo circular de pedra seca em falsa cúpula' },
@@ -21702,7 +21804,7 @@ const SUP_TYPES = {
     where:{ en:'The serra of the Guadiana and the Caldeirão — Martim Longo, Cachopo (Faro); Álamo (Mértola)', pt:'A serra do Guadiana e do Caldeirão — Martim Longo, Cachopo (Faro); Álamo (Mértola)' },
     summary:{ en:'A round plan of schist rubble under a conical thatch roof, for the shepherds — still standing at Martim Longo and Cachopo (Fernandes & Janeiro). At Álamo, by the Guadiana, round buildings were found with a flat roof on an oblique top, others with a corbelled dome, one of them still lived in (Ribeiro 1963).',
       pt:'Planta circular em alvenaria de xisto sob cobertura cónica de colmo, para pastores — ainda de pé em Martim Longo e Cachopo (Fernandes & Janeiro). Em Álamo, junto ao Guadiana, encontraram-se construções circulares com cobertura plana sobre um topo oblíquo, outras em falsa cúpula, uma delas ainda habitada (Ribeiro 1963).' },
-    model:{ L:4.5, D:4.5, fl:1, fh:2.0, rot:180, form:'rect', roof:{ n:3, th:50, bei:0.3 },
+    model:{ L:4.5, D:4.5, fl:1, fh:2.0, rot:180, form:'rect', icon:'roundhut', roof:{ n:3, th:50, bei:0.3 },
       open:{ S:vOpen([D(0.5, 0.25)], 0.06), N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
       render:{ en:'schist walls, thatch roof, timber door', pt:'paredes de xisto, colmo, porta de madeira' },
       walls:{ en:'schist rubble, dry or with clay', pt:'alvenaria de xisto, seca ou com barro' } },
@@ -23840,7 +23942,7 @@ VERN_DIST['pt-cercal'] = ['Setúbal'];
     where:{ en:'Wherever limestone and fuel met — the Estremadura and Ribatejo massifs, the Algarve barrocal; on Terceira beside the tile kilns (Praia da Vitória)', pt:'Onde o calcário e a lenha se encontravam — os maciços da Estremadura e do Ribatejo, o barrocal algarvio; na Terceira junto aos fornos de telha (Praia da Vitória)' },
     summary:{ en:'A round stone kiln, often set into a bank so it could be loaded from above, where limestone was burnt into quicklime for mortar and whitewash; the general use of lime in the south made one in every favourable place, so it was made on the spot rather than brought in.',
       pt:'Um forno redondo de pedra, muitas vezes encostado a um talude para se carregar por cima, onde o calcário se cozia em cal viva para argamassas e caiação; o uso generalizado da cal no sul levou a construí-los em todos os locais favoráveis, para a fazer no lugar em vez de a trazer de fora.' },
-    model:{ L:5, D:5, fl:1, fh:3.0, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.03, units:[{ on:true, frac:0.2, pos:0.5, door:true }] }, N:none, E:none, W:none },
+    model:{ L:5, D:5, fl:1, fh:3.0, rot:180, form:'rect', icon:'limekiln', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.03, units:[{ on:true, frac:0.2, pos:0.5, door:true }] }, N:none, E:none, W:none },
       render:{ en:'stone walls', pt:'paredes de pedra' }, walls:{ en:'limestone rubble, lined with refractory stone', pt:'alvenaria de calcário, forrada a pedra refratária' } },
     feats:[ vI('site', { en:'Set against a slope: loaded from the top, fired and emptied from the mouth at the foot (inference from the common type).', pt:'Encostado a um talude: carregado por cima, aceso e esvaziado pela boca em baixo (inferência do tipo corrente).' }, 'INF'),
       vI('visualization', { en:'Lime for whitewash, its colours (ochres, blue, vermilion, green) and, on the coast and in the Gândara, mutton tallow added to the boiling lime for a whitewash that lasted two years.', pt:'Cal para a caiação, os seus pigmentos (ocres, azul, vermelhão, verde) e, no litoral e na Gândara, sebo de carneiro na cal a ferver para uma caiação que durava dois anos.' }, 'JFE') ] }, ['Leiria', 'Santarém', 'Lisboa', 'Faro', 'Açores']);
@@ -23994,7 +24096,7 @@ SUP_TYPES['pt-forno-sul'] = { region:'mainland', support:true,
   where:{ en:'The montes and villages of the Alentejo and the Algarve', pt:'Os montes e povoações do Alentejo e do Algarve' },
   summary:{ en:'In the south the oven is never in the kitchen: it stands outside, in a small round building of its own, rendered and whitewashed like the rest. In the small montes it is only the oven; in the large ones a bigger building with a roofed front and porch, a stone bench each side for the trays of loaves — where, says Silva Picão, passing labourers slept.',
     pt:'No Sul o forno nunca está na cozinha: fica no exterior, num pequeno edifício redondo e autónomo, rebocado e caiado como o resto. Nos montes pequenos é só o forno; nos grandes uma construção maior, com telheiro e alpendre à frente e um poial de cada lado para os tabuleiros do pão — onde, diz Silva Picão, dormiam malteses e passantes.' },
-  model:{ L:3, D:3, fl:1, fh:1.6, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.06, units:[{ on:true, frac:0.3, pos:0.5, door:true }] }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+  model:{ L:3, D:3, fl:1, fh:1.6, rot:180, form:'rect', icon:'oven', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.06, units:[{ on:true, frac:0.3, pos:0.5, door:true }] }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
     render:{ en:'whitewash walls', pt:'parede caiada' }, walls:{ en:'rubble, taipa or brick, rendered and whitewashed', pt:'alvenaria, taipa ou tijolo, rebocados e caiados' } },
   feats:[ vI('site', { en:'Apart from the house; in the large montes with a porch and two benches in front.', pt:'Afastado da casa; nos montes grandes com alpendre e dois poiais à frente.' }, 'OGA'),
     vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'OGA') ] };
