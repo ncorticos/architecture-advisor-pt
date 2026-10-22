@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.127.0',
+  version:     '1.128.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21002,7 +21002,7 @@ function vIcon(key, size) {
       let cx = (len - band) / 2 + ('pos' in F ? F.pos : u.pos === undefined ? 0.5 : u.pos) * band + (+('off' in F ? F.off : u.off) || 0);
       if (fc === 'S') {
         /* the door of the varanda's storey opens onto it; what falls in a loggia's mouth stands on its back wall */
-        if (door && bl && k === bl.lv - 1) cx = bl.x + bl.w / 2;
+        if (door && bl && k === bl.lv - 1 && (cx - w / 2 < bl.x || cx + w / 2 > bl.x + bl.w)) cx = bl.x + bl.w / 2;
         if (lg && k === lg.lv - 1 && cx + w / 2 > lg.x0 && cx - w / 2 < lg.x1) continue;
         /* clear of the openings already on this storey */
         const hit = c => taken.some(s => s.k === k && c - w / 2 < s.b + 0.3 && c + w / 2 > s.a - 0.3);
@@ -21142,19 +21142,35 @@ function vIcon(key, size) {
     out.length = 0; all.length = 0;
     const cx = L / 2, cy = Dd / 2, r = L / 2, Hw = H, ring = (z, rr) => Array.from({ length:24 }, (_, i) => { const a = i / 24 * 2 * Math.PI; return P(cx + rr * Math.cos(a), cy + rr * Math.sin(a), z); });
     const shd = ring(-rz, r + 0.6).map(p => [p[0] + 0.6, p[1] + 0.3]); out.push('<polygon points="' + fmtP(shd) + '" fill="rgba(0,0,0,.10)"/>'); shd.forEach(p => all.push(p));
-    const lo = ring(0, r), hi = ring(Hw, r), front = [];
-    for (let i = 0; i < 24; i++) { const a = i / 24 * 2 * Math.PI; if (Math.cos(a) - Math.sin(a) > -0.2) front.push(i); }
-    const body = lo.filter((_, i) => front.indexOf(i) >= 0).concat(hi.filter((_, i) => front.indexOf(i) >= 0).reverse());
-    face(lo, vShade(wc, 0.8)); face(body, wc);
-    if (tex) courses(P(cx - r, cy, 0), P(cx + r, cy, 0), P(cx + r, cy, Hw), P(cx - r, cy, Hw), Hw, tex[0], tex[1], 0.035);
-    face([P(cx - 0.6, -0.02 + cy - r, 0.05), P(cx + 0.6, -0.02 + cy - r, 0.05), P(cx + 0.6, -0.02 + cy - r, 2.0), P(cx - 0.6, -0.02 + cy - r, 2.0)], dc, 0.05);
-    face([P(cx + r + 0.02, cy - 0.3, Hw - 1.3), P(cx + r + 0.02, cy + 0.3, Hw - 1.3), P(cx + r + 0.02, cy + 0.3, Hw - 0.6), P(cx + r + 0.02, cy - 0.3, Hw - 0.6)], '#3E4C57', 0.04);
-    const capC = rk === 'thatch' ? '#B5965A' : '#3A2E26', tip = P(cx, cy, Hw + 1.7), capRing = ring(Hw, r + 0.15);
-    capRing.forEach((p, i) => { const q = capRing[(i + 1) % 24]; if (front.indexOf(i) >= 0) face([p, q, tip], vShade(capC, 0.75 + 0.25 * Math.cos(i / 24 * 2 * Math.PI)), 0.02); });
+    /* the tower: the half of the drum turned to the viewer (south-east), from silhouette to silhouette, shaded strip by strip;
+       its stone courses run round it, the door on the south, a window on the east */
+    const NA = 24, arc = (z, rr) => Array.from({ length:NA + 1 }, (_, i) => { const a = -3 * Math.PI / 4 + i / NA * Math.PI; return P(cx + rr * Math.cos(a), cy + rr * Math.sin(a), z); });
+    const lo = arc(0, r), hi = arc(Hw, r);
+    for (let i = 0; i < NA; i++) { const a = -3 * Math.PI / 4 + (i + 0.5) / NA * Math.PI, lit = 0.78 + 0.22 * (Math.cos(a) - Math.sin(a)) / Math.SQRT2;
+      const q = [lo[i], lo[i + 1], hi[i + 1], hi[i]], c = vShade(wc, lit);
+      q.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(q) + '" fill="' + c + '" stroke="' + c + '" stroke-width="0.03"/>'); }
+    if (tex) for (let z = tex[0]; z < Hw - 0.05; z += tex[0]) out.push('<polyline points="' + fmtP(arc(z, r)) + '" fill="none" stroke="' + tex[1] + '" stroke-width="0.035"/>');
+    out.push('<polyline points="' + fmtP(lo.concat(hi.slice().reverse()).concat([lo[0]])) + '" fill="none" stroke="rgba(0,0,0,.4)" stroke-width="0.06" stroke-linejoin="round"/>');
+    /* an opening on the drum: a quad bent round it between two angles */
+    const onDrum = (a0, a1, z0, z1, fill) => { const n = 4, pts = [];
+      for (let k = 0; k <= n; k++) { const a = a0 + (a1 - a0) * k / n; pts.push(P(cx + (r + 0.02) * Math.cos(a), cy + (r + 0.02) * Math.sin(a), z0)); }
+      for (let k = n; k >= 0; k--) { const a = a0 + (a1 - a0) * k / n; pts.push(P(cx + (r + 0.02) * Math.cos(a), cy + (r + 0.02) * Math.sin(a), z1)); }
+      face(pts, fill, 0.05); };
+    const da = 0.6 / r;
+    onDrum(-Math.PI / 2 - da, -Math.PI / 2 + da, 0.02, Math.min(2.0, Hw - 0.6), dc);
+    onDrum(-0.3 / r, 0.3 / r, Hw - 1.3, Hw - 0.6, '#3E4C57');
+    /* the conical cap: every gore, back to front, overhanging the drum */
+    const capC = rk === 'thatch' ? '#B5965A' : '#3A2E26', tip = P(cx, cy, Hw + 1.7), NC = 32, cr = r + 0.15;
+    const cp = i => { const a = i / NC * 2 * Math.PI; return P(cx + cr * Math.cos(a), cy + cr * Math.sin(a), Hw); };
+    Array.from({ length:NC }, (_, i) => i).sort((i, j) => { const d = k => { const a = (k + 0.5) / NC * 2 * Math.PI; return Math.cos(a) - Math.sin(a); }; return d(i) - d(j); })
+      .forEach(i => { const a = (i + 0.5) / NC * 2 * Math.PI; face([cp(i), cp(i + 1), tip], vShade(capC, 0.72 + 0.28 * Math.max(0, (Math.cos(a) - Math.sin(a)) / Math.SQRT2 * 0.6 + 0.4 * Math.cos(a - Math.PI / 4))), 0.02); });
     const hub = P(cx - r * 0.2, cy - r - 0.6, Hw + 0.9);
-    for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + k * Math.PI / 2, ex = Math.cos(a) * 4.6, ez = Math.sin(a) * 4.6;
-      const tipS = P(cx - r * 0.2 + ex, cy - r - 0.6, Hw + 0.9 + ez), mid = P(cx - r * 0.2 + ex * 0.92 + Math.sin(a) * 0.9, cy - r - 0.6, Hw + 0.9 + ez * 0.92 - Math.cos(a) * 0.9), base = P(cx - r * 0.2 + Math.sin(a) * 0.5, cy - r - 0.6, Hw + 0.9 - Math.cos(a) * 0.5);
-      face([hub, tipS, mid, base], 'rgba(245,240,228,.92)', 0.03); line(hub, tipS, '#4A3A2C', 0.08); }
+    /* four spars (varas), each with its triangular cloth sail wrapped from the spar towards the next, tied off by a rope */
+    const hx = cx - r * 0.2, hy = cy - r - 0.6, hz = Hw + 0.9, SP = (a, t) => P(hx + Math.cos(a) * t, hy, hz + Math.sin(a) * t);
+    for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + k * Math.PI / 2, a2 = a + Math.PI / 2;
+      face([SP(a, 0.5), SP(a, 4.6), SP(a + 0.42, 3.4)], 'rgba(245,240,228,.94)', 0.03);
+      line(SP(a + 0.42, 3.4), SP(a2, 4.6), 'rgba(74,58,44,.6)', 0.03);
+      line(SP(a, 0), SP(a, 4.6), '#4A3A2C', 0.09); }
     out.push('<circle cx="' + hub[0].toFixed(2) + '" cy="' + hub[1].toFixed(2) + '" r="0.25" fill="#3A2E26"/>');
   }
   /* a watermill: the arches of the wheel chambers in its plinth, the water running out */
@@ -24093,6 +24109,49 @@ vAddT('pt-porto-esguia', [
   const g = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
   if (g) g.refs.push('Almeida, C., Guedes, J. P., Arêde, A., &amp; Costa, A. (2014). Paredes de alvenaria de pedra de folha única: Caracterização geométrica e comportamento estrutural [Paper presentation]. <i>9.º Congresso Nacional de Mecânica Experimental</i>, Aveiro.',
     'Silva, T. A. de S. e (2013). <i>Porto: [Re]habitar a cidade — Obsolescência urbana e a readaptação habitacional à cidade contemporânea</i> [Master’s dissertation, Universidade de Coimbra].');
+})();
+
+/* Pereira (1994), Vieira (2020) and the SIPA record of the Pátio da Bagatela: the Lisbon pátio drawn as the
+   surveyed gallery block — two storeys of three-room dwellings, the upper ones off a continuous outside
+   gallery reached by a stone stair at its end, all facing the shared yard */
+Object.assign(VERN_SRC, {
+  PER:{ tag:'Pereira 1994', cite:'Pereira, N. T. (1994). «Pátios e vilas de Lisboa, 1870–1930: A promoção privada do alojamento operário». <i>Análise Social</i>, <i>29</i>(127), 509–524.', url:'https://revistas.rcaap.pt/analisesocial/article/view/40380' },
+  VIE:{ tag:'Vieira 2020', cite:'Vieira, C. (2020). «As habitações operárias em Lisboa, na segunda metade do século dezanove». <i>Cadernos do Arquivo Municipal</i>, 2.ª série, <i>13</i> — after M. C. Teixeira (1992) for the definition of the pátio.', url:'https://scielo.pt/pdf/cam/vser2n13/vser2n13a03.pdf' },
+  BAG:{ tag:'SIPA — Pátio da Bagatela', cite:'SIPA / DGPC. «Pátio da Bagatela / Pátio do Monteiro», Lisboa (IPA.00004032).', url:'http://www.monumentos.gov.pt/Site/APP_PagesUser/SIPA.aspx?id=4032' },
+  FCL:{ tag:'FCSH+Lisboa', cite:'FCSH+Lisboa. «(Des)ordenar o território lisboeta», partes I–II — after G. Antunes: 739 pátios and 416 vilas at the turn of the 20th century.', url:'https://maislisboa.fcsh.unl.pt/desordenar-o-territorio-lisboeta-parte-i-como-e-que-apareceram-os-patios-e-as-vilas-operarias/' }
+});
+(() => {
+  const T = VERN_TYPES['pt-lisboa-patio'];
+  if (!T) return;
+  T.where = { en:'Lisbon, inside the blocks of the old city and the industrial edges — the yards of palaces and the cloisters of the convents left empty after 1834, back yards, becos; Graça, Alfama, Castelo, Xabregas, Marvila and Beato, Alcântara', pt:'Lisboa, no interior dos quarteirões da cidade antiga e das margens industriais — pátios de palácios e claustros dos conventos vagos depois de 1834, logradouros, becos; Graça, Alfama, Castelo, Xabregas, Marvila e Beato, Alcântara' };
+  T.summary = { en:'A more or less regular yard inside the block, ringed by small dwellings that open onto it (Teixeira). From the mid-19th century the families drawn to the factories settled wherever there was room — empty ground, the ruins and yards of palaces and convents — first in makeshift houses for which they paid rent, then in rows built for letting: two storeys of dwellings of about 35 m² and three rooms, one of them the kitchen, the upper ones reached by a continuous outside gallery and a stone stair at its end. One fountain in the yard for everyone, shared latrines, no sewer. About 739 pátios were counted round 1900, beside 416 vilas.',
+    pt:'Um espaço mais ou menos regular no interior do quarteirão, rodeado de pequenas habitações que para ele se abrem (Teixeira). A partir de meados do século XIX as famílias atraídas pelas fábricas instalaram-se onde havia lugar — terrenos vagos, ruínas e pátios de palácios e conventos — primeiro em casas improvisadas pelas quais pagavam renda, depois em correntezas construídas para arrendar: dois pisos de fogos de cerca de 35 m² e três divisões, uma delas a cozinha, os de cima servidos por uma galeria exterior corrida e uma escada de pedra no topo. Um só fontanário no pátio para todos, latrinas comuns, sem esgoto. Contaram-se cerca de 739 pátios por volta de 1900, a par de 416 vilas.' };
+  const at = x => +((x - 0.96) / 22.08).toFixed(3);
+  const units = [];
+  for (let i = 0; i < 4; i++) units.push(D(at(6 * i + 1.6), 0.04, [{ door:true }, { door:true }]), W(at(6 * i + 4), 0.035, [{ on:true }, { on:true }]));
+  T.model = { L:24, D:6, fl:2, fh:2.8, rot:180, form:'rect', balc:19.6, balcAt:0.4167, roof:{ n:2, th:22, bei:0.3 },
+    open:{ S:vOpen(units, 0.3, 0.9, 1.9), N:vOpen([W(0.15, 0.03, [{ on:false }, { on:true }]), W(0.4, 0.03, [{ on:false }, { on:true }]), W(0.65, 0.03, [{ on:false }, { on:true }]), W(0.9, 0.03, [{ on:false }, { on:true }])], 0.05), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+    render:{ en:'whitewash walls, tile roof, timber door', pt:'parede caiada, telha, porta de madeira' },
+    walls:{ en:'rubble and brick, rendered and whitewashed; timber or iron gallery, stone stair', pt:'alvenaria e tijolo, rebocados e caiados; galeria de madeira ou ferro, escada de pedra' } };
+  T.feats = [
+    vFloors({ en:'two (three at the back where the ground falls)', pt:'dois (três nas traseiras onde o terreno desce)' }, 2, 3, 'BAG'),
+    vN('site', { en:'Depth of the block', pt:'Profundidade do corpo' }, { en:'one dwelling deep, about 5–7 m — the yard on one side, the neighbour on the other', pt:'um fogo de fundo, cerca de 5–7 m — o pátio de um lado, o vizinho do outro' }, () => MASS.D, 4.5, 7.5, 'm', 'INF'),
+    vI('site', { en:'Inside the block, behind the street houses, reached by a passage or a gate; the dwellings face the common yard. Some yards are wide, others squeezed into a narrow plot; many were the courts of palaces or the cloisters of convents emptied after 1834.', pt:'No interior do quarteirão, por trás das casas da rua, com acesso por uma passagem ou portão; os fogos voltam-se ao pátio comum. Uns pátios são amplos, outros encaixam-se numa parcela estreita; muitos foram pátios de palácios ou claustros de conventos vagos depois de 1834.' }, 'VIE'),
+    vI('site', { en:'The first pátios were not built: workers’ families occupied empty ground and ruined buildings, put up their own shelters and paid the owner rent. Building rows for letting came after — and, from the 1880s, the vilas.', pt:'Os primeiros pátios não foram construídos: as famílias operárias ocupavam terrenos vagos e edifícios arruinados, erguiam os seus abrigos e pagavam renda ao proprietário. As correntezas construídas para arrendar vieram depois — e, a partir dos anos 1880, as vilas.' }, 'PER'),
+    vI('openings', { en:'Each dwelling a door and a window on the yard, nothing on the blind back. Projects of the 1880s–90s average about 35 m² gross and 3.6 rooms; at Xabregas (1887), in a factory yard, 21 dwellings of three rooms, one the kitchen — three of them without a chimney.', pt:'Cada fogo com uma porta e uma janela para o pátio, nada nas costas cegas. Os projetos dos anos 1880–90 dão em média cerca de 35 m² brutos e 3,6 divisões; em Xabregas (1887), no pátio de uma fábrica, 21 fogos de três divisões, uma delas a cozinha — três sem chaminé.' }, 'VIE'),
+    vI('site', { en:'The upper floor is served by a continuous outside gallery (galeria corrida), the yard’s common landing, reached by stone stairs at the ends — Pátio da Bagatela (1879): two storeys, 20 dwellings, three storeys at the back. Galleries of timber, later of iron.', pt:'O piso de cima é servido por uma galeria exterior corrida, o patamar comum do pátio, com escadas de pedra nos topos — Pátio da Bagatela (1879): dois pisos, 20 fogos, três pisos nas traseiras. Galerias de madeira, depois de ferro.' }, 'BAG'),
+    vI('ventilation', { en:'One front only, the back against the neighbour: no through draught. One fountain in the yard for everyone, shared latrines, no sewer — the insalubrity the hygienists and the 1881 Industrial Inquiry denounced.', pt:'Uma só frente, as costas contra o vizinho: sem ventilação cruzada. Um fontanário no pátio para todos, latrinas comuns, sem esgoto — a insalubridade denunciada pelos higienistas e pelo Inquérito Industrial de 1881.' }, 'VIE'),
+    vI('site', { en:'About 739 pátios round 1900, mostly in the old centre near work; the 416 vilas rather at the industrial edges. Protected since the 1993 Plano de Pormenor de Salvaguarda dos Pátios e Vilas.', pt:'Cerca de 739 pátios por volta de 1900, sobretudo no centro antigo junto ao trabalho; as 416 vilas mais nas margens industriais. Salvaguardados desde o Plano de Pormenor de Salvaguarda dos Pátios e Vilas (1993).' }, 'FCL'),
+    vI('roof', { en:'The roof form is a teaching inference: two slopes of tile over the row; the eave over the gallery shelters it.', pt:'A forma do telhado é uma inferência didática: duas águas de telha sobre a correnteza; o beiral sobre a galeria abriga-a.' }, 'INF'),
+    vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'PER')
+  ];
+  VM_OVR['pt-lisboa-patio'] = (vm, b) => { vm.court = { on:true, x:0, y:-b.D / 2 - 4, L:b.L, D:8, h:2.4, open:'N', gate:{ face:'S', pos:0.5, w:2 } };
+    vm.els = vm.els.filter(e => e.t !== 'chimney'); vm.els.push({ t:'varanda', vol:0, face:'S', kind:'corrida', pos:0.41, w:19.6, floor:1 }, { t:'stair', vol:0, face:'S', along:'par', pos:0.9, w:1.0, landing:false, porch:false }); };
+  const g = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
+  if (g) g.refs.push('Pereira, N. T. (1994). Pátios e vilas de Lisboa, 1870–1930: A promoção privada do alojamento operário. <i>Análise Social</i>, <i>29</i>(127), 509–524. https://revistas.rcaap.pt/analisesocial/article/view/40380',
+    'Vieira, C. (2020). As habitações operárias em Lisboa, na segunda metade do século dezanove. <i>Cadernos do Arquivo Municipal</i>, 2.ª série, <i>13</i>.',
+    'SIPA / DGPC. (n.d.). <i>Pátio da Bagatela / Pátio do Monteiro</i> (IPA.00004032). http://www.monumentos.gov.pt/Site/APP_PagesUser/SIPA.aspx?id=4032');
+  vernNames();
 })();
 
 const TABS_OLGYAY = [
