@@ -283,6 +283,15 @@ footer{border-top:1px solid var(--line); margin-top:26px; background:var(--wash)
   color:var(--muted); font-weight:600; margin:0 0 8px;
 }
 .foot p{margin:0 0 3px; font-size:12.5px; color:var(--ink2); line-height:1.6}
+/* the methods and sources fold away, so the archetypes follow straight on */
+.refs-toggle{
+  display:inline-flex; align-items:center; gap:7px; font:inherit; letter-spacing:inherit; text-transform:inherit;
+  color:var(--ink2); background:#fff; border:1px solid var(--line); border-radius:6px; padding:6px 12px; cursor:pointer;
+}
+.refs-toggle:hover{color:var(--ink); border-color:var(--muted)}
+.refs-toggle:focus-visible{outline:2px solid var(--c3); outline-offset:2px}
+.refs-toggle .chev{display:inline-block; transition:transform .15s}
+.refs-toggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
 .foot .appname{font-size:14px; font-weight:650; color:var(--ink); letter-spacing:-0.015em}
 .foot .ver{
   display:inline-block; margin-left:8px; font-family:var(--mono); font-size:10.5px;
@@ -902,8 +911,8 @@ details.more[open] > summary{color:var(--ink)}
     </div>
 
     <div class="foot-refs">
-      <h5 data-t="footMethods">Methods and sources</h5>
-      <ul id="refList"></ul>
+      <h5><button type="button" class="refs-toggle" id="refsToggle" aria-expanded="false" aria-controls="refList"><span class="chev" aria-hidden="true">▸</span><span data-t="footMethods">Methods and sources</span></button></h5>
+      <ul id="refList" hidden></ul>
       <h5 style="margin-top:18px" data-t="footArch">Archetypes bibliography</h5>
       <div id="archBib"></div>
     </div>
@@ -956,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.131.0',
+  version:     '1.132.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24376,8 +24385,10 @@ const REFS = [
    'The regional forest programme each site region answers to. The Ventilation palette names the region\u2019s PROF and the protected areas inside it (ICNF, IFCN, Governo dos Açores) whose flora its species were read from — nothing from outside the region.', 'https://www.icnf.pt/florestas/prof/profemvigor']
 ];
 function buildRefs() {
-  const ul = $('#refList');
+  const ul = $('#refList'), tg = $('#refsToggle');
   if (!ul) return;
+  if (tg && !tg.dataset.on) { tg.dataset.on = '1';
+    tg.addEventListener('click', () => { const open = tg.getAttribute('aria-expanded') !== 'true'; tg.setAttribute('aria-expanded', String(open)); ul.hidden = !open; }); }
   ul.innerHTML = '';
   REFS.forEach(r => ul.appendChild(el('li', { html:
     r[0] + (r[2] ? ' <a href="' + r[2] + '" target="_blank" rel="noopener noreferrer">' + (/doi\.org/.test(r[2]) ? 'doi' : 'link') + '</a>' : '')
