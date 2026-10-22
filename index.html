@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.115.0',
+  version:     '1.116.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -3932,7 +3932,7 @@ function migrateRoofGlobals(G, RF) {
     RF.zones[(isFinite(+C0.x) && isFinite(+C0.y)) ? ziOf(+C0.x, +C0.y) : 0].canopy =
       { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:+C0.x || 0, y:+C0.y || 0,
         w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4), p:clamp(Math.round(+C0.p || 0), 0, 45),
-        drop:clamp(isFinite(+C0.drop) ? +C0.drop : 0.15, CANOPY_DROP_MIN, CANOPY_DROP_MAX) };
+        drop:clamp(isFinite(+C0.drop) ? +C0.drop : 0.15, CANOPY_DROP_MIN, CANOPY_DROP_MAX), ...pergolaKeep(C0) };
   }
   if (RF.chim && RF.chim.on) {
     const zi = (isFinite(+RF.chim.x) && isFinite(+RF.chim.y)) ? ziOf(+RF.chim.x, +RF.chim.y) : 0;
@@ -4681,7 +4681,7 @@ function canopySpanFor(segs, c, H0, Mr) {
   let z0 = H0n - drop;
   if (Mr && Mr.zAt && Mr.bei > 0) { const ev = eaveEdge(Mr, Mr.H0, Mr.bei, sg, u0, u1); if (ev.d > 0.05) z0 = Math.min(z0, ev.z - 0.05); }
   const dz = Math.min(d * Math.tan(clamp(+c.p || 0, 0, 45) * RAD), Math.max(0, z0 - CANOPY_CLEAR));
-  return { sg, u0, u1, d, z0, z1:z0 - dz, p:Math.atan2(dz, d) / RAD, drop };
+  return { sg, u0, u1, d, z0, z1:z0 - dz, p:Math.atan2(dz, d) / RAD, drop, c };
 }
 /** The canopy's plate in world metres: P(u, v) along the wall and out from
     it, falling with the pitch; its four corners, its move node (mid outer
@@ -4696,7 +4696,7 @@ function canopyPts(hit) {
 /** The canopy as a 0.07 m slab: top, soffit and the three free fascia —
     outer edge plus the two sides (the root sits against the wall). */
 function canopySlab(hit) {
-  if (!hit) return null;
+  if (!hit || isPergola(hit.c)) return null;
   const q = canopyPts(hit).quad;
   const lo = p => [p[0], p[1], p[2] - CANOPY_THICK];
   const qb = q.map(lo);
@@ -4719,7 +4719,7 @@ function canopyFrame(hit) {
   const h = CANOPY_POST / 2, bw = CANOPY_BEAM[0] / 2;
   const posts = Array.from({ length:N }, (_, i) => hit.u0 + inset + (w - 2 * inset) * i / (N - 1))
     .map(u => box(at(u - h, nC - h), at(u + h, nC + h), 0, zBot));
-  return { posts, beam:box(at(hit.u0, nC - bw), at(hit.u1, nC + bw), zBot, zTop), n:N, span:(w - 2 * inset) / (N - 1) };
+  return { posts, beam:box(at(hit.u0, nC - bw), at(hit.u1, nC + bw), zBot, zTop), n:N, span:(w - 2 * inset) / (N - 1), slats:pergolaParts(hit, zTop) };
 }
 /** Stone for canvas loops, kin to the embasamento. The treads — each box's
     top — take the lighter tone, so a flight reads as steps, not a ramp. */
@@ -8314,13 +8314,13 @@ function buildSite(host) {
           const slab = canopySlab(cpH), side = opaque(roofFillFor(zi, 'A', 0.38, colK * 0.82));
           const tx = (cpH.sg.b[0] - cpH.sg.a[0]) / cpH.sg.len, ty = (cpH.sg.b[1] - cpH.sg.a[1]) / cpH.sg.len;
           const fr = canopyFrame(cpH);
-          fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
+          fr.posts.concat(fr.beam ? [fr.beam] : [], fr.slats || []).forEach(Bx => boxSides(Bx).forEach(([q, nn]) => {
             if (nn[2] === 0 && seesL(nn)) faces.push({ cano:1, pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26' });
           }));
-          if (seesL(n)) faces.push({ cano:1, pts:slab.outer, fill:side });
-          if (seesL([tx, ty, 0])) faces.push({ cano:1, pts:slab.sideB, fill:side });
-          if (seesL([-tx, -ty, 0])) faces.push({ cano:1, pts:slab.sideA, fill:side });
-          faces.push({ cano:1, pts:canopyPts(cpH).quad, fill:opaque(roofFillFor(zi, 'A', 0.2 + 0.3 * (1 - colK), colK)), top:[n[0] * sp, n[1] * sp, cp] });
+          if (slab && seesL(n)) faces.push({ cano:1, pts:slab.outer, fill:side });
+          if (slab && seesL([tx, ty, 0])) faces.push({ cano:1, pts:slab.sideB, fill:side });
+          if (slab && seesL([-tx, -ty, 0])) faces.push({ cano:1, pts:slab.sideA, fill:side });
+          if (slab || pergolaTopFill(c)) faces.push({ cano:1, pts:canopyPts(cpH).quad, fill:slab ? opaque(roofFillFor(zi, 'A', 0.2 + 0.3 * (1 - colK), colK)) : pergolaTopFill(c), top:[n[0] * sp, n[1] * sp, cp] });
         });
         pushImportFaces(faces);
         pushChimPar(faces, RM);
@@ -9492,7 +9492,7 @@ function buildRoof(host) {
     }
   }
   buildBeiUI();
-  roofSide.appendChild(el('div', { class:'gh', text:'Eave canopy' }));
+  roofSide.appendChild(el('div', { class:'gh', text:'Eave canopy or pergola' }));
   const canBox = roofSide.appendChild(el('div'));
   let canWCtl = null, canDCtl = null, canPCtl = null, canHCtl = null, canSays = null;
   /** The canopy as built, in words: root and outer-edge heights, pitch, posts. */
@@ -9506,7 +9506,7 @@ function buildRoof(host) {
     canSays.textContent = t('Root') + ' ' + fmt(hit.z0, 2) + ' m · ' + t('Outer edge') + ' ' + fmt(hit.z1, 2) + ' m ' + t('above the ground')
       + (held ? ' · ' + t('pitch held at') + ' ' + fmt(hit.p, 0) + '° ' + t('to keep it 2.0 m clear') : '')
       + (dropHeld ? ' · ' + t('drop held to keep root 2.1 m clear') : '')
-      + ' · ' + (fr.n ? fr.n + ' ' + t('timber posts') + ', ' + t('spans of') + ' ' + fmt(fr.span, 2) + ' m' : t('hung from the wall, no posts up to 0.5 m'));
+      + ' · ' + (fr.n ? fr.n + ' ' + t('timber posts') + ', ' + t('spans of') + ' ' + fmt(fr.span, 2) + ' m' : t('hung from the wall, no posts up to 0.5 m')) + pergolaWords(cc2);
   };
   /** Readout for a canopy balcony: dims, stair, corner state. */
   function canopyBalconyText(cb) {
@@ -9565,8 +9565,9 @@ function buildRoof(host) {
     canBox.innerHTML = '';
     canWCtl = canDCtl = canPCtl = canHCtl = canSays = null;
     const RZ = RF.zones[roofEditIdx()], c0 = RZ.canopy, on = !!(c0 && typeof c0 === 'object');
-    const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'On' }], on ? 1 : 0, v => {
-      if (v === 1) {
+    const tgl = segCtl(null, [{ value:0, label:'Off' }, { value:1, label:'Canopy' }, { value:2, label:'Pergola' }], on ? (isPergola(c0) ? 2 : 1) : 0, v => {
+      if (v >= 1 && on) Object.assign(c0, v === 2 ? { kind:'pergola', cover:pergolaCover(c0) } : { kind:'roof' });
+      else if (v >= 1) {
         const M = roofModel(G, RF), Zi = roofEditIdx(), zspan = M.zones[Zi];
         const inSpan = sg => !zspan || (((M.axis === 'x' ? (sg.a[0] + sg.b[0]) / 2 : (sg.a[1] + sg.b[1]) / 2) >= zspan.a0 - 1e-6) && ((M.axis === 'x' ? (sg.a[0] + sg.b[0]) / 2 : (sg.a[1] + sg.b[1]) / 2) <= zspan.a1 + 1e-6));
         const walled = M.pl.segs.filter(sg => sg.len >= 2 && inSpan(sg));
@@ -9575,6 +9576,7 @@ function buildRoof(host) {
         const sg = (pick.length ? pick : all).reduce((p, q) => q.len > p.len ? q : p, all[0]);
         if (!sg) return;
         RF.zones[roofEditIdx()].canopy = { f:segFace(sg), x:+((sg.a[0] + sg.b[0]) / 2).toFixed(2), y:+((sg.a[1] + sg.b[1]) / 2).toFixed(2), w:3, d:1.5, p:15, drop:0.15 };
+        if (v === 2) Object.assign(RF.zones[roofEditIdx()].canopy, { kind:'pergola', cover:'vine', p:0, d:2.5 });
       } else {
         /* on one storey a projecting balcony is this canopy: it goes too */
         const zi = roofEditIdx(), was = G.balc.length;
@@ -9592,6 +9594,7 @@ function buildRoof(host) {
     canPCtl = rangeCtl('Canopy pitch', 0, 45, 1, clamp(+c.p || 0, 0, 45), v => { c.p = Math.round(v); canopyWords(); roofDraw(); }, v => fmt(v, 0) + '°');
     canHCtl = rangeCtl('Canopy drop', 0.05, 1.5, 0.05, canopyDrop(c), v => { c.drop = +v.toFixed(2); canopyWords(); roofDraw(); }, v => fmt(v, 2) + ' m');
     canBox.appendChild(canWCtl); canBox.appendChild(canDCtl); canBox.appendChild(canPCtl); canBox.appendChild(canHCtl);
+    if (isPergola(c)) canBox.appendChild(pergolaCoverCtl(c, () => { canopyWords(); roofDraw(); }));
     canSays = canBox.appendChild(el('p', { class:'hint' }));
     canopyWords();
     canBox.appendChild(el('p', { class:'hint', text:'Push one stretch of eave further out to roof an exterior space, as an alpendre — drag its round node along the wall and outward, its square node at the end to widen it, its diamond at the wall up and down to set how far it hangs below the eave. The pitch falls the canopy away from the wall; its depth is measured level. The slab reads 0.07 m thick. Deeper than 0.5 m it stands on timber posts under a beam, one more post for every 3 m of width.' }));
@@ -9996,7 +9999,7 @@ function buildRoof(host) {
         const sideFill = opaque(roofFillFor(zi, 'A', 0.38, colK * 0.82));
         const botFill = opaque(roofFillFor(zi, 'A', 0.42, colK * 0.62));
         if (camSees(A, n[0] * sp, n[1] * sp, cp)) {
-          faces.push({ pts:canopyPts(cpH).quad, fill:topFill, cnp:Object.assign({ zi }, cpH), over:1 });
+          faces.push({ pts:canopyPts(cpH).quad, fill:isPergola(c) ? pergolaTopFill(c) : topFill, cnp:Object.assign({ zi }, cpH), over:1 });
         }
         const slab = canopySlab(cpH);
         if (slab) {
@@ -10007,7 +10010,7 @@ function buildRoof(host) {
           if (camSees(A, -n[0] * sp, -n[1] * sp, -cp)) faces.push({ pts:slab.bottom, fill:botFill });
         }
         const fr = canopyFrame(cpH);
-        fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
+        fr.posts.concat(fr.beam ? [fr.beam] : [], fr.slats || []).forEach(B => boxSides(B).forEach(([q, nn]) => {
           if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) faces.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26', post:1 });
         }));
       });
@@ -10031,6 +10034,7 @@ if (F.chim || F.par) {
             if (pn ? !camSees(A, pn[0], pn[1], 0) : !camSees(A, 0, 0, 1)) return;
           }
           const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
+        if (F.cnp && isPergola(F.cnp.c)) { if (F.fill) { pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); } return; }
         if (F.cnp) {
           /* the canopy's tiles: a channel every 0.25 m down its fall, and
              the beirado's broken line of tile ends along its edge */
@@ -10320,7 +10324,7 @@ if (F.chim || F.par) {
           const cH = canopySpanFor(M.pl.segs, c, M.H0, M);
           if (!cH) return null;
           const fr = canopyFrame(cH);
-          return 'Part ' + ('ABC'[zi] || String(zi + 1)) + ': ' + c.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '° · 0.07 m slab · root ' + fmt(cH.z0, 2) + ' m (drop ' + fmt(cH.drop, 2) + ' m) · outer edge ' + fmt(cH.z1, 2) + ' m'
+          return 'Part ' + ('ABC'[zi] || String(zi + 1)) + ': ' + c.f + ' · ' + fmt(cH.u1 - cH.u0, 1) + ' × ' + fmt(cH.d, 2) + ' m · ' + fmt(cH.p, 0) + '°' + (isPergola(c) ? ' · ' + t('pergola') + ', ' + VL(PERGOLA_COVERS[pergolaCover(c)]) : ' · 0.07 m slab') + ' · root ' + fmt(cH.z0, 2) + ' m (drop ' + fmt(cH.drop, 2) + ' m) · outer edge ' + fmt(cH.z1, 2) + ' m'
             + (fr.n ? ' · ' + fr.n + ' timber posts, spans ' + fmt(fr.span, 2) + ' m' : ' · no posts');
         }).filter(Boolean);
         return hs.length ? hs.join(' | ') : 'none';
@@ -11710,7 +11714,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     if (o.ovD > 0) ovPositions(o.ovN, { v0:bd.v0, v1:bd.v1 }).forEach(z => plates.push({ za:z, zb:z, d:o.ovD, t0:bd.x0, t1:bd.x1 }));
     if (o.finN > 0 && o.finD > 0) faceFins(f).forEach(tq => fins.push({ t:bd.x0 + tq * (bd.x1 - bd.x0), d:o.finD, z0:bd.v0, z1:bd.v1 }));
     /* the eave canopy, falling at its pitch from its root */
-    if (cpC && cpC.sg === sg) plates.push({ za:cpC.z0, zb:cpC.z1, d:cpC.d, t0:cpC.u0, t1:cpC.u1 });
+    if (cpC && cpC.sg === sg) plates.push({ za:cpC.z0, zb:cpC.z1, d:cpC.d, t0:cpC.u0, t1:cpC.u1, per:isPergola(cpC.c) ? cpC.c : null });
     /* the roof eave over this window: from the roof's height at the wall
        line out to its edge, along the whole wall and past its corners */
     const ev = eaveEdge(MmE, H0E, beiE, sg, sp.a, sp.b);
@@ -11740,22 +11744,23 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
   }
   /** Does a point of the glass (t, z) see the sun along (dt, dn, dz), or
       does a device stop the ray first? */
-  const rayBlocked = (els, t, z, dt, dn, dz) => {
+  const rayTrans = (els, t, z, dt, dn, dz, doy) => {
+    let tr = 1;
     for (const P of els.plates) {
       const kz = (P.zb - P.za) / P.d, den = dz - kz * dn;
       if (den <= 1e-9) continue;
       const s = (P.za - z) / den;
       if (s <= 1e-9) continue;
       const n = s * dn, tt = t + s * dt;
-      if (n <= P.d + 1e-9 && tt >= P.t0 - 1e-9 && tt <= P.t1 + 1e-9) return true;
+      if (n <= P.d + 1e-9 && tt >= P.t0 - 1e-9 && tt <= P.t1 + 1e-9) { if (P.per) { tr *= pergolaTau(P.per, doy); continue; } return 0; }
     }
     if (Math.abs(dt) > 1e-9) for (const F of els.fins) {
       const s = (F.t - t) / dt;
       if (s <= 1e-9) continue;
       const n = s * dn, zz = z + s * dz;
-      if (n <= F.d + 1e-9 && zz >= F.z0 - 1e-9 && zz <= F.z1 + 1e-9) return true;
+      if (n <= F.d + 1e-9 && zz >= F.z0 - 1e-9 && zz <= F.z1 + 1e-9) return 0;
     }
-    return false;
+    return tr;
   };
   /** The share of a season's beam on this side's glass its devices stop,
       in % — days as an array of days of the year (or one day). */
@@ -11799,7 +11804,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
         rects.forEach(rc => {
           const dt = rc.sgnT * dl;
           let seen = 0;
-          rc.pts.forEach(q => { if (!rayBlocked(rc.els, q[0], q[1], dt, dn, dz)) seen++; });
+          rc.pts.forEach(q => { seen += rayTrans(rc.els, q[0], q[1], dt, dn, dz, doy); });
           tot += wgt * rc.area; lit += wgt * rc.area * seen / rc.pts.length;
         });
       });
@@ -11948,13 +11953,13 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
         /* the eave canopy over this wall, which the shading score counts:
            its 0.07 m slab in the roof's colour, its posts and beam in timber */
         if (cpO && cpO.sg === sg) {
-          canopyFrame(cpO).posts.concat(canopyFrame(cpO).beam ? [canopyFrame(cpO).beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
+          canopyFrame(cpO).posts.concat(canopyFrame(cpO).beam ? [canopyFrame(cpO).beam] : [], canopyFrame(cpO).slats || []).forEach(B => boxSides(B).forEach(([q, nn]) => {
             if (nn[2] === 0 && camSees(A, nn[0], nn[1], 0)) items.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26', d:wD - 0.06 });
           }));
           const k = 0.87 - 0.11 * sg.n[1] - 0.05 * sg.n[0];
           const topFill = opaque(roofFill(0.2 + 0.3 * (1 - k), k));
           const sideFill = opaque(roofFill(0.38, k * 0.82));
-          items.push({ pts:canopyPts(cpO).quad, fill:topFill, d:wD - 0.07 });
+          if (!isPergola(cpO.c) || pergolaTopFill(cpO.c)) items.push({ pts:canopyPts(cpO).quad, fill:isPergola(cpO.c) ? pergolaTopFill(cpO.c) : topFill, d:wD - 0.07 });
           const slabO = canopySlab(cpO);
           if (slabO) {
             const tx = (cpO.sg.b[0] - cpO.sg.a[0]) / cpO.sg.len, ty = (cpO.sg.b[1] - cpO.sg.a[1]) / cpO.sg.len;
@@ -14998,7 +15003,7 @@ function buildVentilation(host) {
       if (!cpH) return;
       const n = cpH.sg.n, sp = Math.sin(cpH.p * RAD), cp = Math.cos(cpH.p * RAD);
       const colK = 0.87 - 0.11 * n[1] - 0.05 * n[0];
-      if (sees3v([n[0] * sp, n[1] * sp, cp])) items.push({ pts:canopyPts(cpH).quad, fill:opaque(roofFillFor(zi, 'A', 0.2 + 0.3 * (1 - colK), colK)), over:1 });
+      if (sees3v([n[0] * sp, n[1] * sp, cp]) && (!isPergola(c) || pergolaTopFill(c))) items.push({ pts:canopyPts(cpH).quad, fill:isPergola(c) ? pergolaTopFill(c) : opaque(roofFillFor(zi, 'A', 0.2 + 0.3 * (1 - colK), colK)), over:1 });
       const slab = canopySlab(cpH), side = opaque(roofFillFor(zi, 'A', 0.38, colK * 0.82));
       if (slab) {
         const tx = (cpH.sg.b[0] - cpH.sg.a[0]) / cpH.sg.len, ty = (cpH.sg.b[1] - cpH.sg.a[1]) / cpH.sg.len;
@@ -15007,7 +15012,7 @@ function buildVentilation(host) {
         if (wallSeen([-tx, -ty])) items.push({ pts:slab.sideA, fill:side, over:1 });
       }
       const fr = canopyFrame(cpH);
-      fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([q, nn]) => {
+      fr.posts.concat(fr.beam ? [fr.beam] : [], fr.slats || []).forEach(B => boxSides(B).forEach(([q, nn]) => {
         if (nn[2] === 0 && wallSeen(nn)) items.push({ pts:q, fill:Math.abs(nn[0]) > 0.5 ? '#6E4B2E' : '#5E3F26', post:1 });
       }));
     });
@@ -17649,16 +17654,17 @@ style === 'sketch' ? '#EFEBE0'
         const sg = cpH.sg, CP = canopyPts(cpH), q = CP.quad, Ls = cpH.d / Math.cos(cpH.p * RAD);
         const fk = night ? 0.32 : 0.6 + 0.4 * Math.max(0, sg.n[0] * sunL[0] + sg.n[1] * sunL[1]) * (0.3 + 0.7 * sinA);
         const TIMBER = '#7A5434', fr = canopyFrame(cpH);
-        fr.posts.concat(fr.beam ? [fr.beam] : []).forEach(B => boxSides(B).forEach(([bq, nn]) => {
+        fr.posts.concat(fr.beam ? [fr.beam] : [], fr.slats || []).forEach(B => boxSides(B).forEach(([bq, nn]) => {
           if (nn[2] !== 0 || !wallSeen(nn)) return;   // tops sit under the beam and the slab
           const k2 = night ? 0.3 : faceK(nn);
           items.push(onWallLayer(sg, 4, { pts:bq, fill:shadeHex(TIMBER, k2), sh:k2, d:cdep(bq) }));
         }));
-        items.push(onWallLayer(sg, 5, { pts:q, cnp:true, fill:shadeHex(roofBase(), fk), sh:fk, d:cdep(q), mat:look.roof ? look.roof.key : 'site',
+        if (isPergola(c)) { if (pergolaTopFill(c)) items.push(onWallLayer(sg, 5, { pts:q, fill:shadeHex(pergolaTopFill(c), fk), sh:fk, d:cdep(q) })); }
+        else items.push(onWallLayer(sg, 5, { pts:q, cnp:true, fill:shadeHex(roofBase(), fk), sh:fk, d:cdep(q), mat:look.roof ? look.roof.key : 'site',
           uv:[[cpH.u0, 0], [cpH.u1, 0], [cpH.u1, Ls], [cpH.u0, Ls]] }));
         const lo = p => [p[0], p[1], p[2] - CANOPY_THICK], fq = [q[3], q[2], lo(q[2]), lo(q[3])];
         const sideK = night ? 0.3 : 0.62 * faceK(sg.n);
-        if (wallSeen(sg.n)) items.push(onWallLayer(sg, 6, { pts:fq, fill:shadeHex(roofBase(), sideK), d:cdep(fq),
+        if (!isPergola(c) && wallSeen(sg.n)) items.push(onWallLayer(sg, 6, { pts:fq, fill:shadeHex(roofBase(), sideK), d:cdep(fq),
           tileEnds:{ a:lo(q[3]), b:lo(q[2]), n:Math.max(2, Math.round((cpH.u1 - cpH.u0) / 0.24)) } }));
         const slabV = canopySlab(cpH);
         if (slabV) {
@@ -18871,13 +18877,14 @@ function vernApply(scope) {
     ROOF.n = r.n; ROOF.th = r.th; delete ROOF.zones; ROOF.roofSel = -1;
     ROOF.par = { on:false, h:0.6 };
     ROOF.bei = { on:r.bei > 0, d:r.bei, ends:true };
-    if (r.latada) ROOF.bei.canopy = { f:'S', x:0, y:0, w:Math.min(8, Math.max(1, MASS.L - 2)), d:3, p:0, drop:0.15 };
+    /* a latada is a vine pergola; a porch (alpendre, varanda, gallery) a roofed canopy */
+    if (r.latada || r.porch) ROOF.bei.canopy = Object.assign({ f:'S', x:0, y:0, w:Math.min(8, Math.max(1, MASS.L - 2)), d:3, p:0, drop:0.15 }, r.latada ? { kind:'pergola', cover:'vine' } : {});
     if (r.zones) ROOF.zones = JSON.parse(JSON.stringify(r.zones));
   }
   if ((all || scope === 'site') && m.balc && MASS.fl >= 2) {
     /* the varanda on the main facade, reached by its outside stair */
     const sg = planModel(MASS).segs.filter(q => segFace(q) === 'S').reduce((a, q) => !a || q.len > a.len ? q : a, null);
-    if (sg) MASS.balc = [{ f:'S', x:(sg.a[0] + sg.b[0]) / 2, y:(sg.a[1] + sg.b[1]) / 2, mode:'out', w:Math.min(m.balc, Math.floor(sg.len)), d:1.2, lv:2, corner:0, stair:{ w:STAIR_W } }];
+    if (sg) MASS.balc = [{ f:'S', x:(sg.a[0] + sg.b[0]) / 2, y:(sg.a[1] + sg.b[1]) / 2, mode:'out', w:Math.min(m.balc, Math.floor(sg.len)), d:1.2, lv:Math.min(m.balcLv || 2, MASS.fl), corner:0, stair:{ w:STAIR_W } }];
   }
   if (all || scope === 'openings') {
     ['S', 'N', 'E', 'W'].forEach(f => {
@@ -19114,7 +19121,10 @@ Object.assign(VERN_SRC, {
     url:'http://hdl.handle.net/11067/2464' },
   NER:{ tag:'Nero 2012', cite:'Nero, A. S. (2012). <i>Arquitectura popular portuguesa na região de Lisboa e Vale do Tejo</i> (dissertação de mestrado integrado, orient. A. Borges Abel). Évora: Universidade de Évora.', url:null },
   RBA:{ tag:'Rota da Bairrada', cite:'Rota da Bairrada. «Casa-Museu Casa Gandaresa» (Santo António de Vagos, 1937).',
-    url:'https://rotadabairrada.pt/en/where-to-go/house-museum-casa-gandareza' }
+    url:'https://rotadabairrada.pt/en/where-to-go/house-museum-casa-gandareza' },
+  RSR:{ tag:'Rodrigues 2016', cite:'Rodrigues, P. S. (2016). «Das origens da arquitectura popular em Portugal no século XIX: arqueologia de uma ideia». In P. André &amp; C. Sambricio (coord.), <i>Arquitectura popular: Tradição e vanguarda</i>, 19–47. Lisboa: DINÂMIA’CET-IUL — relaying G. Pereira (1900) on the casa saloia and P. Lopes (1899) on Brinches, Serpa.', url:null },
+  SAL:{ tag:'Salvado 2021', cite:'Salvado, J. P. F. (2021). <i>Arquitectura popular em Portugal: Tecnologias construtivas tradicionais na contemporaneidade</i> (dissertação de mestrado integrado, orient. A. M. T. F. Martins &amp; M. C. S. Nepomuceno). Covilhã: Universidade da Beira Interior — the 2018 field survey of the Zona 3 places of <i>Arquitectura popular em Portugal</i> in the district of Castelo Branco, read against it.', url:null },
+  PAN:{ tag:'André 2016', cite:'André, P. (2016). «Etnogenia, fotogenia, etnologia: arquitectura popular na primeira metade do século XX em Portugal». In P. André &amp; C. Sambricio (coord.), <i>Arquitectura popular: Tradição e vanguarda</i>, 85–143. Lisboa: DINÂMIA’CET-IUL — relaying J. Dias (1949/1951) on the north–south divide.', url:null }
 });
 
 /* --- small builders, so the tables read as tables -------------------------- */
@@ -19391,7 +19401,8 @@ const MN_LINES = {
     [{ en:'The sandy coastal plain between the Vouga and the Mondego: an earth tradition, the house and the farm together round the pátio.', pt:'A planície arenosa do litoral entre o Vouga e o Mondego: uma tradição de terra, a casa e a lavoura juntas em volta do pátio.' }, 'RBA']],
   estremadura:[
     [{ en:'A region of transition, northern and southern traits together: whitewashed houses of stone, adobe and, to the south, rammed earth.', pt:'Uma região de transição, com traços do norte e do sul: casas caiadas de pedra, adobe e, a sul, taipa.' }, 'SIM'],
-    [{ en:'The saloia house faces south, its small openings framed in limestone, the entrance shaded by a latada.', pt:'A casa saloia vira a sul, com vãos pequenos emoldurados a calcário e a entrada sombreada por uma latada.' }, 'CAS']],
+    [{ en:'The saloia house faces south, its small openings framed in limestone, the entrance shaded by a latada.', pt:'A casa saloia vira a sul, com vãos pequenos emoldurados a calcário e a entrada sombreada por uma latada.' }, 'CAS'],
+    [{ en:'Jorge Dias drew the line between the northern and the southern house through Leiria and Castelo Branco: to the south one storey, earth walls, two slopes and a large chimney; to the north two storeys (animals below, family above), stone, two or four slopes, often no chimney. Estremadura sits on the line.', pt:'Jorge Dias traçou a linha entre a casa do norte e a do sul por Leiria e Castelo Branco: a sul um só piso, paredes de terra, duas águas e grande chaminé; a norte dois pisos (gado em baixo, família em cima), pedra, duas ou quatro águas, muitas vezes sem chaminé. A Estremadura fica sobre a linha.' }, 'PAN']],
   setubal:[
     [{ en:'South of the Tagus the saloio house and the Alentejo house meet: saloio near the coast, from Porto Brandão to Cabo Espichel, more Alentejo inland.', pt:'A sul do Tejo encontram-se a casa saloia e a casa alentejana: saloia junto à costa, de Porto Brandão ao Cabo Espichel, mais alentejana para o interior.' }, 'NER']],
   ribatejo:[
@@ -19399,7 +19410,8 @@ const MN_LINES = {
     [{ en:'Between the saloio house and the Alentejo: whitewashed earth and stone; on the Tagus banks the avieiros built palafitte houses above the floods.', pt:'Entre a casa saloia e o Alentejo: terra e pedra caiadas; nas margens do Tejo os avieiros construíram palafitas acima das cheias.' }, 'SIM']],
   alentejo:[
     [{ en:'Hot and dry half the year, cold winters, little rain; the inland Alentejo the most dispersed settlement in the country, in montes.', pt:'Quente e seco metade do ano, Invernos frios, pouca chuva; o Alentejo interior o povoamento mais disperso do país, em montes.' }, 'SIM'],
-    [{ en:'Rammed earth (taipa) dominant until the mid-20th century: it sets the rectangular plan and limits the height of the walls and the number and size of the openings; lime wash in many coats protects it and lowers the summer heat on the walls.', pt:'A taipa dominou até meados do século XX: determina a planta rectangular e limita a altura das paredes e o número e tamanho dos vãos; a caiação em várias demãos protege-a e reduz o calor de Verão nas fachadas.' }, 'SIM']],
+    [{ en:'Rammed earth (taipa) dominant until the mid-20th century: it sets the rectangular plan and limits the height of the walls and the number and size of the openings; lime wash in many coats protects it and lowers the summer heat on the walls.', pt:'A taipa dominou até meados do século XX: determina a planta rectangular e limita a altura das paredes e o número e tamanho dos vãos; a caiação em várias demãos protege-a e reduz o calor de Verão nas fachadas.' }, 'SIM'],
+    [{ en:'In Brinches (Serpa), around 1900: thick whitewashed walls of rammed earth and masonry, much of it granite; in the newer houses the social rooms face the street at the front, the bedrooms inside, the kitchen at the back.', pt:'Em Brinches (Serpa), por volta de 1900: paredes espessas e caiadas de taipa e alvenaria, muito granito; nas casas mais novas as divisões de receber dão para a rua, à frente, os quartos ficam no interior e a cozinha nas traseiras.' }, 'RSR']],
   algarve:[
     [{ en:'Three Algarves: the coast, the limestone barrocal and the serra. The Barlavento in the west is where the wind comes from, the Sotavento in the east where it goes — more Mediterranean.', pt:'Três Algarves: o litoral, o barrocal calcário e a serra. O Barlavento a ocidente é de onde vem o vento, o Sotavento a oriente para onde vai — mais mediterrânico.' }, 'BAG'],
     [{ en:'Water is scarce: roofs and terraces gather the rain into cisterns. The house prefers the south quadrant, shelters from the Atlantic winds and builds shade — porches, terraces, trellised vines.', pt:'A água é escassa: telhados e açoteias recolhem a chuva para cisternas. A casa prefere o quadrante sul, abriga-se dos ventos atlânticos e cria sombra — alpendres, terraços, latadas.' }, 'SIM']]
@@ -19541,7 +19553,8 @@ const MN_TYPES = {
       vFacing({ en:'south', pt:'sul' }, 150, 210, 'CAS'),
       vRoofN(null, { en:'four slopes', pt:'quatro águas' }, [3], 'CAS'),
       vI('site', { en:'The kitchen with its oven is a one-storey annex beside the tower — draw it as a second, lower volume.', pt:'A cozinha com forno é um anexo térreo junto à torre — desenhe-a como um segundo volume, mais baixo.' }, 'CAS'),
-      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'CAS')
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'CAS'),
+      vI('openings', { en:'Gabriel Pereira (1900): the upper floor is reached by an outside stair; the ground floor is granary, store, or a shop when the house stands on a road; the corners are sometimes painted blue; a one-storey lean-to against a side wall shelters the animals.', pt:'Gabriel Pereira (1900): ao piso superior acede-se por escada exterior; o rés-do-chão é celeiro, arrecadação ou casa de venda quando a casa está à beira do caminho; os cunhais por vezes pintados de azul; encostada a uma parede lateral, uma casa térrea abriga o gado.' }, 'RSR')
     ] },
 
   'pt-alentejo':{ region:'mainland',
@@ -19671,7 +19684,7 @@ Object.assign(MN_TYPES, {
     where:{ en:'The Tagus banks — Palhota (Cartaxo), Lezirão (Azambuja), Caneiras', pt:'As margens do Tejo — Palhota (Cartaxo), Lezirão (Azambuja), Caneiras' },
     summary:{ en:'Fishermen from Vieira de Leiria who first lived in their boats, then in cane huts, then in timber houses raised on stakes above the floods of the Tagus. Small and simple, whatever the family: one main room for everything and two much smaller ones; a timber gallery or varanda; the kitchen outside in a timber annex, or inside; tile roofs in the villages that could afford them. The stakes boarded round form a small store below.',
       pt:'Pescadores vindos da Vieira de Leiria que viveram primeiro nos barcos, depois em palheiros de caniço, depois em casas de madeira erguidas sobre estacas acima das cheias do Tejo. Pequena e simples, qualquer que fosse a família: uma divisão principal polivalente e duas muito menores; uma galeria ou varanda de madeira; a cozinha fora, num anexo de madeira, ou dentro; telha nas aldeias que a podiam pagar. As estacas forradas a tábuas formam uma pequena cave.' },
-    model:{ L:7, D:4, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:25, bei:0.3, latada:true },
+    model:{ L:7, D:4, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:25, bei:0.3, porch:true },
       open:{ S:vOpen([W(0.2, 0.25), D(0.5, 0.35), W(0.8, 0.25)], 0.12), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
       render:{ en:'timber walls, tile roof, blue door', pt:'paredes de madeira, telhado de telha, porta azul' },
       walls:{ en:'timber boards on a timber frame, raised on stakes', pt:'tábuas de madeira sobre estrutura de madeira, erguida em estacas' } },
@@ -19696,10 +19709,13 @@ VERN_REGIONS.push({ key:'mainland', name:{ en:'Portuguese vernacular', pt:'Vern�
       if (alt > 1000) warn = VL({ en:'<b>Branda ground.</b> Above 1000 m the shepherds of Castro Laboreiro lived only in summer; in winter they went down below 800 m.', pt:'<b>Terra de branda.</b> Acima dos 1000 m os pastores de Castro Laboreiro só viviam no Verão; no Inverno desciam abaixo dos 800 m.' }) + vSrc('SIM');
     } else if (g === 'tmontes') { cand = ['pt-tmontes', 'pt-beira']; band = S.nuts === 'Douro' ? { en:'Terra Quente', pt:'Terra Quente' } : { en:'Terra Fria', pt:'Terra Fria' }; }
     /* the Pinhal Interior by Coimbra: the valley village house below, the schist mountain house above (≈ 400 m, inference) */
+    else if (g === 'beira' && S.nuts === 'Beira Interior Sul') { cand = alt < 450 ? ['pt-beira-campo', 'pt-beira', 'pt-alentejo'] : ['pt-beira', 'pt-beira-campo', 'pt-paul']; band = alt < 450 ? { en:'Campo, the plain', pt:'Campo, a planície' } : { en:'Serra and inselberg', pt:'Serra e monte-ilha' }; }
+    else if (g === 'beira' && S.nuts === 'Cova da Beira') cand = ['pt-beira', 'pt-paul', 'pt-beira-campo'];
+    else if (g === 'beira' && S.nuts === 'Pinhal Interior Sul') cand = ['pt-pinhal', 'pt-beira', 'pt-beira-campo'];
     else if (g === 'beira') cand = S.nuts === 'Pinhal Interior Norte' && alt < 400 ? ['pt-pinhal', 'pt-beira', 'pt-tmontes'] : S.nuts === 'Pinhal Interior Norte' ? ['pt-beira', 'pt-pinhal', 'pt-tmontes'] : ['pt-beira', 'pt-tmontes', 'pt-pinhal'];
     else if (g === 'gandara') cand = S.nuts === 'Pinhal Litoral' ? ['pt-alpendrada', 'pt-palheiro', 'pt-gandara'] : alt < 15 ? ['pt-palheiro', 'pt-gandara', 'pt-alpendrada'] : ['pt-gandara', 'pt-palheiro', 'pt-alpendrada'];
     else if (g === 'estremadura') cand = ['pt-saloia', 'pt-torreada', 'pt-alentejo'];
-    else if (g === 'ribatejo') cand = S.nuts === 'Médio Tejo' ? ['pt-rib-vila', 'pt-ribatejo', 'pt-beira'] : alt < 15 ? ['pt-ribatejo', 'pt-avieiro', 'pt-rib-vila'] : S.lat > 39.25 ? ['pt-rib-vila', 'pt-ribatejo', 'pt-avieiro'] : ['pt-ribatejo', 'pt-rib-vila', 'pt-avieiro'];
+    else if (g === 'ribatejo') cand = S.nuts === 'Médio Tejo' ? ['pt-rib-vila', 'pt-ribatejo', 'pt-pinhal'] : alt < 15 ? ['pt-ribatejo', 'pt-avieiro', 'pt-rib-vila'] : S.lat > 39.25 ? ['pt-rib-vila', 'pt-ribatejo', 'pt-avieiro'] : ['pt-ribatejo', 'pt-rib-vila', 'pt-avieiro'];
     else if (g === 'setubal') cand = ['pt-setubal', 'pt-saloia', 'pt-alentejo'];
     /* the town house: two floors in the Marble Zone and the north, single storey beyond the Guadiana and in the south */
     else if (g === 'alentejo') cand = S.nuts === 'Baixo Alentejo' || S.nuts === 'Alentejo Litoral' ? ['pt-alentejo', 'pt-monte-patio', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-povoado', 'pt-ale-d', 'pt-alg-taipa'] : ['pt-alentejo', 'pt-monte-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'];
@@ -19753,7 +19769,7 @@ Object.assign(MN_TYPES, {
     where:{ en:'The Centre coast — Mira, Tocha, Vieira; the beaches of the Beira Litoral', pt:'A costa do Centro — Mira, Tocha, Vieira; as praias da Beira Litoral' },
     summary:{ en:'One storey on a rectangle, raised on stakes; the level below closed with stone or timber walls for stores. The bedrooms and the kitchen above, entered by a running varanda. Two slopes, rarely a chimney. Timber everywhere: boards, horizontal and vertical, in the walls, logs for the posts. More bedrooms where it lodged bathers.',
       pt:'Um só piso em planta rectangular, construída sobre estacaria; o nível de baixo fechado com paredes de pedra ou de madeira para arrumações. Ao nível da habitação os quartos e a cozinha, com uma varanda corrida por onde se faz o acesso. Duas águas, raramente chaminé. Madeira em tudo: tábuas horizontais e verticais nas paredes, toros nos pilares. Mais quartos quando destinada a banhistas.' },
-    model:{ L:8, D:5, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:28, bei:0.3, latada:true },
+    model:{ L:8, D:5, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:28, bei:0.3, porch:true },
       open:{ S:vOpen([W(0.2, 0.22), D(0.45, 0.3), W(0.75, 0.22)], 0.12), N:{ wwr:0.02, units:vOff() }, E:vOpen([W(0.5, 1)], 0.04), W:{ wwr:0.02, units:vOff() } },
       render:{ en:'timber walls, tile roof, timber door', pt:'paredes de madeira, telhado de telha, porta de madeira' },
       walls:{ en:'timber boards on a timber frame, on stakes', pt:'tábuas de madeira sobre estrutura de madeira, em estacaria' } },
@@ -19769,7 +19785,7 @@ Object.assign(MN_TYPES, {
     where:{ en:'Pinhal Litoral and the plains round Leiria', pt:'Pinhal Litoral e os campos de Leiria' },
     summary:{ en:'A single storey on a rectangle — kitchen, bedrooms and a porch (alpendre) at the entrance. The kitchen hearth has a chimney of considerable size, rising in the middle of the roof at right angles to the front. Boarded floors, the porch’s too, timber ceilings. Two slopes of channel tiles. Walls of sun-dried adobe (sometimes with straw), rendered and whitewashed, buttressed in adobe; timber frames. A gate beside the house to the back patio, where oven, pens, adega and woodstore stand under one-slope lean-tos.',
       pt:'Uma casa térrea de planta rectangular — cozinha, quartos e um alpendre na entrada. A lareira da cozinha tem uma chaminé de proporções consideráveis, a meio do telhado, perpendicular à fachada. Pavimentos assoalhados, também o do alpendre, tectos forrados de madeira. Duas águas em telha de canudo. Paredes de adobe seco ao sol (por vezes com palha), rebocadas e caiadas, reforçadas com contrafortes de adobe; guarnições de madeira. Junto à casa um portão para o pátio das traseiras, com forno, currais, adega e lenha sob telheiros de uma água.' },
-    model:{ L:10, D:5, fl:1, fh:2.6, rot:180, form:'rect', roof:{ n:2, th:25, bei:0.3, latada:true },
+    model:{ L:10, D:5, fl:1, fh:2.6, rot:180, form:'rect', roof:{ n:2, th:25, bei:0.3, porch:true },
       open:{ S:vOpen([W(0.2, 0.22), D(0.5, 0.3), W(0.8, 0.22)], 0.12), N:vOpen([D(0.5, 1)], 0.05), E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
       render:{ en:'whitewash walls, barrel tile roof, green door', pt:'parede caiada, telha de canudo, porta verde' },
       walls:{ en:'adobe, rendered and whitewashed, with adobe buttresses', pt:'adobe rebocado e caiado, com contrafortes de adobe' } },
@@ -20002,7 +20018,7 @@ const MCO_LINES = [
 Object.assign(MN_TYPES, {
   'pt-pinhal':{ region:'mainland',
     name:{ en:'Pinhal Interior village house (Lousã, Miranda do Corvo)', pt:'Casa de aldeia do Pinhal Interior (Lousã, Miranda do Corvo)' },
-    where:{ en:'The valleys below the Serra da Lousã — Rio de Vide, Semide, Miranda do Corvo (Coimbra); the schist villages higher up', pt:'Os vales sob a Serra da Lousã — Rio de Vide, Semide, Miranda do Corvo (Coimbra); as aldeias do xisto mais acima' },
+    where:{ en:'The valleys below the Serra da Lousã — Rio de Vide, Semide, Miranda do Corvo (Coimbra); the schist villages higher up; west to Vila de Rei and Pedrógão Pequeno (Sertã)', pt:'Os vales sob a Serra da Lousã — Rio de Vide, Semide, Miranda do Corvo (Coimbra); as aldeias do xisto mais acima; a poente até Vila de Rei e Pedrógão Pequeno (Sertã)' },
     summary:{ en:'Built with little or no drawing, square or rectangular but bent to the ground; new rooms lean on old ones, leaving yards, alleys and paths; neighbours share a wall or one roof over several dwellings. Usually two floors, small openings for light and air, often no chimney. Walls of stone or adobe — by Rio de Vide, large river pebbles bound in clay mortar; timber from the nearby forest for floors, roof and furniture. Varandas and porches answer the hard climate; the roof in telha serrana, and tiles hung even on the facades — clay is everywhere. Slate crowns the serras but is little used below.',
       pt:'Construída com pouco ou nenhum desenho prévio, quadrada ou rectangular mas adaptada ao terreno; novas divisões apoiam-se nas existentes, deixando pátios, veredas e caminhos; vizinhos partilham uma parede ou um telhado sobre várias habitações. Normalmente dois pisos, pequenas aberturas para a luz e a ventilação, muitas vezes sem chaminé. Paredes de pedra ou adobe — junto a Rio de Vide, grandes seixos rolados unidos com argamassa de barro; madeira das florestas próximas nos sobrados, na cobertura e no mobiliário. Varandas e alpendres respondem ao clima difícil; cobertura em telha serrana, e telha a revestir até as fachadas — o barro está em todo o lado. A ardósia coroa as serras mas pouco se usa cá em baixo.' },
     model:{ L:8, D:6, fl:2, fh:2.4, rot:160, form:'rect', balc:3, roof:{ n:2, th:30, bei:0.3 },
@@ -20019,9 +20035,64 @@ Object.assign(MN_TYPES, {
       vWall({ en:'stone, adobe or river pebbles', pt:'pedra, adobe ou seixo rolado' }, ['stone', 'earth', 'whitewash', 'plaster'], 'FER'),
       vI('visualization', { en:'Tiles hung on the facades as cladding — the clay of the valley, also in adobe and in the brickworks nearby.', pt:'Telha a revestir as fachadas — o barro do vale, também no adobe e na antiga fábrica de tijolo próxima.' }, 'FER'),
       vI('site', { en:'The village grows without a plan: largos open where the community has its references — the church, the fountain, a place to meet.', pt:'A aldeia cresce sem traçado: os largos abrem-se onde há referências comunitárias — a igreja, o fontanário, os pontos de socialização.' }, 'FER')
+    ] },
+
+  'pt-beira-campo':{ region:'mainland',
+    name:{ en:'Beira Baixa plains house (the Campo — Malpica do Tejo, Zebreira)', pt:'Casa do Campo da Beira Baixa (Malpica do Tejo, Zebreira)' },
+    where:{ en:'The schist plain south and east of Castelo Branco — Malpica do Tejo, Zebreira, Ladoeiro, Idanha: the «Beira Alentejana»', pt:'A planície xistosa a sul e nascente de Castelo Branco — Malpica do Tejo, Zebreira, Ladoeiro, Idanha: a «Beira Alentejana»' },
+    summary:{ en:'A Beira house that already leans to the Alentejo. Walls of dry-laid schist — large slabs stacked, or small pieces set on edge in herringbone — granite where the plain turns to it, adobe here and there, rammed earth rarely. The animals, straw and tools live apart in palheiros, so the house is entered from the ground floor and the porched balcony disappears; inside, a stair to the rooms and, in the common room, the cantareira, the stone dresser for the water jars. No chimney. Door and window frames picked out in white on the bare schist; a stone bench (poial) against the front.',
+      pt:'Uma casa beirã que já se inclina para o Alentejo. Paredes de xisto assente a seco — lajes grandes sobrepostas, ou peças pequenas ao alto em espinhado — granito onde a planície o traz, adobe aqui e ali, taipa raramente. Os animais, a palha e as alfaias ficam à parte, nos palheiros, por isso entra-se pelo rés-do-chão e o balcão alpendrado desaparece; dentro, uma escada para os quartos e, na sala comum, a cantareira. Sem chaminé. Ombreiras e vergas guarnecidas a branco sobre o xisto à vista; um poial encostado à fachada.' },
+    model:{ L:9, D:6, fl:2, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:26, bei:0.2 },
+      open:{ S:vOpen([D(0.3, 0.25, [{ door:true }, { door:false }]), W(0.3, 0.2, [{ on:false }, { on:true }]), W(0.7, 0.2, [{ on:true }, { on:true }])], 0.06, 1.0, 1.8), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'schist walls, barrel tile roof, timber door', pt:'paredes de xisto, telha de canudo, porta de madeira' },
+      walls:{ en:'dry-laid schist (slabs, or herringbone), granite in the transitions; adobe of about 15 × 20 × 40 cm on a stone plinth 30–50 cm high, plastered and whitewashed in the houses', pt:'xisto assente a seco (em lajes, ou em espinhado), granito nas transições; adobe de cerca de 15 × 20 × 40 cm sobre soco de pedra de 30–50 cm, capeado e caiado nas habitações' } },
+    feats:[
+      vFloors({ en:'1–2', pt:'1–2' }, 1, 2, 'SAL'),
+      vN('site', { en:'Porched balcony', pt:'Balcão alpendrado' }, { en:'none — entered from the ground floor', pt:'nenhum — entra-se pelo rés-do-chão' }, () => (MASS.balc || []).length, 0, 0, '', 'SAL'),
+      vI('site', { en:'Animals, straw and tools were kept apart, in palheiros away from the house — where poverty pressed hardest whole families lived in them too. The plains village is organic and dispersed towards the fields; a street facing north is called avesseira, the cold side.', pt:'Os animais, a palha e as alfaias ficavam à parte, em palheiros longe da casa — onde a pobreza mais apertava, famílias inteiras viviam também neles. A aldeia da planície é orgânica e dispersa em direcção aos campos; a rua virada a norte chama-se avesseira, o lado frio.' }, 'SAL'),
+      vRoofN(null, { en:'two slopes, sometimes four or one', pt:'duas águas, por vezes quatro ou uma' }, [1, 2, 3], 'SAL'),
+      vPitch({ en:'barrel tile', pt:'telha de canudo' }, 20, 32, 'INF'),
+      vGlaze(8, 'INF'),
+      vI('openings', { en:'Openings few and small, stacked one above the other; their frames painted white on the bare schist. A low stone bench (poial) by the door.', pt:'Vãos poucos e pequenos, sobrepostos na vertical; as guarnições pintadas de branco sobre o xisto à vista. Um poial junto à porta.' }, 'SAL'),
+      vI('ventilation', { en:'No chimney: the smoke of the hearth warms the kitchen and leaves slowly through the tiles; the hearth stone sits on the ground in a corner. Bread was baked in the village’s communal oven.', pt:'Sem chaminé: o fumo da lareira aquece a cozinha e sai devagar pelo telhado; a pedra do lar assenta no chão, a um canto. O pão cozia-se no forno comunitário da aldeia.' }, 'SAL'),
+      vWall({ en:'exposed schist, white frames', pt:'xisto à vista, guarnições a branco' }, ['schist', 'stone', 'whitewash'], 'SAL'),
+      vRoofFin({ en:'barrel tile', pt:'telha de canudo' }, ['canudo', 'tile'], 'SAL'),
+      vI('visualization', { en:'Adobe: earth or saibro with stubble and dung, kneaded, cast in timber moulds, dried two weeks in the summer sun; laid on a stone plinth, the joints packed with gravel; left bare in the palheiros, plastered and whitewashed in the houses.', pt:'Adobe: terra ou saibro com restolho e bosta, amassados, moldados em adobros de madeira, secos ao sol do Verão cerca de quinze dias; assentes sobre soco de pedra, as juntas cheias de cascalho; à vista nos palheiros, capeados e caiados nas habitações.' }, 'SAL')
+    ] },
+
+  'pt-paul':{ region:'mainland',
+    name:{ en:'Paúl house (three storeys, timber varanda)', pt:'Casa do Paúl (três pisos, varanda de pau)' },
+    where:{ en:'Paúl and the villages round it, on the Zêzere side of the Estrela (Covilhã) — the «sub-region D» of Zona 3', pt:'O Paúl e os núcleos em volta, do lado do Zêzere da Estrela (Covilhã) — a «sub-região D» da Zona 3' },
+    summary:{ en:'Three storeys on an inside stair: animals and tools on the ground floor, the rooms above, and on top a timber-framed storey (taipa beiroa) finished by the timber varanda with its cut-lath balustrade. Where the ground falls the ground floor is set half a storey down. The walls are double, of the river’s granite boulders split in two, the flat faces turned out and in, bound with clay and schist chips.',
+      pt:'Três pisos com escada interior: o gado e as alfaias no rés-do-chão, os quartos por cima e, no topo, um piso de taipa beiroa rematado pela varanda de pau, de gradeamento de ripas recortadas. Onde o terreno desce, o térreo fica meio piso abaixo. As paredes são duplas, de bolas de granito da ribeira partidas ao meio, as faces planas voltadas para fora e para dentro, assentes com barro e capeias de xisto.' },
+    model:{ L:7, D:6, fl:3, fh:2.4, rot:180, form:'rect', balc:3, balcLv:3, roof:{ n:2, th:30, bei:0.3 },
+      open:{ S:vOpen([D(0.25, 0.3, [{ door:true }, { door:false }, { door:true }]), W(0.7, 0.3, [{ on:false }, { on:true }, { on:true }])], 0.08, 1.0, 1.8), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'granite stone walls, tile roof, timber door', pt:'paredes de granito, telhado de telha, porta de madeira' },
+      walls:{ en:'double walls of split granite boulders in clay with schist chips; top storey timber-framed (taipa beiroa)', pt:'paredes duplas de bolas de granito partidas, com barro e capeias de xisto; último piso em taipa beiroa' } },
+    feats:[
+      vFloors('3', 3, 3, 'SAL'),
+      vVaranda('SAL'),
+      vI('site', { en:'The ground floor holds the animals or the tools; on a slope it is set half a storey below the threshold.', pt:'O rés-do-chão guarda o gado ou as alfaias; em declive fica meio piso abaixo da soleira.' }, 'SAL'),
+      vI('openings', { en:'The timber varanda crowns the top storey; its lath balustrade, finely cut, echoes the stone balusters of the great houses.', pt:'A varanda de pau remata o último piso; o gradeamento de ripas muito recortadas ecoa os balaústres de pedra dos edifícios eruditos.' }, 'SAL'),
+      vRoofN(null, { en:'pitched', pt:'de águas' }, [2, 3], 'INF'),
+      vWall({ en:'granite boulders; timber-framed top', pt:'bolas de granito; topo em taipa beiroa' }, ['stone', 'timber'], 'SAL'),
+      vRoofFin({ en:'tile', pt:'telha' }, ['tile', 'canudo'], 'INF')
     ] }
 });
 Object.assign(VERN_TYPES, MN_TYPES);
+
+/* --- Salvado (2021): the Beira house in the field, read against Zona 3 ------ */
+vAdd('pt-beira', [
+  vI('site', { en:'Plan almost always trapezoidal, two storeys: the ground floor for animals, stores or workshops (often a henhouse or pigsty under the balcony), the upper floor for living — a common kitchen blackened by the hearth, small windowless alcoves, sometimes a sala. Behind, the quintal where gorse and straw rotted into manure.', pt:'Planta quase sempre trapezoidal, em dois pisos: o térreo para gado, lojas ou oficinas (muitas vezes galinheiro ou furdão sob o balcão), o sobrado para habitar — a cozinha comum enegrecida pela lareira, alcovas pequenas sem janela, por vezes uma sala. Atrás, o quintal onde se curtiam o tojo e a palha para estrume.' }, 'SAL'),
+  vI('openings', { en:'The porched balcony (balcão alpendrado), on a platform of the same dry stone, reached by the outside stair: open, to dry grain and ripen fruit, or glazed (envidraçado) once sash windows spread in the 19th century. Ideally turned south-west, to the most sun, out of the prevailing wind; otherwise anywhere in the south-east sector — a light and heat catcher in houses without chimney or electricity.', pt:'O balcão alpendrado, sobre plataforma da mesma alvenaria seca, servido pela escada exterior: aberto, para secar os cereais e amadurecer a fruta, ou envidraçado quando no século XIX se generalizaram as janelas de guilhotina. Idealmente virado a sudoeste, ao maior soalhamento, resguardado dos ventos dominantes; senão, para qualquer ponto do sector sudeste — captador de luz e calor em casas sem chaminé nem electricidade.' }, 'SAL'),
+  vI('roof', { en:'Two or four slopes, sometimes one. Barrel tiles laid loose on the timber, without battens (telhado valadio), held by stones along the eaves and the ridge against wind and storm; from the 19th century the flat Marseille tile allowed steeper roofs, and in the 20th the «Lusa» tile.', pt:'Duas ou quatro águas, por vezes uma. Telha de canudo assente solta sobre a madeira, sem ripado (telhado valadio), segura por pedras ao longo do beirado e da cumeeira contra o vento e as enxurradas; a partir do século XIX a telha marselha permitiu telhados mais inclinados, e no XX a telha «Lusa».' }, 'SAL'),
+  vI('ventilation', { en:'No chimney: the smoke stays and warms, filtering out through the tiles; the heat of the animals rises through the gaps of the floorboards to the family above.', pt:'Sem chaminé: o fumo fica e aquece, filtrando-se pelo telhado; o calor dos animais sobe pelas frinchas do soalho até à família, por cima.' }, 'SAL'),
+  vI('visualization', { en:'Covilhã and Fundão: granite on the ground floor, timber-framed walls (tabique) above, clad in barrel tiles nailed upright, corrugated zinc or slate scales.', pt:'Covilhã e Fundão: granito no rés-do-chão, tabique exterior por cima, revestido a telha de meia-cana pregada a prumo, chapa ondulada de zinco ou escamas de ardósia.' }, 'SAL')
+]);
+vAdd('pt-pinhal', [
+  vI('visualization', { en:'Westward, toward the Médio Tejo (Vila de Rei, Pedrógão Pequeno), the schist and granite walls are plastered and lime-washed, at least round the openings — lime from the limestone soils to the west.', pt:'Para poente, no Médio Tejo (Vila de Rei, Pedrógão Pequeno), as paredes de xisto e granito são rebocadas e caiadas, pelo menos nas guarnições — a cal dos solos calcários a ocidente.' }, 'SAL'),
+  vI('site', { en:'There the houses keep to two storeys, more regular in plan, with symmetrical openings; the chimney appears; porched and glazed balconies live side by side.', pt:'Aí as casas ficam pelos dois pisos, de planta mais regular e vãos simétricos; aparece a chaminé; balcões alpendrados e envidraçados convivem.' }, 'SAL')
+]);
 
 /* --- Reimão Costa (2007): the montes of the Serra do Caldeirão --------------- */
 const RCO_LINES = [
@@ -20060,6 +20131,7 @@ Object.assign(VERN_TYPES, MN_TYPES);
    A to Z in the reader's language, alphabetical within each region. */
 const ARCH_BIB = [
   { r:{ en:'Alentejo', pt:'Alentejo' }, types:['pt-alentejo', 'pt-monte-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'], refs:[
+    'Rodrigues, P. S. (2016). Das origens da arquitectura popular em Portugal no século XIX: Arqueologia de uma ideia. In P. André &amp; C. Sambricio (Coords.), <i>Arquitectura popular: Tradição e vanguarda</i> (pp. 19–47). DINÂMIA’CET-IUL.',
     'Correia, M. (2002). A habitação vernácula rural no Alentejo, Portugal. In <i>4.º Seminario Iberoamericano sobre Vivienda Rural y Calidad de Vida en los Asentamientos Rurales</i>. Universidad de Chile.',
     'Fialho, N. A. R. (2009). <i>Técnicas tradicionais de construção em Vidigueira: A taipa e as coberturas tradicionais</i> [Master’s dissertation, Universidade de Évora].',
     'Pereira, M. S. (2019). <i>Casa de Vila Viçosa (1959–1963): Ecos das memórias de Nuno Teotónio Pereira e Nuno Portas sobre Carlo Scarpa</i> [Master’s dissertation, Universidade do Porto].',
@@ -20080,6 +20152,8 @@ const ARCH_BIB = [
   { r:{ en:'Beira Litoral — Gândara', pt:'Beira Litoral — Gândara' }, types:['pt-gandara'], refs:[
     'Rota da Bairrada. (n.d.). <i>House museum Casa Gandareza</i>. https://rotadabairrada.pt/en/where-to-go/house-museum-casa-gandareza'] },
   { r:{ en:'Estremadura, Ribatejo and the Setúbal peninsula — Lisboa e Vale do Tejo', pt:'Estremadura, Ribatejo e península de Setúbal — Lisboa e Vale do Tejo' }, types:['pt-saloia', 'pt-torreada', 'pt-ribatejo', 'pt-rib-vila', 'pt-setubal', 'pt-avieiro'], refs:[
+    'André, P. (2016). Etnogenia, fotogenia, etnologia: Arquitectura popular na primeira metade do século XX em Portugal. In P. André &amp; C. Sambricio (Coords.), <i>Arquitectura popular: Tradição e vanguarda</i> (pp. 85–143). DINÂMIA’CET-IUL.',
+    'Rodrigues, P. S. (2016). Das origens da arquitectura popular em Portugal no século XIX: Arqueologia de uma ideia. In P. André &amp; C. Sambricio (Coords.), <i>Arquitectura popular: Tradição e vanguarda</i> (pp. 19–47). DINÂMIA’CET-IUL.',
     'Nero, A. S. (2012). <i>Arquitectura popular portuguesa na região de Lisboa e Vale do Tejo</i> [Master’s dissertation, Universidade de Évora].',
     'Oliveira, M. M. C. A. (2016). <i>Evolução do habitar de uma casa rural no Ribatejo: Do início do séc. XX à actualidade</i> [Master’s dissertation, Universidade Lusíada de Lisboa]. http://hdl.handle.net/11067/2464',
     'Pereira, N. T., Freitas, A. P. de, &amp; Dias, F. S. (1988). Zona 4: Estremadura e Ribatejo. In <i>Arquitectura popular em Portugal</i> (3rd ed.). Associação dos Arquitectos Portugueses. (Read through Oliveira, 2016.)',
@@ -20094,7 +20168,10 @@ const ARCH_BIB = [
     'Miranda, P. M. A., et al. (n.d.). <i>Clima observado</i>. Observatório Regional do Clima da Madeira. https://observatorioclima.madeira.gov.pt/wp-content/uploads/pdfs/02_clima_observado.pdf',
     'Silva, F. A. da, &amp; Menezes, C. A. de. (n.d.). Indústria agrícola. In <i>Elucidário Madeirense</i>. https://elucidariomadeirense.pt/en/articles/1780',
     'Teixeira, C. R. Q. (2009). <i>A arquitectura vernacular da Madeira: Tradição, identidade e sustentabilidade</i> [Master’s dissertation, Universidade da Beira Interior]. http://hdl.handle.net/10400.6/1746'] },
+  { r:{ en:'Beira Interior — Beira Baixa and Cova da Beira', pt:'Beira Interior — Beira Baixa e Cova da Beira' }, types:['pt-beira', 'pt-beira-campo', 'pt-paul'], refs:[
+    'Salvado, J. P. F. (2021). <i>Arquitectura popular em Portugal: Tecnologias construtivas tradicionais na contemporaneidade</i> [Master’s dissertation, Universidade da Beira Interior].'] },
   { r:{ en:'Beira Litoral and the Pinhal Interior — Coimbra', pt:'Beira Litoral e Pinhal Interior — Coimbra' }, types:['pt-pinhal', 'pt-beira'], refs:[
+    'Salvado, J. P. F. (2021). <i>Arquitectura popular em Portugal: Tecnologias construtivas tradicionais na contemporaneidade</i> [Master’s dissertation, Universidade da Beira Interior].',
     'Ferreira, J. M. T. R. (2024). <i>Sarnada: Entre o passado e o futuro no campo</i> [Master’s dissertation, Universidade do Porto].'] },
   { types:['pt-minho', 'pt-castro', 'pt-tmontes', 'pt-beira', 'pt-palheiro', 'pt-alpendrada'], r:{ en:'Portugal — all mainland regions (Minho, Trás-os-Montes, Beiras, Estremadura, Alentejo, Algarve)', pt:'Portugal — todas as regiões do continente (Minho, Trás-os-Montes, Beiras, Estremadura, Alentejo, Algarve)' }, refs:[
     'Moutinho, M. C. (1979). <i>A arquitectura popular portuguesa</i>. Editorial Estampa.',
@@ -20269,6 +20346,87 @@ function tabsFor(S) {
     { key:'visualization', label:'Materials and image', build:popular('visualization', buildRender) }
   ];
 }
+
+/* ============================================== 7f. THE PERGOLA (LATADA) ==
+   An alternative to the eave canopy: the same stretch of wall, the same
+   width, depth, pitch and drop, the same posts and beam — but open. On the
+   beam and the wall run rafters every 0.60 m and over them slats every
+   0.30 m; no tiled slab. What it does to the sun depends on its cover:
+   bare slats let part of it through all year; a deciduous vine — the
+   latada of the south — shades in leaf and lets the winter sun in; a reed
+   or cane mat (caniço) shades steadily. The shading score on Openings and
+   Shadowing reads the cover as a fraction of beam let through, so a vine
+   pergola earns the seasonal discrimination a fixed slab cannot.
+   The transmission values are teaching figures, marked as such: the
+   principle — deciduous plants on a trellis for seasonal shade — is
+   Olgyay's (1963) and DeKay & Brown's (2014); the numbers are not theirs.
+   ====================================================================== */
+
+const PERGOLA_RAFTER = [0.06, 0.15], PERGOLA_RAFTER_GAP = 0.6;
+const PERGOLA_SLAT = [0.03, 0.08], PERGOLA_SLAT_GAP = 0.3;
+const PERGOLA_COVERS = {
+  bare:{ en:'bare slats', pt:'ripado à vista', top:null, tau:() => 0.6 },
+  vine:{ en:'deciduous vine', pt:'trepadeira de folha caduca', top:'#7E9B4E', tau:(doy, south) => pergolaInLeaf(doy, south) ? 0.15 : 0.75 },
+  reed:{ en:'reed / cane mat', pt:'esteira de caniço', top:'#C9B27C', tau:() => 0.25 }
+};
+const isPergola = c => !!(c && typeof c === 'object' && c.kind === 'pergola');
+const pergolaCover = c => PERGOLA_COVERS[c && c.cover] ? c.cover : 'vine';
+/** In leaf from May to October north of the equator, November to April south of it. */
+function pergolaInLeaf(doy, south) {
+  const leaf = doy >= 121 && doy <= 304;
+  return south ? !leaf : leaf;
+}
+/** The share of the beam the pergola lets through on a day of the year. */
+function pergolaTau(c, doy) {
+  const south = !!(STATE.site && STATE.site.lat < 0);
+  return PERGOLA_COVERS[pergolaCover(c)].tau(doy, south);
+}
+/** The colour its top shows, or null for bare slats (nothing but timber). */
+const pergolaTopFill = c => isPergola(c) ? PERGOLA_COVERS[pergolaCover(c)].top : null;
+/** The fields a saved study keeps. */
+const pergolaKeep = c => isPergola(c) ? { kind:'pergola', cover:pergolaCover(c) } : {};
+/** Its rafters and slats as world boxes [x0, y0, z0, x1, y1, z1], laid on the
+    beam: rafters from the wall to the outer edge, slats across them. */
+function pergolaParts(hit, zTop) {
+  if (!hit || !isPergola(hit.c)) return [];
+  const sg = hit.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, nv = sg.n;
+  const at = (u, n) => [sg.a[0] + tx * u + nv[0] * n, sg.a[1] + ty * u + nv[1] * n];
+  const box = (p, q, z0, z1) => [Math.min(p[0], q[0]), Math.min(p[1], q[1]), z0, Math.max(p[0], q[0]), Math.max(p[1], q[1]), z1];
+  const w = hit.u1 - hit.u0, out = [];
+  const zr0 = zTop, zr1 = zTop + PERGOLA_RAFTER[1], hr = PERGOLA_RAFTER[0] / 2;
+  const nR = Math.max(2, Math.round(w / PERGOLA_RAFTER_GAP) + 1);
+  for (let i = 0; i < nR; i++) {
+    const u = hit.u0 + hr + (w - 2 * hr) * i / (nR - 1);
+    out.push(box(at(u - hr, 0), at(u + hr, hit.d), zr0, zr1));
+  }
+  const hs = PERGOLA_SLAT[0] / 2, nS = Math.max(2, Math.round(hit.d / PERGOLA_SLAT_GAP));
+  for (let j = 0; j < nS; j++) {
+    const v = hs + (hit.d - 2 * hs) * (j + 0.5) / nS;
+    out.push(box(at(hit.u0, v - hs), at(hit.u1, v + hs), zr1, zr1 + PERGOLA_SLAT[1]));
+  }
+  out.nRaf = nR;
+  return out;
+}
+/** The pergola in words, for the Roof readout. */
+function pergolaWords(c) {
+  if (!isPergola(c)) return '';
+  const k = pergolaCover(c), C = PERGOLA_COVERS[k];
+  const summer = pergolaTau(c, 172), winter = pergolaTau(c, 355);
+  return ' · ' + t('pergola') + ', ' + VL(C) + ' · ' + t('sun let through') + ' ' + Math.round(summer * 100) + ' % ' + t('in June') + ', '
+    + Math.round(winter * 100) + ' % ' + t('in December') + ' (' + VL({ en:'teaching values', pt:'valores didácticos' }) + ')';
+}
+/** The cover chooser under the canopy controls. */
+function pergolaCoverCtl(c, after) {
+  const wrap = el('div', { class:'fld' });
+  wrap.appendChild(el('label', { text:'Pergola cover' }));
+  wrap.appendChild(segCtl(null, ['bare', 'vine', 'reed'].map(k => ({ value:k, label:VL(PERGOLA_COVERS[k]) })), pergolaCover(c), v => { c.cover = v; after(); }));
+  wrap.appendChild(el('p', { class:'hint', text:VL({
+    en:'A pergola keeps the canopy’s posts and beam and replaces its tiled slab with rafters and slats. A deciduous vine shades the summer and lets the winter sun through — the latada of the Portuguese south; a reed mat shades all year; bare slats let part of the sun through all year. Openings and Shadowing scores it by the share of sun it lets through.',
+    pt:'A pérgola mantém os pilares e a viga do alpendre e troca a laje de telha por barrotes e ripado. Uma trepadeira de folha caduca sombreia o Verão e deixa passar o sol de Inverno — a latada do sul; uma esteira de caniço sombreia todo o ano; o ripado à vista deixa passar parte do sol todo o ano. Aberturas e Sombreamento avalia-a pela fracção de sol que deixa passar.' }) }));
+  return wrap;
+}
+Object.assign(PT, { 'Canopy':'Alpendre', 'Pergola':'Pérgola', 'Pergola cover':'Cobertura da pérgola', 'pergola':'pérgola',
+  'sun let through':'sol que passa', 'in June':'em Junho', 'in December':'em Dezembro', 'Eave canopy or pergola':'Alpendre ou pérgola' });
 
 const TABS_OLGYAY = [
   { key:'environment', label:'Environmental', build:buildEnvironment },
@@ -20736,14 +20894,15 @@ function exportModel() {
       const slabX = canopySlab(hit), nX = hit.sg.n;
       const txX = (hit.sg.b[0] - hit.sg.a[0]) / hit.sg.len, tyX = (hit.sg.b[1] - hit.sg.a[1]) / hit.sg.len;
       const spX = Math.sin(hit.p * RAD), cpX = Math.cos(hit.p * RAD);
-      add('shading', 'Eave canopy', 'AA-SHADING', [[canopyPts(hit).quad, [nX[0] * spX, nX[1] * spX, cpX]],
+      if (slabX) add('shading', 'Eave canopy', 'AA-SHADING', [[canopyPts(hit).quad, [nX[0] * spX, nX[1] * spX, cpX]],
         [slabX.outer, [nX[0], nX[1], 0]], [slabX.sideA, [-txX, -tyX, 0]], [slabX.sideB, [txX, tyX, 0]],
         [slabX.bottom, [-nX[0] * spX, -nX[1] * spX, -cpX]]],
         { device:'Canopy', depth:hit.d, pitch:+hit.p.toFixed(1), thickness:CANOPY_THICK, root:+hit.z0.toFixed(2), drop:+hit.drop.toFixed(2), outer:+hit.z1.toFixed(2), mat:'AA_Roof' });
       /* the alpendre's timber frame: posts no more than 3 m apart, the beam over them */
       const fr = canopyFrame(hit);
-      fr.posts.forEach((B, i) => add('column', 'Eave canopy post ' + (i + 1), 'AA-STRUCTURE', box(...B), { mat:'AA_Timber' }));
-      if (fr.beam) add('beam', 'Eave canopy beam', 'AA-STRUCTURE', box(...fr.beam), { mat:'AA_Timber' });
+      fr.posts.forEach((B, i) => add('column', (slabX ? 'Eave canopy post ' : 'Pergola post ') + (i + 1), 'AA-STRUCTURE', box(...B), { mat:'AA_Timber' }));
+      if (fr.beam) add('beam', slabX ? 'Eave canopy beam' : 'Pergola beam', 'AA-STRUCTURE', box(...fr.beam), { mat:'AA_Timber' });
+      (fr.slats || []).forEach((B, i) => add('beam', i < (fr.slats.nRaf || 0) ? 'Pergola rafter ' + (i + 1) : 'Pergola slat ' + (i + 1 - (fr.slats.nRaf || 0)), 'AA-STRUCTURE', box(...B), { mat:'AA_Timber' }));
     }
   });
   /* a north arrow on the ground, for the tools that do not read north */
@@ -21402,7 +21561,7 @@ function applyStudy(o) {
   }
   if (R0.bei && R0.bei.canopy && typeof R0.bei.canopy === 'object') {
     const C0 = R0.bei.canopy;
-    ROOF.bei.canopy = { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:isFinite(+C0.x) ? +C0.x : 0, y:isFinite(+C0.y) ? +C0.y : 0, w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4), p:clamp(Math.round(+C0.p || 0), 0, 45), drop:clamp(isFinite(+C0.drop) ? +C0.drop : 0.15, 0.05, 1.5) };
+    ROOF.bei.canopy = { f:['S', 'N', 'E', 'W'].indexOf(C0.f) >= 0 ? C0.f : 'S', x:isFinite(+C0.x) ? +C0.x : 0, y:isFinite(+C0.y) ? +C0.y : 0, w:clamp(+C0.w || 3, 1, 8), d:clamp(+C0.d || 1.5, 0.6, 4), p:clamp(Math.round(+C0.p || 0), 0, 45), drop:clamp(isFinite(+C0.drop) ? +C0.drop : 0.15, 0.05, 1.5), ...pergolaKeep(C0) };
   }
   if (Array.isArray(R0.zones) && R0.zones.length && R0.zones.length <= 3) {
     const zs = R0.zones.filter(z => z && [0, 1, 2, 3].indexOf(z.n) >= 0 && isFinite(+z.f0) && isFinite(+z.f1) && +z.f1 > +z.f0);
@@ -21419,7 +21578,7 @@ function applyStudy(o) {
       z.canopy && typeof z.canopy === 'object' ? { canopy:{
         f:['S', 'N', 'E', 'W'].indexOf(z.canopy.f) >= 0 ? z.canopy.f : 'S', x:isFinite(+z.canopy.x) ? +z.canopy.x : 0, y:isFinite(+z.canopy.y) ? +z.canopy.y : 0,
         w:clamp(+z.canopy.w || 3, 1, 8), d:clamp(+z.canopy.d || 1.5, 0.6, 4), p:clamp(Math.round(+z.canopy.p || 0), 0, 45),
-        drop:clamp(isFinite(+z.canopy.drop) ? +z.canopy.drop : 0.15, 0.05, 1.5) } } : {},
+        drop:clamp(isFinite(+z.canopy.drop) ? +z.canopy.drop : 0.15, 0.05, 1.5), ...pergolaKeep(z.canopy) } } : {},
       z.chim && typeof z.chim === 'object' ? { chim:Object.assign({ on:!!z.chim.on },
         typeof z.chim.fam === 'string' ? { fam:z.chim.fam } : {},
         isFinite(+z.chim.x) ? { x:+z.chim.x } : {}, isFinite(+z.chim.y) ? { y:+z.chim.y } : {},
