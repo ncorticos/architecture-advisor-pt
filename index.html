@@ -965,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.138.0',
+  version:     '1.139.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21083,12 +21083,15 @@ function vIcon(key, size) {
     if (!o || !o.units || !(o.wwr > 0)) return;
     const sill = o.sillZ || 0.9, head = o.headZ || 1.8, hh = Math.max(0.4, head - sill);
     const band = Math.min(len * 0.92, o.wwr * len * H / (fl * hh));
+    /* the openings keep their size from the glazed band but spread along the wall, as the vernacular front spaces them —
+       a narrow band would bunch them at the middle */
+    const nu = o.units.filter(u => u.on !== false).length, spread = nu < 2 ? band : Math.max(band, len * (nu >= 3 ? 0.84 : 0.66));
     const taken = [];
     o.units.forEach(u => { for (let k = 0; k < fl; k++) {
       const F = u.floors && u.floors[k] ? u.floors[k] : {}, on = 'on' in F ? F.on : u.on !== false, door = 'door' in F ? F.door : !!u.door;
       if (!on || (u.floors && !u.floors[k] && k > 0 && !u.floors.length)) continue;
       const w = Math.max(door ? 0.8 : 0.45, Math.min(door ? 1.4 : 1.4, (u.frac || 0.2) * band));
-      let cx = (len - band) / 2 + ('pos' in F ? F.pos : u.pos === undefined ? 0.5 : u.pos) * band + (+('off' in F ? F.off : u.off) || 0);
+      let cx = (len - spread) / 2 + ('pos' in F ? F.pos : u.pos === undefined ? 0.5 : u.pos) * spread + (+('off' in F ? F.off : u.off) || 0);
       if (fc === 'S') {
         /* the door of the varanda's storey opens onto it; what falls in a loggia's mouth stands on its back wall */
         if (door && bl && k === bl.lv - 1 && (cx - w / 2 < bl.x || cx + w / 2 > bl.x + bl.w)) cx = bl.x + bl.w / 2;
