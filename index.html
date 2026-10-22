@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.124.0',
+  version:     '1.125.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -22566,7 +22566,7 @@ const VM_ROOFS = {
 const VM_CHIM = {
   box:{ en:'plain stack', pt:'chaminé simples' }, alg:{ en:'Algarve pierced chimney', pt:'chaminé algarvia rendilhada' },
   ale:{ en:'great Alentejo chimney (wide, inside the wall)', pt:'grande chaminé alentejana (larga, dentro da parede)' }, az:{ en:'Azores «mãos postas»', pt:'açoriana «mãos postas»' },
-  mad:{ en:'Madeira prismatic chimney', pt:'chaminé madeirense prismática' }, talha:{ en:'jar top (Felgar)', pt:'boca de talha (Felgar)' }
+  mad:{ en:'Madeira prismatic chimney', pt:'chaminé madeirense prismática' }, esp:{ en:'great corner chimney (Esposende)', pt:'grande chaminé de cunhal (Esposende)' }, talha:{ en:'jar top (Felgar)', pt:'boca de talha (Felgar)' }
 };
 const VM_VAR = {
   corrida:{ en:'running varanda', pt:'varanda corrida' }, reentrante:{ en:'recessed varanda', pt:'varanda reentrante' },
@@ -22930,7 +22930,7 @@ function vmElFaces(vm, vs) {
       const k = E.kind || 'box';
       const cx = x0 + (E.u || 0.75) * v.L, cy = y0 + (E.v || 0.5) * v.D, zb = H + vmRoofAt(v, cx, cy) - 0.25, h = (E.h || 1.2) + 0.25;
       if (k === 'talha') { box(cx, cy, zb, 0.45, 0.45, h * 0.6, '#9C5A3C', o); box(cx - 0.05, cy - 0.05, zb + h * 0.6, 0.55, 0.55, 0.1, '#7E462E', o); return; }
-      const w = k === 'mad' ? 0.45 : k === 'az' ? 0.8 : k === 'ale' ? 1.2 : 0.6, d = k === 'az' ? 0.5 : k === 'ale' ? 0.7 : w, hh = k === 'mad' ? h + 0.4 : h;
+      const w = k === 'mad' ? 0.45 : k === 'az' ? 0.8 : k === 'ale' ? 1.2 : k === 'esp' ? 1.8 : 0.6, d = k === 'az' ? 0.5 : k === 'ale' ? 0.7 : k === 'esp' ? 1.0 : w, hh = k === 'mad' ? h + 0.4 : h;
       box(cx, cy, zb, w, d, hh, wc, o);
       if (k === 'alg') { for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) push([[cx + 0.1 + j * 0.25, cy - 0.01, zb + hh - 0.85 + i * 0.25], [cx + 0.25 + j * 0.25, cy - 0.01, zb + hh - 0.85 + i * 0.25], [cx + 0.25 + j * 0.25, cy - 0.01, zb + hh - 0.7 + i * 0.25], [cx + 0.1 + j * 0.25, cy - 0.01, zb + hh - 0.7 + i * 0.25]], '#3E4C57', o);
         const ap = [cx + w / 2, cy + d / 2, zb + hh + 0.55]; push([[cx, cy, zb + hh], [cx + w, cy, zb + hh], ap], vmShade(wc, 0.95), o); push([[cx + w, cy, zb + hh], [cx + w, cy + d, zb + hh], ap], vmShade(wc, 0.8), o); }
@@ -22956,7 +22956,7 @@ function vmElFaces(vm, vs) {
       if (E.kind === 'reentrante') { const [qx, qy] = at(u0 + w, 0.03); push([[px, py - (f === 'S' ? 0.03 : 0), z], [qx, qy, z], [qx, qy, z + v.fh * 0.92], [px, py - (f === 'S' ? 0.03 : 0), z + v.fh * 0.92]], 'rgba(40,32,26,.6)', o);
         if (f === 'S') [px + 0.15, px + w - 0.4].forEach(cx => box(cx, py - 0.25, z, 0.25, 0.25, v.fh * 0.92, '#CFC6B4', o)); return; }
       if (f !== 'S') return;
-      if (E.kind === 'envidracada') { box(px, py - d, z, w, d, v.fh * 0.95, 'rgba(170,205,225,.75)', o); for (let i = 1; i < 6; i++) push([[px + i * w / 6, py - d - 0.01, z], [px + i * w / 6 + 0.05, py - d - 0.01, z], [px + i * w / 6 + 0.05, py - d - 0.01, z + v.fh * 0.95], [px + i * w / 6, py - d - 0.01, z + v.fh * 0.95]], '#F4F1EA', o); return; }
+      if (E.kind === 'envidracada') { box(px, py - d, z, w, d, v.fh * 0.95, '#B9D3E2', o); for (let i = 1; i < 6; i++) push([[px + i * w / 6, py - d - 0.01, z], [px + i * w / 6 + 0.05, py - d - 0.01, z], [px + i * w / 6 + 0.05, py - d - 0.01, z + v.fh * 0.95], [px + i * w / 6, py - d - 0.01, z + v.fh * 0.95]], '#F4F1EA', o); return; }
       const dd = E.kind === 'sacada' ? 0.5 : d;
       box(px, py - dd, z - 0.12, w, dd, 0.12, wood, o);
       push([[px, py - dd, z], [px + w, py - dd, z], [px + w, py - dd, z + 0.95], [px, py - dd, z + 0.95]], 'rgba(110,80,50,.45)', o);
@@ -23115,7 +23115,7 @@ function vmElevSVG(vm, face, w, opts) {
   });
   (vm.els || []).filter(E => E.t === 'chimney').forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
     const z0 = v.raise || 0, H = z0 + vmH(v), x = v.x - v.L / 2 + (E.u || 0.75) * v.L, y = v.y - v.D / 2 + (E.v || 0.5) * v.D, uu = across ? (face === 'S' ? x : -x) : (face === 'E' ? y : -y);
-    const zb = H + vmRoofAt(v, x, y) - 0.2, zt = zb + (E.h || 1.2) + 0.2, ww = E.kind === 'ale' ? 1.2 : 0.6;
+    const zb = H + vmRoofAt(v, x, y) - 0.2, zt = zb + (E.h || 1.2) + 0.2, ww = E.kind === 'ale' ? 1.2 : E.kind === 'esp' ? 1.8 : 0.6;
     o.push('<polygon points="' + [[uu - ww / 2, zb], [uu + ww / 2, zb], [uu + ww / 2, zt], [uu - ww / 2, zt]].map(p => P(p[0], p[1]).join(',')).join(' ') + '" fill="#F2EFE6" stroke="#3A3530" stroke-width="1"/>'); }));
   o.push('<text x="10" y="16" font-family="sans-serif" font-size="12" fill="#3A3530">' + VL({ en:{ S:'South', E:'East', N:'North', W:'West' }[face] + ' elevation', pt:'Alçado ' + { S:'sul', E:'nascente', N:'norte', W:'poente' }[face] }) + '</text>');
   return '<svg xmlns="http://www.w3.org/2000/svg" class="vmelev" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' + o.join('') + '</svg>';
@@ -23615,6 +23615,263 @@ async function vmExportReport(format) {
     return true;
   } catch (e) { console.error(e); toast(VMT('The report could not be built', 'Não foi possível construir o relatório')); return false; }
 }
+
+/* --- v1.125: Fernandes, J. E. P. (2012), «O contributo da arquitetura vernacular portuguesa para a
+   sustentabilidade dos edifícios» (Universidade do Minho) — the sustainability principles read region by
+   region, after the 1961 survey (AAVV 1980), Oliveira & Galhano, Mestre (Madeira) and the Azores survey
+   (AAVV 2007). What it adds: the house of the serras of Grândola and Cercal turned to the east, the
+   cisterns of the Azores, the atafona, the lime kiln, the submersible mills of the Guadiana, and many
+   passive details of the types already here. --- */
+Object.assign(VERN_SRC, {
+  JFE:{ tag:'Fernandes 2012', cite:'Fernandes, J. E. P. (2012). <i>O contributo da arquitetura vernacular portuguesa para a sustentabilidade dos edifícios</i> (dissertação de mestrado, orient. R. Mateus). Guimarães: Universidade do Minho — after <i>Arquitectura popular em Portugal</i> (1980), Oliveira &amp; Galhano, Mestre (2002) and <i>Arquitectura popular dos Açores</i> (2007).', url:null }
+});
+
+/* ---- a new house: the serras of Grândola and Cercal ---- */
+VERN_TYPES['pt-cercal'] = { region:'mainland',
+  name:{ en:'House of the serras of Grândola and Cercal, turned to the east', pt:'Casa das serras de Grândola e do Cercal, voltada a nascente' },
+  where:{ en:'The Alentejo Litoral hills — Serra de Grândola, Serra do Cercal; São Francisco da Serra (Santiago do Cacém)', pt:'As serras do Alentejo Litoral — Serra de Grândola, Serra do Cercal; São Francisco da Serra (Santiago do Cacém)' },
+  summary:{ en:'A long single-storey house laid north–south with its main front to the east, away from the wet westerlies off the sea: the openings only on the sheltered side, a single small window to the west. Whitewashed walls of taipa or rubble under two slopes of tile.',
+    pt:'Uma casa térrea comprida, disposta no sentido norte–sul, com a fachada principal a nascente, de costas para os ventos e chuvas de oeste vindos do mar: os vãos só do lado abrigado, uma pequena janela a poente. Paredes caiadas de taipa ou alvenaria sob duas águas de telha.' },
+  model:{ L:12, D:5, fl:1, fh:2.6, rot:90, form:'rect', roof:{ n:2, th:22, bei:0.25 },
+    open:{ S:vOpen([W(0.2, 0.07), D(0.42, 0.08), W(0.62, 0.07), D(0.82, 0.08)], 0.08), N:vOpen([W(0.5, 0.05)], 0.01), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+    render:{ en:'whitewash walls, barrel tile roof, blue door', pt:'parede caiada, telha de canudo, porta azul' },
+    walls:{ en:'taipa or rubble, lime-rendered and whitewashed', pt:'taipa ou alvenaria, rebocadas e caiadas' } },
+  feats:[
+    vFloors('1', 1, 1, 'JFE'),
+    vFacing({ en:'east — away from the sea winds', pt:'nascente — de costas para os ventos do mar' }, 60, 120, 'JFE'),
+    vN('openings', { en:'Windows on the back (west) facade', pt:'Janelas na fachada de trás (poente)' }, { en:'one, small', pt:'uma, pequena' }, () => vCount(['N']).wins, 0, 1, '', 'JFE'),
+    vGlaze(7, 'INF'),
+    vI('site', { en:'The wind and rain from the west decided the facing here, not the sun: the long side runs north–south and turns its back to the sea (Inquérito, zone 6, read in Fernandes 2012).', pt:'Aqui foi o vento e a chuva de oeste a decidir a orientação, não o sol: o lado maior corre norte–sul e vira as costas ao mar (Inquérito, zona 6, lido em Fernandes 2012).' }, 'JFE'),
+    vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster', 'earth'], 'JFE'),
+    vRoofFin({ en:'channel tile', pt:'telha de canudo' }, ['canudo', 'tile'], 'INF')
+  ] };
+VERN_DIST['pt-cercal'] = ['Setúbal'];
+
+/* ---- support structures ---- */
+(() => {
+  const sup = (k, o, dist) => { SUP_TYPES[k] = Object.assign({ support:true }, o); VERN_TYPES[k] = SUP_TYPES[k]; VERN_DIST[k] = dist; };
+  const none = { wwr:0, units:vOff() };
+  sup('az-cisterna', { region:'azores',
+    name:{ en:'Cistern of the Azores (Pico, Faial, Santa Maria)', pt:'Cisterna açoriana (Pico, Faial, Santa Maria)' },
+    where:{ en:'Beside the houses of the dry islands — Pico above all, Faial, Santa Maria (Almagreira, Carreira), Graciosa; Terceira in the pastures (Paúl, Doze Ribeiras); the outlying houses of Corvo', pt:'Junto às casas das ilhas secas — sobretudo o Pico, o Faial, Santa Maria (Almagreira, Carreira), a Graciosa; a Terceira nos pastos (Paúl, Doze Ribeiras); as casas afastadas do Corvo' },
+    summary:{ en:'On Pico the black rock gives little water and much heat, so every house kept its cistern: a stone volume built into the house or standing apart, often with stores in it, rendered only on the catchment surface so the rain runs to the opening of the tank. Gutters built into the walls or along the eaves fed it. On São Jorge and Graciosa half-buried covered tanks in the pastures, their stone faces sloping inward and roofed with slabs in two slopes, watered the cattle.',
+      pt:'No Pico a rocha negra dá pouca água e muito calor, e cada casa guardava a sua cisterna: um volume de pedra integrado na casa ou isolado, muitas vezes com arrumos, rebocado apenas na superfície de captação para a chuva correr para o orifício do depósito. Caleiras embebidas nas paredes ou ao longo do beiral alimentavam-na. Em São Jorge e na Graciosa, tanques semi-enterrados e cobertos nos pastos, de faces inclinadas para dentro e lajes em duas águas, davam de beber ao gado.' },
+    model:{ L:4, D:3.5, fl:1, fh:1.8, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.03, units:[{ on:true, frac:0.2, pos:0.5, door:true }] }, N:none, E:none, W:none },
+      render:{ en:'basalt walls, timber door', pt:'paredes de basalto, porta de madeira' }, walls:{ en:'basalt rubble; render only on the catchment', pt:'alvenaria de basalto; reboco só na superfície de captação' } },
+    feats:[ vI('roof', { en:'The top is the catchment: a rendered surface falling to the tank’s opening.', pt:'O topo é a superfície de captação: rebocada, a cair para o orifício do depósito.' }, 'JFE'),
+      vI('site', { en:'Built into the house, or apart with stores in its volume — the most elaborate water works of the archipelago.', pt:'Integrada na casa, ou isolada com arrumos no seu volume — as obras de água mais elaboradas do arquipélago.' }, 'JFE'),
+      vWall({ en:'bare basalt', pt:'basalto à vista' }, ['stone', 'basalt'], 'JFE') ] }, ['Açores']);
+  sup('az-atafona', { region:'azores',
+    name:{ en:'Atafona — the animal-driven mill', pt:'Atafona — o moinho de tração animal' },
+    where:{ en:'Pico and Faial, among the farm buildings round the house', pt:'O Pico e o Faial, entre os edifícios de apoio em volta da casa' },
+    summary:{ en:'A mill turned by an ox or a donkey walking round, housed in a small stone building of its own among the palheiros and cisterns that surround the rural house — abundant on Pico, where wind and water mills are rarer.',
+      pt:'Um moinho movido por um boi ou um burro andando em roda, abrigado num pequeno edifício de pedra próprio entre os palheiros e as cisternas que rodeiam a casa rural — abundante no Pico, onde os moinhos de vento e de água são mais raros.' },
+    model:{ L:5, D:5, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:3, th:28, bei:0.2 }, open:{ S:{ wwr:0.05, units:[{ on:true, frac:0.2, pos:0.5, door:true }] }, N:none, E:none, W:none },
+      render:{ en:'basalt walls, tile roof, timber door', pt:'paredes de basalto, telha, porta de madeira' }, walls:{ en:'basalt rubble', pt:'alvenaria de basalto' } },
+    feats:[ vN('site', { en:'Room for the animal to walk round', pt:'Espaço para o animal andar em roda' }, { en:'about 4–6 m across (inference)', pt:'cerca de 4–6 m (inferência)' }, () => Math.min(MASS.L, MASS.D), 4, 7, 'm', 'INF'),
+      vI('site', { en:'Part of the group of support buildings round the house: palheiro, cistern, atafona.', pt:'Parte do conjunto de apoio em volta da casa: palheiro, cisterna, atafona.' }, 'JFE') ] }, ['Açores']);
+  sup('pt-forno-cal', { region:'mainland',
+    name:{ en:'Lime kiln (forno de cal)', pt:'Forno de cal' },
+    where:{ en:'Wherever limestone and fuel met — the Estremadura and Ribatejo massifs, the Algarve barrocal; on Terceira beside the tile kilns (Praia da Vitória)', pt:'Onde o calcário e a lenha se encontravam — os maciços da Estremadura e do Ribatejo, o barrocal algarvio; na Terceira junto aos fornos de telha (Praia da Vitória)' },
+    summary:{ en:'A round stone kiln, often set into a bank so it could be loaded from above, where limestone was burnt into quicklime for mortar and whitewash; the general use of lime in the south made one in every favourable place, so it was made on the spot rather than brought in.',
+      pt:'Um forno redondo de pedra, muitas vezes encostado a um talude para se carregar por cima, onde o calcário se cozia em cal viva para argamassas e caiação; o uso generalizado da cal no sul levou a construí-los em todos os locais favoráveis, para a fazer no lugar em vez de a trazer de fora.' },
+    model:{ L:5, D:5, fl:1, fh:3.0, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.03, units:[{ on:true, frac:0.2, pos:0.5, door:true }] }, N:none, E:none, W:none },
+      render:{ en:'stone walls', pt:'paredes de pedra' }, walls:{ en:'limestone rubble, lined with refractory stone', pt:'alvenaria de calcário, forrada a pedra refratária' } },
+    feats:[ vI('site', { en:'Set against a slope: loaded from the top, fired and emptied from the mouth at the foot (inference from the common type).', pt:'Encostado a um talude: carregado por cima, aceso e esvaziado pela boca em baixo (inferência do tipo corrente).' }, 'INF'),
+      vI('visualization', { en:'Lime for whitewash, its colours (ochres, blue, vermilion, green) and, on the coast and in the Gândara, mutton tallow added to the boiling lime for a whitewash that lasted two years.', pt:'Cal para a caiação, os seus pigmentos (ocres, azul, vermelhão, verde) e, no litoral e na Gândara, sebo de carneiro na cal a ferver para uma caiação que durava dois anos.' }, 'JFE') ] }, ['Leiria', 'Santarém', 'Lisboa', 'Faro', 'Açores']);
+  sup('pt-moinho-guadiana', { region:'mainland',
+    name:{ en:'Guadiana watermill — massive, vaulted, made to be drowned', pt:'Moinho do Guadiana — maciço, abobadado, feito para ser submerso' },
+    where:{ en:'The banks of the Guadiana and its streams — Mértola, Alcoutim, Serpa; the Caldeirão, where almost every stream had more than one mill', pt:'As margens do Guadiana e das suas ribeiras — Mértola, Alcoutim, Serpa; o Caldeirão, onde quase todas as ribeiras tinham mais de um moinho' },
+    summary:{ en:'A solid block of masonry under a low vault, its back shaped so the flood passes over it: in winter the river covers it, and it is built to come through. The wheel chambers below, the millstones in the one room above.',
+      pt:'Um bloco maciço de alvenaria sob uma abóbada baixa, de extradorso suave para a cheia passar por cima: no inverno o rio cobre-o, e está feito para resistir. As caldeiras do rodízio em baixo, as mós na única sala por cima.' },
+    model:{ L:7, D:4, fl:1, fh:2.4, rot:180, form:'rect', icon:'watermill', raise:{ h:1.0, kind:'plinth' }, roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.02, units:[{ on:true, frac:0.15, pos:0.5, door:true }] }, N:none, E:none, W:none },
+      render:{ en:'schist walls', pt:'paredes de xisto' }, walls:{ en:'schist rubble, massive', pt:'alvenaria de xisto, maciça' } },
+    feats:[ vI('roof', { en:'A low vault, smooth on its back, so the flood slides over: draw the roof as a dome in the modeller.', pt:'Uma abóbada baixa, de extradorso liso, para a cheia deslizar por cima: desenhe a cobertura como cúpula no modelador.' }, 'JFE'),
+      vWall({ en:'bare schist', pt:'xisto à vista' }, ['schist', 'stone'], 'JFE') ] }, ['Beja', 'Faro']);
+  VM_OVR['az-cisterna'] = (vm, b) => { b.roof = { type:'shed', th:8, bei:0, mat:'lime', par:0, cells:2, beirado:0 }; };
+  VM_OVR['pt-forno-cal'] = (vm, b) => { Object.assign(b, { kind:'round', L:5, D:5 }); b.roof = { type:'flat', th:0, bei:0, mat:'stone', par:0.3 }; };
+  VM_OVR['pt-moinho-guadiana'] = (vm, b) => { b.roof = { type:'dome', th:0, bei:0, mat:'stone', par:0 }; b.wall.mat = 'schist'; };
+  VM_OVR['pt-cercal'] = (vm, b) => { vm.els.push({ t:'chimney', vol:0, kind:'ale', u:0.3, v:0.3, h:1.5 }); };
+  const g = ARCH_BIB.find(x => x.r.pt === 'Estruturas de apoio à habitação');
+  if (g) { g.types = Object.keys(SUP_TYPES); g.refs.push('Fernandes, J. E. P. (2012). <i>O contributo da arquitetura vernacular portuguesa para a sustentabilidade dos edifícios</i> [Master’s dissertation, Universidade do Minho].'); }
+  const sv = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
+  if (sv) { sv.types.push('pt-cercal'); sv.refs.push('Fernandes, J. E. P. (2012). <i>O contributo da arquitetura vernacular portuguesa para a sustentabilidade dos edifícios</i> [Master’s dissertation, Universidade do Minho].'); }
+})();
+
+/* ---- what it adds to the types already here ---- */
+[
+  ['pt-tmontes', 'ventilation', 'Rio de Onor and Guadramil: the byres under the house warm it; where a chimney exists it is small, with little holes; few and small openings against the long winters. The varanda is the passage between the street and the house.', 'Rio de Onor e Guadramil: as cortes por baixo aquecem a casa; onde há chaminé é pequena, só com pequenos orifícios; poucos e pequenos vãos contra os invernos longos. A varanda é a transição entre a rua e a casa.'],
+  ['pt-tmontes', 'site', 'Terra de Miranda: the porta carral, sometimes under a little porch of its own to keep the rain off its timber.', 'Terra de Miranda: a porta carral, por vezes com um pequeno alpendre próprio que a protege da chuva.'],
+  ['pt-barroso-redonda', 'roof', 'On the windy Barroso the thatch was held down by a crossed timber lattice tied to the building — the «latas» (Pitões das Júnias).', 'No Barroso ventoso o colmo era preso por uma estrutura de madeira entrecruzada amarrada ao edifício — as «latas» (Pitões das Júnias).'],
+  ['pt-montemuro', 'roof', 'The rye grown on the Montemuro gave the thatch each season — Bigorne, Moura Morta, Relva, Gralheira: a renewable roof.', 'O centeio cultivado no Montemuro dava o colmo a cada estação — Bigorne, Moura Morta, Relva, Gralheira: uma cobertura renovável.'],
+  ['pt-beira', 'site', 'Beira villages often sit in valleys open to the south or south-west to catch the most hours of winter sun — Alvôco da Serra, Valezim.', 'As aldeias da Beira situam-se muitas vezes em vales voltados a sul ou sudoeste para o máximo de horas de sol de inverno — Alvôco da Serra, Valezim.'],
+  ['pt-beira-campo', 'ventilation', 'In the south of the Beira Baixa (Malpica do Tejo) the winters soften and the summers harden: thick walls, small openings, whitewash.', 'No sul da Beira Baixa (Malpica do Tejo) os invernos amaciam e os verões endurecem: paredes grossas, vãos pequenos, caiação.'],
+  ['pt-minho', 'site', 'The farmhouse stands free of the village and takes the site the master mason judged best; the floor over the lojas (wine press, tulha, byres) uses the animals’ heat.', 'A casa de lavoura, livre do povoado, toma a implantação que o mestre pedreiro julga melhor; o sobrado por cima das lojas (lagar, tulha, cortes) aproveita o calor dos animais.'],
+  ['pt-alg-serra', 'roof', 'In the schist houses of the Caldeirão the single slope is laid with the rain-bearing wind, so the water does not drive in between the tiles.', 'Nas casas de xisto do Caldeirão a única água orienta-se no sentido dos ventos chuvosos, para a água não entrar por entre as telhas.'],
+  ['pt-alg-acoteia', 'roof', 'The açoteia is not common to all the Algarve: it keeps to the areas of Olhão and Loulé.', 'A açoteia não é comum a todo o Algarve: limita-se às áreas de Olhão e Loulé.'],
+  ['pt-alg-central', 'roof', 'The açoteia keeps to the areas of Olhão and Loulé — where it is, it dries fruit, cereal or fish.', 'A açoteia limita-se às áreas de Olhão e Loulé — onde existe, seca fruto, cereal ou peixe.'],
+  ['pt-alentejo', 'ventilation', 'Patios, varandas and pergolas against the summer; in Évora the rotulados (timber lattices) on the openings.', 'Pátios, varandas e parreiras contra o verão; em Évora os rotulados nos vãos.'],
+  ['md-santana', 'site', 'At Santana and São Jorge, on the north slope near the dense forest, houses built wholly of timber; the fronts turned to the south quarter and no openings on the north.', 'Em Santana e São Jorge, na encosta norte junto à floresta densa, casas inteiramente de madeira; as fachadas viradas ao quadrante sul e sem vãos a norte.'],
+  ['md-elementar', 'ventilation', 'Tapa-sóis — outside lattices on the openings, vernacular and erudite alike — shade and ventilate in a humid, near-tropical climate; the latada makes shade and an outdoor room.', 'Tapa-sóis — gelosias pelo exterior dos vãos, vernáculas e eruditas — sombreiam e ventilam num clima húmido, quase tropical; a latada faz sombra e um espaço de estar exterior.'],
+  ['md-salao', 'roof', 'The salão — the clay of Porto Santo — laid on tamarisk or boards, sets the island’s houses apart from all others in Portugal; water came from wells and small springs.', 'O salão — o barro de Porto Santo — assente em tamargueira ou tabuado, distingue as casas da ilha de todas as outras do país; a água vinha de poços e pequenas nascentes.'],
+  ['az-pico', 'ventilation', 'Where the kitchen is inside the house and has no chimney, its roof is raised so the smoke leaves through the tiles without reaching the other rooms.', 'Onde a cozinha está integrada e não tem chaminé, a sua cobertura sobreleva-se para o fumo sair por entre as telhas sem invadir as outras divisões.'],
+  ['az-pico', 'site', 'Round the house: palheiros, cisterns and atafonas — the cistern above all, on an island short of water.', 'Em volta da casa: palheiros, cisternas e atafonas — sobretudo a cisterna, numa ilha com falta de água.'],
+  ['az-mariense', 'site', 'Short of water, most houses have a cistern or ceramic jars (talhas) for the rain, fed by gutters set in the walls or along the eaves (Almagreira, Carreira).', 'Com falta de água, a maioria das casas tem cisterna ou talhas cerâmicas para a chuva, alimentadas por caleiras embebidas nas paredes ou ao longo do beiral (Almagreira, Carreira).'],
+  ['az-corvo', 'site', 'Houses far from the village’s single fountain kept a cistern of their own.', 'As casas afastadas do único fontanário da vila tinham cisterna própria.'],
+  ['pt-palheiro', 'site', 'On the coast by the pinhal de Leiria the timber houses stand on stakes so the wind-blown sand does not pile against them; elsewhere on the shore lime on tile-hung walls resists the salt.', 'No litoral junto ao pinhal de Leiria as casas de madeira elevam-se sobre estacaria para a areia soprada não se acumular; noutras povoações da beira-mar a cal sobre paramentos de telha resiste à salsugem.']
+].forEach(([k, tab, en, pt]) => { if (VERN_TYPES[k]) vAddT(k, [vI(tab, { en, pt }, 'JFE')]); });
+
+/* the serras of Grândola and Cercal are offered where they stand */
+(() => {
+  const mn = VERN_REGIONS.find(r => r.key === 'mainland'), P0 = mn.place;
+  mn.place = (S, V) => { const o = P0(S, V); if (o && S.nuts === 'Alentejo Litoral' && (S.alt || 0) >= 120 && S.lat > 37.75 && S.lat < 38.3) { const c = o.cand.filter(x => x !== 'pt-cercal'); c.unshift('pt-cercal'); o.cand = c.slice(0, 3); } return o; };
+})();
+vernNames();
+
+/* --- v1.125: Oliveira, E. V. de, & Galhano, F. (1992), «Arquitectura tradicional portuguesa» (Etnográfica Press,
+   open text), chapters I–II — the northern block house and the southern single-storey house — and
+   «A arquitectura popular no Minho (Soajo)» (Folclore.pt, after «Cores, sabores e tradições — Passeios no Vale do
+   Lima»). New: the casa de casal of the Porto outskirts with its measured survey, the Maia house of type B, the
+   Esposende house with its great chimney and tabique varanda, the closed-courtyard house of the Sousa valley,
+   the southern free-standing oven. --- */
+Object.assign(VERN_SRC, {
+  OGA:{ tag:'Oliveira & Galhano 1992', cite:'Oliveira, E. V. de, &amp; Galhano, F. (1992). <i>Arquitectura tradicional portuguesa</i>. Lisboa: Etnográfica Press / Dom Quixote.', url:'https://doi.org/10.4000/books.etnograficapress.6508' },
+  FOL:{ tag:'Folclore.pt — Minho', cite:'Folclore.pt (2022). «A arquitectura popular no Minho (Soajo)» — after <i>Cores, sabores e tradições: Passeios no Vale do Lima</i>.', url:'https://folclore.pt/arquitectura-popular-no-minho/' }
+});
+
+/* ---- the casa de casal of the Porto outskirts: the Expresso type, now with Oliveira & Galhano's survey ---- */
+(() => {
+  const T = VERN_TYPES['pt-porto-arredores'];
+  T.name = { en:'Casa de casal of the Porto outskirts (Aldoar, Nevogilde) — stone stair and porched patim', pt:'Casa de casal dos arredores do Porto (Aldoar, Nevogilde) — escadaria e patim alpendrado' };
+  T.where = { en:'The rural belt inside Porto and round it — Aldoar, Nevogilde, Ramalde, Senhora da Hora (Barranha), Matosinhos; 17th century onward', pt:'A cintura rural do Porto e arredores — Aldoar, Nevogilde, Ramalde, Senhora da Hora (Barranha), Matosinhos; desde o século XVII' };
+  T.summary = { en:'A rectangular house of two storeys, its long front to the south-east, reached by a wide stone stair (1.60 m) running along the whole front to a patim under the four-slope roof, whose front slope comes down over it on three low granite columns (0.85 m). Upstairs a square sala with a masseira ceiling and two small rooms; below, a loja-celeiro; the kitchen in a separate single-storey annex at the end of the front, two slopes, at first without chimney. Granite walls 0.60 m to the floor and 0.55 m above, rendered and whitewashed, frames of dressed granite, double eave of old channel tile.',
+    pt:'Uma casa retangular de rés-do-chão e andar, com a frente comprida a sudeste, servida por uma escadaria de pedra larga (1,60 m) que corre ao longo de toda a fachada até um patim sob o telhado de quatro águas, cuja água da frente desce sobre ele em três colunas baixas de granito (0,85 m). No andar, uma sala quadrada de tecto de masseira e dois quartos pequenos; em baixo, uma loja-celeiro; a cozinha num anexo térreo independente no topo da fachada, de duas águas, primitivamente sem chaminé. Paredes de granito de 0,60 m até ao sobrado e 0,55 m acima, rebocadas e caiadas, alizares de granito aparelhado, beiral duplo de telha caleira velha.' };
+  Object.assign(T.model, { L:9, D:6.5, fl:2, fh:2.4, rot:135, balc:0 });
+  T.model.roof = { n:3, th:26, bei:0.4 };
+  T.model.walls = { en:'granite, 0.60 m to the floor, 0.55 m above, rendered and whitewashed; dressed granite frames', pt:'granito, 0,60 m até ao sobrado, 0,55 m acima, rebocado e caiado; alizares de granito aparelhado' };
+  T.feats.push(
+    vFacing({ en:'south-east (the long side)', pt:'sudeste (o lado maior)' }, 110, 160, 'OGA'),
+    vN('site', { en:'Storey height', pt:'Pé-direito' }, { en:'2.40 m on each floor', pt:'2,40 m em cada piso' }, () => MASS.fh, 2.3, 2.6, 'm', 'OGA'),
+    vI('site', { en:'Measured at Aldoar: walls 0.60 / 0.55 m; ground to floor 2.40, floor to beams 2.40, sala ceiling panel 3.30; sills 0.94 (upper) and 0.87 (ground); back postigo 0.70 × 0.70 at 1.27; doors under the patim 2.00 and 2.20; patim guard 0.88; columns 0.85; patim to roof beams 2.45 m.', pt:'Levantamento em Aldoar: paredes 0,60 / 0,55 m; chão ao soalho 2,40, soalho aos barrotes 2,40, painel do tecto da sala 3,30; peitoris 0,94 (andar) e 0,87 (térreo); postigo das traseiras 0,70 × 0,70 a 1,27; portas sob o patim 2,00 e 2,20; resguardo do patim 0,88; colunas 0,85; patim aos barrotes 2,45 m.' }, 'OGA'),
+    vI('openings', { en:'The stair (1.60 m wide, gentle, its guard starting in a double-spiral S) and the patim take the whole front; the porch covers the patim but not the stair.', pt:'A escadaria (1,60 m, de subida suave, a guarda a começar num S de dupla espiral) e o patim ocupam toda a fachada; o alpendre cobre o patim mas não a escada.' }, 'OGA'),
+    vI('ventilation', { en:'The kitchen apart, in its own low building, at first without a chimney — the smoke through the tiles, away from the rooms.', pt:'A cozinha à parte, em edifício térreo próprio, primitivamente sem chaminé — o fumo pela telha-vã, longe dos aposentos.' }, 'OGA'));
+  VM_OVR['pt-porto-arredores'] = (vm, b) => { b.wall.frames = 'cantaria'; b.wall.cunhais = true; b.roof.beirado = 2;
+    vm.els = vm.els.filter(e => e.t !== 'stair' && e.t !== 'chimney');
+    vm.els.push({ t:'stair', vol:0, face:'S', along:'par', pos:0.05, w:1.6, landing:true, porch:true });
+    vm.vols.push(vmVol({ name:{ en:'Kitchen annex', pt:'Cozinha (anexo)' }, x:b.L / 2 + 2.2, y:b.y - 0.8, L:4.4, D:4.2, fl:1, fh:2.5, roof:{ type:'gable', th:24, bei:0.25, mat:'tile', ridge:'x', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall), open:{ S:[vmOp('d', 0.4, 0.9, 2)], E:[], N:[vmOp('w', 0.5, 0.6, 0.6)], W:[] } })); };
+})();
+
+/* ---- new houses of the north-west ---- */
+const OGA_TYPES = {
+  'pt-maia-b':{ region:'mainland',
+    name:{ en:'Maia house of type B — two storeys in an L, with stone stair and porched landing', pt:'Casa da Maia do tipo B — andar em L, escadaria e patamar alpendrado' },
+    where:{ en:'Matosinhos and the Maia — Santa Cruz do Bispo, Freixieiro and Gandra (Perafita), Pedras Rubras, Moreira; again at Esposende; from 1743', pt:'Matosinhos e a Maia — Santa Cruz do Bispo, Freixieiro e Gandra (Perafita), Pedras Rubras, Moreira; de novo em Esposende; desde 1743' },
+    summary:{ en:'Two bodies in an L of unequal arms: the main one under four slopes branching into a lower wing over the smaller. Against the inner side climbs a stair of well-dressed granite to a landing, both under the prolonged roof; onto it open the sala and the large room. Two alcoves, often lit only by their doors, open off the sala; a narrow service stair goes down to the kitchen, always on the ground floor, beside the body, two slopes and no chimney. Below, only lojas. The house of a well-off farmer touched by the town.',
+      pt:'Dois corpos em L de braços desiguais: o principal sob quatro águas que se ramificam numa ala lateral mais baixa sobre o menor. Encostada ao lado interno sobe uma escada de granito bem trabalhado até um patamar, ambos sob o prolongamento do telhado; para ele dão a sala e o quarto grande. Duas alcovas, muitas vezes iluminadas só pelas portas, abrem para a sala; uma escada estreita de serviço desce à cozinha, sempre térrea, encostada ao corpo, de duas águas e sem chaminé. Em baixo, só lojas. A casa de um lavrador abastado já tocado pela cidade.' },
+    model:{ L:10, D:7, fl:2, fh:2.5, rot:180, form:'L', wing:{ w:4, e:4, side:1, face:-1 }, roof:{ n:3, th:26, bei:0.4 },
+      open:{ S:vOpen([W(0.25, 0.1, [{ on:false }, { on:true }]), W(0.5, 0.1, [{ on:false }, { on:true }]), W(0.75, 0.1, [{ on:false }, { on:true }])], 0.08), N:vOpen([W(0.5, 0.06, [{ on:false }, { on:true }])], 0.02), E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.01, units:vOff() } },
+      render:{ en:'whitewash walls, barrel tile roof, green door', pt:'parede caiada, telha de canudo, porta verde' },
+      walls:{ en:'granite, rendered and whitewashed; wide granite frames', pt:'granito, rebocado e caiado; alizares largos de granito' } },
+    feats:[
+      vFloors('2', 2, 2, 'OGA'),
+      vRoofN(null, { en:'four slopes, with a lower lateral wing', pt:'quatro águas, com ala lateral mais baixa' }, [3], 'OGA'),
+      vI('openings', { en:'The street front is plain: three windows (two of the sala, one of the large room) over three postigos of the lojas, in wide granite frames.', pt:'A fachada da rua é lisa: três janelas (duas da sala, uma do quarto grande) sobre três postigos das lojas, com largos alizares de granito.' }, 'OGA'),
+      vI('ventilation', { en:'No chimney in any of the Maia types — the kitchen apart, on the ground, under bare tiles.', pt:'Nenhum dos tipos da Maia tem chaminé — a cozinha à parte, térrea, de telha-vã.' }, 'OGA'),
+      vI('site', { en:'Types A and A′, their single-storey forerunners: the narrow end to the street, no street door, a gate beside the cubicle to the yard; the blind wall to the neighbour.', pt:'Os tipos A e A′, os seus antecessores térreos: o topo estreito para a rua, sem porta para ela, um portão junto ao cubículo para o quintal; a parede cega para o vizinho.' }, 'OGA'),
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'OGA')
+    ] },
+  'pt-esposende':{ region:'mainland',
+    name:{ en:'Esposende farmhouse — the great corner chimney and the tabique varanda', pt:'Casa de lavoura de Esposende — a grande chaminé de cunhal e a varanda de tabique' },
+    where:{ en:'Esposende — Fão, Gandra, Gemezes, Marinhas, Abelheira', pt:'Esposende — Fão, Gandra, Gemezes, Marinhas, Abelheira' },
+    summary:{ en:'Two storeys, the lojas and byres below; above, the sala with its two alcoves and a corridor to the kitchen, along a varanda on the long front — mostly closed, its outer wall of tabique with two or three windows, under the long slope of the roof. The note of these houses is the chimney: vast, heavy, rising on a corner over one end wall — granite on its two outer faces, tabique hung with tile on the others — the roof then of three slopes. A covered quinteiro beside the house shelters the cart and the tools behind a wide gate.',
+      pt:'Dois pisos, as lojas e cortes em baixo; em cima a sala com as duas alcovas e um corredor para a cozinha, ao longo de uma varanda na frente comprida — quase sempre fechada, a parede exterior de tabique com duas ou três janelas, sob a água maior do telhado. A nota destas casas é a chaminé: vasta, pesada, erguida num cunhal sobre a parede de um dos topos — de granito nas duas faces exteriores, de tabique forrado a telha nas outras — e o telhado então de três águas. Um quinteiro coberto ao lado guarda o carro e as alfaias, com largo portal.' },
+    model:{ L:11, D:7, fl:2, fh:2.5, rot:180, form:'rect', roof:{ n:3, th:24, bei:0.4 },
+      open:{ S:vOpen([D(0.12, 0.08, [{ door:true }, { on:false }]), D(0.5, 0.08, [{ door:true }, { on:false }]), W(0.3, 0.1, [{ on:false }, { on:true }]), W(0.55, 0.1, [{ on:false }, { on:true }]), W(0.8, 0.1, [{ on:false }, { on:true }])], 0.1), N:{ wwr:0.01, units:vOff() }, E:vOpen([W(0.5, 0.1, [{ on:false }, { on:true }])], 0.02), W:{ wwr:0, units:vOff() } },
+      render:{ en:'granite stone walls, tile roof, green door', pt:'paredes de granito, telha, porta verde' },
+      walls:{ en:'granite; the varanda’s outer wall of tabique', pt:'granito; a parede exterior da varanda de tabique' } },
+    feats:[
+      vFloors('2', 2, 2, 'OGA'),
+      vRoofN(null, { en:'three or four slopes, one long slope over the varanda', pt:'três ou quatro águas, uma água maior sobre a varanda' }, [3], 'OGA'),
+      vI('ventilation', { en:'The chimney’s wide mouth: two little gutters on the walls, an iron bar with tiles laid across it, gaps between them for the smoke, a rim of brick or schist against the wind.', pt:'A boca larga da chaminé: duas caleiras sobre as paredes, um varão de ferro com telhas pousadas e espaços entre si para o fumo, um rebordo de tijolo ou lascas de xisto contra o vento.' }, 'OGA'),
+      vI('openings', { en:'The closed varanda along the long front, lit by two or three windows in its tabique wall; onto it the doors of the sala, the kitchen and the end rooms.', pt:'A varanda fechada ao longo da frente comprida, iluminada por duas ou três janelas na parede de tabique; para ela dão as portas da sala, da cozinha e dos quartos dos topos.' }, 'OGA'),
+      vWall({ en:'granite', pt:'granito' }, ['stone', 'whitewash'], 'OGA')
+    ] },
+  'pt-sousa-patio':{ region:'mainland',
+    name:{ en:'Closed-courtyard farmhouse of the Sousa valley (Paredes, Penafiel)', pt:'Casa de pátio fechado do vale do Sousa (Paredes, Penafiel)' },
+    where:{ en:'The centre of the Douro Litoral — the concelho of Paredes by the river Sousa, Penafiel; here and there in the whole zone', pt:'O centro do Douro Litoral — o concelho de Paredes junto ao rio Sousa, Penafiel; esporadicamente em toda a zona' },
+    summary:{ en:'The farm buildings close a courtyard all round, or on two or three sides and a high wall on the rest, entered by a wide gate, usually under a porch. The dwelling stands at the back, a sobrado over a ground floor for work, often thatched, its walls of rough bare granite or schist — a rude, archaic group with the look of a little citadel, perhaps built for defence against raids.',
+      pt:'Os edifícios da lavoura fecham um pátio em toda a volta, ou em dois ou três lados e um muro alto no restante, com entrada por um largo portal, geralmente alpendrado. A habitação fica ao fundo, um sobrado sobre um térreo de serviço, muitas vezes de colmo, de paredes de pedra tosca à vista, granito ou xisto — um conjunto rude e arcaico com ar de cidadela, talvez concebido como defesa contra assaltos.' },
+    model:{ L:11, D:6, fl:2, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:38, bei:0.4 },
+      open:{ S:vOpen([D(0.3, 0.08, [{ door:true }, { on:false }]), W(0.6, 0.06, [{ on:false }, { on:true }])], 0.05), N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'granite stone walls, thatch roof, timber door', pt:'paredes de granito, colmo, porta de madeira' },
+      walls:{ en:'rough granite or schist, bare', pt:'granito ou xisto tosco, à vista' } },
+    feats:[
+      vFloors('2', 2, 2, 'OGA'),
+      vI('site', { en:'Draw the dwelling at the back of a courtyard closed by the other buildings and a high wall, with a porched gate (use the courtyard in the modeller).', pt:'Desenhe a habitação ao fundo de um pátio fechado pelos outros edifícios e por um muro alto, com portal alpendrado (use o pátio no modelador).' }, 'OGA'),
+      vWall({ en:'bare stone', pt:'pedra à vista' }, ['stone', 'schist'], 'OGA'),
+      vRoofFin({ en:'thatch, often', pt:'colmo, muitas vezes' }, ['thatch', 'tile', 'canudo'], 'OGA')
+    ] }
+};
+Object.assign(VERN_TYPES, OGA_TYPES);
+Object.assign(VERN_DIST, { 'pt-maia-b':['Porto', 'Braga'], 'pt-esposende':['Braga'], 'pt-sousa-patio':['Porto'] });
+VM_OVR['pt-maia-b'] = (vm, b) => { b.L = 10; vm.vols.push(vmVol({ name:{ en:'Lower wing', pt:'Ala lateral' }, x:b.L / 2 - 2, y:b.D / 2 + 2, L:4, D:4, fl:2, fh:2.3, roof:{ type:'hip', th:26, bei:0.4, mat:'tile', par:0, cells:2, beirado:1, ridge:'auto' }, wall:vmClone(b.wall), open:{ S:[], E:[vmOp('w', 0.5, 0.8, 1, 1)], N:[], W:[] } }));
+  vm.vols.push(vmVol({ name:{ en:'Kitchen', pt:'Cozinha' }, x:-b.L / 2 - 2, y:0.5, L:4, D:5, fl:1, fh:2.6, roof:{ type:'gable', th:24, bei:0.25, mat:'tile', ridge:'auto', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall), open:{ S:[vmOp('d', 0.5, 0.9, 2)], E:[], N:[], W:[] } }));
+  vm.els = vm.els.filter(e => e.t !== 'chimney'); vm.els.push({ t:'stair', vol:0, face:'N', along:'par', pos:0.55, w:1.2, landing:true, porch:true }); b.wall.frames = 'cantaria'; };
+VM_OVR['pt-esposende'] = (vm, b) => { vm.els = vm.els.filter(e => e.t !== 'chimney');
+  vm.els.push({ t:'chimney', vol:0, kind:'esp', u:0.84, v:0.3, h:1.2 }, { t:'varanda', vol:0, face:'S', kind:'envidracada', pos:0.55, w:7, floor:1 }, { t:'stair', vol:0, face:'S', along:'perp', pos:0.02, w:1.1, landing:true, porch:false });
+  vm.vols.push(vmVol({ name:{ en:'Covered quinteiro', pt:'Quinteiro coberto' }, x:-b.L / 2 - 2.5, y:0, L:5, D:b.D, fl:1, fh:3.0, roof:{ type:'shed', th:15, bei:0.3, mat:'tile', ridge:'auto', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall), open:{ S:[vmOp('d', 0.5, 2.8, 2.6)], E:[], N:[], W:[] } })); };
+VM_OVR['pt-sousa-patio'] = (vm, b) => { b.y = 6; vm.court = { on:true, x:0, y:0, L:16, D:12, h:2.8, open:'N', gate:{ face:'S', pos:0.5, w:3.2 } };
+  vm.vols.push(vmVol({ name:{ en:'Byres and stores', pt:'Cortes e arrumos' }, x:-6, y:0, L:4, D:8, fl:1, fh:2.6, roof:{ type:'shed', th:20, bei:0.3, mat:'tile', ridge:'auto', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall), open:{ S:[], E:[vmOp('d', 0.5, 1.2, 2)], N:[], W:[] } })); };
+
+/* ---- a support structure of the south: the free-standing oven ---- */
+SUP_TYPES['pt-forno-sul'] = { region:'mainland', support:true,
+  name:{ en:'Free-standing bread oven of the south', pt:'Forno de pão isolado do Sul' },
+  where:{ en:'The montes and villages of the Alentejo and the Algarve', pt:'Os montes e povoações do Alentejo e do Algarve' },
+  summary:{ en:'In the south the oven is never in the kitchen: it stands outside, in a small round building of its own, rendered and whitewashed like the rest. In the small montes it is only the oven; in the large ones a bigger building with a roofed front and porch, a stone bench each side for the trays of loaves — where, says Silva Picão, passing labourers slept.',
+    pt:'No Sul o forno nunca está na cozinha: fica no exterior, num pequeno edifício redondo e autónomo, rebocado e caiado como o resto. Nos montes pequenos é só o forno; nos grandes uma construção maior, com telheiro e alpendre à frente e um poial de cada lado para os tabuleiros do pão — onde, diz Silva Picão, dormiam malteses e passantes.' },
+  model:{ L:3, D:3, fl:1, fh:1.6, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.06, units:[{ on:true, frac:0.3, pos:0.5, door:true }] }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+    render:{ en:'whitewash walls', pt:'parede caiada' }, walls:{ en:'rubble, taipa or brick, rendered and whitewashed', pt:'alvenaria, taipa ou tijolo, rebocados e caiados' } },
+  feats:[ vI('site', { en:'Apart from the house; in the large montes with a porch and two benches in front.', pt:'Afastado da casa; nos montes grandes com alpendre e dois poiais à frente.' }, 'OGA'),
+    vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'OGA') ] };
+VERN_TYPES['pt-forno-sul'] = SUP_TYPES['pt-forno-sul'];
+VERN_DIST['pt-forno-sul'] = ['Évora', 'Beja', 'Portalegre', 'Setúbal', 'Faro'];
+VM_OVR['pt-forno-sul'] = (vm, b) => { Object.assign(b, { kind:'round', L:3, D:3, fh:1.2 }); b.roof = { type:'dome', th:0, bei:0, mat:'lime', par:0 }; b.wall.barra = '#3F6FA8'; };
+
+/* ---- what chapters I–II and the Minho page add to the types already here ---- */
+[
+  ['pt-minho', 'openings', 'Varandas by place: at Lindoso a granite varanda along the front under a very low roof on plain pillars, the ground below it a covered store; at Cabração, Moreira de Lima and Estorãos (Ponte de Lima) timber varandas on pilasters; in the Serra d’Arga and the Labruja low closed varandas, narrow vents and postigos against the cold.', 'As varandas conforme o lugar: no Lindoso uma varanda de granito corrida ao longo da fachada, cobertura muito baixa sobre singelos pilares, o térreo por baixo como coberto de arrumos; em Cabração, Moreira de Lima e Estorãos (Ponte de Lima) varandas de madeira sobre pilastras; na Serra d’Arga e na Labruja varandas baixas e vedadas, respiros e postigos estreitos contra o frio.', 'FOL'],
+  ['pt-minho', 'roof', 'Two slopes of little pitch in channel tile — or, in the most rustic, thatch and broom (giesta), in villages of the upper Lima; in the 18th century every house could still be thatched.', 'Duas águas pouco inclinadas de telha caleira — ou, nos casos mais rústicos, colmo e giesta, em aldeias do alto Lima; no século XVIII ainda se usava cobrir cada casa de colmo.', 'FOL'],
+  ['pt-minho', 'site', 'Round the house: the eira, the medas, the well, the byres and the espigueiros. The great varanda runs along a long front under the roof brought low on posts or on pillars with round-cornered capitals (the Minho way); in the lower Douro it projects on the floor beams; the ground beneath it shelters the tools.', 'À volta da casa: a eira, as medas, o poço, as cortes e os espigueiros. A grande varanda corre ao longo de uma fachada comprida sob o telhado descido em prumos ou pilares de capitel de cantos redondos (o caso minhoto); no baixo Douro sai em balanço sobre os barrotes do sobrado; o térreo por baixo abriga as alfaias.', 'OGA'],
+  ['pt-castro', 'openings', 'At Ermida and Germil (Serra Amarela) the windows are tiny, few and set right under the eave against the weather.', 'Em Ermida e Germil (Serra Amarela) as janelas são diminutas, escassas e muito chegadas ao beiral para fazer face ao clima.', 'FOL'],
+  ['pt-alentejo', 'roof', 'The two slopes of the south are often two one-slope roofs leaning on a high wall in the middle of the house; the rooms lie in front of and behind it.', 'As duas águas do Sul são muitas vezes dois telhados de uma água encostados a uma parede alta a meio do edifício; as divisões ficam à frente e atrás dela.', 'OGA'],
+  ['pt-alentejo', 'site', 'The large monte gathers the owner’s or tenant’s house — entrance hall, great larder, the kitchen with its huge hearth that feeds the hands, the bread room — the farm and stock buildings, and lodgings for the workers who live nowhere nearer.', 'O monte grande junta a casa do senhorio ou rendeiro — casa de entrada, enorme despensa, a cozinha de lareira descomunal que serve de refeitório do pessoal, a amassaria — as instalações agrícolas e pecuárias e as acomodações dos assalariados que não vivem em nenhuma povoação próxima.', 'OGA'],
+  ['pt-alentejo', 'ventilation', 'In Évora and Elvas Oliveira & Galhano record a box-shaped chimney leaning against the wall of a ground floor; elsewhere the stack is the chimney of the hearth, raised over the roof in many forms.', 'Em Évora e Elvas Oliveira & Galhano registam uma chaminé em forma de caixa encostada à parede de um rés-do-chão; noutros lugares a chaminé da lareira ergue-se sobre o telhado em muitas formas.', 'OGA'],
+  ['pt-alg-taipa', 'roof', 'In the west of the Algarve the açoteia is rare: one slope (almost all at Carrapateira), the tiles on canes, continuous or in groups («pulo de rato»), tied with straw or wire.', 'No ocidente do Algarve a açoteia é rara: uma só água (na Carrapateira quase todas), as telhas assentes em canas, contínuas ou em grupos («pulo de rato»), amarradas com cordas de palha ou arame.', 'OGA'],
+  ['pt-alg-serra', 'site', 'In the serra hamlets (montes of ten to twenty houses, with the round palheiros beside them) the stone is often left bare or only whitewashed round the doors; no chimneys; roofs sometimes of thatch.', 'Nas aldeias da serra (montes de dez a vinte casas, com os palheiros redondos ao pé) a pedra fica muitas vezes a nu, ou só com desenhos caiados sobre as portas; sem chaminés; telhados por vezes de colmo.', 'OGA'],
+  ['pt-alg-acoteia', 'roof', 'Frequent in the centre and the Sotavento, above all east of Loulé, rare in the Barlavento; in the old coastal houses its floor rests on the vaults over the alcoves, later on timber and tile; it dries fish and figs and, joined to the cistern, gathers the rain.', 'Frequente no centro e no Sotavento, sobretudo a leste de Loulé, rara no Barlavento; nas casas antigas do litoral o pavimento assenta nas abóbadas das alcovas, depois em traves e ladrilho; seca o peixe e o figo e, ligada à cisterna, recolhe a chuva.', 'OGA'],
+  ['pt-gandara', 'site', 'Mira: a long single-storey front to the road — window, door, window — then a stretch with only two oculi under the eave (the upper celeiro); between them the gate through a covered passage (telheiro) to the courtyard behind. An L with the kitchens, often two, in a lower rear wing.', 'Mira: uma frente térrea e comprida para a estrada — janela, porta, janela — e um lanço só com dois óculos sob o beiral (o celeiro de cima); entre ambos o portão numa passagem coberta (telheiro) para o pátio das traseiras. Um L com as cozinhas, muitas vezes duas, num corpo traseiro mais baixo.', 'OGA'],
+  ['pt-tocha', 'site', 'South of the pine wood that parts Mira from the Tocha the type loses its character: the gate in a wall, the kitchen more often inside the main block, the chimney at its end.', 'A sul do pinhal que separa Mira da Tocha o tipo perde o carácter: o portão num muro, a cozinha mais vezes incorporada no bloco principal, a chaminé no topo.', 'OGA'],
+  ['pt-murtosa', 'site', 'Three forms: a main body (kitchen and sala) with two very small rooms at the ends of the front leaving a porch between them, under a hip roof whose front slope comes down over porch and rooms; then a front, a middle and a back body (two alcoves with high postigos). The back to the nortada is a massive wall almost without openings.', 'Três formas: um corpo principal (cozinha e sala) com dois quartos muito pequenos nos extremos da frente, deixando entre si um alpendre, sob um telhado de quatro águas cuja água da frente desce sobre alpendre e quartos; depois um corpo da frente, um central e um traseiro (duas alcovas com postigos altos). As traseiras viradas à nortada são uma parede maciça quase sem vãos.', 'OGA'],
+  ['pt-murtosa', 'visualization', 'Walls of clay adobe laid flat on footings of lousa or the red stone of Eirol, 20–30 cm above the ground; later of lime adobe. Columns of tijoleira rendered in yellow mortar and whitewashed; chestnut lintels, often arched.', 'Paredes de adobo de barro postos ao baixo sobre caboucos de lousa ou de pedra vermelha de Eirol, 20–30 cm acima do solo; mais tarde de adobo de cal. Colunas de tijoleira revestidas de argamassa amarela e caiadas; padieiras de castanho, muitas vezes arqueadas.', 'OGA'],
+  ['pt-alpendrada', 'site', 'Granja (Leiria): adobe walls about 50 cm, so low that one stoops at the doors; a central body (kitchen, sala, a room) behind a recessed porch; the chimney in the middle of the roof; the oven in its own cubicle.', 'Granja (Leiria): paredes de adobe com cerca de 50 cm, tão baixas que é preciso curvar-se nas portas; um corpo central (cozinha, sala, um quarto) por trás de um alpendre reentrante; a chaminé a meio do telhado; o forno num cubículo próprio.', 'OGA']
+].forEach(([k, tab, en, pt, src]) => { if (VERN_TYPES[k]) vAddT(k, [vI(tab, { en, pt }, src)]); });
+
+/* where they are offered */
+(() => {
+  const mn = VERN_REGIONS.find(r => r.key === 'mainland'), P0 = mn.place;
+  mn.place = (S, V) => { const o = P0(S, V); if (!o) return o;
+    const lead = (k, at) => { const c = o.cand.filter(x => x !== k); c.splice(at || 0, 0, k); o.cand = c.slice(0, 3); };
+    if (S.lat > 41.18 && S.lat < 41.32 && S.lon > -8.72 && S.lon < -8.55 && (S.alt || 0) < 150) lead('pt-maia-b', 1);
+    if (S.lat > 41.48 && S.lat < 41.6 && S.lon < -8.72) lead('pt-esposende', 0);
+    if (S.lat > 41.1 && S.lat < 41.25 && S.lon > -8.4 && S.lon < -8.2) lead('pt-sousa-patio', 1);
+    return o; };
+  const g = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
+  if (g) { g.types.push('pt-maia-b', 'pt-esposende', 'pt-sousa-patio');
+    g.refs.push('Oliveira, E. V. de, &amp; Galhano, F. (1992). <i>Arquitectura tradicional portuguesa</i>. Etnográfica Press. https://doi.org/10.4000/books.etnograficapress.6508',
+      'Folclore.pt. (2022). <i>A arquitectura popular no Minho (Soajo)</i>. https://folclore.pt/arquitectura-popular-no-minho/'); }
+  const s = ARCH_BIB.find(x => x.r.pt === 'Estruturas de apoio à habitação'); if (s) { s.types = Object.keys(SUP_TYPES); s.refs.push('Oliveira, E. V. de, &amp; Galhano, F. (1992). <i>Arquitectura tradicional portuguesa</i>. Etnográfica Press. https://doi.org/10.4000/books.etnograficapress.6508'); }
+})();
+vernNames();
 
 const TABS_OLGYAY = [
   { key:'environment', label:'Environmental', build:buildEnvironment },
