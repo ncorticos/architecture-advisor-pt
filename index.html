@@ -965,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.137.0',
+  version:     '1.138.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20366,8 +20366,8 @@ Object.assign(MN_TYPES, {
     where:{ en:'The fishing towns of the Algarve coast — Olhão, Fuzeta', pt:'As povoações piscatórias da costa algarvia — Olhão, Fuzeta' },
     summary:{ en:'Usually one storey on a rectangle, the roof an açoteia reached by a stair from inside or from the patio; the stair may be covered by a «pangaio» crowned by a «mirante». The rooms vaulted, the kitchen at the back. Stone or brick; the açoteia paved in tiles over the vaults, edged by platibandas. Whitewashed, the skirting and the frames in colour.',
       pt:'Em geral de um só piso, de planta rectangular, coberta por uma açoteia acessível por uma escada que parte do interior ou do pátio; a escada pode estar coberta por um «pangaio» no cimo do qual aparece um «mirante». As divisões abobadadas, a cozinha em princípio ao fundo. Alvenaria de pedra ou tijolo; a açoteia ladrilhada sobre as abóbadas, contornada pelas platibandas. Caiação branca, o rodapé e as guarnições coloridos.' },
-    model:{ L:6, D:10, fl:1, fh:3.0, rot:180, form:'rect', roof:{ n:0, th:0, bei:0, zones:[{ f0:0, f1:1, n:0, th:0, par:{ on:true, h:0.8 } }] },
-      open:{ S:vOpen([D(0.35, 0.45), W(0.78, 0.3)], 0.1), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+    model:{ L:5.5, D:11, fl:1, fh:3.0, rot:180, form:'rect', icon:'olhao', roof:{ n:0, th:0, bei:0, zones:[{ f0:0, f1:1, n:0, th:0, par:{ on:true, h:0.8 } }] },
+      open:{ S:vOpen([W(0.08, 0.15), D(0.5, 0.2), W(0.92, 0.15)], 0.25), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
       render:{ en:'whitewash walls, blue door', pt:'parede caiada, porta azul' },
       walls:{ en:'stone or brick masonry, vaulted rooms', pt:'alvenaria de pedra ou tijolo, divisões abobadadas' } },
     feats:[
@@ -20946,6 +20946,17 @@ vAdd('pt-avieiro', [
       'Alma de Aventureiros. (n.d.). <i>Escaroupim e Palhota: Histórias de avieiros no Tejo</i>. https://almadeaventureiros.pt/ainda-existem-avieiros-no-tejo/',
       'Câmara Municipal de Salvaterra de Magos. (n.d.). <i>Casa típica avieira</i>. https://www.cm-salvaterrademagos.pt/concelho/aldeia-avieira-do-escaroupim/item/3622-casa-tipica-avieira',
       'Marafona, S. C. M. (2015). <i>Os Avieiros: Cultura e reabilitação do património vernacular</i> [Master’s dissertation, Universidade do Porto]. https://repositorio-aberto.up.pt/handle/10216/77208'); } })();
+/* Romba (2012/13): the Olhão house read from its lots, from the 1715 stone houses to the mirantes */
+VERN_SRC.ROM = { tag:'Romba 2012/13', cite:'Romba, S. (2012/2013). «Evolução urbana de Olhão». <i>Promontoria</i>, <i>10</i>(10), 55–80. Faro: CEPHA, Universidade do Algarve.', url:null };
+vAdd('pt-alg-pescadores', [
+  vN('site', { en:'Street front of the lot', pt:'Frente do lote' }, { en:'about 5 varas (5.5 m), the lot 15 varas (16.5 m) deep', pt:'cerca de 5 varas (5,5 m), o lote com 15 varas (16,5 m) de fundo' }, () => MASS.L, 4.5, 7, 'm', 'ROM'),
+  vI('site', { en:'From cane huts to stone and lime: in 1712 three hundred households lived in cane huts under thatch, not allowed to build in stone; from 1715 they asked leave to build stone houses, and in 1758 Olhão counted over five hundred houses and some three hundred huts. Streets and lots regular from the start — the Queen asked in 1718 that each house be built «straight on the street and not across it».', pt:'Das cabanas à pedra e cal: em 1712 trezentos vizinhos moravam em casas de cana cobertas de palha, sem licença para as fazer de pedra; a partir de 1715 pediram licença para casas de pedra e cal, e em 1758 Olhão contava mais de quinhentas moradas de casas e cerca de trezentas cabanas. Ruas e lotes regulares desde o início — a Rainha pediu em 1718 que a casa «se faça direita na rua e não atravessada».' }, 'ROM'),
+  vI('openings', { en:'The front: door and window (porta-janela), door-window-window, or window-door-window — the house «de risca ao meio» — the frames simply moulded; a platibanda came later to finish the front, at times with neoclassical metopes.', pt:'A fachada: porta-janela, porta-janela-janela ou janela-porta-janela — a casa «de risca ao meio» —, molduras de ornamentação simples; mais tarde uma platibanda remata a fachada, por vezes com métopas neoclássicas.' }, 'ROM'),
+  vI('roof', { en:'The casa de fora at the front under a telhado de tesouro, the rooms behind vaulted under the açoteia; the platibanda hid the tesouro, which then disappeared — barely half a dozen survive — and the açoteia took the whole house once concrete slabs came.', pt:'A casa de fora à frente sob telhado de tesouro, as divisões de trás abobadadas sob a açoteia; a platibanda escondeu o tesouro, que acabou por desaparecer — restará meia dúzia — e a açoteia tomou toda a casa com as lajes de betão.' }, 'ROM'),
+  vI('site', { en:'The mirante: a small upper room in the middle of the lot over the vaulted rooms, or at the back — never at the front — reached from the quintal; its front to the back of the house, a door and a window, an ornamented platibanda, and a flight up to its own açoteia. Perhaps grown from the pangaio over the stair. Some have no stair, some no ornament, some catch rainwater; poorer houses add only a one-slope store in a corner of the açoteia.', pt:'O mirante: uma pequena divisão superior a meio do lote, sobre as abóbadas, ou nos fundos — nunca à frente — com acesso pelo quintal; a fachada voltada às traseiras, uma porta e uma janela, platibanda ornamentada e um lanço de escadas até à sua própria açoteia. Talvez nascido do pangaio sobre a escada. Alguns sem escada, outros sem decoração, outros com recolha de água; as casas mais pobres só juntam uma dependência de uma água a um canto da açoteia.' }, 'ROM'),
+  vI('ventilation', { en:'The quintal behind keeps the well — the reason it survived — and the stair to the açoteia; the açoteia took over the quintal’s chores when the lots filled up.', pt:'O quintal das traseiras guarda o poço — razão por que sobreviveu — e a escada para a açoteia; a açoteia passou a desempenhar as tarefas do quintal quando os lotes se encheram.' }, 'ROM')
+]);
+(() => { const g = ARCH_BIB.find(x => x.r.en === 'Algarve'); if (g) g.refs.push('Romba, S. (2012/2013). Evolução urbana de Olhão. <i>Promontoria</i>, <i>10</i>(10), 55–80.'); })();
 /* The town houses of the icons — drawn between their neighbours — and the
    dwellings the sources give no chimney (the smoke through the tiles). */
 const VICON_URBAN = ['pt-porto-esguia', 'pt-porto-ilha', 'pt-lisboa-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-ale-d',
@@ -21385,6 +21396,55 @@ function vIcon(key, size) {
     const am = -Math.PI / 2, da = 0.32 / r;
     sideOpen(cx, cy, r, am - da, am + da, 0.75, 1.3, '#2E2A26');
     box(cx + 0.6, cy + 0.2, 1.9, cx + 0.9, cy + 0.5, 2.25, wc);
+  }
+  if (m.icon === 'olhao') {
+    /* Romba's Olhão lot: the street front (window-door-window) under a platibanda; behind it the casa de fora under its
+       telhado de tesouro; the açoteia over the vaulted rooms with the mirante in the middle of the lot, a flight up to its own
+       açoteia; at the back the walled quintal with the well and the stair up to the açoteia */
+    out.length = 0; all.length = 0;
+    if (nbr) { nbr.street(); nbr.west(); }
+    const Hq = 2.3, Dq = 4.5, yq = Dd, yt = 4.5, ph = 0.65, stone = ['#E6E1D7', '#CFC9BC', '#B8B1A3'];
+    const flight = (pts) => pts.slice().sort((p, q) => (p[0] + p[1] - p[2] - p[3]) - (q[0] + q[1] - q[2] - q[3])).forEach(([a, b, c, e, z0, h]) => {
+      face([P(a, c, z0), P(b, c, z0), P(b, c, h), P(a, c, h)], stone[1], 0.02); face([P(b, c, z0), P(b, e, z0), P(b, e, h), P(b, c, h)], stone[2], 0.02);
+      face([P(a, c, h), P(b, c, h), P(b, e, h), P(a, e, h)], stone[0], 0.02); });
+    /* the quintal: its back wall, the well, the stair against the house's back wall, its east wall */
+    face([P(0, yq + Dq, 0), P(L, yq + Dq, 0), P(L, yq + Dq, Hq), P(0, yq + Dq, Hq)], vShade(wc, 0.9), 0.03);
+    face([P(0, yq, 0), P(L, yq, 0), P(L, yq + Dq, 0), P(0, yq + Dq, 0)], '#D8CDB5', 0.02);
+    drum(L * 0.7, yq + Dq * 0.6, 0.45, 0, 0.8, wc); disc(L * 0.7, yq + Dq * 0.6, 0.3, 0.81, '#33414D');
+    { const n = Math.ceil(H / 0.19), r = H / n, t = Math.min(0.26, (L - 1.0) / n), bs = [];
+      for (let j = 0; j < n; j++) { const a = 0.4 + j * t; bs.push([a, a + t, yq, yq + 0.85, 0, (j + 1) * r]); }
+      flight(bs); }
+    face([P(L, yq, 0), P(L, yq + Dq, 0), P(L, yq + Dq, Hq), P(L, yq, Hq)], vShade(wc, 0.82), 0.03);
+    face([P(L, yq, Hq), P(L, yq + Dq, Hq), P(L - 0.25, yq + Dq, Hq), P(L - 0.25, yq, Hq)], vShade(wc, 1.03), 0.02);
+    /* the house: front and party wall, the barra, the openings */
+    face([P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H)], wc); face([P(L, 0, 0), P(L, Dd, 0), P(L, Dd, H), P(L, 0, H)], vShade(wc, 0.82));
+    if (southBar) { face([P(0, -0.01, 0), P(L, -0.01, 0), P(L, -0.01, 0.6), P(0, -0.01, 0.6)], barC, 0.02); face([P(L + 0.01, 0, 0), P(L + 0.01, Dd, 0), P(L + 0.01, Dd, 0.6), P(L + 0.01, 0, 0.6)], vShade(barC, 0.8), 0.02); }
+    openings('S', L, (u, z) => P(u, -0.02, z));
+    /* the açoteia, its low back parapet */
+    face([P(0, yt, H), P(L, yt, H), P(L, Dd, H), P(0, Dd, H)], '#D9CBB4', 0.03);
+    face([P(0, Dd - 0.2, H), P(L, Dd - 0.2, H), P(L, Dd - 0.2, H + 0.45), P(0, Dd - 0.2, H + 0.45)], wc, 0.02);
+    /* the mirante over the vaulted rooms, its ornamented platibanda, and the flight up its east side to its own açoteia */
+    const mx0 = 0.5, mx1 = 3.4, my0 = 5.8, my1 = 8.6, mh = 2.4, zm = H + mh;
+    { const n = Math.ceil(mh / 0.2), r = mh / n, t = (my1 + 1.2 - my0) / n, bs = [];
+      for (let j = 0; j < n; j++) { const c = my1 + 1.2 - (j + 1) * t; bs.push([mx1, mx1 + 0.8, c, c + t, H, H + (j + 1) * r]); }
+      face([P(mx0, my0, H), P(mx1, my0, H), P(mx1, my0, zm), P(mx0, my0, zm)], wc, 0.04);
+      face([P(mx1, my0, H), P(mx1, my1, H), P(mx1, my1, zm), P(mx1, my0, zm)], vShade(wc, 0.82), 0.04);
+      face([P(mx1 + 0.02, my0 + 1.0, H + 0.9), P(mx1 + 0.02, my0 + 1.7, H + 0.9), P(mx1 + 0.02, my0 + 1.7, H + 1.8), P(mx1 + 0.02, my0 + 1.0, H + 1.8)], '#3E4C57', 0.03);
+      face([P(mx0, my0, zm), P(mx1, my0, zm), P(mx1, my1, zm), P(mx0, my1, zm)], '#D9CBB4', 0.03);
+      face([P(mx0, my0 - 0.02, zm), P(mx1, my0 - 0.02, zm), P(mx1, my0 - 0.02, zm + 0.5), P(mx0, my0 - 0.02, zm + 0.5)], wc, 0.03);
+      face([P(mx1 + 0.02, my0, zm), P(mx1 + 0.02, my1, zm), P(mx1 + 0.02, my1, zm + 0.5), P(mx1 + 0.02, my0, zm + 0.5)], vShade(wc, 0.85), 0.03);
+      line(P(mx0, my0 - 0.04, zm + 0.12), P(mx1, my0 - 0.04, zm + 0.12), vShade(wc, 0.75), 0.06);
+      for (let k = 1; k < 5; k++) { const xx = mx0 + (mx1 - mx0) * k / 5; face([P(xx - 0.08, my0 - 0.04, zm + 0.15), P(xx + 0.08, my0 - 0.04, zm + 0.15), P(xx + 0.08, my0 - 0.04, zm + 0.45), P(xx - 0.08, my0 - 0.04, zm + 0.45)], vShade(wc, 0.85), 0.01); }
+      flight(bs); }
+    /* the casa de fora under its telhado de tesouro, behind the platibanda of the street front */
+    const tz = H + 1.55, ap = P(L / 2, yt / 2, tz), c0 = P(-0.1, -0.1, H), c1 = P(L + 0.1, -0.1, H), c2 = P(L + 0.1, yt, H), c3 = P(-0.1, yt, H);
+    face([c3, c2, ap], vShade(rc, 0.7)); face([c0, c3, ap], vShade(rc, 0.78)); face([c1, c2, ap], vShade(rc, 0.88)); face([c0, c1, ap], rc);
+    roofTex(c0, c1, ap, ap, 2.4, L);
+    face([P(0, -0.02, H), P(L, -0.02, H), P(L, -0.02, H + ph), P(0, -0.02, H + ph)], wc, 0.03);
+    face([P(L, 0, H), P(L, yt, H), P(L, yt, H + ph), P(L, 0, H + ph)], vShade(wc, 0.82), 0.03);
+    face([P(-0.06, -0.12, H + ph), P(L + 0.06, -0.12, H + ph), P(L + 0.06, -0.12, H + ph + 0.12), P(-0.06, -0.12, H + ph + 0.12)], vShade(wc, 0.92), 0.02);
+    line(P(0, -0.04, H + 0.1), P(L, -0.04, H + 0.1), vShade(wc, 0.75), 0.07);
+    if (nbr) nbr.east();
   }
   if (m.icon === 'eira') {
     /* the threshing floor: a disc of flagstones on a low kerb of stones set on edge, a low wall round most of it, sheaves waiting */
