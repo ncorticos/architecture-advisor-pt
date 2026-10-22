@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.121.0',
+  version:     '1.122.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19173,6 +19173,7 @@ Object.assign(VERN_SRC, {
     url:'https://doi.org/10.14195/2184-7193_4_7' },
   RCO:{ tag:'Reimão Costa 2007', cite:'Costa, M. R. (2007). «Das casas de trave às casas de espigão: processos de transformação dos montes da Serra do Caldeirão». <i>Promontoria</i>, 5, 299–322. Universidade do Algarve — from the research of his doctoral thesis, <i>Casas e montes da serra entre as estremas do Alentejo e do Algarve</i> (Universidade do Porto, 2009; Afrontamento, 2014).',
     url:'https://sapientia.ualg.pt/bitstreams/5f6dba31-1df0-43e2-a5c6-17df57ca5ed0/download' },
+  FJA:{ tag:'Fernandes & Janeiro 2008', cite:'Fernandes, J. M., &amp; Janeiro, A. (2008). <i>A casa popular do Algarve: Espaço rural e urbano, evolução e actualidade</i>. Faro: CCDR Algarve.', url:'https://www.ccdr-alg.pt/site/sites/default/files/publicacoes/casa_popular.pdf' },
   BAG:{ tag:'Baganha 2024', cite:'Baganha, J. (2024). «A arquitetura popular do Sotavento algarvio». <i>Journal of Traditional Building, Architecture and Urbanism</i>, 5.',
     url:'https://dialnet.unirioja.es/descarga/articulo/9867033.pdf' },
   CAS:{ tag:'CM Cascais', cite:'Câmara Municipal de Cascais. «A casa saloia» (Sala 8, núcleo museológico).',
@@ -20084,8 +20085,8 @@ const MN_TYPES = {
     ] },
 
   'pt-alg-taipa':{ region:'mainland',
-    name:{ en:'Algarve rammed-earth house (casa térrea de taipa)', pt:'Casa térrea de taipa do Algarve' },
-    where:{ en:'Lower Algarve and the Barlavento — Vila do Bispo, Aljezur, Lagos', pt:'Baixo Algarve e Barlavento — Vila do Bispo, Aljezur, Lagos' },
+    name:{ en:'Algarve rural house — the «casa rural pura» (taipa, stone or brick)', pt:'Casa rural algarvia — a «casa rural pura» (taipa, pedra ou tijolo)' },
+    where:{ en:'Baixo Algarve, barrocal, Costa Vicentina (Carrapateira, Bordeira, Budens, Vila do Bispo, Aljezur) and Serra de Monchique (Alferce, Casais, Marmelete)', pt:'Baixo Algarve, barrocal, Costa Vicentina (Carrapateira, Bordeira, Budens, Vila do Bispo, Aljezur) e Serra de Monchique (Alferce, Casais, Marmelete)' },
     summary:{ en:'One storey (very rarely two), rectangular, few and small openings, a single small door. Taipa walls usually no higher than 2.50 m, 45–60 cm thick, on stone footings, raised in taipais of about 0.50 × 1.50 m; interior walls of adobe about 20 cm. Lime: dazzling white with ochre or blue round the openings. One or two slopes at 20–35 %, channel tiles, a projecting eave; often no chimney — the smoke leaves through the tiles. More square and less long than the Alentejo house.',
       pt:'Um piso (muito raramente dois), planta rectangular, vãos poucos e pequenos, uma única porta pequena. Paredes de taipa normalmente não acima de 2,50 m, com 45–60 cm de espessura, sobre fundações de pedra, erguidas em taipais de cerca de 0,50 × 1,50 m; paredes interiores de adobe com cerca de 20 cm. Cal: branco imaculado com ocre ou azul nas bordaduras dos vãos. Uma ou duas águas a 20–35 %, telha de canudo, beirado saliente; muitas vezes sem chaminé — o fumo sai pelo ripado do telhado. Mais quadrangular e menos extensa que a casa alentejana.' },
     model:{ L:8, D:5.5, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:14, bei:0.25 },
@@ -20101,13 +20102,15 @@ const MN_TYPES = {
       vN('roof', { en:'Eave', pt:'Beirado' }, { en:'projecting', pt:'saliente' }, () => vEave(), 0.15, 0.5, 'm', 'BRA'),
       vN('openings', { en:'Doors', pt:'Portas' }, { en:'one, small', pt:'uma, pequena' }, () => vCount().doors, 1, 1, '', 'BRA'),
       vGlaze(8, 'BRA'),
-      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster', 'earth'], 'BRA'),
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster', 'earth', 'stone', 'limestone'], 'FJA'),
       vRoofFin({ en:'channel tile', pt:'telha de canudo' }, ['canudo'], 'BRA'),
+      vI('site', { en:'The «casa rural pura» of the Algarve: one or two slopes, often no chimney or a very elementary one, whitewashed walls of «poor» masonry — taipa, stone or brick — floors of tijoleira or beaten earth. Single storey and small, sometimes with a little balcão in front. It survives in three areas: the Baixo Algarve, the Serra de Monchique, and the serra from the Caldeirão to the Guadiana.', pt:'A «casa rural pura» do Algarve: uma ou duas águas, frequentemente sem chaminé ou com chaminé muito elementar, paredes caiadas de alvenarias «pobres» — taipa, pedra ou tijolo — pavimentos de tijoleira ou terra batida. Térrea e de pequena dimensão, por vezes com o balcãozinho fronteiro. Sobrevive em três áreas: o Baixo Algarve, a Serra de Monchique e a serra do Caldeirão ao vale do Guadiana.' }, 'FJA'),
+      vI('visualization', { en:'The stone by place: schist in the serra, limestone in the barrocal — kept for the frames of doors and windows and the carved lintels — red sandstone (grés) at Silves and Messines, the hard foiaíte at Monchique. In the west, under the Atlantic wind, the houses are poorer and simpler, and the decorated platibanda is almost absent.', pt:'A pedra por lugar: xisto na serra, calcário no barrocal — reservado às molduras de portas e janelas e aos lintéis lavrados — grés vermelho em Silves e Messines, a dura foiaíte em Monchique. No ocidente, sob o vento atlântico, as casas são mais pobres e simples, e a platibanda decorativa é quase inexistente.' }, 'FJA'),
       vS('visualization', { en:'Borders of the openings', pt:'Bordaduras dos vãos' }, { en:'ochre or blue', pt:'ocre ou azul' }, () => vRender().door, ['dblue', 'dgreen'], 'BRA')
     ] },
 
   'pt-alg-acoteia':{ region:'mainland',
-    name:{ en:'Algarve house with açoteia (barrocal)', pt:'Casa algarvia com açoteia (barrocal)' },
+    name:{ en:'Algarve house with platibanda and açoteia — a later, transitional type (c. 1875–1930)', pt:'Casa algarvia de platibanda e açoteia — tipo tardio, de transição (c. 1875–1930)' },
     where:{ en:'Central Algarve and the barrocal, Porches to Tavira; Olhão and Fuzeta in town', pt:'Algarve central e barrocal, de Porches a Tavira; Olhão e Fuzeta na vila' },
     summary:{ en:'A volume under a single-slope roof joined to another under a roof terrace (açoteia), usually to the street, edged by a decorated platibanda parapet — terraces that gather the scarce rain for the cistern and dry fruit, grain, beans and pumpkins. Square plan in the country; a receiving room at the door, the kitchen not prominent; small chimneys with openwork grilles. In front, a courtyard with a vine or bougainvillea, the well, the oven (fornalha), benches and alegretes.',
       pt:'Um volume de telhado de uma água articulado com outro coberto por açoteia, em geral para a rua, rematada por platibanda decorada — terraços que recolhem a chuva escassa para a cisterna e secam fruta, cereal, feijão e abóboras. Planta quadrada no campo; uma sala de receber à entrada, a cozinha sem protagonismo; chaminés pequenas, rendilhadas. À frente, o pátio com a latada ou a buganvília, o poço, a fornalha, os bancos e os alegretes.' },
@@ -20116,6 +20119,8 @@ const MN_TYPES = {
       render:{ en:'whitewash walls, barrel tile roof, green door', pt:'parede caiada, telha de canudo, porta verde' },
       walls:{ en:'limestone masonry of the barrocal (clay on the coast), whitewashed', pt:'alvenaria de calcário do barrocal (barro no litoral), caiada' } },
     feats:[
+      vI('site', { en:'⚠ Not the rural vernacular house. The platibanda came with the industrialisation of materials — Marseille tile, zinc, gutters and downpipes — between the last quarter of the 19th century and the 1910s–20s, first in the towns and then spreading to the country: a parapet about 1 m high hiding the eave, giving the house height and social status, soon the ornament par excellence of the modernised traditional house. Read it as a later layer; the popular house underneath is the «casa rural pura».', pt:'⚠ Não é a casa rural vernácula. A platibanda chegou com a industrialização dos materiais — telha Marselha, zinco, caleiras e tubos de queda — entre o último quartel de Oitocentos e as décadas de 1910–20, primeiro nas vilas e depois alastrando ao meio rural: um murete de cerca de um metro que esconde o beiral, alteia a casa e lhe dá «status», depressa a forma decorativa por excelência da modernização da casa tradicional. Leia-a como uma camada tardia; a casa popular por baixo é a «casa rural pura».' }, 'FJA'),
+      vI('site', { en:'The decorated parapet is dated to the 19th century; from 1872 a law required pitched roofs to drain without spilling on the street, and the platibanda spread to every kind of roof.', pt:'A platibanda decorada data do século XIX; a partir de 1872 uma lei obrigou os telhados a drenar sem escorrer sobre a via pública, e a platibanda estendeu-se a todos os tipos de cobertura.' }, 'SIM'),
       vFacing({ en:'the south quadrant', pt:'o quadrante sul' }, 135, 225, 'SIM'),
       vN('site', { en:'Plan proportion', pt:'Proporção da planta' }, { en:'square (rural)', pt:'quadrada (rural)' }, () => MASS.L / MASS.D, 0.8, 1.25, 'L/D', 'SIM'),
       vS('roof', { en:'Açoteia (roof terrace)', pt:'Açoteia' }, { en:'yes, beside a single-slope roof', pt:'sim, junto a um telhado de uma água' }, () => (vZones() || []).some(z => z.n === 0), [true], 'SIM', v => v ? '✓' : '—'),
@@ -20126,7 +20131,7 @@ const MN_TYPES = {
     ] },
 
   'pt-alg-serra':{ region:'mainland',
-    name:{ en:'Caldeirão mountain house (casa de trave)', pt:'Casa serrana do Caldeirão (casa de trave)' },
+    name:{ en:'Caldeirão mountain house — cells of one slope', pt:'Casa serrana do Caldeirão — células de uma água' },
     where:{ en:'Serra do Caldeirão and the Guadiana valley', pt:'Serra do Caldeirão e vale do Guadiana' },
     summary:{ en:'A very simple volume and plan under a single-slope tiled roof that follows the fall of the ground, sometimes leaving split levels inside; often the door is the only opening. Schist masonry; an outdoor hearth to cook in summer, the one inside to warm the winter, no chimney — the smoke through the tiles. The ridge-beam houses (casas de trave) were thatched with rye before the channel tile; the cells cluster with the animal shelters.',
       pt:'Volume e planta muito simples sob telhado de uma só água, de telha, que acompanha o declive, criando por vezes desníveis no interior; muitas vezes a porta é o único vão. Alvenaria de xisto; um lar exterior para cozinhar no Verão, o interior para aquecer o Inverno, sem chaminé — o fumo pelas telhas. As casas de trave cobriam-se de palha de centeio antes da telha de canudo; as células agrupam-se com os abrigos dos animais.' },
@@ -20235,8 +20240,10 @@ VERN_REGIONS.push({ key:'mainland', name:{ en:'Portuguese vernacular', pt:'Vern�
     else if (g === 'alentejo') cand = S.nuts === 'Baixo Alentejo' || S.nuts === 'Alentejo Litoral' ? ['pt-alentejo', 'pt-monte-patio', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-povoado', 'pt-ale-d', 'pt-alg-taipa'] : ['pt-alentejo', 'pt-monte-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'];
     else {
       band = alt > 300 ? { en:'Serra', pt:'Serra' } : alt > 100 ? { en:'Barrocal', pt:'Barrocal' } : { en:'Coast', pt:'Litoral' };
-      cand = alt > 300 ? ['pt-alg-serra', 'pt-alg-trave', 'pt-alg-taipa'] : alt > 100 ? ['pt-alg-acoteia', 'pt-alg-taipa', 'pt-alg-serra']
-        : S.lon < -8.55 ? ['pt-alg-taipa', 'pt-alg-acoteia', 'pt-alg-pescadores'] : ['pt-alg-acoteia', 'pt-alg-pescadores', 'pt-alg-taipa'];
+      /* the «casa rural pura» first; the platibanda-and-açoteia house is a later layer, kept in the region list but not suggested */
+      /* the north-east, from the Caldeirão to the Guadiana (Alcoutim), is schist country even below 300 m */
+      cand = (alt > 300 && S.lon >= -8.4) || (alt > 100 && S.lat > 37.28 && S.lon > -8.1) ? ['pt-alg-serra', 'pt-alg-trave', 'pt-alg-taipa'] : alt > 300 ? ['pt-alg-taipa', 'pt-alg-serra']
+        : alt > 100 ? ['pt-alg-taipa', 'pt-alg-serra', 'pt-alg-trave'] : ['pt-alg-taipa', 'pt-alg-pescadores'];
     }
     /* the fishing shores: Monte Gordo sands, the Sado's Carrasqueira, the north coast fishing towns */
     if (g === 'algarve' && S.lon > -7.62 && alt < 15) cand = ['pt-monte-gordo'].concat(cand.filter(k => k !== 'pt-monte-gordo')).slice(0, 3);
@@ -20801,6 +20808,9 @@ Object.assign(MN_TYPES, {
 });
 Object.assign(VERN_TYPES, MN_TYPES);
 
+vAdd('pt-alg-serra', [
+  vI('site', { en:'From the Caldeirão to the Guadiana (Ameixial, Mealha, Cachopo, Martim Longo, Vaqueiros, Giões, Alcaria Alta, Alcoutim) the traditional house survives most intact — single storey, schist, whitewashed; houses photographed for the 1961 survey are still almost the same at Corte Serrano, Barrada and Alcaria Alta. The pátio faces south and stays; the house grows sideways and backwards, opening a new slope; the partition walls carry the roof; floors step with the ground (socalcados).', pt:'Do Caldeirão ao Guadiana (Ameixial, Mealha, Cachopo, Martim Longo, Vaqueiros, Giões, Alcaria Alta, Alcoutim) a casa tradicional sobrevive mais intacta — térrea, de xisto, caiada; casas fotografadas para o Inquérito de 1961 estão quase iguais em Corte Serrano, Barrada e Alcaria Alta. O pátio, voltado normalmente a sul, mantém-se; a casa cresce para os lados e para trás, encetando uma nova água; as paredes divisórias suportam a cobertura; pavimentos socalcados.' }, 'FJA')]);
+
 /* --- the archetypes bibliography, under Methods and sources ----------------
    Every source the vernacular models read, in APA (7th ed.), by region from
    A to Z in the reader's language, alphabetical within each region. */
@@ -20814,6 +20824,7 @@ const ARCH_BIB = [
     'Rosado, A. C. (2021). <i>A casa tradicional urbana no Alentejo: Tipos, tempos e materiais</i> [Doctoral thesis, Universidad de Sevilla].',
     'Rosado, A. C. (2020). A casa urbana tradicional no Alentejo: Tipos, evolução e materialidade. <i>Kairós, 4</i>. https://doi.org/10.14195/2184-7193_4_7'] },
   { r:{ en:'Algarve', pt:'Algarve' }, types:['pt-alg-taipa', 'pt-alg-acoteia', 'pt-alg-pescadores', 'pt-alg-serra', 'pt-alg-trave'], refs:[
+    'Fernandes, J. M., &amp; Janeiro, A. (2008). <i>A casa popular do Algarve: Espaço rural e urbano, evolução e actualidade</i>. CCDR Algarve. https://www.ccdr-alg.pt/site/sites/default/files/publicacoes/casa_popular.pdf',
     'Baganha, J. (2024). Vernacular architecture in the Sotavento region of the Algarve [A arquitetura popular do Sotavento algarvio]. <i>Journal of Traditional Building, Architecture and Urbanism, 5</i>. https://dialnet.unirioja.es/descarga/articulo/9867033.pdf',
     'Braga, A. M., &amp; Estêvão, J. M. C. (2010). Os sismos e a construção em taipa no Algarve [Paper presentation]. <i>Sísmica 2010 — 8.º Congresso de Sismologia e Engenharia Sísmica</i>. https://sapientia.ualg.pt/bitstreams/582484c2-19b1-4ba4-8497-70ad89eae1cf/download',
     'Costa, M. R. (2007). Das casas de trave às casas de espigão: Processos de transformação dos montes da Serra do Caldeirão. <i>Promontoria, 5</i>, 299–322. https://sapientia.ualg.pt/bitstreams/19e084df-626f-4cf6-96ab-b16365a3dd40/download',
