@@ -965,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.135.0',
+  version:     '1.136.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20404,14 +20404,14 @@ Object.assign(MN_TYPES, {
     where:{ en:'North of the Tagus — the Bairro and the villages of Alcanena, Torres Novas, Santarém; Vila Chã de Ourique (Cartaxo)', pt:'A norte do Tejo — o Bairro e as aldeias de Alcanena, Torres Novas, Santarém; Vila Chã de Ourique (Cartaxo)' },
     summary:{ en:'A whitewashed parallelepiped on the village street, its openings symmetrical, under two slopes: the kitchen, the sala and the bedrooms on the ground floor, the loft (sótão) above as the family’s store. A corridor of beaten earth runs through from the front door to the back door, wide enough to carry the harvest; a windowless store beside the kitchen, whose slim chimney marks it from the street. Behind, the pátio: cistern and orchard, the adega, a second kitchen with its wood ovens, a porch for the carts. Walls of tufo and adobe 0.50 m, stone frames to the openings. Low houses turned inward: to the street only the door and one or two windows.',
       pt:'Um paralelepípedo caiado na rua da aldeia, de aberturas simétricas, sob duas águas: a cozinha, a sala e os quartos no piso térreo, o sótão em cima como armazém da família. Um corredor de terra batida atravessa da porta da rua à do pátio, com a largura bastante para o transporte dos produtos agrícolas; um armazém sem vãos junto à cozinha, cuja chaminé delgada a denuncia da rua. Atrás, o pátio: cisterna e pomar, a adega, uma segunda cozinha com fornos de lenha, um alpendre para os carros. Paredes de tufo e adobe de 0,50 m, cantarias de pedra nos vãos. Casas baixas voltadas para dentro: para a rua só a porta e uma ou duas janelas.' },
-    model:{ L:11, D:7, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:2, th:28, bei:0.3 },
-      open:{ S:vOpen([W(0.2, 0.2), D(0.5, 0.26), W(0.8, 0.2)], 0.1), N:vOpen([D(0.5, 1)], 0.04), E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+    model:{ L:14, D:7, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:2, th:28, bei:0.3 }, frames:'#BDB6A6', barra:false,
+      open:{ S:vOpen([D(0.04, 0.075), W(0.22, 0.06), D(0.4, 0.075), W(0.6, 0.06), D(0.78, 0.075), W(0.96, 0.06)], 0.28), N:vOpen([D(0.5, 1)], 0.04), E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
       render:{ en:'whitewash walls, tile roof, green door', pt:'parede caiada, telhado de telha, porta verde' },
       walls:{ en:'tufo and adobe, 0.50 m, rendered and whitewashed; stone frames to the openings', pt:'tufo e adobe, 0,50 m, rebocados e caiados; cantarias de pedra nos vãos' } },
     feats:[
       vFloors({ en:'1 + the loft as store', pt:'1 + sótão como armazém' }, 1, 1, 'OLI'),
       vRoofN(null, { en:'two slopes', pt:'duas águas' }, [2], 'OLI'),
-      vN('openings', { en:'Openings to the street', pt:'Vãos para a rua' }, { en:'the door and one or two windows, symmetrical', pt:'a porta e uma ou duas janelas, simétricas' }, () => vCount(['S']).all, 2, 3, '', 'NER'),
+      vN('openings', { en:'Openings to the street', pt:'Vãos para a rua' }, { en:'to each dwelling the door and one or two windows — the longer fronts repeat door and window in turn', pt:'a cada fogo a porta e uma ou duas janelas — as frentes mais longas repetem porta e janela alternadas' }, () => vCount(['S']).all, 2, 8, '', 'NER'),
       vN('openings', { en:'Door to the pátio', pt:'Porta para o pátio' }, { en:'one, at the end of the corridor', pt:'uma, ao fundo do corredor' }, () => vCount(['N']).doors, 1, 1, '', 'OLI'),
       vI('site', { en:'Inside: the central corridor in beaten earth from street door to pátio door; the kitchen among the largest rooms, with stone poiais and wall cupboards; four bedrooms and a store without openings. A two-storey annex — the loja below for the harvest, a family sala above.', pt:'Dentro: o corredor central em terra batida da porta da rua à do pátio; a cozinha entre as maiores divisões, com poiais de pedra e armários de parede; quatro quartos e um armazém sem vãos. Um anexo de dois pisos — a loja em baixo para os produtos agrícolas, uma sala da família em cima.' }, 'OLI'),
       vI('ventilation', { en:'The pátio is the working half of the house: cistern fed by the roofs, orchard, adega in the lowest corner, a second kitchen with two wood ovens kept out of the house.', pt:'O pátio é a metade de trabalho da casa: cisterna alimentada pelos telhados, pomar, adega no canto mais baixo, uma segunda cozinha com dois fornos de lenha fora da casa.' }, 'OLI'),
@@ -20994,8 +20994,10 @@ function vIcon(key, size) {
   const rz = m.raise ? +m.raise.h || 0 : 0, rkind = m.raise ? m.raise.kind : null;
   /* the regional details: the coloured barra and cut corners of the south, the chimney of each region */
   const dist = typeof vDist === 'function' ? vDist(key) : [], south = dist.some(d => ['Faro', 'Beja', 'Évora', 'Portalegre', 'Setúbal', 'Santarém', 'Lisboa'].indexOf(d) >= 0);
-  const chimKind = dist.indexOf('Faro') >= 0 ? 'alg' : dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal', 'Santarém'].indexOf(d) >= 0) ? 'ale' : dist[0] === 'Açores' ? 'az' : 'box';
+  const chimKind = dist.indexOf('Faro') >= 0 ? 'alg' : dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal'].indexOf(d) >= 0) ? 'ale' : dist.indexOf('Santarém') >= 0 ? 'rib' : dist[0] === 'Açores' ? 'az' : 'box';
   const lime = wk === 'plaster' || /whitewash/i.test(rp.en), barC = /ochre|yellow/i.test(rp.en) ? '#C9A040' : '#3F6FA8';
+  /* the coloured barra and frames of the south, unless the model dresses its openings in stone instead */
+  const southBar = lime && south && m.barra !== false;
   const c30 = Math.cos(Math.PI / 6), s30 = 0.5;
   const P = (x, y, z) => [(x + y) * c30, (x - y) * s30 - z - rz];
   const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
@@ -21035,9 +21037,9 @@ function vIcon(key, size) {
   const tex = { stone:[0.42, 'rgba(0,0,0,.18)'], schist:[0.2, 'rgba(0,0,0,.22)'], timber:[0.24, 'rgba(0,0,0,.25)'], earth:[0.5, 'rgba(0,0,0,.12)'] }[wk];
   if (tex) { courses(P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H), H, tex[0], tex[1], 0.035); courses(P(L, 0, 0), P(L, Dd, 0), P(L, Dd, H), P(L, 0, H), H, tex[0], tex[1], 0.035);
     if (wk === 'timber') { ticks(P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H), L, 1.2, 'rgba(255,255,255,.45)', 0.05); } }
-  else if (!rz) { const bc = lime && south ? barC : vShade(wc, 0.72), bh = lime && south ? 0.45 : 0.35;
-    face([P(0, 0, 0), P(L, 0, 0), P(L, 0, bh), P(0, 0, bh)], bc, 0.02); face([P(L, 0, 0), P(L, Dd, 0), P(L, Dd, bh), P(L, 0, bh)], lime && south ? vShade(barC, 0.8) : vShade(wc, 0.6), 0.02);
-    if (lime && south) { [[0, 0.3], [L - 0.3, L]].forEach(([a, b]) => face([P(a, -0.01, bh), P(b, -0.01, bh), P(b, -0.01, H), P(a, -0.01, H)], vShade(barC, 1.05), 0.015));
+  else if (!rz) { const bc = southBar ? barC : vShade(wc, 0.72), bh = southBar ? 0.45 : 0.35;
+    face([P(0, 0, 0), P(L, 0, 0), P(L, 0, bh), P(0, 0, bh)], bc, 0.02); face([P(L, 0, 0), P(L, Dd, 0), P(L, Dd, bh), P(L, 0, bh)], southBar ? vShade(barC, 0.8) : vShade(wc, 0.6), 0.02);
+    if (southBar) { [[0, 0.3], [L - 0.3, L]].forEach(([a, b]) => face([P(a, -0.01, bh), P(b, -0.01, bh), P(b, -0.01, H), P(a, -0.01, H)], vShade(barC, 1.05), 0.015));
       face([P(L + 0.01, 0, bh), P(L + 0.01, 0.3, bh), P(L + 0.01, 0.3, H), P(L + 0.01, 0, H)], vShade(barC, 0.85), 0.015); }
     else { [[0, 0.3], [L - 0.3, L]].forEach(([a, b]) => face([P(a, -0.01, bh), P(b, -0.01, bh), P(b, -0.01, H), P(a, -0.01, H)], vShade(wc, 0.9), 0.015)); } }
   /* the varanda on the south wall, laid out before the openings it moves:
@@ -21089,7 +21091,7 @@ function vIcon(key, size) {
       const z0 = k * fh + (door ? 0.02 : sill), z1 = k * fh + (door ? Math.min(2.1, fh * 0.86) : Math.min(head, fh - 0.15));
       const q = [at(cx - w / 2, z0), at(cx + w / 2, z0), at(cx + w / 2, z1), at(cx - w / 2, z1)];
       const fr = 0.13, Q = [at(cx - w / 2 - fr, z0 - (door ? 0 : fr)), at(cx + w / 2 + fr, z0 - (door ? 0 : fr)), at(cx + w / 2 + fr, z1 + fr), at(cx - w / 2 - fr, z1 + fr)];
-      face(Q, tex ? vShade(wc, 1.25) : lime && south ? barC : vShade(wc, 0.86), 0.02);
+      face(Q, m.frames || (tex ? vShade(wc, 1.25) : southBar ? barC : vShade(wc, 0.86)), 0.02);
       face(q, door ? dc : '#3E4C57', 0.05);
       if (door) { line(lerp(q[0], q[1], 0.5), lerp(q[3], q[2], 0.5), 'rgba(0,0,0,.35)', 0.04); line(lerp(q[0], q[3], 0.62), lerp(q[1], q[2], 0.62), 'rgba(0,0,0,.25)', 0.03); }
       if (!door) { line(lerp(q[0], q[1], 0.5), lerp(q[3], q[2], 0.5), 'rgba(255,255,255,.55)', 0.04); line(lerp(q[0], q[3], 0.5), lerp(q[1], q[2], 0.5), 'rgba(255,255,255,.4)', 0.03); }
@@ -21192,7 +21194,7 @@ function vIcon(key, size) {
     } else { const xa = (z.f0 || 0) * L, xb = (z.f1 === undefined ? 1 : z.f1) * L, ph = z.par && z.par.on ? +z.par.h || 0.6 : 0.25;
       face([P(xa, 0, H), P(xb, 0, H), P(xb, Dd, H), P(xa, Dd, H)], vShade(wc, 0.93));
       face([P(xa, 0, H), P(xb, 0, H), P(xb, 0, H + ph), P(xa, 0, H + ph)], wc);
-      if (ph > 0.3) { line(P(xa, -0.02, H + 0.08), P(xb, -0.02, H + 0.08), lime && south ? barC : vShade(wc, 0.7), 0.08); line(P(xa, -0.02, H + ph - 0.06), P(xb, -0.02, H + ph - 0.06), lime && south ? barC : vShade(wc, 0.7), 0.06); }
+      if (ph > 0.3) { line(P(xa, -0.02, H + 0.08), P(xb, -0.02, H + 0.08), southBar ? barC : vShade(wc, 0.7), 0.08); line(P(xa, -0.02, H + ph - 0.06), P(xb, -0.02, H + ph - 0.06), southBar ? barC : vShade(wc, 0.7), 0.06); }
       if (zi === zones.length - 1) face([P(xb, 0, H), P(xb, Dd, H), P(xb, Dd, H + ph), P(xb, 0, H + ph)], vShade(wc, 0.82));
     }
     /* where this part stands above the next, its east end is a gable wall rising from the lower roof — closed, not open */
@@ -21221,6 +21223,15 @@ function vIcon(key, size) {
     /* a painted timber house has a masonry chimney, whitewashed */
     const wc = m.paint ? '#ECE8E0' : wcAll;
     /* the Alentejo chimney: wide, rising from inside the wall, off the centre */
+    if (chimKind === 'rib') {
+      /* the Ribatejo chimney: a broad whitewashed stack rising from the front wall through the eave, past the ridge, under a thin cap */
+      const cw = Math.min(1.5, L * 0.13), cx = L * 0.58, y0 = -0.32, y1 = 1.1, z0 = H - 0.5, zt = roofZ(cx, Dd / 2) + 1.1;
+      face([P(cx, y0, z0), P(cx + cw, y0, z0), P(cx + cw, y0, zt), P(cx, y0, zt)], wc, 0.05);
+      face([P(cx + cw, y0, z0), P(cx + cw, y1, roofZ(cx + cw, y1) - 0.1), P(cx + cw, y1, zt), P(cx + cw, y0, zt)], vShade(wc, 0.8), 0.05);
+      face([P(cx - 0.08, y0 - 0.08, zt), P(cx + cw + 0.08, y0 - 0.08, zt), P(cx + cw + 0.08, y1 + 0.08, zt), P(cx - 0.08, y1 + 0.08, zt)], vShade(wc, 0.92), 0.04);
+      face([P(cx - 0.08, y0 - 0.08, zt), P(cx + cw + 0.08, y0 - 0.08, zt), P(cx + cw + 0.08, y0 - 0.08, zt + 0.12), P(cx - 0.08, y0 - 0.08, zt + 0.12)], vShade(wc, 0.85), 0.03);
+      [0.22, 0.62].forEach(f => face([P(cx + cw * f, y0 - 0.01, zt - 0.45), P(cx + cw * f + cw * 0.18, y0 - 0.01, zt - 0.45), P(cx + cw * f + cw * 0.18, y0 - 0.01, zt - 0.15), P(cx + cw * f, y0 - 0.01, zt - 0.15)], '#2E2A26', 0.01));
+    } else {
     const cw = chimKind === 'ale' ? 1.1 : 0.6, cx = chimKind === 'ale' ? L * 0.66 : Math.min(L * 0.72, L - 0.9), cy = chimKind === 'ale' ? Dd * 0.3 : Dd * 0.55, zb = roofZ(cx + cw / 2, cy) - 0.2, zt = Math.max(zb + 1.3, roofZ(cx, Dd / 2) + 0.6);
     face([P(cx, cy, zb), P(cx + cw, cy, zb), P(cx + cw, cy, zt), P(cx, cy, zt)], wc, 0.05); face([P(cx + cw, cy, zb), P(cx + cw, cy + 0.6, zb), P(cx + cw, cy + 0.6, zt), P(cx + cw, cy, zt)], vShade(wc, 0.8), 0.05);
     face([P(cx - 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy + 0.65, zt), P(cx - 0.05, cy + 0.65, zt)], vShade(wc, 0.92), 0.05);
@@ -21228,6 +21239,7 @@ function vIcon(key, size) {
       for (let k = 0; k < 3; k++) for (let j = 0; j < 2; j++) face([P(cx + 0.1 + j * 0.25, cy - 0.01, zb + 0.5 + k * 0.25), P(cx + 0.25 + j * 0.25, cy - 0.01, zb + 0.5 + k * 0.25), P(cx + 0.25 + j * 0.25, cy - 0.01, zb + 0.65 + k * 0.25), P(cx + 0.1 + j * 0.25, cy - 0.01, zb + 0.65 + k * 0.25)], '#3E4C57', 0.01);
       face([P(cx - 0.05, cy - 0.05, zt), P(cx + 0.65, cy - 0.05, zt), P(cx + 0.3, cy + 0.3, zt + 0.6)], vShade(wc, 0.95), 0.03); face([P(cx + 0.65, cy - 0.05, zt), P(cx + 0.65, cy + 0.65, zt), P(cx + 0.3, cy + 0.3, zt + 0.6)], vShade(wc, 0.78), 0.03); }
     else { face([P(cx + 0.12, cy - 0.01, zt - 0.35), P(cx + 0.48, cy - 0.01, zt - 0.35), P(cx + 0.48, cy - 0.01, zt - 0.12), P(cx + 0.12, cy - 0.01, zt - 0.12)], '#2E2A26', 0.01); }
+    }
   }
   /* a porch or a vine pergola in front of the south wall */
   if (R.porch || R.latada) { const w = Math.min(8, Math.max(1, L - 2)), x = (L - w) / 2, d = 2.2, z = Math.min(H, fh) - 0.15;
@@ -21386,11 +21398,11 @@ function vIcon(key, size) {
   if (m.annex && !m.icon) {
     const A = m.annex, La = A.L || 3, hi = H - 0.15, ha = Math.min(A.h || hi - 0.4, hi - 0.2), ta = (hi - ha) / La, xa = L, xb = L + La;
     face([P(xa, -0.01, 0), P(xb, -0.01, 0), P(xb, -0.01, ha), P(xa, -0.01, hi)], wc, 0.04);
-    if (lime && south) face([P(xa, -0.02, 0), P(xb, -0.02, 0), P(xb, -0.02, 0.35), P(xa, -0.02, 0.35)], barC, 0.02);
+    if (southBar) face([P(xa, -0.02, 0), P(xb, -0.02, 0), P(xb, -0.02, 0.35), P(xa, -0.02, 0.35)], barC, 0.02);
     face([P(xb, 0, 0), P(xb, Dd, 0), P(xb, Dd, ha), P(xb, 0, ha)], vShade(wc, 0.82), 0.04);
-    if (lime && south) face([P(xb + 0.01, 0, 0), P(xb + 0.01, Dd, 0), P(xb + 0.01, Dd, 0.35), P(xb + 0.01, 0, 0.35)], vShade(barC, 0.8), 0.02);
+    if (southBar) face([P(xb + 0.01, 0, 0), P(xb + 0.01, Dd, 0), P(xb + 0.01, Dd, 0.35), P(xb + 0.01, 0, 0.35)], vShade(barC, 0.8), 0.02);
     const dx = xa + La * 0.45, dq = [P(dx - 0.4, -0.02, 0.02), P(dx + 0.4, -0.02, 0.02), P(dx + 0.4, -0.02, 1.8), P(dx - 0.4, -0.02, 1.8)];
-    if (lime && south) face([P(dx - 0.53, -0.02, 0.02), P(dx + 0.53, -0.02, 0.02), P(dx + 0.53, -0.02, 1.93), P(dx - 0.53, -0.02, 1.93)], barC, 0.02);
+    if (southBar) face([P(dx - 0.53, -0.02, 0.02), P(dx + 0.53, -0.02, 0.02), P(dx + 0.53, -0.02, 1.93), P(dx - 0.53, -0.02, 1.93)], barC, 0.02);
     face(dq, dc, 0.05);
     const e2 = 0.25, rf = [P(xa, -e2, hi), P(xb + e2, -e2, ha - e2 * ta), P(xb + e2, Dd + e2, ha - e2 * ta), P(xa, Dd + e2, hi)];
     face(rf, rc); roofTex(rf[0], rf[1], rf[2], rf[3], Math.hypot(La, hi - ha), Dd);
