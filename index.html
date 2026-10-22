@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.114.0',
+  version:     '1.115.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19097,7 +19097,7 @@ Object.assign(VERN_SRC, {
     url:'https://sapientia.ualg.pt/bitstreams/582484c2-19b1-4ba4-8497-70ad89eae1cf/download' },
   ROS:{ tag:'Rosado 2020', cite:'Rosado, A. C. (2020). «A casa urbana tradicional no Alentejo: tipos, evolução e materialidade». <i>Kairós</i>, 4 — 500 houses surveyed in Estremoz, Borba, Moura and Serpa, compared with Castelo de Vide and Mértola.',
     url:'https://doi.org/10.14195/2184-7193_4_7' },
-  RCO:{ tag:'Reimão Costa', cite:'Costa, M. R. «Das “casas de trave” às de parede de cumeeira: processos de transformação dos montes da Serra do Caldeirão». Universidade do Algarve.',
+  RCO:{ tag:'Reimão Costa 2007', cite:'Costa, M. R. (2007). «Das casas de trave às casas de espigão: processos de transformação dos montes da Serra do Caldeirão». <i>Promontoria</i>, 5, 299–322. Universidade do Algarve — from the research of his doctoral thesis, <i>Casas e montes da serra entre as estremas do Alentejo e do Algarve</i> (Universidade do Porto, 2009; Afrontamento, 2014).',
     url:'https://sapientia.ualg.pt/bitstreams/5f6dba31-1df0-43e2-a5c6-17df57ca5ed0/download' },
   BAG:{ tag:'Baganha 2024', cite:'Baganha, J. (2024). «A arquitetura popular do Sotavento algarvio». <i>Journal of Traditional Building, Architecture and Urbanism</i>, 5.',
     url:'https://dialnet.unirioja.es/descarga/articulo/9867033.pdf' },
@@ -19705,7 +19705,7 @@ VERN_REGIONS.push({ key:'mainland', name:{ en:'Portuguese vernacular', pt:'Vern�
     else if (g === 'alentejo') cand = S.nuts === 'Baixo Alentejo' || S.nuts === 'Alentejo Litoral' ? ['pt-alentejo', 'pt-monte-patio', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-povoado', 'pt-ale-d', 'pt-alg-taipa'] : ['pt-alentejo', 'pt-monte-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-b2', 'pt-ale-c1', 'pt-ale-d'];
     else {
       band = alt > 300 ? { en:'Serra', pt:'Serra' } : alt > 100 ? { en:'Barrocal', pt:'Barrocal' } : { en:'Coast', pt:'Litoral' };
-      cand = alt > 300 ? ['pt-alg-serra', 'pt-alg-taipa'] : alt > 100 ? ['pt-alg-acoteia', 'pt-alg-taipa', 'pt-alg-serra']
+      cand = alt > 300 ? ['pt-alg-serra', 'pt-alg-trave', 'pt-alg-taipa'] : alt > 100 ? ['pt-alg-acoteia', 'pt-alg-taipa', 'pt-alg-serra']
         : S.lon < -8.55 ? ['pt-alg-taipa', 'pt-alg-acoteia', 'pt-alg-pescadores'] : ['pt-alg-acoteia', 'pt-alg-pescadores', 'pt-alg-taipa'];
     }
     return { cand, face:null, faceName:MN_NAME[g], bandName:band, lines:MN_LINES[g] || [], faces:null, warn };
@@ -20023,6 +20023,38 @@ Object.assign(MN_TYPES, {
 });
 Object.assign(VERN_TYPES, MN_TYPES);
 
+/* --- Reimão Costa (2007): the montes of the Serra do Caldeirão --------------- */
+const RCO_LINES = [
+  vI('site', { en:'Settlement is almost only in montes — small clusters of ten to twenty houses, round palheiros at their feet — on flattened ridge lines (festos), never on steep slopes; most often by the closeness of small groups of one to three families, sometimes in large blocks where many families’ cells join.', pt:'O povoamento faz-se quase só em montes — pequenos aglomerados de dez a vinte casas, com os palheiros redondos ao pé — sobre linhas de festo aplanadas, evitando o declive acentuado; em geral pela proximidade de pequenos conjuntos de um a três núcleos familiares, por vezes em grandes blocos onde se juntam as células de muitas famílias.' }, 'RCO'),
+  vI('site', { en:'Three ages read in the walls: first the casa de trave — two slopes on a ridge beam, 3–4.5 m between the eave walls, in lines along the festo; then the cell of one slope, 2–6 m a side, added across the slope at different levels, its roof running downhill, each new cell taking a wall of the last — so the perimeter grows irregular; lastly two slopes round a ridge wall (espigão), under the influence of the farmers’ houses.', pt:'Três tempos legíveis nas juntas das paredes: primeiro a casa de trave — duas águas com pau-de-fileira, 3–4,5 m entre paredes de beirado, em alinhamentos ao longo do festo; depois a célula de uma água, com 2–6 m de lado, aglutinada transversalmente a diferentes cotas, a cobertura prolongando-se encosta abaixo, cada célula nova aproveitando a parede da anterior — o perímetro torna-se irregular; por fim as duas águas em função da parede de cumeeira (espigão), sob a influência das casas de lavrador.' }, 'RCO'),
+  vI('ventilation', { en:'The door is often the only opening, leading straight into a fairly large sala off which open the bedrooms and the kitchen; the inner rooms are dark. In summer the cooking moves outside to the fornalha against the front (Alcoutim, Mértola); in winter the kitchen hearth, its smoke through the tiles — there are no chimneys. The yard is the house’s outdoor room: the poial, the bread oven, the paths between cells.', pt:'A porta é muitas vezes a única abertura e conduz directamente a uma sala relativamente ampla, com a qual comunicam os quartos e a cozinha; os compartimentos interiores são escuros. No Verão cozinha-se fora, na fornalha adossada à fachada (Alcoutim, Mértola); no Inverno a lareira da cozinha, o fumo pelas telhas — não há chaminés. O espaço exterior prolonga o doméstico: o poial, o forno de pão, os percursos entre as células.' }, 'RCO'),
+  vI('visualization', { en:'Schist laid in clay mortar from the stream banks, often bare inside and out, the houses «humble, squat and black» (Guia de Portugal, 1928), whitewashed drawings only round the doors; whitewash spread later and came to mark the dwelling against the farm buildings, left bare. Floors of beaten earth or schist slabs.', pt:'Xisto assente em barro das margens das ribeiras, muitas vezes sem reboco nem caiação, por fora e por dentro, casas «humildes, acaçapadas e negras» (Guia de Portugal, 1928), só com desenhos caiados sobre as portas; a caiação generalizou-se depois e passou a distinguir a habitação das dependências agrícolas, deixadas em xisto aparente. Pavimentos de terra batida ou lajes de xisto.' }, 'RCO'),
+  vI('roof', { en:'The ridge beam of holm oak, cork oak or olive; the rafters of any wood; laths of cane, oleander or rock-rose (esteva); rye thatch, later the channel tile from the serra’s tileworks. The community oven («forno do monte», four or five houses) all in stone under an earth cover; pigsties as schist false domes; the palheiro by the threshing floor, round with a conical rye-thatch roof.', pt:'A trave de azinho, sobreiro ou oliveira; os caibros de qualquer madeira; ripado de cana, loendro ou esteva; cobertura de palha de centeio, depois telha de canudo dos telheiros da serra. O forno do monte (comunitário, de quatro ou cinco casas) todo em pedra sob cobertura de terra; pocilgas em falsa-cúpula de xisto; o palheiro junto à eira, de planta circular e cobertura cónica em palha de centeio.' }, 'RCO')
+];
+vAdd('pt-alg-serra', RCO_LINES.concat([
+  vN('site', { en:'Cell of one slope', pt:'Célula de uma água' }, { en:'2–6 m a side', pt:'2–6 m de lado' }, () => Math.max(MASS.L, MASS.D), 4, 7.5, 'm', 'RCO', { en:'one cell — a house is several, joined down the slope', pt:'uma célula — a casa são várias, juntas encosta abaixo' })]));
+Object.assign(MN_TYPES, {
+  'pt-alg-trave':{ region:'mainland',
+    name:{ en:'Ridge-beam house of the Caldeirão (casa de trave)', pt:'Casa de trave da serra do Caldeirão' },
+    where:{ en:'Serra do Caldeirão — central and eastern parts; rarer by the lower Guadiana', pt:'Serra do Caldeirão — zonas central e oriental; mais rara no Baixo Guadiana' },
+    summary:{ en:'The oldest cell of the serra house, once the predominant dwelling: a rectangle of 3 to 4.5 m between the eave walls, longer between the gables, under two slopes on a ridge beam (pau-de-fileira), in lines along the flattened ridge. Two rooms — the casa de fora and the casa de dentro — either one holding the fire; beside it the ramada for the animals, also a trave cell; the palheiro further off by the threshing floor. Schist in clay mortar, bare; rye thatch, later channel tile. Today mostly abandoned or turned into palheiros and stores; found by reading the joints of later walls.',
+      pt:'A célula mais antiga da casa serrana, outrora a edificação habitacional predominante: um rectângulo de três a quatro metros e meio entre paredes de beirado, mais variável entre empenas, sob duas águas com pau-de-fileira, em alinhamentos ao longo do festo aplanado. Dois compartimentos — a casa de fora e a casa de dentro — qualquer deles podendo ser o sítio do fogo; junto, a ramada para os animais, também célula de trave; o palheiro mais afastado, perto da eira. Xisto com barro, à vista; palha de centeio, depois telha de canudo. Hoje quase sempre abandonada ou convertida em palheiro ou casa de despejo; reconhece-se pelas juntas das paredes posteriores.' },
+    model:{ L:7, D:4, fl:1, fh:2.2, rot:180, form:'rect', roof:{ n:2, th:30, bei:0.15 },
+      open:{ S:vOpen([D(0.4, 1)], 0.06, 0.9, 1.8), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+      render:{ en:'schist walls, thatch roof, timber door', pt:'paredes de xisto, telhado de colmo, porta de madeira' },
+      walls:{ en:'schist in clay mortar, unrendered', pt:'xisto com argamassa de barro, sem reboco' } },
+    feats:[
+      vFloors('1', 1, 1, 'RCO'),
+      vN('site', { en:'Width between the eave walls', pt:'Largura entre paredes de beirado' }, '3–4.5 m', () => MASS.D, 3, 4.5, 'm', 'RCO', { en:'the app’s narrowest depth is 4 m', pt:'a profundidade mínima da aplicação é de 4 m' }),
+      vRoofN(null, { en:'two slopes on a ridge beam', pt:'duas águas com pau-de-fileira' }, [2], 'RCO'),
+      vPitch({ en:'thatch, then tile', pt:'colmo, depois telha' }, 25, 40, 'INF'),
+      vN('openings', { en:'Openings', pt:'Vãos' }, { en:'the door, often alone', pt:'a porta, muitas vezes única' }, () => vCount().all, 1, 1, '', 'RCO'),
+      vWall({ en:'bare schist', pt:'xisto à vista' }, ['schist'], 'RCO'),
+      vRoofFin({ en:'rye thatch (later channel tile)', pt:'palha de centeio (depois telha de canudo)' }, ['thatch', 'canudo'], 'RCO')
+    ].concat(RCO_LINES) }
+});
+Object.assign(VERN_TYPES, MN_TYPES);
+
 /* --- the archetypes bibliography, under Methods and sources ----------------
    Every source the vernacular models read, in APA (7th ed.), by region from
    A to Z in the reader's language, alphabetical within each region. */
@@ -20034,10 +20066,11 @@ const ARCH_BIB = [
     'Martins, J. M. S. (2015). <i>A arquitectura do olival: Monte do Benjoim em Alqueva</i> [Master’s dissertation, Universidade de Évora].',
     'Rosado, A. C. (2021). <i>A casa tradicional urbana no Alentejo: Tipos, tempos e materiais</i> [Doctoral thesis, Universidad de Sevilla].',
     'Rosado, A. C. (2020). A casa urbana tradicional no Alentejo: Tipos, evolução e materialidade. <i>Kairós, 4</i>. https://doi.org/10.14195/2184-7193_4_7'] },
-  { r:{ en:'Algarve', pt:'Algarve' }, types:['pt-alg-taipa', 'pt-alg-acoteia', 'pt-alg-pescadores', 'pt-alg-serra'], refs:[
+  { r:{ en:'Algarve', pt:'Algarve' }, types:['pt-alg-taipa', 'pt-alg-acoteia', 'pt-alg-pescadores', 'pt-alg-serra', 'pt-alg-trave'], refs:[
     'Baganha, J. (2024). Vernacular architecture in the Sotavento region of the Algarve [A arquitetura popular do Sotavento algarvio]. <i>Journal of Traditional Building, Architecture and Urbanism, 5</i>. https://dialnet.unirioja.es/descarga/articulo/9867033.pdf',
     'Braga, A. M., &amp; Estêvão, J. M. C. (2010). Os sismos e a construção em taipa no Algarve [Paper presentation]. <i>Sísmica 2010 — 8.º Congresso de Sismologia e Engenharia Sísmica</i>. https://sapientia.ualg.pt/bitstreams/582484c2-19b1-4ba4-8497-70ad89eae1cf/download',
-    'Costa, M. R. (n.d.). <i>Das «casas de trave» às de parede de cumeeira: Processos de transformação dos montes da Serra do Caldeirão</i>. Universidade do Algarve. https://sapientia.ualg.pt/bitstreams/5f6dba31-1df0-43e2-a5c6-17df57ca5ed0/download'] },
+    'Costa, M. R. (2007). Das casas de trave às casas de espigão: Processos de transformação dos montes da Serra do Caldeirão. <i>Promontoria, 5</i>, 299–322. https://sapientia.ualg.pt/bitstreams/19e084df-626f-4cf6-96ab-b16365a3dd40/download',
+    'Costa, M. R. (2014). <i>Casas e montes da serra entre as estremas do Alentejo e do Algarve: Forma, processo e escala no estudo da arquitectura vernacular</i>. Afrontamento. (Doctoral thesis, Universidade do Porto, 2009; not consulted directly.)'] },
   { r:{ en:'Azores', pt:'Açores' }, types:['az-abarracada', 'az-integrada', 'az-mariense', 'az-terceira', 'az-pico', 'az-linear', 'az-flores', 'az-empenafachada'], refs:[
     'Albergaria, I. S. de. (n.d.). <i>Na forja da «arquitetura regional»: Entre o determinismo geográfico e as desinências nacionalistas — o caso açoriano</i>. Universidade dos Açores, CHAM. https://repositorio.uac.pt/server/api/core/bitstreams/90af7704-e8f4-4165-b415-833b6c7e0542/content',
     'Alvernaz, J. (2023). <i>Estratégias bioclimáticas na habitação vernacular: Um estudo na ilha do Pico</i> [Master’s dissertation, Instituto Superior Técnico, Universidade de Lisboa]. https://fenix.tecnico.ulisboa.pt/downloadFile/2533669927387300/Dissertacao_Joaquina_Alvernaz.pdf',
