@@ -316,6 +316,8 @@ body.in-study .foot-refs{display:none}
   padding-left:20px; text-indent:-20px; break-inside:avoid;
 }
 .foot-refs i{font-style:italic}
+.foot-thanks{margin-top:22px; padding-top:16px; border-top:1px solid var(--line); max-width:820px}
+.foot-thanks p{font-style:italic; color:var(--ink2)}
 .foot-legal{
   margin-top:24px; padding-top:16px; border-top:1px solid var(--line);
   font-size:11.5px; color:var(--faint); line-height:1.65; max-width:96ch;
@@ -924,6 +926,11 @@ details.more[open] > summary{color:var(--ink)}
       application is not an energy model. Nothing it reports is a compliance statement, and none of it
       substitutes for the checks required under the SCE.
     </p>
+
+    <div class="foot-thanks">
+      <h5 data-t="footThanks">Acknowledgements</h5>
+      <p data-t="footThanksBody">To my maternal grandmother, from Barreiros, near Valpaços, in Trás-os-Montes — some forty kilometres from Cortiços, the village my name comes from — for letting me know, as a child, the heritage of my origins. It was there that I lived in these spaces and these houses: they were comfortable, they are dear to my memory, and I miss that time very much. To my aunts Delmira and Clara, who took me into their traditional houses and taught me to see the qualities of so rich a heritage — the same that sustained the generations before us and still sustains those that follow, mine among them, as I write these lines.</p>
+    </div>
   </div>
 </footer>
 
@@ -966,7 +973,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.141.0',
+  version:     '1.142.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -14348,16 +14355,18 @@ function buildVentilation(host) {
     'Arm the wall tool, then click open ground. Click a placed wall to tune it, drag its corner dots to resize it, drag the wall to move it, double-click to remove it. A wall near a south or north facade runs east–west; near east or west it runs north–south. Each wall shelters its nearest facade.'));
   rail.appendChild(el('div', { class:'gh', text:'Walls' }));
   const wallPalette = rail.appendChild(el('div', { class:'rgroup' }));
-  let wallArmed = false;
+  let wallArmed = false, supArmed = null, supBtn = null;
   const wallBtn = el('button', { class:'btn small', text:'Place wall', onclick: () => {
-    wallArmed = !wallArmed; plantArmed = null;
+    wallArmed = !(wallArmed && !supArmed); supArmed = null; plantArmed = null;
     paintTools();
     toast(wallArmed ? 'Click open ground to place a wall' : 'Placement cancelled');
   } });
   /** One tool is armed at a time, or the select tool is. */
   function paintTools() {
+    if (!wallArmed) supArmed = null;
     vegBtns.forEach(x => x.classList.toggle('solid', x.dataset.species === plantArmed));
-    wallBtn.classList.toggle('solid', wallArmed);
+    wallBtn.classList.toggle('solid', wallArmed && !supArmed);
+    if (supBtn) supBtn.classList.toggle('solid', !!supArmed);
     selectBtn.classList.toggle('solid', !plantArmed && !wallArmed);
     if (!plantArmed && !wallArmed) ghost = null;
     draw();
@@ -14365,8 +14374,21 @@ function buildVentilation(host) {
   selectBtn.onclick = () => { plantArmed = null; wallArmed = false; paintTools(); };
   rail.appendChild(el('div', { class:'keys', text:t('Esc cancels a tool · Delete removes the selected item') }));
   wallPalette.appendChild(wallBtn);
-  const wallClear = el('button', { class:'btn small', text:'Clear walls', onclick: () => { WALLS.length = 0; selected = null; refresh(); } });
+  const wallClear = el('button', { class:'btn small', text:'Clear walls', onclick: () => { for (let i = WALLS.length - 1; i >= 0; i--) if (!WALLS[i].sup) WALLS.splice(i, 1); selected = null; refresh(); } });
   wallPalette.appendChild(wallClear);
+  /* ---- support structures of the archetypes, placed like walls: a solid the wind goes round, seen again on Render ---- */
+  rail.appendChild(el('div', { class:'gh', text:'Support structures' }));
+  const supSel = el('select', { class:'supsel', style:'max-width:100%;font:inherit;font-size:12px' });
+  supKeys().forEach(k => supSel.appendChild(el('option', { value:k, text:VL(VERN_TYPES[k].name).replace(/ \(.*\)$/, '').replace(/ — .*$/, '') })));
+  supBtn = el('button', { class:'btn small', text:'Place', onclick: () => {
+    const k = supSel.value, on = supArmed !== k;
+    supArmed = on ? k : null; wallArmed = on; plantArmed = null;
+    paintTools();
+    toast(on ? t('Click open ground to place') + ' — ' + VL(VERN_TYPES[k].name).replace(/ \(.*\)$/, '') : 'Placement cancelled');
+  } });
+  supSel.addEventListener('change', () => { if (supArmed) { supArmed = supSel.value; paintTools(); } });
+  rail.appendChild(el('div', { class:'rgroup' }, [supSel, supBtn,
+    el('button', { class:'btn small', text:'Clear structures', onclick:() => { for (let i = WALLS.length - 1; i >= 0; i--) if (WALLS[i].sup) WALLS.splice(i, 1); selected = null; refresh(); } })]));
   /* ---- a garden wind turbine: mast, rotor and its electricity, with the sun ----
      Taller than the walls is allowed — height is the whole point. */
   rail.appendChild(el('div', { class:'gh', text:'Wind turbine' }));
@@ -14443,7 +14465,12 @@ function buildVentilation(host) {
     selBox.innerHTML = '';
     edH = edT = edC = edWH = edWL = null;
     if (!s) { selBox.appendChild(selHint); return; }
-    if (s.kind === 'wall') {
+    if (s.kind === 'wall' && s.obj.sup) {
+      const w = s.obj, T = VERN_TYPES[w.sup];
+      selBox.appendChild(el('span', { class:'hint', text:(T ? VL(T.name) : w.sup) + ' — ' + fmt(w.length, 1) + ' × ' + fmt(w.depth, 1) + ' m, ' + fmt(w.height, 1) + ' m ' + t('high') }));
+      selBox.appendChild(el('button', { class:'btn small', text:'Turn 90°', onclick:() => { w.along = w.along === 'y' ? 'x' : 'y'; selKey = '@'; refresh(); } }));
+      selBox.appendChild(el('button', { class:'btn small', text:'Delete structure', onclick:() => { WALLS.splice(s.index, 1); selected = null; refresh(); toast('Structure removed'); } }));
+    } else if (s.kind === 'wall') {
       const w = s.obj;
       edWH = rangeCtl('Height', 0.5, 4, 0.1, w.height, v => { w.height = +v.toFixed(1); refresh(); }, v => fmt(v, 1) + ' m');
       edWL = rangeCtl('Length', 1, 12, 0.5, w.length, v => { w.length = +v.toFixed(1); refresh(); }, v => fmt(v, 1) + ' m');
@@ -14605,7 +14632,7 @@ function buildVentilation(host) {
     const inNeg = (x, y) => holes.some(h => x > h[0] + 1e-6 && x < h[2] - 1e-6 && y > h[1] + 1e-6 && y < h[3] - 1e-6);
     WALLS.forEach(w => {
       if (w.height < 0.3) return;
-      const hw = w.length / 2, t = 0.2;
+      const hw = w.length / 2, t = w.sup ? w.depth / 2 : 0.2;
       const r = w.along === 'y' ? [w.x - t, w.y - hw, w.x + t, w.y + hw]
         : [w.x - hw, w.y - t, w.x + hw, w.y + t];
       /* Extents are wall-relative: absolute plan coords would centre a
@@ -14977,7 +15004,7 @@ function buildVentilation(host) {
       });
       WALLS.forEach(w => {
         if (w.height < 0.4) return;
-        const hw = w.length / 2, t = 0.12;
+        const hw = w.length / 2, t = w.sup ? w.depth / 2 : 0.12;
         if (w.along === 'y') blocks.push({ x0: w.x - t, y0: w.y - hw, z0: 0, x1: w.x + t, y1: w.y + hw, z1: w.height });
         else blocks.push({ x0: w.x - hw, y0: w.y - t, z0: 0, x1: w.x + hw, y1: w.y + t, z1: w.height });
       });
@@ -15241,6 +15268,13 @@ function buildVentilation(host) {
 
     /* ---- detached walls as true vertical quads, amber when selected ---- */
     WALLS.forEach((w, i) => {
+      if (w.sup) {
+        /* a support structure: its own walls and roof, far faces first; amber outline when selected */
+        const fs = supFaces(w).map(f => Object.assign(f, { d:f.pts.reduce((a2, q) => a2 + camDepth(q[0], q[1], q[2]), 0) / f.pts.length }));
+        fs.sort((p, q) => q.d - p.d).forEach(f => poly(f.pts, f.roof ? f.fill : supShade(f.fill, 0.9), 'rgba(40,36,32,.55)', 0.8));
+        if (sel && sel.kind === 'wall' && sel.index === i) fs.filter(f => f.roof || f.pts.length === 4).forEach(f => poly(f.pts, null, '#D97706', 1.6, [5, 4]));
+        return;
+      }
       const hw = w.length / 2;
       const quad = w.along === 'y'
         ? [[w.x, w.y - hw, 0], [w.x, w.y + hw, 0], [w.x, w.y + hw, w.height], [w.x, w.y - hw, w.height]]
@@ -15343,7 +15377,7 @@ function buildVentilation(host) {
       }
       for (const w of WALLS) {
         if (w.height < layH || w.height <= top) continue;
-        const hw = w.length / 2, t = 0.25;
+        const hw = w.length / 2, t = w.sup ? w.depth / 2 : 0.25;
         if (w.along === 'y' ? (x > w.x - t - 0.2 && x < w.x + t + 0.2 && y > w.y - hw - 0.2 && y < w.y + hw + 0.2)
           : (x > w.x - hw - 0.2 && x < w.x + hw + 0.2 && y > w.y - t - 0.2 && y < w.y + t + 0.2)) top = w.height;
       }
@@ -15539,6 +15573,12 @@ function buildVentilation(host) {
       paintPlant(g2, gv, proj, camDepth, s, false);
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = ghost.ok ? 0.45 : 0.15;
       ctx.drawImage(oc, 0, 0); ctx.restore();
+    } else if (ghost && wallArmed && supArmed) {
+      const f = sideOf(ghost.x, ghost.y), g = supItem(supArmed, ghost.x, ghost.y, (f === 'S' || f === 'N') ? 'x' : 'y');
+      ctx.save(); ctx.globalAlpha = ghost.ok ? 0.5 : 0.18;
+      supFaces(g).map(fc => Object.assign(fc, { d:fc.pts.reduce((a2, q) => a2 + camDepth(q[0], q[1], q[2]), 0) / fc.pts.length }))
+        .sort((p, q) => q.d - p.d).forEach(fc => poly(fc.pts, fc.fill, ghost.ok ? '#57534e' : '#DC2626', 0.8));
+      ctx.restore();
     } else if (ghost && wallArmed) {
       const f = sideOf(ghost.x, ghost.y), hw = 1.5;
       const quad = (f === 'S' || f === 'N')
@@ -15823,7 +15863,7 @@ function buildVentilation(host) {
     const proj = (x, y, z) => projF(FR, x, y, z);
     let best = null;
     const selH = selItem();
-    if (selH && selH.kind === 'wall') {
+    if (selH && selH.kind === 'wall' && !selH.obj.sup) {
       const H = wallHandles(selH.obj, proj);
       for (const part of ['endA', 'endB', 'top']) {
         if (Math.hypot(sx - H[part][0], sy - H[part][1]) <= 11) return { kind:'handle', index:selH.index, part };
@@ -15844,9 +15884,10 @@ function buildVentilation(host) {
       const segAt = z => w.along === 'y' ? [proj(w.x, w.y - hw, z), proj(w.x, w.y + hw, z)]
                                           : [proj(w.x - hw, w.y, z), proj(w.x + hw, w.y, z)];
       const [a0, b0] = segAt(0), [a1, b1] = segAt(w.height / 2);
-      const d = Math.min(distSeg(sx, sy, a0[0], a0[1], b0[0], b0[1]),
+      let d = Math.min(distSeg(sx, sy, a0[0], a0[1], b0[0], b0[1]),
                          distSeg(sx, sy, a1[0], a1[1], b1[0], b1[1]));
-      if (d <= 16 && (!best || d < best.d)) best = { kind:'wall', index:i, d };
+      if (w.sup) { const c = proj(w.x, w.y, w.height / 2); d = Math.min(d, Math.hypot(sx - c[0], sy - c[1]) * 0.5); }
+      if (d <= (w.sup ? 30 : 16) && (!best || d < best.d)) best = { kind:'wall', index:i, d };
     });
     return best;
   };
@@ -15858,6 +15899,8 @@ function buildVentilation(host) {
         t('Click to tune · drag to move · double-click to remove') + '</span>';
     }
     const w = WALLS[hit.index], f = sideOf(w.x, w.y);
+    if (w.sup && VERN_TYPES[w.sup]) return '<b>' + VL(VERN_TYPES[w.sup].name).replace(/ \(.*\)$/, '') + '</b><br><span class="tv">' + fmt(w.length, 1) + ' × ' + fmt(w.depth, 1) + ' × ' + fmt(w.height, 1) + ' m · ' + t('shelters') + ' ' + t(FACE_NAME[f]) +
+      '</span><br><span class="tm">' + t('Click to turn it · drag to move · double-click to remove') + '</span>';
     return '<b>' + t('Wall') + ' ' + (hit.index + 1) + '</b><br><span class="tv">' +
       t('L ' + fmt(w.length, 1) + ' × H ' + fmt(w.height, 1) + ' m') + ' · ' + t('shelters') + ' ' + t(FACE_NAME[f]) +
       '</span><br><span class="tm">' + t('Drag corners to resize · drag to move · double-click to remove') + '</span>';
@@ -15888,7 +15931,9 @@ function buildVentilation(host) {
       refresh();
     } else if (wallArmed) {
       const f = sideOf(pos.x, pos.y);
-      WALLS.push({ x:+pos.x.toFixed(1), y:+pos.y.toFixed(1), along:(f === 'S' || f === 'N') ? 'x' : 'y', height:2.0, length:3.0 });
+      if (supArmed) { if (WALLS.filter(w => w.sup).length >= 8) { toast('Maximum 8 support structures reached'); return; }
+        WALLS.push(supItem(supArmed, pos.x, pos.y, (f === 'S' || f === 'N') ? 'x' : 'y')); }
+      else WALLS.push({ x:+pos.x.toFixed(1), y:+pos.y.toFixed(1), along:(f === 'S' || f === 'N') ? 'x' : 'y', height:2.0, length:3.0 });
       selected = { kind:'wall', ref:WALLS[WALLS.length - 1] };
       refresh();
     }
@@ -15989,7 +16034,7 @@ function buildVentilation(host) {
       const it = dragV.kind === 'tree' ? VEGETATION[dragV.index] : WALLS[dragV.index];
       if (!it) { dragV = null; return; }
       it.x = +nx.toFixed(1); it.y = +ny.toFixed(1);
-      if (dragV.kind === 'wall') {
+      if (dragV.kind === 'wall' && !it.sup) {
         const f = sideOf(it.x, it.y);
         it.along = (f === 'S' || f === 'N') ? 'x' : 'y';
       }
@@ -17738,6 +17783,15 @@ style === 'sketch' ? '#EFEBE0'
     });
     /* detached walls */
     SCENE.walls.forEach(w => {
+      if (w.sup) {
+        /* a support structure: its faces in the scene's depth order, lit by their facing */
+        supFaces(w).forEach(f => { const p0 = f.pts[0], p1 = f.pts[1], p2 = f.pts[2];
+          const ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2], vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+          const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, nl = Math.hypot(nx, ny, nz) || 1;
+          const k = f.roof ? 0.95 : 0.7 + 0.3 * Math.abs(nx / nl * 0.6 - ny / nl * 0.8);
+          items.push({ pts:f.pts, fill:shadeHex(f.fill, night ? 0.3 : k), d:f.pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / f.pts.length }); });
+        return;
+      }
       const hw = w.length / 2;
       const quad = w.along === 'y'
         ? [[w.x, w.y - hw, 0], [w.x, w.y + hw, 0], [w.x, w.y + hw, w.height], [w.x, w.y - hw, w.height]]
@@ -24488,6 +24542,75 @@ Object.assign(VERN_SRC, {
   vernNames();
 })();
 
+/* --- support structures round the house -------------------------------------
+   Placed on Ventilation from the archetypes' own support structures (the
+   nora, the eira, the oven, the espigueiro, the windmill…). Each rides in
+   SCENE.walls as a solid block — sup names its type, depth its second side —
+   so every routine that reads the detached walls (wind, shade, drag, save,
+   export, render) reads it too; supFaces gives its drawn form. */
+const supShade = (hex, k) => '#' + hexRgb(hex).map(c => Math.round(clamp(c * 255 * k, 0, 255)).toString(16).padStart(2, '0')).join('');
+const SUP_ROUND = { windmill:'cone', roundhut:'cone', oven:'dome', limekiln:'flat', eira:'flat', nora:'flat' };
+function supKeys() {
+  return Object.keys(VERN_TYPES).filter(k => VERN_TYPES[k].support || VERN_TYPES[k].model.icon === 'windmill')
+    .sort((a, b) => VL(VERN_TYPES[a].name).localeCompare(VL(VERN_TYPES[b].name), 'pt'));
+}
+/** Body height (walls, raised floor) and the roof's rise above it, in metres. */
+function supDims(key) {
+  const m = VERN_TYPES[key].model, R = m.roof || { n:0 }, raise = m.raise ? +m.raise.h || 0 : 0;
+  if (m.icon === 'eira') return { body:0.8, rise:0, round:'flat' };
+  if (m.icon === 'nora') return { body:2.4, rise:0, round:'flat' };
+  const body = m.fl * m.fh + raise, th = (R.th || 0) * Math.PI / 180, span = Math.min(m.L, m.D);
+  const round = SUP_ROUND[m.icon] || null;
+  const rise = round === 'cone' ? 1.7 : round === 'dome' ? m.L / 2 : round === 'flat' ? 0 : R.n === 2 || R.n === 3 ? span / 2 * Math.tan(th) : R.n === 1 ? span * Math.tan(th) : 0;
+  return { body, rise, round };
+}
+/** A new placed structure at (x, y), its long side along x or y. */
+function supItem(key, x, y, along) {
+  const m = VERN_TYPES[key].model, d = supDims(key), r = d.round;
+  return { sup:key, x:+x.toFixed(1), y:+y.toFixed(1), along:along || 'x', length:+(r ? m.L : Math.max(m.L, m.D)).toFixed(1), depth:+(r ? m.L : Math.min(m.L, m.D)).toFixed(1), height:+(d.body + d.rise).toFixed(1) };
+}
+/** The drawn faces of a placed structure, in world metres: [{ pts, fill, roof }]. */
+function supFaces(w) {
+  const T = VERN_TYPES[w.sup];
+  if (!T) return [];
+  const m = T.model, d = supDims(w.sup), rp = typeof m.render === 'function' ? m.render({ nuts:'' }) : m.render, pr = parseRenderPrompt(rp.en);
+  const wc = m.icon === 'eira' ? '#B9B2A4' : pr.wall ? pr.wall.c : '#E8E4DC', rc = pr.roof ? pr.roof.c : '#A45E41';
+  const out = [], hb = d.body, a = w.along === 'y';
+  const W2 = (a ? w.depth : w.length) / 2, D2 = (a ? w.length : w.depth) / 2, cx = w.x, cy = w.y;
+  if (d.round) {
+    const r = w.length / 2, N = 16, ring = z => Array.from({ length:N }, (_, i) => { const t = i / N * 2 * Math.PI; return [cx + r * Math.cos(t), cy + r * Math.sin(t), z]; });
+    const lo = ring(0), hi = ring(hb);
+    for (let i = 0; i < N; i++) out.push({ pts:[lo[i], lo[(i + 1) % N], hi[(i + 1) % N], hi[i]], fill:wc });
+    if (d.round === 'flat') out.push({ pts:hi, fill:m.icon === 'eira' ? '#C9C3B6' : supShade(wc, 0.9), roof:true });
+    else { const tip = [cx, cy, hb + d.rise], cc = d.round === 'cone' ? (m.icon === 'roundhut' ? '#B5965A' : '#3A2E26') : wc;
+      for (let i = 0; i < N; i++) out.push({ pts:[hi[i], hi[(i + 1) % N], tip], fill:cc, roof:true }); }
+    return out;
+  }
+  const c = [[cx - W2, cy - D2], [cx + W2, cy - D2], [cx + W2, cy + D2], [cx - W2, cy + D2]];
+  for (let i = 0; i < 4; i++) { const p = c[i], q = c[(i + 1) % 4]; out.push({ pts:[[p[0], p[1], 0], [q[0], q[1], 0], [q[0], q[1], hb], [p[0], p[1], hb]], fill:wc }); }
+  const n = (m.roof || {}).n || 0, top = hb + d.rise;
+  if (n === 0 || d.rise < 0.05) { out.push({ pts:c.map(p => [p[0], p[1], hb]), fill:supShade(wc, 0.92), roof:true }); return out; }
+  /* the ridge runs along the long side */
+  const alongX = W2 >= D2;
+  if (n === 2) {
+    const r0 = alongX ? [cx - W2, cy, top] : [cx, cy - D2, top], r1 = alongX ? [cx + W2, cy, top] : [cx, cy + D2, top];
+    if (alongX) { out.push({ pts:[[cx - W2, cy - D2, hb], [cx + W2, cy - D2, hb], r1, r0], fill:rc, roof:true }); out.push({ pts:[[cx + W2, cy + D2, hb], [cx - W2, cy + D2, hb], r0, r1], fill:rc, roof:true });
+      out.push({ pts:[[cx - W2, cy - D2, hb], [cx - W2, cy + D2, hb], r0], fill:wc }); out.push({ pts:[[cx + W2, cy - D2, hb], [cx + W2, cy + D2, hb], r1], fill:wc }); }
+    else { out.push({ pts:[[cx - W2, cy - D2, hb], [cx - W2, cy + D2, hb], r1, r0], fill:rc, roof:true }); out.push({ pts:[[cx + W2, cy + D2, hb], [cx + W2, cy - D2, hb], r0, r1], fill:rc, roof:true });
+      out.push({ pts:[[cx - W2, cy - D2, hb], [cx + W2, cy - D2, hb], r0], fill:wc }); out.push({ pts:[[cx - W2, cy + D2, hb], [cx + W2, cy + D2, hb], r1], fill:wc }); }
+  } else if (n === 3) {
+    const s = Math.min(W2, D2), r0 = alongX ? [cx - W2 + s, cy, top] : [cx, cy - D2 + s, top], r1 = alongX ? [cx + W2 - s, cy, top] : [cx, cy + D2 - s, top];
+    const C = c.map(p => [p[0], p[1], hb]);
+    if (alongX) { out.push({ pts:[C[0], C[1], r1, r0], fill:rc, roof:true }); out.push({ pts:[C[2], C[3], r0, r1], fill:rc, roof:true }); out.push({ pts:[C[1], C[2], r1], fill:rc, roof:true }); out.push({ pts:[C[3], C[0], r0], fill:rc, roof:true }); }
+    else { out.push({ pts:[C[1], C[2], r1, r0], fill:rc, roof:true }); out.push({ pts:[C[3], C[0], r0, r1], fill:rc, roof:true }); out.push({ pts:[C[0], C[1], r0], fill:rc, roof:true }); out.push({ pts:[C[2], C[3], r1], fill:rc, roof:true }); }
+  } else {
+    /* one slope, rising to the north */
+    out.push({ pts:[[cx - W2, cy - D2, hb], [cx + W2, cy - D2, hb], [cx + W2, cy + D2, top], [cx - W2, cy + D2, top]], fill:rc, roof:true });
+    out.push({ pts:[[cx - W2, cy - D2, hb], [cx - W2, cy + D2, hb], [cx - W2, cy + D2, top]], fill:wc }); out.push({ pts:[[cx + W2, cy - D2, hb], [cx + W2, cy + D2, hb], [cx + W2, cy + D2, top]], fill:wc });
+    out.push({ pts:[[cx - W2, cy + D2, hb], [cx + W2, cy + D2, hb], [cx + W2, cy + D2, top], [cx - W2, cy + D2, top]], fill:wc });
+  }
+  return out;
+}
 const TABS_OLGYAY = [
   { key:'environment', label:'Environmental', build:buildEnvironment },
   { key:'site', label:'Site', build:buildSite },
@@ -24899,8 +25022,8 @@ function exportModel() {
 
   /* detached walls and planting from Ventilation */
   SCENE.walls.forEach((w, i) => {
-    const t2 = 0.1, hl = w.length / 2;
-    add('sitewall', 'Detached wall ' + (i + 1), 'AA-SITE-WALLS', w.along === 'y'
+    const t2 = w.sup ? w.depth / 2 : 0.1, hl = w.length / 2;
+    add('sitewall', w.sup && VERN_TYPES[w.sup] ? VL(VERN_TYPES[w.sup].name).replace(/ \(.*\)$/, '') + ' ' + (i + 1) : 'Detached wall ' + (i + 1), 'AA-SITE-WALLS', w.along === 'y'
       ? box(w.x - t2, w.y - hl, 0, w.x + t2, w.y + hl, w.height) : box(w.x - hl, w.y - t2, 0, w.x + hl, w.y + t2, w.height),
       { height:w.height, length:w.length, mat:'AA_Wall' });
   });
@@ -27304,6 +27427,8 @@ Object.assign(STATIC_PT, {
   footPriv: 'Privacidade',
   footPrivBody: 'Nada é carregado nem guardado fora deste navegador. As coordenadas só vão para os serviços que preenchem algo: elevação (Consultar), Open-Meteo (Buscar na web), os mosaicos do mapa (Esri, OpenStreetMap), os edifícios vizinhos (Overpass), a pesquisa de moradas (Nominatim) e, quando o lote se desloca, a sua altitude (Open-Meteo) e o seu concelho (Nominatim).',
   footMethods: 'Métodos e fontes',
+  footThanks: 'Agradecimentos',
+  footThanksBody: 'À minha avó materna, natural de Barreiros, perto de Valpaços, em Trás-os-Montes — a cerca de quarenta quilómetros de Cortiços, a aldeia de onde vem o meu nome —, por me ter dado a conhecer, em criança, o património das minhas origens. Foi aí que vivi estes espaços e estas casas: eram confortáveis, são-me caras na memória e tenho muitas saudades desse tempo. Às minhas tias Delmira e Clara, que me acolheram nas suas casas tradicionais e me ensinaram a ver as qualidades de um património tão rico — o mesmo que sustentou as gerações passadas e continua a sustentar as que se seguem, a minha entre elas, como estas linhas o mostram.',
   footArch: 'Bibliografia dos arquétipos',
   footLegal: '© 2026 Nuno Dinis Cortiços. Este é um instrumento pedagógico. Reporta o que a literatura de projecto recomenda e nomeia a fonte de cada recomendação, mas uma orientação não é um cálculo e esta aplicação não é um modelo energético. Nada do que reporta constitui declaração de conformidade, e nada disto substitui as verificações exigidas no âmbito do SCE.'
 });
