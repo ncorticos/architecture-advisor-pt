@@ -966,7 +966,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.148.0',
+  version:     '1.149.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23590,6 +23590,8 @@ function vmPlanSVG(vm, w, opts) {
   if (c && c.on) { const a = P(c.x - c.L / 2, c.y + c.D / 2); o.push('<rect x="' + a[0] + '" y="' + a[1] + '" width="' + (c.L * s).toFixed(1) + '" height="' + (c.D * s).toFixed(1) + '" fill="#F1EDE3" stroke="#8A8274" stroke-width="' + (0.4 * s).toFixed(1) + '" stroke-dasharray="' + (c.gate ? '' : '') + '"/>');
     const g = c.gate; if (g) { const len = g.face === 'S' || g.face === 'N' ? c.L : c.D, u = g.pos * len - g.w / 2, p0 = g.face === 'S' ? P(c.x - c.L / 2 + u, c.y - c.D / 2) : g.face === 'N' ? P(c.x - c.L / 2 + u, c.y + c.D / 2) : g.face === 'E' ? P(c.x + c.L / 2, c.y - c.D / 2 + u + g.w) : P(c.x - c.L / 2, c.y - c.D / 2 + u + g.w);
       o.push('<rect x="' + (+p0[0] - (g.face === 'E' || g.face === 'W' ? 0.3 * s : 0)) + '" y="' + (+p0[1] - (g.face === 'S' || g.face === 'N' ? 0.3 * s : 0)) + '" width="' + ((g.face === 'S' || g.face === 'N' ? g.w : 0.6) * s).toFixed(1) + '" height="' + ((g.face === 'E' || g.face === 'W' ? g.w : 0.6) * s).toFixed(1) + '" fill="#F1EDE3"/>'); } }
+  /* openings go on top of every body, so a wall a neighbour body touches still shows and takes its openings */
+  const ops = [];
   vs.forEach(v => {
     const Wt = (VM_WALL[v.wall.mat] || VM_WALL.whitewash).t, sel = opts.sel === v._i;
     const fillC = sel ? '#F4E3C2' : '#EFEAE0', st = sel ? '#B5772A' : '#3A3530';
@@ -23600,18 +23602,20 @@ function vmPlanSVG(vm, w, opts) {
     if (v.kind !== 'rect') VM_FACES.forEach(f => (v.open[f] || []).filter(q => q.fl === flN || opts.allFloors).forEach(q => {
       /* on a round wall, at the ring's point facing that way, as the isometric places it */
       const ang = { S:-Math.PI / 2, E:0, N:Math.PI / 2, W:Math.PI }[f] + (q.pos - 0.5) * 1.2, c0 = P(v.x + v.L / 2 * Math.cos(ang), v.y + v.D / 2 * Math.sin(ang));
-      o.push('<circle cx="' + c0[0] + '" cy="' + c0[1] + '" r="' + Math.max(3, q.w / 2 * s).toFixed(1) + '" fill="' + (q.t === 'd' ? '#FBFAF7' : '#CFE0EA') + '" stroke="#3A3530" stroke-width="0.6"/>');
+      ops.push('<circle cx="' + c0[0] + '" cy="' + c0[1] + '" r="' + Math.max(3, q.w / 2 * s).toFixed(1) + '" fill="' + (q.t === 'd' ? '#FBFAF7' : '#CFE0EA') + '" stroke="#3A3530" stroke-width="0.6"/>');
     }));
-    if (v.kind === 'rect') VM_FACES.forEach(f => (v.open[f] || []).filter(q => q.fl === flN || opts.allFloors).forEach(q => {
+    if (v.kind === 'rect') VM_FACES.forEach(f => (v.open[f] || []).forEach((q, qi) => {
+      if (!(q.fl === flN || opts.allFloors)) return;
       const len = f === 'S' || f === 'N' ? v.L : v.D, u = q.pos * len, x0 = v.x - v.L / 2, y0 = v.y - v.D / 2;
       const [cx, cy] = f === 'S' ? [x0 + u, y0] : f === 'N' ? [x0 + u, y0 + v.D] : f === 'E' ? [x0 + v.L, y0 + u] : [x0, y0 + u];
       const hor = f === 'S' || f === 'N', a = P(cx - (hor ? q.w / 2 : 0), cy + (hor ? 0 : q.w / 2));
-      o.push('<rect x="' + (+a[0] - (hor ? 0 : Wt * s / 2 + 1)) + '" y="' + (+a[1] - (hor ? Wt * s / 2 + 1 : 0)) + '" width="' + ((hor ? q.w : Wt + 0.08) * s).toFixed(1) + '" height="' + ((hor ? Wt + 0.08 : q.w) * s).toFixed(1) + '" fill="' + (q.t === 'd' ? '#FBFAF7' : '#CFE0EA') + '" stroke="#3A3530" stroke-width="0.6"/>');
+      ops.push('<rect' + (v._r ? '' : ' data-op="' + v._i + ':' + f + ':' + qi + '" style="cursor:ew-resize"') + ' x="' + (+a[0] - (hor ? 0 : Wt * s / 2 + 1)) + '" y="' + (+a[1] - (hor ? Wt * s / 2 + 1 : 0)) + '" width="' + ((hor ? q.w : Wt + 0.08) * s).toFixed(1) + '" height="' + ((hor ? Wt + 0.08 : q.w) * s).toFixed(1) + '" fill="' + (q.t === 'd' ? '#FBFAF7' : '#CFE0EA') + '" stroke="#3A3530" stroke-width="0.6"/>');
     }));
     /* the body's name: at its middle when no rooms are drawn in it, else along its north wall, clear of the rooms' names */
     const inRooms = (opts.rooms || []).some(q => Math.abs(q.x - v.x) < v.L / 2 && Math.abs(q.y - v.y) < v.D / 2);
     const lc = inRooms ? P(v.x, v.y + v.D / 2 - 0.35 - 12 / s) : P(v.x, v.y); if (!opts.noLabels) o.push('<text x="' + lc[0] + '" y="' + (+lc[1] + 4) + '" font-size="' + Math.max(9, Math.min(12, s * 0.9)).toFixed(0) + '" text-anchor="middle" fill="#6B645A" font-family="sans-serif">' + (v._r ? '' : VL(v.name).replace(/&/g, '&amp;')) + '</text>');
   });
+  o.push(...ops);
   /* elements */
   (vm.els || []).forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
     const x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
@@ -23706,7 +23710,7 @@ function vmDXF(vm) {
    ====================================================================== */
 
 const VMT = (en, pt) => VL({ en, pt });
-let VM_SEL = 0, VM_FACE = 'S', VM_ROOMFL = 0;
+let VM_SEL = 0, VM_FACE = 'S', VM_ROOMFL = 0, VM_ARM = null;   // VM_ARM: 'w' or 'd' while a window or door is being placed on a plan
 
 function vmStyle() {
   if ($('#vmCSS')) return;
@@ -24034,6 +24038,12 @@ function buildModeller(host) {
     planBox.innerHTML = '';
     planBox.style.gridColumn = '1 / -1';
     planBox.appendChild(el('p', { class:'vmcap', html:VMT('Plans — drag a body or a room; click a plan to add rooms to that floor', 'Plantas — arraste um corpo ou uma divisão; clique numa planta para lhe juntar divisões') }));
+    /* open a window or a door straight on a plan: arm it, then click a wall of that floor; drag an opening along its wall, double-click to remove it */
+    const tools = planBox.appendChild(el('div', { class:'vmbtns' }));
+    if (!vmPlanDrag.esc) { vmPlanDrag.esc = true; document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && VM_ARM) { VM_ARM = null; if (VM_REDRAW) VM_REDRAW(); } }); }
+    [['w', VMT('Open a window on the plan', 'Abrir janela na planta')], ['d', VMT('Open a door on the plan', 'Abrir porta na planta')]].forEach(([k, txt]) => tools.appendChild(el('button', { type:'button', class:'btn small' + (VM_ARM === k ? ' solid' : ''), text:txt,
+      onclick:() => { VM_ARM = VM_ARM === k ? null : k; drawViews(); } })));
+    tools.appendChild(el('span', { class:'hint', text:VM_ARM ? VMT('Click a wall on a plan to open it there — Esc to stop', 'Clique numa parede de uma planta para a abrir aí — Esc para parar') : VMT('Drag an opening along its wall · double-click to remove it', 'Arraste um vão ao longo da parede · duplo clique para o remover') }));
     const grid = planBox.appendChild(el('div', { class:'vmplans' })), nFl = Math.max(...M.vols.map(v => v.fl));
     if (VM_ROOMFL >= nFl) VM_ROOMFL = 0;
     for (let k = 0; k < nFl; k++) {
@@ -24083,8 +24093,28 @@ function buildModeller(host) {
   function vmPlanDrag(svg, PL, fl) {
     if (!svg) return;
     let drag = null;
+    /* the wall nearest the pointer, on a body that has this floor: its face and the place along it, 0–1 */
+    const toW = q => [q[0] / PL.s + PL.X0, PL.Y1 - q[1] / PL.s];
+    const wallAt = (q, onlyVol, onlyFace) => { const [x, y] = toW(q); let best = null;
+      vm().vols.forEach((v, i) => { if (v.kind !== 'rect' || fl >= v.fl || (onlyVol !== undefined && i !== onlyVol)) return;
+        const x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = x0 + v.L, y1 = y0 + v.D;
+        [['S', clamp(x, x0, x1), y0, (x - x0) / v.L], ['N', clamp(x, x0, x1), y1, (x - x0) / v.L], ['W', x0, clamp(y, y0, y1), (y - y0) / v.D], ['E', x1, clamp(y, y0, y1), (y - y0) / v.D]].forEach(([f, px, py, t]) => {
+          if (onlyFace && f !== onlyFace) return; const d = Math.hypot(x - px, y - py); if (!best || d < best.d) best = { vi:i, v, f, t, d }; }); });
+      return best; };
     const pt = ev => { const b = svg.getBoundingClientRect(); return [(ev.clientX - b.left) * PL.w / b.width, (ev.clientY - b.top) * PL.h / b.height]; };
     svg.addEventListener('pointerdown', ev => {
+      if (VM_ARM) {
+        const W = wallAt(pt(ev));
+        if (!W || W.d > 1.5) { toast(VMT('Click on a wall of a body that has this floor', 'Clique numa parede de um corpo que tenha este piso')); return; }
+        const len = W.f === 'S' || W.f === 'N' ? W.v.L : W.v.D, op = VM_ARM === 'd' ? vmOp('d', 0, 0.9, 2.0, fl) : vmOp('w', 0, 1.0, 1.0, fl);
+        op.pos = +clamp(W.t, op.w / 2 / len + 0.02, 1 - op.w / 2 / len - 0.02).toFixed(3);
+        (W.v.open[W.f] = W.v.open[W.f] || []).push(op);
+        ev.preventDefault(); drawEditor(); drawViews(); return;
+      }
+      if (ev.target.dataset && ev.target.dataset.op) {
+        const [vi, f, qi] = ev.target.dataset.op.split(':'), v = vm().vols[+vi], op = v && v.open[f] && v.open[f][+qi];
+        if (op) { drag = { kind:'op', v, vi:+vi, f, op, p:pt(ev) }; svg.setPointerCapture(ev.pointerId); ev.preventDefault(); return; }
+      }
       if (VM_ROOMFL !== fl) { VM_ROOMFL = fl; svg.closest('.vmplans') && svg.closest('.vmplans').querySelectorAll('.vmplan1').forEach((d, i) => d.classList.toggle('on', i === fl)); }
       const t = ev.target, p = pt(ev), M = vm(), rooms = R.V.rooms.filter(q => q.fl === fl);
       if (t.dataset.roomsize !== undefined) drag = { kind:'size', q:rooms[+t.dataset.roomsize], p, w0:rooms[+t.dataset.roomsize].w, d0:rooms[+t.dataset.roomsize].d };
@@ -24095,7 +24125,8 @@ function buildModeller(host) {
     svg.addEventListener('pointermove', ev => {
       if (!drag) return;
       const p = pt(ev), dx = Math.round((p[0] - drag.p[0]) / PL.s * 4) / 4, dy = -Math.round((p[1] - drag.p[1]) / PL.s * 4) / 4;
-      if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
+      if (drag.kind === 'op') { const W = wallAt(p, drag.vi, drag.f); if (W) { const len = drag.f === 'S' || drag.f === 'N' ? drag.v.L : drag.v.D; drag.op.pos = +clamp(W.t, drag.op.w / 2 / len + 0.02, 1 - drag.op.w / 2 / len - 0.02).toFixed(3); } }
+      else if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
       else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
       else { drag.q.w = Math.max(1, drag.w0 + dx); drag.q.d = Math.max(1, drag.d0 - dy); }
       const PL2 = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:(vmRoomChecks(vm(), R.V.rooms), R.V.rooms.filter(q => q.fl === fl)) });
@@ -24103,6 +24134,11 @@ function buildModeller(host) {
     });
     const up = () => { if (drag) { drag = null; drawEditor(); drawViews(); } };
     svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+    svg.addEventListener('dblclick', ev => {
+      if (!ev.target.dataset || !ev.target.dataset.op) return;
+      const [vi, f, qi] = ev.target.dataset.op.split(':'), v = vm().vols[+vi];
+      if (v && v.open[f]) { v.open[f].splice(+qi, 1); drawEditor(); drawViews(); }
+    });
   }
 
   /* ---- below: numbers, comparison, Olgyay, rooms ---- */
