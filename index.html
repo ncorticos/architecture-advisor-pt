@@ -966,7 +966,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.144.0',
+  version:     '1.145.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -17200,6 +17200,7 @@ function buildRender(host) {
 
   /* ---- the look the prompt resolves to ---- */
   const STONE_C = (RENDER_WALLS.find(o => o.key === 'stone') || {}).c || '#A29C90';
+  const STONE_C0 = STONE_C;
   const LIME_C = (RENDER_WALLS.find(o => o.key === 'limestone') || {}).c || '#D8CEBD';
   const wallBase = () => {
     if (look.wall) return look.wall.c;
@@ -17620,14 +17621,16 @@ style === 'sketch' ? '#EFEBE0'
       const k = night ? 0.3 : faceK(rf.n) * (style === 'watercolor' ? 0.92 : 1);
       items.push({ pts:rf.pts, fill:shadeHex(rf.fill, k), sh:k, d:rf.pts.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / rf.pts.length + (rf.back ? 0.02 : 0) });
     });
-    if (embas) M.pl.segs.forEach(sg => {
+    if (embas || RENDER_DRESS.barra) M.pl.segs.forEach(sg => {
       if (!wallSeen(sg.n)) return;
-      const eh = Math.min(1, H0);
+      /* the stone base when asked for; otherwise the archetype's coloured barra, as its icon wears it */
+      const eh = embas ? Math.min(1, H0) : Math.min(0.45, H0);
+      const STONE_C = embas ? STONE_C0 : RENDER_DRESS.barra;
       if (eh < 0.2) return;
       const off = (p, d) => [p[0] + sg.n[0] * d, p[1] + sg.n[1] * d, p[2]];
       const tu = [(sg.b[0] - sg.a[0]) / sg.len, (sg.b[1] - sg.a[1]) / sg.len];
       const q = [off(onWall(sg, 0, 0), 0.03), off(onWall(sg, sg.len, 0), 0.03), off(onWall(sg, sg.len, eh), 0.03), off(onWall(sg, 0, eh), 0.03)];
-      items.push(onWallLayer(sg, 1, { pts:q, fill:shadeHex(STONE_C, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4, mat:'stone', wallSg:sg, uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) }));
+      items.push(onWallLayer(sg, 1, { pts:q, fill:shadeHex(STONE_C, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4, mat:embas ? 'stone' : 'site', wallSg:sg, uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) }));
     });
     M.pieces.forEach(pc => {
       const f = pc.f;
@@ -17690,7 +17693,7 @@ style === 'sketch' ? '#EFEBE0'
               items.push(onWallLayer(sg, 3, { pts:q, win:{ sg, u0:a2, u1:b2, v0, v1 },
                 fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(), glass:true, d:cdep(q) }));
             }
-            if (cant) frameRing(sg, a2, b2, v0, v1, 'limestone', LIME_C, !!eu.door).forEach(q2 => items.push(onWallLayer(sg, 2, q2)));
+            if (cant || RENDER_DRESS.frames) frameRing(sg, a2, b2, v0, v1, cant ? 'limestone' : 'site', cant ? LIME_C : RENDER_DRESS.frames, !!eu.door).forEach(q2 => items.push(onWallLayer(sg, 2, q2)));
           });
         });
       });
@@ -17725,7 +17728,7 @@ style === 'sketch' ? '#EFEBE0'
             items.push(onWallLayer(sg, 3, { pts:q, win:{ sg, u0:a, u1:b, v0, v1 },
               fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(), glass:true, d:cdep(q) }));
           }
-          if (cant) frameRing(sg, a, b, v0, v1, 'limestone', LIME_C, !!eu.door).forEach(q2 => items.push(onWallLayer(sg, 2, q2)));
+          if (cant || RENDER_DRESS.frames) frameRing(sg, a, b, v0, v1, cant ? 'limestone' : 'site', cant ? LIME_C : RENDER_DRESS.frames, !!eu.door).forEach(q2 => items.push(onWallLayer(sg, 2, q2)));
         });
       });
     });
@@ -18976,6 +18979,13 @@ function vernApply(scope) {
     const keep = r.zones ? ROOF.zones.map(z => z.bei) : null;
     migrateRoofGlobals(MASS, ROOF);
     if (keep) ROOF.zones.forEach((z, i) => { if (keep[i] === undefined) delete z.bei; else z.bei = keep[i]; });
+    /* the chimney the icon raises, as the place's own chimney, where the icon stands it */
+    const dr = vDress(R.type);
+    if (dr && dr.chimney && ROOF.zones && ROOF.zones.length) {
+      const fx = dr.chimAt[0], zi = Math.max(0, ROOF.zones.findIndex(z => fx >= (z.f0 || 0) - 1e-6 && fx <= (z.f1 === undefined ? 1 : z.f1) + 1e-6));
+      ROOF.zones.forEach(z => { if (z.chim) delete z.chim; });
+      ROOF.zones[zi].chim = { on:true, fam:chimneyOf(STATE.site), picked:false, x:+((fx - 0.5) * m.L).toFixed(2), y:+((dr.chimAt[1] - 0.5) * m.D).toFixed(2) };
+    }
   }
   if ((all || scope === 'site') && m.loggia) {
     /* a recessed porch or loggia cut into the main facade, on the ground floor unless the model says otherwise */
@@ -18993,10 +19003,25 @@ function vernApply(scope) {
       const o = m.open[f] || { wwr:0.02, units:vOff() };
       OPEN[f] = { wwr:o.wwr, sillZ:o.sillZ || 0.9, headZ:o.headZ || 1.8, ovD:0, ovN:1, ovL:0, ovR:0, finD:0, finN:0, finSide:'both',
         units:JSON.parse(JSON.stringify(o.units)) };
+      /* as the icon draws it: the openings keep their size from the glazed band but spread along the wall, and a door is
+         at least a door wide — a low glazed share would otherwise bunch them at the middle, the doors a hand wide */
+      const len = f === 'S' || f === 'N' ? m.L : m.D, hh = Math.max(0.4, OPEN[f].headZ - OPEN[f].sillZ), H = m.fl * m.fh;
+      const band = Math.min(len * 0.92, o.wwr * len * H / (m.fl * hh)), us = OPEN[f].units, nu = us.filter(u => u.on !== false).length;
+      const spread = nu < 2 ? band : Math.max(band, len * (nu >= 3 ? 0.84 : 0.66));
+      if (band > 0.05) us.forEach(u => {
+        const door = !!u.door || (u.floors || []).some(F => F && F.door);
+        if (door) u.frac = Math.max(+u.frac || 0, Math.min(1, 0.85 / band));
+        if (spread > band + 0.01) {
+          const adj = p => ((isFinite(+p) ? +p : 0.5) - 0.5) * (spread - band);
+          u.off = +((+u.off || 0) + adj(u.pos)).toFixed(2);
+          (u.floors || []).forEach(F => { if (F && typeof F === 'object' && isFinite(+F.pos)) F.off = +((isFinite(+F.off) ? +F.off : 0) + adj(F.pos)).toFixed(2); });
+        }
+      });
     });
   }
   /* a model may pick its materials by place (a function of the site) */
-  if (all || scope === 'visualization') RENDER_PROMPT = VL(typeof m.render === 'function' ? m.render(STATE.site || {}) : m.render);
+  if (all || scope === 'visualization') { RENDER_PROMPT = VL(typeof m.render === 'function' ? m.render(STATE.site || {}) : m.render);
+    const dr = vDress(R.type); RENDER_DRESS = { barra:dr ? dr.barra : null, frames:dr ? dr.frames : null }; }
   mountApp(STATE.site, null, STATE.tab, true, true);
   toast(VL({ en:'Model applied: ', pt:'Modelo aplicado: ' }) + VL(R.T.name));
 }
@@ -20986,6 +21011,24 @@ vAdd('pt-alg-pescadores', [
 const VICON_URBAN = ['pt-porto-esguia', 'pt-porto-ilha', 'pt-lisboa-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-ale-d',
   'pt-rib-vila', 'pt-alg-pescadores', 'pt-casa-judeus', 'pt-meia-casa', 'pt-povoa', 'pt-tavira'];
 const VICON_NOCHIM = ['pt-tmontes', 'pt-alg-trave'];
+/** What the icon dresses a type with, for the app to wear the same: the
+    coloured barra and frames of the south (or stone frames), and whether a
+    chimney rises — and of which kind, where it stands on the roof. */
+let RENDER_DRESS = { barra:null, frames:null };
+function vDress(key) {
+  const T = VERN_TYPES[key];
+  if (!T) return null;
+  const m = T.model, rp = typeof m.render === 'function' ? m.render({ nuts:'' }) : m.render, pr = parseRenderPrompt(rp.en);
+  const wk = pr.wall ? pr.wall.key : 'plaster', dist = typeof vDist === 'function' ? vDist(key) : [];
+  const south = dist.some(d => ['Faro', 'Beja', 'Évora', 'Portalegre', 'Setúbal', 'Santarém', 'Lisboa'].indexOf(d) >= 0);
+  const lime = wk === 'plaster' || /whitewash/i.test(rp.en), barC = /ochre|yellow/i.test(rp.en) ? '#C9A040' : '#3F6FA8';
+  const bar = lime && south && m.barra !== false;
+  const sumEn = (T.summary && T.summary.en) || '';
+  const smokeOnly = (typeof VICON_NOCHIM !== 'undefined' && VICON_NOCHIM.indexOf(key) >= 0) || /no chimney|without (a )?chimney|chimney is rare|rarely a chimney|almost no chimney|few chimneys|no chimneys|chimney.{0,10}absent/i.test(sumEn);
+  const chim = !T.support && !m.icon && (!smokeOnly || !!m.chimney);
+  const ale = dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal'].indexOf(d) >= 0) && dist.indexOf('Faro') < 0;
+  return { barra:bar ? barC : null, frames:m.frames || (bar ? barC : null), chimney:chim, chimAt:ale ? [0.66, 0.3] : [0.72, 0.55] };
+}
 /** The neighbours of a town house in the icon: a plain block on each side,
     the same depth, a little lower or higher, and the street in front. They
     are drawn as glass — every face, roof slopes on both sides, at low
