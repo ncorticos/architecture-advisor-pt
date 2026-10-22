@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.151.0',
+  version:     '1.152.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -18986,11 +18986,14 @@ function vernApply(scope) {
     migrateRoofGlobals(MASS, ROOF);
     if (keep) ROOF.zones.forEach((z, i) => { if (keep[i] === undefined) delete z.bei; else z.bei = keep[i]; });
     /* the chimney the icon raises, as the place's own chimney, where the icon stands it */
-    const dr = vDress(R.type);
-    if (dr && dr.chimney && ROOF.zones && ROOF.zones.length) {
-      const fx = dr.chimAt[0], zi = Math.max(0, ROOF.zones.findIndex(z => fx >= (z.f0 || 0) - 1e-6 && fx <= (z.f1 === undefined ? 1 : z.f1) + 1e-6));
-      ROOF.zones.forEach(z => { if (z.chim) delete z.chim; });
-      ROOF.zones[zi].chim = { on:true, fam:chimneyOf(STATE.site), picked:false, x:+((fx - 0.5) * m.L).toFixed(2), y:+((dr.chimAt[1] - 0.5) * m.D).toFixed(2) };
+    const CH = vmChimOf(R.type);
+    if (ROOF.zones) ROOF.zones.forEach(z => { if (z.chim) delete z.chim; });
+    if (CH && ROOF.zones && ROOF.zones.length) {
+      /* the same chimney as the icon and the modeller, as the Roof tab's family nearest its kind */
+      const fam = { alg:'rendilhada', ale:'alentejana', rib:'arca', sal:'saloia', az:'maos', mad:'arca', esp:'granito', talha:'arca', box:'arca',
+        gran:CH.wall === 'schist' ? 'xisto' : CH.wall === 'basalt' ? 'basalto' : 'granito' }[CH.kind] || chimneyOf(STATE.site);
+      const fx = CH.u, zi = Math.max(0, ROOF.zones.findIndex(z => fx >= (z.f0 || 0) - 1e-6 && fx <= (z.f1 === undefined ? 1 : z.f1) + 1e-6));
+      ROOF.zones[zi].chim = { on:true, fam, picked:true, x:+((fx - 0.5) * m.L).toFixed(2), y:+((Math.max(0.15, CH.v) - 0.5) * m.D).toFixed(2) };
     }
   }
   if ((all || scope === 'site') && m.loggia) {
@@ -21317,38 +21320,44 @@ function vIcon(key, size) {
   const roofZ = (x, y) => { const z = zones.find(q => x >= (q.f0 || 0) * L - 1e-6 && x <= (q.f1 === undefined ? 1 : q.f1) * L + 1e-6) || zones[0], t = (z.n === 0 ? 0 : z.th) * Math.PI / 180;
     const xa = (z.f0 || 0) * L, xb = (z.f1 === undefined ? 1 : z.f1) * L;
     return z.n === 2 ? H + (Dd / 2 - Math.abs(y - Dd / 2)) * Math.tan(t) : z.n === 1 ? H + y * Math.tan(t) : z.n === 3 ? H + Math.max(0, Math.min(y, Dd - y, x - xa, xb - x)) * Math.tan(t) : H; };
-  /* every dwelling has its hearth: a chimney, or — where the sources say the smoke left through the tiles — a wisp of smoke over the roof */
-  const sumEn = (T.summary && T.summary.en) || '';
-  const dwelling = !T.support && !m.icon;
-  const smokeOnly = VICON_NOCHIM.indexOf(key) >= 0 || /no chimney|without (a )?chimney|chimney is rare|rarely a chimney|almost no chimney|few chimneys|no chimneys|chimney.{0,10}absent/i.test(sumEn);
-  if (dwelling && smokeOnly && !m.chimney) {
-    const sx = L * 0.62, sy = Dd * 0.5, z0 = roofZ(sx, sy) + 0.05;
-    [[0, 0], [0.35, 0.25], [-0.3, 0.45]].forEach(([dx, dz], k) => { const a = P(sx + dx, sy, z0), b = P(sx + dx + 0.3, sy, z0 + 1.0 + dz), c = P(sx + dx - 0.2, sy, z0 + 2.0 + dz);
-      [a, b, c].forEach(p => all.push(p));
-      out.push('<path d="M' + a[0].toFixed(2) + ',' + a[1].toFixed(2) + ' Q' + (b[0] + 0.6).toFixed(2) + ',' + b[1].toFixed(2) + ' ' + c[0].toFixed(2) + ',' + c[1].toFixed(2) + '" fill="none" stroke="rgba(140,140,140,' + (0.5 - k * 0.1) + ')" stroke-width="' + (0.16 - k * 0.03).toFixed(2) + '" stroke-linecap="round"/>'); });
-  }
-  if (dwelling && (!smokeOnly || m.chimney)) {
-    /* a painted timber house has a masonry chimney, whitewashed */
-    const wc = m.chimney === 'stone' ? '#A8A196' : m.paint ? '#ECE8E0' : wcAll;
-    /* the Alentejo chimney: wide, rising from inside the wall, off the centre */
-    if (chimKind === 'rib') {
+  /* every dwelling has its hearth: the chimney vmChimOf gives (the same in the modeller and the app), or — where the sources
+     say the smoke left through the tiles — a wisp of smoke over the roof */
+  const CH = vmChimOf(key), dwelling = !T.support && ['windmill', 'watermill'].indexOf(m.icon) < 0;
+  const drawSmoke = (sx, sy, z0) => [[0, 0], [0.35, 0.25], [-0.3, 0.45]].forEach(([dx, dz], k) => { const a = P(sx + dx, sy, z0), b = P(sx + dx + 0.3, sy, z0 + 1.0 + dz), c = P(sx + dx - 0.2, sy, z0 + 2.0 + dz);
+    [a, b, c].forEach(p => all.push(p));
+    out.push('<path d="M' + a[0].toFixed(2) + ',' + a[1].toFixed(2) + ' Q' + (b[0] + 0.6).toFixed(2) + ',' + b[1].toFixed(2) + ' ' + c[0].toFixed(2) + ',' + c[1].toFixed(2) + '" fill="none" stroke="rgba(140,140,140,' + (0.5 - k * 0.1) + ')" stroke-width="' + (0.16 - k * 0.03).toFixed(2) + '" stroke-linecap="round"/>'); });
+  /** The chimney of its kind, standing where CH says, on the roof under it. */
+  const drawChim = () => {
+    const k = CH.kind, wc = k === 'gran' || k === 'esp' || m.chimney === 'stone' ? '#A39C8F' : m.paint ? '#ECE8E0' : wcAll;
+    if (k === 'rib') {
       /* the Ribatejo chimney: a broad whitewashed stack rising from the front wall through the eave, past the ridge, under a thin cap */
-      const cw = Math.min(1.5, L * 0.13), cx = L * 0.58, y0 = -0.32, y1 = 1.1, z0 = H - 0.5, zt = roofZ(cx, Dd / 2) + 1.1;
+      const cw = Math.min(1.5, L * 0.13), cx = L * CH.u, y0 = -0.32, y1 = 1.1, z0 = H - 0.5, zt = roofZ(cx, Dd / 2) + 1.1;
       face([P(cx, y0, z0), P(cx + cw, y0, z0), P(cx + cw, y0, zt), P(cx, y0, zt)], wc, 0.05);
       face([P(cx + cw, y0, z0), P(cx + cw, y1, roofZ(cx + cw, y1) - 0.1), P(cx + cw, y1, zt), P(cx + cw, y0, zt)], vShade(wc, 0.8), 0.05);
       face([P(cx - 0.08, y0 - 0.08, zt), P(cx + cw + 0.08, y0 - 0.08, zt), P(cx + cw + 0.08, y1 + 0.08, zt), P(cx - 0.08, y1 + 0.08, zt)], vShade(wc, 0.92), 0.04);
-      face([P(cx - 0.08, y0 - 0.08, zt), P(cx + cw + 0.08, y0 - 0.08, zt), P(cx + cw + 0.08, y0 - 0.08, zt + 0.12), P(cx - 0.08, y0 - 0.08, zt + 0.12)], vShade(wc, 0.85), 0.03);
       [0.22, 0.62].forEach(f => face([P(cx + cw * f, y0 - 0.01, zt - 0.45), P(cx + cw * f + cw * 0.18, y0 - 0.01, zt - 0.45), P(cx + cw * f + cw * 0.18, y0 - 0.01, zt - 0.15), P(cx + cw * f, y0 - 0.01, zt - 0.15)], '#2E2A26', 0.01));
-    } else {
-    const cw = chimKind === 'ale' ? 1.1 : 0.6, cx = chimKind === 'ale' ? L * 0.66 : Math.min(L * 0.72, L - 0.9), cy = chimKind === 'ale' ? Dd * 0.3 : Dd * 0.55, zb = roofZ(cx + cw / 2, cy) - 0.2, zt = Math.max(zb + 1.3, roofZ(cx, Dd / 2) + 0.6);
-    face([P(cx, cy, zb), P(cx + cw, cy, zb), P(cx + cw, cy, zt), P(cx, cy, zt)], wc, 0.05); face([P(cx + cw, cy, zb), P(cx + cw, cy + 0.6, zb), P(cx + cw, cy + 0.6, zt), P(cx + cw, cy, zt)], vShade(wc, 0.8), 0.05);
-    face([P(cx - 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy + 0.65, zt), P(cx - 0.05, cy + 0.65, zt)], vShade(wc, 0.92), 0.05);
-    if (chimKind === 'alg') { /* the Algarve lattice chimney: a pierced shaft and a little pointed cap */
-      for (let k = 0; k < 3; k++) for (let j = 0; j < 2; j++) face([P(cx + 0.1 + j * 0.25, cy - 0.01, zb + 0.5 + k * 0.25), P(cx + 0.25 + j * 0.25, cy - 0.01, zb + 0.5 + k * 0.25), P(cx + 0.25 + j * 0.25, cy - 0.01, zb + 0.65 + k * 0.25), P(cx + 0.1 + j * 0.25, cy - 0.01, zb + 0.65 + k * 0.25)], '#3E4C57', 0.01);
-      face([P(cx - 0.05, cy - 0.05, zt), P(cx + 0.65, cy - 0.05, zt), P(cx + 0.3, cy + 0.3, zt + 0.6)], vShade(wc, 0.95), 0.03); face([P(cx + 0.65, cy - 0.05, zt), P(cx + 0.65, cy + 0.65, zt), P(cx + 0.3, cy + 0.3, zt + 0.6)], vShade(wc, 0.78), 0.03); }
-    else { face([P(cx + 0.12, cy - 0.01, zt - 0.35), P(cx + 0.48, cy - 0.01, zt - 0.35), P(cx + 0.48, cy - 0.01, zt - 0.12), P(cx + 0.12, cy - 0.01, zt - 0.12)], '#2E2A26', 0.01); }
+      return;
     }
-  }
+    if (k === 'talha') { const cx = L * CH.u, cy = Dd * CH.v, zb = roofZ(cx, cy) - 0.1;
+      face([P(cx, cy, zb), P(cx + 0.45, cy, zb), P(cx + 0.45, cy, zb + 0.6), P(cx, cy, zb + 0.6)], '#9C5A3C', 0.04); face([P(cx + 0.45, cy, zb), P(cx + 0.45, cy + 0.45, zb), P(cx + 0.45, cy + 0.45, zb + 0.6), P(cx + 0.45, cy, zb + 0.6)], '#7E462E', 0.04); return; }
+    const cw = k === 'ale' ? 1.1 : k === 'esp' ? 1.6 : k === 'mad' ? 0.45 : k === 'az' ? 0.8 : 0.6, cd = k === 'ale' ? 0.6 : k === 'esp' ? 0.9 : k === 'az' ? 0.5 : cw;
+    const cx = Math.min(L * CH.u, L - cw - 0.3), cy = Dd * CH.v, zb = roofZ(cx + cw / 2, cy) - 0.2, zt = Math.max(zb + (k === 'mad' ? 1.7 : 1.3), roofZ(cx, Dd / 2) + 0.6);
+    face([P(cx, cy, zb), P(cx + cw, cy, zb), P(cx + cw, cy, zt), P(cx, cy, zt)], wc, 0.05); face([P(cx + cw, cy, zb), P(cx + cw, cy + cd, zb), P(cx + cw, cy + cd, zt), P(cx + cw, cy, zt)], vShade(wc, 0.8), 0.05);
+    face([P(cx - 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy + cd + 0.05, zt), P(cx - 0.05, cy + cd + 0.05, zt)], vShade(wc, 0.92), 0.05);
+    if (k === 'alg') { /* the Algarve lattice chimney: a pierced shaft and a little pointed cap */
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) face([P(cx + 0.1 + j * 0.25, cy - 0.01, zb + 0.5 + i * 0.25), P(cx + 0.25 + j * 0.25, cy - 0.01, zb + 0.5 + i * 0.25), P(cx + 0.25 + j * 0.25, cy - 0.01, zb + 0.65 + i * 0.25), P(cx + 0.1 + j * 0.25, cy - 0.01, zb + 0.65 + i * 0.25)], '#3E4C57', 0.01);
+      face([P(cx - 0.05, cy - 0.05, zt), P(cx + 0.65, cy - 0.05, zt), P(cx + 0.3, cy + 0.3, zt + 0.6)], vShade(wc, 0.95), 0.03); face([P(cx + 0.65, cy - 0.05, zt), P(cx + 0.65, cy + 0.65, zt), P(cx + 0.3, cy + 0.3, zt + 0.6)], vShade(wc, 0.78), 0.03); }
+    else if (k === 'gran') { /* the stone stack under a projecting slab, and a second slab on stones above it */
+      face([P(cx - 0.15, cy - 0.15, zt), P(cx + cw + 0.15, cy - 0.15, zt), P(cx + cw + 0.15, cy - 0.15, zt + 0.1), P(cx - 0.15, cy - 0.15, zt + 0.1)], '#7E786D', 0.03);
+      face([P(cx + 0.18, cy - 0.01, zt + 0.1), P(cx + cw - 0.18, cy - 0.01, zt + 0.1), P(cx + cw - 0.18, cy - 0.01, zt + 0.28), P(cx + 0.18, cy - 0.01, zt + 0.28)], wc, 0.02);
+      face([P(cx - 0.1, cy - 0.1, zt + 0.28), P(cx + cw + 0.1, cy - 0.1, zt + 0.28), P(cx + cw + 0.1, cy - 0.1, zt + 0.36), P(cx - 0.1, cy - 0.1, zt + 0.36)], '#7E786D', 0.03); }
+    else if (k === 'sal') { /* the saloia chimney: a little tiled hat */
+      face([P(cx - 0.1, cy - 0.1, zt), P(cx + cw + 0.1, cy - 0.1, zt), P(cx + cw + 0.1, cy + cw / 2, zt + 0.35), P(cx - 0.1, cy + cw / 2, zt + 0.35)], rc, 0.03); }
+    else if (k === 'az') { face([P(cx, cy - 0.01, zt), P(cx + cw, cy - 0.01, zt), P(cx + cw / 2, cy - 0.01, zt + 0.45)], vShade(wc, 0.97), 0.03); }
+    else { face([P(cx + 0.12, cy - 0.01, zt - 0.35), P(cx + Math.min(0.48, cw - 0.12), cy - 0.01, zt - 0.35), P(cx + Math.min(0.48, cw - 0.12), cy - 0.01, zt - 0.12), P(cx + 0.12, cy - 0.01, zt - 0.12)], '#2E2A26', 0.01); }
+  };
+  if (dwelling && !CH) drawSmoke(L * 0.62, Dd * 0.5, roofZ(L * 0.62, Dd * 0.5) + 0.05);
+  if (CH && !m.icon) drawChim();
   /* a porch or a vine pergola in front of the south wall */
   if (R.porch || R.latada) { const w = Math.min(8, Math.max(1, L - 2)), x = (L - w) / 2, d = 2.2, z = Math.min(H, fh) - 0.15;
     if (rz > 0 && rkind === 'piers') {
@@ -21541,6 +21550,7 @@ function vIcon(key, size) {
     face([P(L, 0, H), P(L, yt, H), P(L, yt, H + ph), P(L, 0, H + ph)], vShade(wc, 0.82), 0.03);
     face([P(-0.06, -0.12, H + ph), P(L + 0.06, -0.12, H + ph), P(L + 0.06, -0.12, H + ph + 0.12), P(-0.06, -0.12, H + ph + 0.12)], vShade(wc, 0.92), 0.02);
     line(P(0, -0.04, H + 0.1), P(L, -0.04, H + 0.1), vShade(wc, 0.75), 0.07);
+    if (CH) drawChim(); else if (dwelling) drawSmoke(L * 0.4, 7, H + 0.05);
     if (nbr) nbr.east();
   }
   if (m.icon === 'eira') {
@@ -23109,14 +23119,28 @@ const VM_CHIM = {
   sal:{ en:'saloia chimney (a little tiled hat)', pt:'chaminé saloia (com chapéu de telha)' }
 };
 /** The archetype's own chimney in the modeller: whether the house has one, as its icon draws it, and the kind its place builds. */
+/** The archetype's chimney, the one source for the icon, the modeller and the app's 3D: none for a support structure or a mill,
+    none where the sources say the smoke left through the tiles (the icon and the modeller draw that smoke instead); else the
+    kind its place builds — or the type's own (Esposende's corner chimney, Felgar's jar top, Cercal's Alentejo stack) — and
+    where it stands, u along the house west→east and v across it south→north, 0–1. */
+const VM_CHIM_OWN = { 'pt-esposende':{ kind:'esp', u:0.84, v:0.3, h:1.2 }, 'pt-tm-alpendrada':{ kind:'talha', u:0.7, v:0.5, h:0.6 }, 'pt-cercal':{ kind:'ale', u:0.3, v:0.3, h:1.5 } };
 function vmChimOf(k, wm) {
   const T = VERN_TYPES[k];
-  if (!T || T.support || ['windmill', 'watermill'].indexOf(T.model.icon) >= 0) return null;   // every dwelling: where the sources say the smoke left through the tiles, the student can still take it off
+  if (!T || T.support || ['windmill', 'watermill'].indexOf(T.model.icon) >= 0) return null;
+  const dr = typeof vDress === 'function' ? vDress(k) : null;
+  if (!dr || !dr.chimney) return null;
+  if (VM_CHIM_OWN[k]) return Object.assign({ t:'chimney', vol:0 }, VM_CHIM_OWN[k]);
+  if (wm === undefined) wm = vmWallOf(T);
   const m = T.model, dist = typeof vDist === 'function' ? vDist(k) : [], stone = ['stone', 'granite', 'schist', 'basalt'].indexOf(wm) >= 0;
   const kind = dist.indexOf('Faro') >= 0 ? 'alg' : dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal'].indexOf(d) >= 0) ? 'ale' : dist.indexOf('Santarém') >= 0 ? 'rib'
     : dist[0] === 'Açores' ? 'az' : dist[0] === 'Madeira' ? 'mad' : m.chimney === 'stone' || stone ? 'gran' : dist.indexOf('Lisboa') >= 0 ? 'sal' : 'box';
   const at = kind === 'ale' ? [0.62, 0.25] : kind === 'rib' ? [0.56, 0.02] : [0.78, 0.6];
-  return { t:'chimney', vol:0, kind, u:at[0], v:at[1], h:kind === 'ale' ? 1.5 : kind === 'rib' ? 2.0 : 1.2 };
+  return { t:'chimney', vol:0, kind, u:at[0], v:at[1], h:kind === 'ale' ? 1.5 : kind === 'rib' ? 2.0 : 1.2, wall:wm };
+}
+/** Whether the archetype is a dwelling whose smoke left through the tiles: no chimney, a wisp of smoke over the roof. */
+function vmSmokeOf(k) {
+  const T = VERN_TYPES[k];
+  return !!T && !T.support && ['windmill', 'watermill'].indexOf(T.model.icon) < 0 && !vmChimOf(k);
 }
 const VM_VAR = {
   corrida:{ en:'running varanda', pt:'varanda corrida' }, reentrante:{ en:'recessed varanda', pt:'varanda reentrante' },
@@ -23200,8 +23224,10 @@ function vmFromType(k) {
   if (m.icon === 'windmill') { base.kind = 'round'; base.L = base.D = Math.max(m.L, m.D); base.roof.type = 'cone'; base.roof.th = 40; base.roof.mat = rm === 'thatch' ? 'thatch' : 'timber'; }
   const ov = VM_OVR[k];
   if (ov) ov(vm, base);
-  /* the chimney the archetype's icon raises, of its place's kind — unless the sources' own model already set one */
-  if (!vm.els.some(e => e.t === 'chimney')) { const ch = vmChimOf(k, wm); if (ch) vm.els.push(ch); }
+  /* the chimney as the icon draws it — or, where the smoke left through the tiles, none and the smoke instead */
+  vm.els = vm.els.filter(e => e.t !== 'chimney');
+  const ch = vmChimOf(k, wm);
+  if (ch) vm.els.push(ch); else if (vmSmokeOf(k)) vm.smoke = true;
   return vm;
 }
 /* what the sources add to the archetypes the one-bar model could not draw */
@@ -23601,6 +23627,13 @@ function vmIsoSVG(vm, w, opts) {
         out.push('<line x1="' + A[0].toFixed(2) + '" y1="' + A[1].toFixed(2) + '" x2="' + B[0].toFixed(2) + '" y2="' + B[1].toFixed(2) + '" stroke="rgba(0,0,0,.18)" stroke-width="0.025"/>'); }
     }
   });
+  /* the smoke through the tiles, where the house has no chimney: three wisps over the main body's ridge */
+  if (vm.smoke && !(vm.els || []).some(e => e.t === 'chimney') && vm.vols && vm.vols[0]) {
+    const v = vm.vols[0], R = vmTurn(vm), z = (v.raise || 0) + vmH(v) + vmRoofRise(v);
+    [[0, 0], [0.35, 0.25], [-0.3, 0.45]].forEach(([dx, dz], k) => { const a = vmIso(R([v.x + v.L * 0.12 + dx, v.y, z])), b = vmIso(R([v.x + v.L * 0.12 + dx + 0.3, v.y, z + 1.0 + dz])), c = vmIso(R([v.x + v.L * 0.12 + dx - 0.2, v.y, z + 2.0 + dz]));
+      [a, b, c].forEach(q => all.push(q));
+      out.push('<path d="M' + a[0].toFixed(2) + ',' + a[1].toFixed(2) + ' Q' + (b[0] + 0.6).toFixed(2) + ',' + b[1].toFixed(2) + ' ' + c[0].toFixed(2) + ',' + c[1].toFixed(2) + '" fill="none" stroke="rgba(140,140,140,' + (0.5 - k * 0.1) + ')" stroke-width="' + (0.16 - k * 0.03).toFixed(2) + '" stroke-linecap="round"/>'); });
+  }
   const xs = all.map(p => p[0]), ys = all.map(p => p[1]), x0 = Math.min(...xs), y0 = Math.min(...ys), W = Math.max(...xs) - x0, H = Math.max(...ys) - y0, pad = 0.6;
   const vb = [x0 - pad, y0 - pad, W + 2 * pad, H + 2 * pad].map(v => +v.toFixed(2)).join(' '), h = Math.round(w * (H + 2 * pad) / (W + 2 * pad));
   return '<svg xmlns="http://www.w3.org/2000/svg" class="vmiso" viewBox="' + vb + '" width="' + w + '" height="' + h + '">' + (opts.bg ? '<rect x="' + (x0 - pad) + '" y="' + (y0 - pad) + '" width="' + (W + 2 * pad) + '" height="' + (H + 2 * pad) + '" fill="' + opts.bg + '"/>' : '') + out.join('') + '</svg>';
