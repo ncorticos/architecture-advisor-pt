@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.116.0',
+  version:     '1.117.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19124,6 +19124,9 @@ Object.assign(VERN_SRC, {
     url:'https://rotadabairrada.pt/en/where-to-go/house-museum-casa-gandareza' },
   RSR:{ tag:'Rodrigues 2016', cite:'Rodrigues, P. S. (2016). «Das origens da arquitectura popular em Portugal no século XIX: arqueologia de uma ideia». In P. André &amp; C. Sambricio (coord.), <i>Arquitectura popular: Tradição e vanguarda</i>, 19–47. Lisboa: DINÂMIA’CET-IUL — relaying G. Pereira (1900) on the casa saloia and P. Lopes (1899) on Brinches, Serpa.', url:null },
   SAL:{ tag:'Salvado 2021', cite:'Salvado, J. P. F. (2021). <i>Arquitectura popular em Portugal: Tecnologias construtivas tradicionais na contemporaneidade</i> (dissertação de mestrado integrado, orient. A. M. T. F. Martins &amp; M. C. S. Nepomuceno). Covilhã: Universidade da Beira Interior — the 2018 field survey of the Zona 3 places of <i>Arquitectura popular em Portugal</i> in the district of Castelo Branco, read against it.', url:null },
+  DEL:{ tag:'Delgado 2026', cite:'Delgado, G. F. A. (2026). <i>Entre o vernacular e o contemporâneo: Um projeto em Miranda do Douro</i> (dissertação de mestrado integrado). Porto: FAUP — reading the Zona 2 (Trás-os-Montes) of <i>Arquitectura popular em Portugal</i> (1961) and Oliveira &amp; Galhano.', url:'https://repositorio-aberto.up.pt/bitstream/10216/174514/2/780058.pdf' },
+  MGA:{ tag:'Almeida 2014', cite:'Almeida, M. G. de (2014). <i>Arquitectura popular de Entre-Douro-e-Vouga</i> (dissertação de mestrado integrado, orient. A. M. T. F. Martins). Covilhã: Universidade da Beira Interior — Rio de Frades, Covêlo de Paivô, Lomba, Cabaços, Albergaria da Serra (Arouca), after M. A. Ribeiro (1999) and M. C. Teixeira (2013).', url:'https://ubibliorum.ubi.pt/server/api/core/bitstreams/41d56d22-5877-4da2-adf8-73d65273f519/content' },
+  PIN:{ tag:'Pinto 2016', cite:'Pinto, S. M. L. R. (2016). <i>A tradição portuguesa das coberturas de colmo: Os casos práticos de Vale de Papas e Corte de Ouro</i> (dissertação de mestrado integrado). Lisboa: Universidade Lusíada — fieldwork in Vale de Papas (Cinfães, 1040 m), after Oliveira, Galhano &amp; Pereira (1988).', url:'http://hdl.handle.net/11067/1787' },
   PAN:{ tag:'André 2016', cite:'André, P. (2016). «Etnogenia, fotogenia, etnologia: arquitectura popular na primeira metade do século XX em Portugal». In P. André &amp; C. Sambricio (coord.), <i>Arquitectura popular: Tradição e vanguarda</i>, 85–143. Lisboa: DINÂMIA’CET-IUL — relaying J. Dias (1949/1951) on the north–south divide.', url:null }
 });
 
@@ -19703,13 +19706,16 @@ VERN_REGIONS.push({ key:'mainland', name:{ en:'Portuguese vernacular', pt:'Vern�
   place(S) {
     const g = MN_GROUP[S.nuts], alt = +S.alt || 0;
     let cand, band = null, warn = null;
-    if (g === 'minho') {
+    if (g === 'minho' && S.nuts === 'Entre Douro e Vouga' && alt >= 350) { cand = ['pt-freita', 'pt-minho', 'pt-montemuro']; band = { en:'Serra — the Gralheira massif', pt:'Serra — o Maciço da Gralheira' }; }
+    else if (g === 'minho' && S.nuts === 'Tâmega' && alt >= 700 && S.lat < 41.15) { cand = ['pt-montemuro', 'pt-freita', 'pt-minho']; band = { en:'Serra de Montemuro', pt:'Serra de Montemuro' }; }
+    else if (g === 'minho') {
       band = alt >= 500 ? { en:'Serra, above ≈ 500 m', pt:'Serra, acima de ≈ 500 m' } : { en:'Ribeira, the valleys', pt:'Ribeira, os vales' };
       cand = alt >= 500 ? ['pt-castro', 'pt-minho'] : ['pt-minho', 'pt-castro'];
       if (alt > 1000) warn = VL({ en:'<b>Branda ground.</b> Above 1000 m the shepherds of Castro Laboreiro lived only in summer; in winter they went down below 800 m.', pt:'<b>Terra de branda.</b> Acima dos 1000 m os pastores de Castro Laboreiro só viviam no Verão; no Inverno desciam abaixo dos 800 m.' }) + vSrc('SIM');
     } else if (g === 'tmontes') { cand = ['pt-tmontes', 'pt-beira']; band = S.nuts === 'Douro' ? { en:'Terra Quente', pt:'Terra Quente' } : { en:'Terra Fria', pt:'Terra Fria' }; }
     /* the Pinhal Interior by Coimbra: the valley village house below, the schist mountain house above (≈ 400 m, inference) */
     else if (g === 'beira' && S.nuts === 'Beira Interior Sul') { cand = alt < 450 ? ['pt-beira-campo', 'pt-beira', 'pt-alentejo'] : ['pt-beira', 'pt-beira-campo', 'pt-paul']; band = alt < 450 ? { en:'Campo, the plain', pt:'Campo, a planície' } : { en:'Serra and inselberg', pt:'Serra e monte-ilha' }; }
+    else if (g === 'beira' && S.nuts === 'Dão-Lafões' && alt >= 700 && S.lat > 40.85) { cand = ['pt-montemuro', 'pt-beira', 'pt-freita']; band = { en:'Serra de Montemuro', pt:'Serra de Montemuro' }; }
     else if (g === 'beira' && S.nuts === 'Cova da Beira') cand = ['pt-beira', 'pt-paul', 'pt-beira-campo'];
     else if (g === 'beira' && S.nuts === 'Pinhal Interior Sul') cand = ['pt-pinhal', 'pt-beira', 'pt-beira-campo'];
     else if (g === 'beira') cand = S.nuts === 'Pinhal Interior Norte' && alt < 400 ? ['pt-pinhal', 'pt-beira', 'pt-tmontes'] : S.nuts === 'Pinhal Interior Norte' ? ['pt-beira', 'pt-pinhal', 'pt-tmontes'] : ['pt-beira', 'pt-tmontes', 'pt-pinhal'];
@@ -20037,6 +20043,51 @@ Object.assign(MN_TYPES, {
       vI('site', { en:'The village grows without a plan: largos open where the community has its references — the church, the fountain, a place to meet.', pt:'A aldeia cresce sem traçado: os largos abrem-se onde há referências comunitárias — a igreja, o fontanário, os pontos de socialização.' }, 'FER')
     ] },
 
+  'pt-freita':{ region:'mainland',
+    name:{ en:'Serra da Freita house (Arouca — schist and slate)', pt:'Casa serrana da Freita (Arouca — xisto e lousa)' },
+    where:{ en:'The Gralheira massif above Arouca — Rio de Frades, Covêlo de Paivô, Lomba (schist), Cabaços, Albergaria da Serra (granite)', pt:'O Maciço da Gralheira sobre Arouca — Rio de Frades, Covêlo de Paivô, Lomba (xisto), Cabaços, Albergaria da Serra (granito)' },
+    summary:{ en:'A small square block of two storeys, packed in hamlets with no private yard: the curral or loja below, with blind walls and a wide door under a relieving arch; the sala-cozinha above, entered straight from the slope or by a stone stair to a landing. Dry-laid schist toward the Paiva, granite on the Freita, big stones at the quoins; the rock itself used as wall. Few windows, turned south and west, set high under the eave, on a single parapet slab. No balcony. A shallow two-slope roof of black slate (once thatch), no chimney: the smoke leaves through lifted tiles.',
+      pt:'Um pequeno bloco quadrado de dois pisos, apertado em lugarejos sem quinteiro: em baixo o curral ou a loja, de paredes cegas e porta larga sob arco de descarga; em cima a sala-cozinha, acedida directamente da encosta ou por escada de pedra com patim. Xisto assente a seco para o lado do Paiva, granito na Freita, pedras grandes nos cunhais; a própria rocha a servir de parede. Poucas janelas, viradas a sul e poente, altas junto ao beiral, sobre uma laje de peitoril. Sem varanda. Cobertura de duas águas pouco inclinada em lousa preta (antes colmo), sem chaminé: o fumo sai por telhas levantadas.' },
+    model:{ L:6, D:6, fl:2, fh:2.3, rot:200, form:'rect', roof:{ n:2, th:22, bei:0.15 },
+      open:{ S:vOpen([D(0.3, 0.25, [{ door:true }, { door:false }]), W(0.72, 0.18, [{ on:false }, { on:true }])], 0.05, 1.1, 1.9), N:{ wwr:0.01, units:vOff() }, E:{ wwr:0.01, units:vOff() }, W:vOpen([W(0.5, 1, [{ on:false }, { on:true }])], 0.03, 1.1, 1.9) },
+      render:{ en:'schist walls, slate roof, timber door', pt:'paredes de xisto, telhado de lousa, porta de madeira' },
+      walls:{ en:'schist and/or granite laid dry, exposed inside and out; granite quoins and jambs (schist or timber where granite is scarce)', pt:'xisto e/ou granito assente a seco, à vista por dentro e por fora; cunhais e ombreiras de granito (xisto ou madeira onde ele escasseia)' } },
+    feats:[
+      vFloors('2', 2, 2, 'MGA'),
+      vN('site', { en:'Balcony', pt:'Varanda' }, { en:'none in the unaltered houses', pt:'nenhuma nas casas não alteradas' }, () => (MASS.balc || []).length, 0, 0, '', 'MGA'),
+      vN('site', { en:'Square block', pt:'Bloco quadrado' }, { en:'yes', pt:'sim' }, () => MASS.L / MASS.D, 0.8, 1.3, 'L/D', 'MGA'),
+      vI('site', { en:'Where the slope allows, two doors at two levels and no stair; otherwise a stone stair against the front with a landing at the top. Houses bridge the lane with passadiços at the upper floor.', pt:'Onde o declive deixa, duas portas a dois níveis e nenhuma escada; senão uma escada de pedra encostada à frente com patim no alto. Passadiços ligam as casas por cima do caminho, ao nível do sobrado.' }, 'MGA'),
+      vFacing({ en:'windows to south and west', pt:'janelas a sul e poente' }, 160, 260, 'MGA'),
+      vGlaze(6, 'INF'),
+      vI('openings', { en:'Only the upper floor has windows, few and small, close to the eave; the curral has blind walls or one or two small vents. Under the window one large stone slab is both sill and a thinner wall, with stone seats (namoradeiras) inside.', pt:'Só o sobrado tem janelas, poucas e pequenas, junto ao beiral; o curral tem paredes cegas ou um ou dois postigos de ventilação. Sob a janela uma grande laje é peitoril e parede mais estreita, com namoradeiras por dentro.' }, 'MGA'),
+      vRoofN(null, { en:'two slopes, low pitch', pt:'duas águas, pouco inclinadas' }, [2], 'MGA'),
+      vPitch({ en:'slate, low', pt:'lousa, pouco inclinada' }, 15, 28, 'INF'),
+      vI('ventilation', { en:'No chimney: lifted or paired tiles let the smoke out of the sala-cozinha, the hearth a stone slab against the wall with the oven beside it.', pt:'Sem chaminé: telhas levantadas ou encostadas deixam sair o fumo da sala-cozinha; a lareira é uma laje de pedra encostada à parede, com o forno ao lado.' }, 'MGA'),
+      vWall({ en:'exposed schist or granite', pt:'xisto ou granito à vista' }, ['schist', 'stone'], 'MGA'),
+      vRoofFin({ en:'black slate (thatch before)', pt:'lousa preta (antes colmo)' }, ['slate', 'thatch'], 'MGA')
+    ] },
+
+  'pt-montemuro':{ region:'mainland',
+    name:{ en:'Montemuro thatched house (Vale de Papas, Gralheira)', pt:'Casa colmada do Montemuro (Vale de Papas, Gralheira)' },
+    where:{ en:'The high villages of the Serra de Montemuro, about 1000 m — Vale de Papas, Gralheira (Cinfães), Alhões; Castro Daire', pt:'As aldeias altas da Serra de Montemuro, por volta dos 1000 m — Vale de Papas, Gralheira (Cinfães), Alhões; Castro Daire' },
+    summary:{ en:'Granite and rye straw. One storey, or two that do not connect: the ground falls, so the curral is entered below and the house above, each by its own door. A common room with the hearth on the floor and alcoves where several sleep; tiny openings; almost no chimney. The gable walls are capped with dressed slabs and edged with stones set on end (guarda-ventos); the smooth rye thatch is weighted at the ridge by a row of stones and along the eave by slabs or poles.',
+      pt:'Granito e palha de centeio. Um piso, ou dois que não comunicam: o terreno desce, e entra-se no curral por baixo e na casa por cima, cada um pela sua porta. Uma sala comum com a lareira no chão e alcovas onde dormem vários; aberturas diminutas; quase nenhuma chaminé. As empenas rematam com cápeas e guarda-ventos de pedras ao cutelo; o colmaço liso de centeio é seguro no cume por uma fiada de pedras ladeiras e no beiral por lousas ou varas.' },
+    model:{ L:8, D:5.5, fl:2, fh:2.3, rot:180, form:'rect', roof:{ n:2, th:42, bei:0.3 },
+      open:{ S:vOpen([D(0.25, 0.3, [{ door:true }, { door:true }]), W(0.7, 0.15, [{ on:false }, { on:true }])], 0.03, 1.1, 1.7), N:{ wwr:0.01, units:vOff() }, E:{ wwr:0.01, units:vOff() }, W:{ wwr:0.01, units:vOff() } },
+      render:{ en:'granite stone walls, thatch roof, timber door', pt:'paredes de granito, telhado de colmo, porta de madeira' },
+      walls:{ en:'granite, capped by dressed slabs (cápeas) to seat the rafters; oak and chestnut roof frame, rafters 0.40–0.55 m apart', pt:'granito, rematado por cápeas aparelhadas onde assentam os caibros; armação de carvalho e castanho, caibros a 0,40–0,55 m' } },
+    feats:[
+      vFloors({ en:'1, or 2 not connected', pt:'1, ou 2 que não comunicam' }, 1, 2, 'PIN'),
+      vI('site', { en:'A mountain village of houses, currais, palheiros and canastros packed together, leaving the fertile, finely divided fields around it free for rye, maize and potato; the community threshing floor for the rye.', pt:'Uma aldeia de montanha de casas, currais, palheiros e canastros apertados, libertando em redor os terrenos férteis, muito parcelados, para o centeio, o milho e a batata; a eira comunitária para o centeio.' }, 'PIN'),
+      vRoofN(null, { en:'two slopes, thatch', pt:'duas águas, colmo' }, [2], 'PIN'),
+      vPitch({ en:'thatch, steep', pt:'colmo, inclinado' }, 38, 50, 'INF'),
+      vGlaze(4, 'INF'),
+      vI('roof', { en:'Rye sown in September, cut by hand in June–July as close to the ground as possible, threshed by flail and stored two or three years before use. Thatched in March–April, in the morning dew, from the right-hand corner leftward, eave to ridge, beaten smooth; the old roofs had a thin straw lining over spaced battens 0.10–0.20 m apart.', pt:'Centeio semeado em Setembro, ceifado à mão em Junho–Julho o mais rente possível, malhado ao mangual e guardado dois ou três anos antes de usar. Colmado em Março–Abril, de manhã com o orvalho, do canto direito para a esquerda, do beiral ao cume, batido liso; as coberturas antigas tinham um forro fino de colmo sobre ripas espaçadas de 0,10–0,20 m.' }, 'PIN'),
+      vI('ventilation', { en:'Almost no chimneys: the smoke blackens everything and leaves through the gaps of thatch, stones and doors — and seasons the straw against rot.', pt:'Quase sem chaminés: o fumo enegrece tudo e sai pelos interstícios do colmo, das pedras e das portas — e defende a palha da podridão.' }, 'PIN'),
+      vWall({ en:'granite', pt:'granito' }, ['stone'], 'PIN'),
+      vRoofFin({ en:'rye thatch', pt:'colmo de centeio' }, ['thatch'], 'PIN')
+    ] },
+
   'pt-beira-campo':{ region:'mainland',
     name:{ en:'Beira Baixa plains house (the Campo — Malpica do Tejo, Zebreira)', pt:'Casa do Campo da Beira Baixa (Malpica do Tejo, Zebreira)' },
     where:{ en:'The schist plain south and east of Castelo Branco — Malpica do Tejo, Zebreira, Ladoeiro, Idanha: the «Beira Alentejana»', pt:'A planície xistosa a sul e nascente de Castelo Branco — Malpica do Tejo, Zebreira, Ladoeiro, Idanha: a «Beira Alentejana»' },
@@ -20080,6 +20131,14 @@ Object.assign(MN_TYPES, {
     ] }
 });
 Object.assign(VERN_TYPES, MN_TYPES);
+
+/* --- Delgado (2026) and Pinto (2016): the Trás-os-Montes house, Zona 2 ------ */
+vAdd('pt-tmontes', [
+  vI('site', { en:'Three types of the rustic house: the simplest with only a loja; the middle one with a side porch, continuing the neighbours’ fronts; the richest with a yard (curralada) behind a tall two-leaf carriage door. Poorer families lived on one floor beside the animals and slept in the roof space, the warmest place. Houses lean on one another with shared walls, the streets narrow and winding.', pt:'Três tipos da casa rústica: a mais simples só com uma loja; a média com alpendre lateral, na continuidade das vizinhas; a mais complexa com pátio (curralada) atrás de uma porta carral alta, de duas folhas. As famílias mais pobres viviam num só piso ao lado dos animais e dormiam no vão do telhado, o sítio mais quente. As casas encostam-se com paredes meeiras, as ruas estreitas e sinuosas.' }, 'DEL'),
+  vI('ventilation', { en:'The living floor raised over the loja is drier, and the animals below warm it. The kitchen, under bare tiles (telha-vã) because the chimney is rare, is the one large room: the hearth always lit, the escano bench beside it, alcoves at the dark edges behind timber partitions. In Barroso small openings of about 50 × 50 cm in the thatch let out a little of the smoke.', pt:'O sobrado levantado sobre a loja é mais seco, e os animais aquecem-no por baixo. A cozinha, de telha-vã porque a chaminé é rara, é o grande espaço único: a lareira sempre acesa, o escano ao lado, alcovas nas zonas escuras atrás de tabiques de madeira. No Barroso pequenas aberturas de cerca de 50 × 50 cm no colmo deixam sair um pouco do fumo.' }, 'DEL'),
+  vI('visualization', { en:'Walls often double: two leaves of stone tied by through-stones, the core filled with clay and rubble; bigger blocks at quoins and openings. Insulation only in the roof, where slate or schist sits over a layer of thatch. In Pitões the thatch is held against the wind by crossed poles (latas) clamped to the eaves; in Rio de Onor schist slabs cover several houses under one roof.', pt:'Paredes muitas vezes duplas: dois panos de pedra travados por perpianhos, o miolo cheio de terra argilosa e pedra miúda; blocos maiores nos cunhais e nos vãos. Isolamento só na cobertura, onde a lousa ou o xisto assentam sobre uma camada de colmo. Em Pitões o colmo é seguro contra o vento por armações de paus cruzados (latas) presas às beiradas; em Rio de Onor placas de xisto cobrem várias casas num só telhado.' }, 'DEL'),
+  vI('openings', { en:'The varanda is all of timber — not on granite pillars as in the Minho — projecting on extended beams or small stone piers, often with a tabique closet at each end under the house roof.', pt:'A varanda é toda de pau — não sobre pilares de granito como no Minho — saliente sobre traves prolongadas ou pequenos pilares de pedra, muitas vezes com um cubículo de tabique em cada extremo, sob o telhado da casa.' }, 'DEL')
+]);
 
 /* --- Salvado (2021): the Beira house in the field, read against Zona 3 ------ */
 vAdd('pt-beira', [
@@ -20168,6 +20227,12 @@ const ARCH_BIB = [
     'Miranda, P. M. A., et al. (n.d.). <i>Clima observado</i>. Observatório Regional do Clima da Madeira. https://observatorioclima.madeira.gov.pt/wp-content/uploads/pdfs/02_clima_observado.pdf',
     'Silva, F. A. da, &amp; Menezes, C. A. de. (n.d.). Indústria agrícola. In <i>Elucidário Madeirense</i>. https://elucidariomadeirense.pt/en/articles/1780',
     'Teixeira, C. R. Q. (2009). <i>A arquitectura vernacular da Madeira: Tradição, identidade e sustentabilidade</i> [Master’s dissertation, Universidade da Beira Interior]. http://hdl.handle.net/10400.6/1746'] },
+  { r:{ en:'Entre-Douro-e-Vouga and the Montemuro — the Gralheira massif', pt:'Entre-Douro-e-Vouga e o Montemuro — o Maciço da Gralheira' }, types:['pt-freita', 'pt-montemuro'], refs:[
+    'Almeida, M. G. de. (2014). <i>Arquitectura popular de Entre-Douro-e-Vouga</i> [Master’s dissertation, Universidade da Beira Interior]. https://ubibliorum.ubi.pt/entities/publication/ac1905e9-6afb-413e-ae56-93ef22399338',
+    'Pinto, S. M. L. R. (2016). <i>A tradição portuguesa das coberturas de colmo: Os casos práticos de Vale de Papas e Corte de Ouro</i> [Master’s dissertation, Universidade Lusíada]. http://hdl.handle.net/11067/1787'] },
+  { r:{ en:'Trás-os-Montes', pt:'Trás-os-Montes' }, types:['pt-tmontes'], refs:[
+    'Delgado, G. F. A. (2026). <i>Entre o vernacular e o contemporâneo: Um projeto em Miranda do Douro</i> [Master’s dissertation, Universidade do Porto]. https://repositorio-aberto.up.pt/bitstream/10216/174514/2/780058.pdf',
+    'Pinto, S. M. L. R. (2016). <i>A tradição portuguesa das coberturas de colmo: Os casos práticos de Vale de Papas e Corte de Ouro</i> [Master’s dissertation, Universidade Lusíada]. http://hdl.handle.net/11067/1787'] },
   { r:{ en:'Beira Interior — Beira Baixa and Cova da Beira', pt:'Beira Interior — Beira Baixa e Cova da Beira' }, types:['pt-beira', 'pt-beira-campo', 'pt-paul'], refs:[
     'Salvado, J. P. F. (2021). <i>Arquitectura popular em Portugal: Tecnologias construtivas tradicionais na contemporaneidade</i> [Master’s dissertation, Universidade da Beira Interior].'] },
   { r:{ en:'Beira Litoral and the Pinhal Interior — Coimbra', pt:'Beira Litoral e Pinhal Interior — Coimbra' }, types:['pt-pinhal', 'pt-beira'], refs:[
