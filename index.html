@@ -966,7 +966,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.143.0',
+  version:     '1.144.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -18405,79 +18405,55 @@ style === 'sketch' ? '#EFEBE0'
     if (renderPanel) renderPanel.draw();
     benchStage(stage);
   }
-  /* ---- Spark advisor (optional, key-held): Muse Spark reads the current
-     view plus the v2 brief and answers STRICT JSON with a score and
-     parameter moves — text in, text out, the model never leaves the
-     student's key control. Nothing runs without a key. */
-  props.appendChild(el('div', { class:'gh', text:'Spark advisor' }));
-  const sparkBox = props.appendChild(el('div', { class:'controls' }));
-  const sparkKey = el('input', { type:'password' });
-  sparkKey.placeholder = t('OpenRouter key (stays in this browser)');
-  sparkKey.style.cssText = 'font:inherit;font-size:12px;width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px';
-  try { sparkKey.value = localStorage.getItem('arca-spark-key') || ''; } catch (e) {}
-  const sparkBtn = el('button', { class:'btn', text:'Ask Spark for a better look' });
-  const sparkNote = el('div', { class:'hint', text:'' });
-  const sparkAdvice = el('div', { class:'facts' });
-  const sparkApply = el('button', { class:'btn solid', text:'Apply the moves', title:'Apply the advised sun, materials and finish' });
-  sparkApply.style.display = 'none';
-  sparkBox.appendChild(sparkKey); sparkBox.appendChild(sparkBtn);
-  props.appendChild(sparkNote); props.appendChild(sparkAdvice); props.appendChild(sparkApply);
-  let sparkMoves = null;
-  sparkBtn.onclick = async () => {
-    const key = sparkKey.value.trim();
-    if (!key) { sparkNote.textContent = t('Paste an OpenRouter key first — billed to you, nothing else leaves the browser.'); return; }
-    try { localStorage.setItem('arca-spark-key', key); } catch (e) {}
-    sparkBtn.disabled = true; sparkApply.style.display = 'none'; sparkAdvice.innerHTML = '';
-    sparkNote.textContent = t('Asking Spark…');
-    refreshRender();
-    try {
-      const png = renderPanel.canvas.toDataURL('image/png');
-      const brief = renderBriefData();
-      const wallKeys = RENDER_WALLS.map(o => o.key).join('/'), roofKeys = RENDER_ROOFS.map(o => o.key).join('/');
-      const sys = 'You are a rendering art-director for a bioclimatic teaching app. The image shows its current 3D view; the JSON carries the exact model, materials, sun and camera. Reply with NOTHING but strict JSON: {"score_0_10":n,"moves":[{"op":op,"value":v}],"note":"one sentence"}. Allowed ops only: {"op":"sun_hour","value":5-22}, {"op":"wall","value":"one of ' + wallKeys + '"}, {"op":"roof","value":"one of ' + roofKeys + '"}, {"op":"style","value":"clay/photo/bw"}. At most 4 moves, each genuinely improving light or materials for this house and climate.';
-      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + key },
-        body:JSON.stringify({ model:'meta/muse-spark-1.3', max_tokens:500,
-          messages:[{ role:'system', content:sys },
-            { role:'user', content:[{ type:'text', text:'Model JSON: ' + JSON.stringify(brief) }, { type:'image_url', image_url:{ url:png } }] }] })
-      });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const js = await r.json();
-      const txt = (js.choices && js.choices[0] && js.choices[0].message && js.choices[0].message.content) || '';
-      const adv = JSON.parse(String(txt).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim());
-      if (!adv || !Array.isArray(adv.moves)) throw new Error('shape');
-      sparkMoves = adv.moves.filter(m => m && typeof m.op === 'string').slice(0, 4);
-      sparkAdvice.innerHTML = '';
-      const row = (k, v) => { const d = el('div', { class:'fact' }, [el('span', { text:k })]); const b = el('b', {}); b.textContent = v; d.appendChild(b); sparkAdvice.appendChild(d); };
-      row(t('Score') + ' /10', String(adv.score_0_10 != null ? adv.score_0_10 : '–'));
-      sparkMoves.forEach(m => row(String(m.op), String(m.value)));
-      if (adv.note) sparkNote.textContent = String(adv.note);
-      else sparkNote.textContent = t('Advice ready — apply it or keep judging by eye.');
-      sparkApply.style.display = sparkMoves.length ? '' : 'none';
-    } catch (e) {
-      sparkNote.textContent = t('Spark did not answer — check the key and the connection, then retry.');
-    }
-    sparkBtn.disabled = false;
-  };
-  sparkApply.onclick = () => {
-    if (!sparkMoves) return;
-    sparkMoves.forEach(m => {
-      try {
-        if (m.op === 'sun_hour' && isFinite(+m.value)) {
-          hour = clamp(+m.value, 5, 22); hourTouched = true;
-          hourCtl.range.value = hour; hourCtl.out.textContent = fmt(hour, 1) + ' h';
-        } else if (m.op === 'wall' || m.op === 'roof') {
-          const list = m.op === 'wall' ? RENDER_WALLS : RENDER_ROOFS;
-          const o = list.find(q => q.key === String(m.value));
-          if (o) setPromptMaterial(m.op, o);
-        } else if (m.op === 'style' && ['clay', 'photo', 'bw'].indexOf(String(m.value)) >= 0) {
-          styleLock = String(m.value); styleTouched = true; syncStyleCtl();
-        }
-      } catch (e) {}
-    });
-    refreshRender();
-    toast('Applied — judge the new look by eye');
-  };
+  /* ---- Photorealistic image with Gemini: a hand-off, nothing called from here.
+     The student's own Gemini (signed in with the university Google account)
+     receives the current view as a PNG and a prompt built from the model,
+     and answers with a photorealistic picture of the same house on its site.
+     The app keeps no key and sends nothing: the image is downloaded, the
+     prompt copied, and gemini.google.com opened in a new tab. */
+  props.appendChild(el('div', { class:'gh', text:'Photorealistic image (Gemini)' }));
+  const gemBox = props.appendChild(el('div', { class:'controls' }));
+  const gemNote = el('div', { class:'hint', html:t('Frame the view first — zoom and turn it: Gemini keeps the framing. Opens Gemini in a new tab — sign in there with your university Google account. Then attach the downloaded image, paste the prompt (Ctrl/⌘ V) and send.') });
+  const gemWarn = el('div', { class:'hint', text:t('What Gemini returns is an AI illustration, not the model: check that storeys, roof and openings were kept before using it.') });
+  gemWarn.style.color = '#9A3412';
+  /** The prompt, in the page's language, from the model as it stands. */
+  function geminiPrompt() {
+    const B = renderBriefData(), pt = LANG === 'pt';
+    let typ = '';
+    try { const R = vernRead(); if (R && R.T) typ = VL(R.T.name); } catch (e) {}
+    const roofW = { flat:pt ? 'cobertura plana (açoteia/terraço)' : 'flat roof', shed:pt ? 'telhado de uma água' : 'single-slope roof', gable:pt ? 'telhado de duas águas' : 'two-slope (gable) roof', hip:pt ? 'telhado de quatro águas' : 'hipped roof' }[B.model.roof.type];
+    const wall = look.wall ? matName(look.wall) : (pt ? 'acabamento do local' : 'the site finish'), roofM = look.roof ? matName(look.roof) : (pt ? 'acabamento do local' : 'the site finish');
+    const dO = B.look.door ? RENDER_DOORS.find(o => o.key === B.look.door) : null, door = dO ? (pt ? 'de ' : '') + VL(dO.label) : '';
+    const nPl = B.model.planting, nSup = SCENE.walls.filter(w => w.sup).map(w => VERN_TYPES[w.sup] ? VL(VERN_TYPES[w.sup].name).replace(/ \(.*\)$/, '') : '').filter(Boolean);
+    return pt ? [
+      'Transforma esta vista 3D esquemática numa fotografia fotorrealista do mesmo edifício no seu local.',
+      'Local: ' + B.site.place + ' (' + B.site.nuts + ', Portugal), ' + B.site.alt + ' m de altitude, clima ' + B.site.koppen + '.' + (typ ? ' Tipo: ' + typ + ', arquitetura vernacular portuguesa.' : ''),
+      'Edifício: ' + B.model.floors + ' piso(s), cerca de ' + B.model.length + ' × ' + B.model.depth + ' m, ' + roofW + (B.model.roof.pitch ? ' a ' + B.model.roof.pitch + '°' : '') + '. Paredes: ' + wall + '. Cobertura: ' + roofM + '.' + (door ? ' Portas ' + door + '.' : ''),
+      'Luz: 21 de junho, ' + B.sun.hour + ' h solares, sol a ' + B.sun.altitude + '° de altura — sombras coerentes com essa posição.',
+      (nPl ? nPl + ' árvores ou arbustos onde aparecem na vista. ' : '') + (nSup.length ? 'Estruturas de apoio onde aparecem: ' + nSup.join(', ') + '. ' : '') + 'Paisagem e vegetação próprias da região.',
+      'Mantém rigorosamente: o mesmo ponto de vista e enquadramento, a forma e as proporções do volume, o número de pisos, a forma e a inclinação do telhado, e o número, a posição e o tamanho das portas e janelas. Não acrescentes pisos, varandas, janelas nem outros edifícios.',
+      'Uma só imagem, com a mesma proporção da original.'
+    ].join('\n') : [
+      'Turn this schematic 3D view into a photorealistic photograph of the same building on its site.',
+      'Site: ' + B.site.place + ' (' + B.site.nuts + ', Portugal), ' + B.site.alt + ' m above sea level, ' + B.site.koppen + ' climate.' + (typ ? ' Type: ' + typ + ', Portuguese vernacular architecture.' : ''),
+      'Building: ' + B.model.floors + ' storey(s), about ' + B.model.length + ' × ' + B.model.depth + ' m, ' + roofW + (B.model.roof.pitch ? ' at ' + B.model.roof.pitch + '°' : '') + '. Walls: ' + wall + '. Roof: ' + roofM + '.' + (door ? ' Doors: ' + door + '.' : ''),
+      'Light: 21 June, ' + B.sun.hour + ' h solar time, sun ' + B.sun.altitude + '° high — shadows consistent with that position.',
+      (nPl ? nPl + ' trees or bushes where the view shows them. ' : '') + (nSup.length ? 'Support structures where shown: ' + nSup.join(', ') + '. ' : '') + 'Landscape and planting of the region.',
+      'Keep strictly: the same viewpoint and framing, the shape and proportions of the volume, the number of storeys, the roof form and pitch, and the number, position and size of the doors and windows. Do not add storeys, balconies, windows or other buildings.',
+      'One image, in the same aspect ratio as the original.'
+    ].join('\n');
+  }
+  const copyText = (txt, done) => { try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, () => fallbackCopy(txt, done)); else fallbackCopy(txt, done); } catch (e) { fallbackCopy(txt, done); } };
+  gemBox.appendChild(el('button', { class:'btn solid', text:'Open in Gemini', title:t('Download the view, copy the prompt and open Gemini'),
+    onclick: () => {
+      refreshRender();
+      /* the view as a file the student attaches in Gemini */
+      try { const a = document.createElement('a'); a.href = renderPanel.canvas.toDataURL('image/png'); a.download = 'vista-render-' + (S.place || S.nuts || 'local').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '-') + '.png'; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {}
+      copyText(geminiPrompt(), () => toast(t('Image downloaded and prompt copied — attach the image in Gemini and paste the prompt')));
+      window.open('https://gemini.google.com/app', '_blank', 'noopener');
+    } }));
+  gemBox.appendChild(el('button', { class:'btn', text:'Copy the prompt again', onclick:() => copyText(geminiPrompt(), () => toast(t('Prompt copied'))) }));
+  props.appendChild(gemNote); props.appendChild(gemWarn);
 
   KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showNb, embas, cant, cam:{ az:CAM.az, el:CAM.el } }; });
   host._refresh = () => { renderCam.sync(); refreshRender(); };
@@ -28104,16 +28080,14 @@ Object.assign(PT, {
   "whitewashed walls, clay tile roof, afternoon sun, photorealistic": "paredes de cal, telhado de telha, sol da tarde, fotorrealista",
   "Ground in view: low {} m, high +{} m (240 m grid).": "Terreno à vista: baixo {} m, alto +{} m (malha de 240 m).",
   "Surrounding buildings": "Edifícios vizinhos",
-  "Spark advisor": "Consultor Spark",
-  "OpenRouter key (stays in this browser)": "Chave OpenRouter (fica neste navegador)",
-  "Ask Spark for a better look": "Pedir melhor aspeto ao Spark",
-  "Apply the moves": "Aplicar as mudanças",
-  "Paste an OpenRouter key first — billed to you, nothing else leaves the browser.": "Cole primeiro uma chave OpenRouter — faturada a si, mais nada sai do navegador.",
-  "Asking Spark…": "A perguntar ao Spark…",
-  "Advice ready — apply it or keep judging by eye.": "Conselho pronto — aplique ou continue a julgar a olho.",
-  "Spark did not answer — check the key and the connection, then retry.": "O Spark não respondeu — verifique a chave e a ligação e tente de novo.",
-  "Score": "Nota",
-  "Applied — judge the new look by eye": "Aplicado — julgue o novo aspeto a olho",
+  "Photorealistic image (Gemini)": "Imagem fotorrealista (Gemini)",
+  "Open in Gemini": "Abrir no Gemini",
+  "Download the view, copy the prompt and open Gemini": "Descarregar a vista, copiar o pedido e abrir o Gemini",
+  "Copy the prompt again": "Copiar o pedido outra vez",
+  "Prompt copied": "Pedido copiado",
+  "Image downloaded and prompt copied — attach the image in Gemini and paste the prompt": "Imagem descarregada e pedido copiado — anexe a imagem no Gemini e cole o pedido",
+  "Frame the view first — zoom and turn it: Gemini keeps the framing. Opens Gemini in a new tab — sign in there with your university Google account. Then attach the downloaded image, paste the prompt (Ctrl/⌘ V) and send.": "Enquadre primeiro a vista — aproxime e rode: o Gemini mantém o enquadramento. Abre o Gemini num novo separador — entre aí com a sua conta Google da universidade. Depois anexe a imagem descarregada, cole o pedido (Ctrl/⌘ V) e envie.",
+  "What Gemini returns is an AI illustration, not the model: check that storeys, roof and openings were kept before using it.": "O que o Gemini devolve é uma ilustração gerada por IA, não o modelo: confirme que os pisos, o telhado e os vãos se mantiveram antes de a usar.",
   "Popular here": "Popular aqui",
   "Wall finishes": "Acabamentos de parede",
   "Wall module": "Módulo da parede",
