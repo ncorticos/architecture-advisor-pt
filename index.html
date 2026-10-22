@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.123.0',
+  version:     '1.124.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21028,19 +21028,15 @@ function vIcon(key, size) {
   /* a chimney where the model names one */
   const sumEn = (T.summary && T.summary.en) || '';
   if (/chimney/i.test(sumEn) && !/no chimney|without (a )?chimney|chimney is rare|rarely a chimney|almost no chimney|few chimneys|no chimneys|not.{0,20}chimney|chimney.{0,10}absent/i.test(sumEn) && zones[0].n !== 0) {
-    const cx = L * 0.72, cy = Dd * 0.55, th0 = zones[zones.length - 1].th * Math.PI / 180, zb = H + Math.max(0, Dd / 2 - Math.abs(cy - Dd / 2)) * Math.tan(th0) - 0.2, zt = zb + 1.3;
-    face([P(cx, cy, zb), P(cx + 0.6, cy, zb), P(cx + 0.6, cy, zt), P(cx, cy, zt)], wc, 0.05); face([P(cx + 0.6, cy, zb), P(cx + 0.6, cy + 0.6, zb), P(cx + 0.6, cy + 0.6, zt), P(cx + 0.6, cy, zt)], vShade(wc, 0.8), 0.05);
-    face([P(cx - 0.05, cy - 0.05, zt), P(cx + 0.65, cy - 0.05, zt), P(cx + 0.65, cy + 0.65, zt), P(cx - 0.05, cy + 0.65, zt)], vShade(wc, 0.92), 0.05);
+    /* the Alentejo chimney: wide, rising from inside the wall, off the centre */
+    const cw = chimKind === 'ale' ? 1.1 : 0.6, cx = chimKind === 'ale' ? L * 0.66 : L * 0.72, cy = chimKind === 'ale' ? Dd * 0.3 : Dd * 0.55, th0 = zones[zones.length - 1].th * Math.PI / 180, zb = H + Math.max(0, Dd / 2 - Math.abs(cy - Dd / 2)) * Math.tan(th0) - 0.2, zt = zb + 1.3;
+    face([P(cx, cy, zb), P(cx + cw, cy, zb), P(cx + cw, cy, zt), P(cx, cy, zt)], wc, 0.05); face([P(cx + cw, cy, zb), P(cx + cw, cy + 0.6, zb), P(cx + cw, cy + 0.6, zt), P(cx + cw, cy, zt)], vShade(wc, 0.8), 0.05);
+    face([P(cx - 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy - 0.05, zt), P(cx + cw + 0.05, cy + 0.65, zt), P(cx - 0.05, cy + 0.65, zt)], vShade(wc, 0.92), 0.05);
     if (chimKind === 'alg') { /* the Algarve lattice chimney: a pierced shaft and a little pointed cap */
       for (let k = 0; k < 3; k++) for (let j = 0; j < 2; j++) face([P(cx + 0.1 + j * 0.25, cy - 0.01, zb + 0.5 + k * 0.25), P(cx + 0.25 + j * 0.25, cy - 0.01, zb + 0.5 + k * 0.25), P(cx + 0.25 + j * 0.25, cy - 0.01, zb + 0.65 + k * 0.25), P(cx + 0.1 + j * 0.25, cy - 0.01, zb + 0.65 + k * 0.25)], '#3E4C57', 0.01);
       face([P(cx - 0.05, cy - 0.05, zt), P(cx + 0.65, cy - 0.05, zt), P(cx + 0.3, cy + 0.3, zt + 0.6)], vShade(wc, 0.95), 0.03); face([P(cx + 0.65, cy - 0.05, zt), P(cx + 0.65, cy + 0.65, zt), P(cx + 0.3, cy + 0.3, zt + 0.6)], vShade(wc, 0.78), 0.03); }
     else { face([P(cx + 0.12, cy - 0.01, zt - 0.35), P(cx + 0.48, cy - 0.01, zt - 0.35), P(cx + 0.48, cy - 0.01, zt - 0.12), P(cx + 0.12, cy - 0.01, zt - 0.12)], '#2E2A26', 0.01); }
   }
-  /* the great chimney of the Alentejo, built against the gable from the ground */
-  if (chimKind === 'ale' && /chimney/i.test(sumEn) && zones[0].n !== 0) { const cw = Math.min(1.8, Dd * 0.35), y0c = Dd / 2 - cw / 2, ht = H + Dd / 2 * Math.tan((zones[zones.length - 1].th || 20) * Math.PI / 180) + 0.8;
-    face([P(L, y0c, 0), P(L + 0.7, y0c, 0), P(L + 0.7, y0c, ht), P(L, y0c, ht)], vShade(wc, 0.95), 0.04); face([P(L + 0.7, y0c, 0), P(L + 0.7, y0c + cw, 0), P(L + 0.7, y0c + cw, ht), P(L + 0.7, y0c, ht)], vShade(wc, 0.8), 0.04);
-    face([P(L + 0.7, y0c, 0), P(L + 0.7, y0c + cw, 0), P(L + 0.7, y0c + cw, 0.45), P(L + 0.7, y0c, 0.45)], lime ? barC : vShade(wc, 0.6), 0.02);
-    face([P(L - 0.05, y0c - 0.05, ht), P(L + 0.75, y0c - 0.05, ht), P(L + 0.75, y0c + cw + 0.05, ht), P(L - 0.05, y0c + cw + 0.05, ht)], vShade(wc, 0.9), 0.04); }
   /* a porch or a vine pergola in front of the south wall */
   if (R.porch || R.latada) { const w = Math.min(8, Math.max(1, L - 2)), x = (L - w) / 2, d = 2.2, z = Math.min(H, fh) - 0.15;
     [x + 0.1, x + w - 0.25].forEach(px => face([P(px, -d, 0), P(px + 0.15, -d, 0), P(px + 0.15, -d, z), P(px, -d, z)], '#6E4B2E', 0.03));
@@ -21128,7 +21124,7 @@ const POP_HEAD = {
   visualization:{ t:{ en:'Materials and image', pt:'Materiais e imagem' },
     p:{ en:'The archetype’s materials and colours: walls, roof, doors and their bands — and the image of it.', pt:'Os materiais e as cores do arquétipo: paredes, cobertura, portas e as suas barras — e a sua imagem.' } }
 };
-Object.assign(PT, { 'Archetype':'Arquétipo', 'Plan and massing':'Planta e volumetria', 'Roof and covering':'Cobertura e revestimento',
+Object.assign(PT, { 'Draw the model':'Desenhar o modelo', 'Archetype':'Arquétipo', 'Plan and massing':'Planta e volumetria', 'Roof and covering':'Cobertura e revestimento',
   'Passive systems':'Sistemas passivos', 'Materials and image':'Materiais e imagem' });
 
 /** A page as before, retitled for the popular study, its checklist open at the head. */
@@ -21170,6 +21166,11 @@ function buildArchetype(host) {
     card.appendChild(el('button', { type:'button', class:on ? 'pri' : '', text:on ? VL({ en:'Studying this model', pt:'A estudar este modelo' }) : VL({ en:'Study this model', pt:'Estudar este modelo' }),
       onclick:() => { R.V.type = k; vernApply('all'); } }));
   });
+  /* every archetype, searchable — a click studies it here, out of its place */
+  host.appendChild(section(VL({ en:'All the archetypes — search and filter', pt:'Todos os arquétipos — pesquisar e filtrar' }), VL({ en:'A click studies that model here, out of its place.', pt:'Um clique estuda esse modelo aqui, fora do seu lugar.' })));
+  const fd = el('details', { class:'vern', style:'padding:8px 12px' }, [el('summary', { text:VL({ en:'Open the finder', pt:'Abrir a pesquisa' }) })]);
+  host.appendChild(fd);
+  fd.addEventListener('toggle', () => { if (fd.open && !fd.querySelector('.vmfinder')) vmFinder(fd, k => { R.V.type = k; vernApply('all'); }); });
   /* the whole sheet, as on every tab but open and complete */
   vernMount(host, 'archetype', true);
   const sheet = host.querySelector('details.vern');
@@ -21188,6 +21189,7 @@ function tabsFor(S) {
   if (studyMethod(S) !== 'popular') return TABS_OLGYAY;
   return [
     { key:'archetype', label:'Archetype', build:buildArchetype },
+    { key:'modeller', label:'Draw the model', build:buildModeller },
     { key:'environment', label:'Environmental', build:popular('environment', buildEnvironment) },
     { key:'site', label:'Plan and massing', build:popular('site', buildSite) },
     { key:'roof', label:'Roof and covering', build:popular('roof', buildRoof) },
@@ -21661,8 +21663,8 @@ const BASE_TYPES = {
   'pt-sado-taipa':{ region:'mainland',
     name:{ en:'Sado valley house of rammed earth with buttresses', pt:'Casa do Vale do Sado, de taipa com contrafortes' },
     where:{ en:'The Sado valley — Alcácer do Sal, Grândola, the Comporta; the Serra de Grândola', pt:'O Vale do Sado — Alcácer do Sal, Grândola, a Comporta; a Serra de Grândola' },
-    summary:{ en:'A single long bay under two slopes of tile, walls of taipa — or adobe on the alluvial ground — propped by buttresses against the thrust and the damp; a tall chimney at the gable; whitewashed with a coloured barra (Inquérito, zone 6: the Serra de Grândola and the Sado valley).',
-      pt:'Uma só nave comprida sob duas águas de telha, paredes de taipa — ou adobe nos terrenos aluvionares — escoradas por contrafortes contra o impulso e a humidade; chaminé alta na empena; caiada, com barra colorida (Inquérito, zona 6: Serra de Grândola e vale do Sado).' },
+    summary:{ en:'A single long bay under two slopes of tile, walls of taipa — or adobe on the alluvial ground — propped by buttresses against the thrust and the damp; a tall chimney rising from inside the wall; whitewashed with a coloured barra (Inquérito, zone 6: the Serra de Grândola and the Sado valley).',
+      pt:'Uma só nave comprida sob duas águas de telha, paredes de taipa — ou adobe nos terrenos aluvionares — escoradas por contrafortes contra o impulso e a humidade; chaminé alta a sair de dentro da parede; caiada, com barra colorida (Inquérito, zona 6: Serra de Grândola e vale do Sado).' },
     model:{ L:14, D:5.5, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:2, th:22, bei:0.25 },
       open:{ S:vOpen([W(0.2, 0.06), D(0.4, 0.07), W(0.6, 0.06), D(0.8, 0.07)], 0.07), N:{ wwr:0.01, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
       render:{ en:'whitewash walls, barrel tile roof, blue door', pt:'parede caiada, telha de canudo, porta azul' },
@@ -21672,7 +21674,7 @@ const BASE_TYPES = {
       vRoofN(null, { en:'two slopes, one long bay', pt:'duas águas, uma só nave' }, [2], 'ISC'),
       vN('site', { en:'Length to depth', pt:'Comprimento / profundidade' }, { en:'long and narrow, ≥ 2', pt:'comprida e estreita, ≥ 2' }, () => MASS.L / MASS.D, 2, 4, '', 'ISC'),
       vGlaze(6, 'INF'),
-      vI('site', { en:'Buttresses (contrafortes) along the long walls — draw them as short masonry spurs; the chimney tall at the gable.', pt:'Contrafortes ao longo das paredes compridas — desenhe-os como esporões curtos de alvenaria; a chaminé alta na empena.' }, 'EXP'),
+      vI('site', { en:'Buttresses (contrafortes) along the long walls — draw them as short masonry spurs; the chimney tall, built within the wall.', pt:'Contrafortes ao longo das paredes compridas — desenhe-os como esporões curtos de alvenaria; a chaminé alta, construída dentro da parede.' }, 'EXP'),
       vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'earth', 'plaster'], 'EXP'),
       vRoofFin({ en:'channel tile', pt:'telha de canudo' }, ['canudo', 'tile'], 'EXP')
     ] },
@@ -21768,7 +21770,7 @@ function vDistTxt(k) {
 }
 
 /** The tile map of the districts, above the archetypes bibliography: pick a district, see its houses. */
-function buildArchDist(box) {
+function buildArchDist(box, refsBox) {
   const by = {};
   Object.keys(VERN_TYPES).forEach(k => vDist(k).forEach(d => (by[d] = by[d] || []).push(k)));
   box.innerHTML = '';
@@ -21783,11 +21785,22 @@ function buildArchDist(box) {
     panel.innerHTML = '';
     panel.appendChild(el('h6', { text:d + ' · ' + ks.length }));
     const sup = ks.filter(k => VERN_TYPES[k].support), houses = ks.filter(k => !VERN_TYPES[k].support);
-    const fig = list => '<div class="archicons">' + list.map(k => '<figure title="' + VL(VERN_TYPES[k].where).replace(/"/g, '&quot;') + '">' + vIcon(k, 56)
+    const fig = list => '<div class="archicons">' + list.map(k => '<figure title="' + VL(VERN_TYPES[k].where).replace(/"/g, '&quot;') + '">' + vIcon(k, 112)
       + '<figcaption>' + VL(VERN_TYPES[k].name).replace(/ \(.*\)$/, '') + '</figcaption></figure>').join('') + '</div>';
     if (houses.length) panel.appendChild(el('div', { html:fig(houses) }));
     if (sup.length) { panel.appendChild(el('p', { class:'vm', text:VL({ en:'Support structures', pt:'Estruturas de apoio' }) })); panel.appendChild(el('div', { html:fig(sup) })); }
     if (!ks.length) panel.appendChild(el('p', { class:'vm', text:VL({ en:'No archetype recorded yet.', pt:'Ainda sem arquétipo registado.' }) }));
+    /* only the sources of the archetypes shown */
+    if (refsBox) {
+      /* a group's reference is kept when all its houses are shown here, or when a house shown cites its author and year */
+      const tags = [...new Set(ks.reduce((a, k) => a.concat(VERN_TYPES[k].feats.map(f => f.src)), []).filter(t => t && VERN_SRC[t] && t !== 'INF'))].map(t => VERN_SRC[t].tag);
+      const cites = r => { const plain = r.replace(/<[^>]+>/g, ''); return tags.some(t => { const y = (t.match(/\d{4}/) || [''])[0], w = t.split(/[ ,&(]/)[0]; return w.length > 2 && plain.indexOf(w) >= 0 && (!y || plain.indexOf(y) >= 0); }); };
+      const refs = [...new Set(ARCH_BIB.filter(g => g.types && g.types.some(k => ks.indexOf(k) >= 0)).reduce((a, g) => a.concat(g.types.every(k => ks.indexOf(k) >= 0) ? g.refs : g.refs.filter(cites)), []))]
+        .sort((a, b) => a.replace(/<[^>]+>/g, '').localeCompare(b.replace(/<[^>]+>/g, ''), 'pt'));
+      refsBox.innerHTML = '';
+      refsBox.appendChild(el('h6', { class:'archreg', text:VL({ en:'Sources of the archetypes of ', pt:'Fontes dos arquétipos de ' }) + d }));
+      refsBox.appendChild(el('ul', { class:'archlist', html:refs.map(r => '<li>' + linkify(r) + '</li>').join('') }));
+    }
   };
   DISTRICTS.forEach(([d, r, c]) => {
     const n = (by[d] || []).length;
@@ -21797,7 +21810,7 @@ function buildArchDist(box) {
   show('Faro');
 }
 (() => {
-  const css = '.distwrap{display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:14px;align-items:start;margin:6px 0 14px}'
+  const css = '.distwrap{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:14px;align-items:start;margin:6px 0 14px}'
     + '@media (max-width:640px){.distwrap{grid-template-columns:1fr}}'
     + '.distmap{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:34px;gap:3px}'
     + '.distmap .dist{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:2px 6px;border:1px solid var(--line);border-radius:4px;background:#FBF3E2;font-size:10.5px;line-height:1.15;text-align:left;cursor:pointer;color:inherit}'
@@ -21808,12 +21821,12 @@ function buildArchDist(box) {
 })();
 const _buildArchBib = buildArchBib;
 buildArchBib = function () {
-  _buildArchBib();
   const box = $('#archBib');
   if (!box) return;
-  const d = el('div', { class:'archdist' });
-  box.insertBefore(d, box.firstChild);
-  buildArchDist(d);
+  /* the district map alone, its houses at twice the size, and below it only the sources of what it shows */
+  box.innerHTML = '';
+  const d = box.appendChild(el('div', { class:'archdist' })), refs = box.appendChild(el('div', { class:'archdistrefs' }));
+  buildArchDist(d, refs);
 };
 
 /* ---- 6. where the new types are offered: put first, or second where an older survey still leads ---- */
@@ -21893,6 +21906,1715 @@ vAddT('pt-espigueiro', [vI('site', { en:'Beside the espigueiro, the canastro: th
 VERN_DIST['pt-espigueiro'] = ['Viana do Castelo', 'Braga', 'Vila Real', 'Aveiro', 'Viseu'];
 (() => { const g = ARCH_BIB.find(x => x.r.pt === 'Estruturas de apoio à habitação'); if (g) { g.types = Object.keys(SUP_TYPES); g.refs.push('Entidade Regional de Turismo do Porto e Norte de Portugal, &amp; ATA — Associação de Turismo de Aldeia. (n.d.). <i>Aldeias do Norte de Portugal</i> [Brochure].'); } })();
 vernNames();
+
+
+/* ---- 9. more support structures (v1.124): the work of each community beside its houses ----
+   Kept to what the sources on file say; the sizes are teaching inferences and say so. */
+(() => {
+  const sup = (k, o, dist) => { SUP_TYPES[k] = Object.assign({ region:'mainland', support:true }, o); VERN_TYPES[k] = SUP_TYPES[k]; VERN_DIST[k] = dist; };
+  const flat = { type:'flat' };
+  sup('pt-eira', { name:{ en:'Eira — the threshing floor', pt:'Eira — o terreiro de malhar' },
+    where:{ en:'Every grain village of the north and the Beira, often communal — Soajo on its granite outcrop, Ramires (Cinfães), Vila da Ponte, Paradinha', pt:'Todas as aldeias de cereal do norte e da Beira, muitas vezes comunitária — o Soajo sobre o seu penedo de granito, Ramires (Cinfães), Vila da Ponte, Paradinha' },
+    summary:{ en:'An open floor of granite slabs (or of beaten earth and lime) where the grain was threshed and dried, a little raised and open to the wind, with the espigueiros or canastros round it; many were shared by the village.', pt:'Um terreiro aberto de lajes de granito (ou de terra batida e cal) onde se malhava e secava o grão, um pouco elevado e aberto ao vento, com os espigueiros ou canastros à volta; muitas eram comuns à aldeia.' },
+    model:{ L:10, D:10, fl:1, fh:2.0, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0, units:vOff() }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'granite stone walls', pt:'granito' }, walls:{ en:'granite slabs laid flat', pt:'lajes de granito assentes' } },
+    feats:[ vN('site', { en:'Side of the floor', pt:'Lado do terreiro' }, { en:'about 8–12 m (inference)', pt:'cerca de 8–12 m (inferência)' }, () => MASS.L, 6, 14, 'm', 'INF'),
+      vI('ventilation', { en:'Open to the prevailing wind: the chaff blown off as the grain was thrown up (winnowing).', pt:'Aberta ao vento dominante: a moinha levada pelo vento quando se joeirava o grão.' }, 'INF'),
+      vI('site', { en:'The espigueiros and canastros stand round the eira — at Soajo 24 on the same outcrop.', pt:'Os espigueiros e canastros erguem-se à volta da eira — no Soajo, 24 sobre o mesmo penedo.' }, 'ANP') ] }, ['Viana do Castelo', 'Braga', 'Vila Real', 'Viseu', 'Aveiro']);
+  sup('pt-pombal', { name:{ en:'Pombal — the dovecote of Trás-os-Montes', pt:'Pombal — o pombal transmontano' },
+    where:{ en:'The plateaus of the Nordeste Transmontano — Vimioso (Uva), Mogadouro, Miranda, Bragança', pt:'Os planaltos do Nordeste Transmontano — Vimioso (Uva), Mogadouro, Miranda, Bragança' },
+    summary:{ en:'A small free-standing building of schist or granite, round, horseshoe or square in plan, its roof of one slope falling to the north, whitewashed bands round the holes where the pigeons enter; dung for the fields, meat for the house. Many now abandoned and in ruins.', pt:'Uma pequena construção isolada de xisto ou granito, de planta circular, em ferradura ou quadrada, cobertura de uma água a cair para norte, faixas caiadas em volta dos orifícios por onde entram os pombos; estrume para os campos, carne para a casa. Muitos hoje abandonados e em ruína.' },
+    model:{ L:5, D:5, fl:1, fh:2.8, rot:180, form:'rect', roof:{ n:1, th:15, bei:0.2 }, open:{ S:{ wwr:0.02, units:[{ on:true, frac:0.1, pos:0.5 }] }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'schist walls, tile roof, timber door', pt:'paredes de xisto, telha, porta de madeira' }, walls:{ en:'schist or granite rubble, whitewashed bands', pt:'alvenaria de xisto ou granito, faixas caiadas' } },
+    feats:[ vN('site', { en:'Diameter or side', pt:'Diâmetro ou lado' }, { en:'about 4–6 m (inference)', pt:'cerca de 4–6 m (inferência)' }, () => MASS.L, 3.5, 7, 'm', 'INF'),
+      vI('roof', { en:'One slope, high to the south where the birds come in, low to the north against the cold wind (inference from the common type).', pt:'Uma água, alta a sul por onde entram as aves, baixa a norte contra o vento frio (inferência do tipo corrente).' }, 'INF'),
+      vWall({ en:'bare schist', pt:'xisto à vista' }, ['schist', 'stone'], 'INF') ] }, ['Bragança', 'Vila Real']);
+  sup('pt-lagar', { name:{ en:'Lagar de azeite — the olive press', pt:'Lagar de azeite' },
+    where:{ en:'The olive country — the Douro and Tua (Abreiro), the Beira, the Alentejo; presses cut in the rock in the north', pt:'A terra do olival — o Douro e o Tua (Abreiro), a Beira, o Alentejo; lagares escavados na rocha a norte' },
+    summary:{ en:'A long low building round the mill-stone and the beam or screw press, with tanks and a hearth to warm the water; often communal or owned by the big house. Older presses were cut in the granite in the open.', pt:'Um edifício comprido e baixo em volta da galga e da prensa de vara ou de parafuso, com tanques e uma fornalha para aquecer a água; muitas vezes comunitário ou da casa grande. Os mais antigos eram escavados no granito, ao ar livre.' },
+    model:{ L:14, D:7, fl:1, fh:3.2, rot:180, form:'rect', roof:{ n:2, th:22, bei:0.3 }, open:{ S:{ wwr:0.05, units:[{ on:true, frac:0.15, pos:0.35, door:true }, { on:true, frac:0.06, pos:0.75 }] }, N:{ wwr:0, units:vOff() }, E:{ wwr:0.01, units:[{ on:true, frac:0.1, pos:0.5 }] }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'granite stone walls, tile roof, timber door', pt:'paredes de granito, telha, porta de madeira' }, walls:{ en:'granite or schist rubble', pt:'alvenaria de granito ou xisto' } },
+    feats:[ vFloors('1', 1, 1, 'INF'), vN('site', { en:'Length', pt:'Comprimento' }, { en:'about 10–18 m, to hold the beam (inference)', pt:'cerca de 10–18 m, para conter a vara (inferência)' }, () => MASS.L, 10, 18, 'm', 'INF'),
+      vI('site', { en:'Lagar escavado na rocha (Ribadouro), lagar dos Mouros (Amarante): the press began in the open granite.', pt:'Lagar escavado na rocha (Ribadouro), Lagar dos Mouros (Amarante): a prensa começou no granito, ao ar livre.' }, 'ANP') ] }, ['Bragança', 'Vila Real', 'Porto', 'Guarda', 'Castelo Branco', 'Évora', 'Portalegre']);
+  sup('pt-alfarroba', { name:{ en:'Algarve store for carob, figs and almonds (with its açoteia)', pt:'Armazém algarvio de alfarroba, figo e amêndoa (com açoteia)' },
+    where:{ en:'The barrocal and the coast of the Algarve — Loulé, São Brás, Tavira, Silves', pt:'O barrocal e o litoral do Algarve — Loulé, São Brás, Tavira, Silves' },
+    summary:{ en:'The dry fruit of the barrocal — figs, almonds, carob — was dried on the açoteias and stored in plain long rooms beside the house, the trade that took the Algarve’s figs, carob and dried fish north (Inquérito, zone 6).', pt:'O fruto seco do barrocal — figo, amêndoa, alfarroba — secava nas açoteias e guardava-se em compartimentos compridos e simples junto da casa, o comércio que levava para norte o figo, a alfarroba e o peixe seco do Algarve (Inquérito, zona 6).' },
+    model:{ L:10, D:5, fl:1, fh:3.0, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0.06, units:[{ on:true, frac:0.2, pos:0.5, door:true }] }, N:{ wwr:0, units:vOff() }, E:{ wwr:0.01, units:[{ on:true, frac:0.1, pos:0.5 }] }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'whitewash walls, green door', pt:'parede caiada, porta verde' }, walls:{ en:'taipa or limestone, whitewashed', pt:'taipa ou calcário, caiados' } },
+    feats:[ vFloors('1', 1, 1, 'FJ5'), vI('roof', { en:'A walkable açoteia to dry the fruit, reached by an outside stair.', pt:'Uma açoteia utilizável para secar o fruto, com escada exterior.' }, 'FJ5'), vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'FJ5') ] }, ['Faro']);
+  sup('pt-cortelho', { name:{ en:'Cortelho — the pig sty beside the house', pt:'Cortelho — a pocilga junto à casa' },
+    where:{ en:'The farmhouses of the Minho, the Beira and Trás-os-Montes — under the balcony or against the yard wall', pt:'As casas de lavoura do Minho, da Beira e de Trás-os-Montes — debaixo do balcão ou encostado ao muro do quinteiro' },
+    summary:{ en:'A small stone shelter for the pig, often under the balcony of the house or against the wall of the yard, with a low door and a trough; the household’s pig, killed in winter (the matança). In the Beira Baixa the large herds had their malhadas instead.', pt:'Um pequeno abrigo de pedra para o porco, muitas vezes debaixo do balcão da casa ou encostado ao muro do quinteiro, com porta baixa e pia; o porco da casa, morto no inverno (a matança). Na Beira Baixa as varas grandes tinham as malhadas.' },
+    model:{ L:3, D:2.5, fl:1, fh:1.6, rot:180, form:'rect', roof:{ n:1, th:15, bei:0.15 }, open:{ S:{ wwr:0.05, units:[{ on:true, frac:0.25, pos:0.5, door:true }] }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'granite stone walls, tile roof, timber door', pt:'paredes de granito, telha, porta de madeira' }, walls:{ en:'granite or schist rubble', pt:'alvenaria de granito ou xisto' } },
+    feats:[ vN('site', { en:'Floor area', pt:'Área' }, { en:'a few m² (inference)', pt:'poucos m² (inferência)' }, () => MASS.L * MASS.D, 4, 12, 'm²', 'INF'),
+      vI('site', { en:'Under the balcony of the Beira house a henhouse or a pigsty is common.', pt:'Debaixo do balcão da casa beirã é comum uma capoeira ou uma pocilga.' }, 'INF') ] }, ['Viana do Castelo', 'Braga', 'Vila Real', 'Bragança', 'Viseu', 'Guarda']);
+  sup('pt-salina', { name:{ en:'Salt-maker’s store (armazém de sal)', pt:'Armazém de sal da salina' },
+    where:{ en:'The salt pans of Aveiro, the Tagus and Sado estuaries, Castro Marim and Tavira', pt:'As salinas de Aveiro, dos estuários do Tejo e do Sado, de Castro Marim e de Tavira' },
+    summary:{ en:'Beside the pans, a long low store of timber or rubble where the salt was heaped to drain before it was carried away, with a hut for the marnoto; on the flats, the only building for kilometres.', pt:'Junto aos talhos, um armazém comprido e baixo de madeira ou alvenaria onde o sal se amontoava a escorrer antes de ser levado, com um abrigo para o marnoto; na planura, o único edifício em quilómetros.' },
+    model:{ L:12, D:5, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:20, bei:0.3 }, open:{ S:{ wwr:0.06, units:[{ on:true, frac:0.2, pos:0.3, door:true }] }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'timber walls, tile roof, timber door', pt:'paredes de madeira, telha, porta de madeira' }, walls:{ en:'timber boards or rubble', pt:'tabuado de madeira ou alvenaria' } },
+    feats:[ vFloors('1', 1, 1, 'INF'), vI('site', { en:'Raised a little off the wet ground; the long side to the pans for the carts (inference).', pt:'Um pouco levantado do chão húmido; o lado maior para os talhos, para as carroças (inferência).' }, 'INF') ] }, ['Aveiro', 'Setúbal', 'Lisboa', 'Faro']);
+  const g = ARCH_BIB.find(x => x.r.pt === 'Estruturas de apoio à habitação'); if (g) g.types = Object.keys(SUP_TYPES);
+  vernNames();
+})();
+
+/* --- v1.124: the report engines of the Construction Advisor (same author), brought over whole:
+   a stored-zip .pptx writer and a native .odp writer with one shape/table call pattern,
+   extended here with PNG pictures for the drawings of the models. --- */
+/* ==================== PowerPoint report export (v2.32.0) ====================
+   Self-contained .pptx writer (stored zip, no dependency) + a report of every
+   selection in the current assessment, styled like the course slides: dark
+   slate ground, amber metric boxes, a zone pill where the CASE pill sits. */
+const VPPTX = (() => {
+  const EMU = 914400;
+  const SW = Math.round(13.333 * EMU), SH = Math.round(7.5 * EMU);
+  const C = { bg:'1B2730', panel:'243B46', line:'3A4F59', amber:'E8A33D', teal:'7FB3A3',
+              white:'FFFFFF', muted:'9AA7B0', box:'3A4034', green:'8FCB8F', red:'D98C8C' };
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const CRC = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  const crc32 = bytes => {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+  const enc = new TextEncoder();
+  let idc = 0;
+  const nid = () => ++idc + 1;
+  const X = v => Math.round(v * EMU);
+  // ---- text ----
+  const run = (t, o) => {
+    o = o || {};
+    return '<a:r><a:rPr lang="en-US" sz="' + Math.round((o.sz || 14) * 100) + '"' +
+      (o.b ? ' b="1"' : '') + (o.i ? ' i="1"' : '') +
+      '><a:solidFill><a:srgbClr val="' + (o.color || C.white) + '"/></a:solidFill>' +
+      '<a:latin typeface="Calibri"/><a:cs typeface="Calibri"/></a:rPr>' +
+      '<a:t>' + esc(t) + '</a:t></a:r>';
+  };
+  /* v2.52.0: written to the schema, so PowerPoint opens it without a
+     repair and Slides, Canva and LibreOffice import it whole: a paragraph
+     always closes on its end properties, a text body always holds one */
+  const para = (runs, o) => {
+    o = o || {};
+    const rs = runs.filter(r => String(r.t) !== '');
+    const sz = Math.round(((rs[0] && rs[0].sz) || (runs[0] && runs[0].sz) || 14) * 100);
+    return '<a:p>' + (o.align ? '<a:pPr algn="' + o.align + '"/>' : '') +
+      rs.map(r => run(r.t, r)).join('') + '<a:endParaRPr lang="en-US" sz="' + sz + '" dirty="0"/></a:p>';
+  };
+  const bodyPr = o => '<a:bodyPr wrap="square" lIns="' + X(o.padL !== undefined ? o.padL : 0.1) + '" rIns="' + X(o.padR !== undefined ? o.padR : 0.1) +
+    '" tIns="' + X(o.padT !== undefined ? o.padT : 0.05) + '" bIns="' + X(o.padB !== undefined ? o.padB : 0.05) + '" rtlCol="0" anchor="' +
+    (o.anchor || 't') + '"><a:noAutofit/></a:bodyPr>';
+  const paras = (ps, tag) => '<' + tag + '>' + '__BP__' + '<a:lstStyle/>' +
+    (ps.length ? ps.map(p => para(p.runs, p)).join('') : '<a:p><a:endParaRPr lang="en-US" dirty="0"/></a:p>') + '</' + tag + '>';
+  const txBody = (ps, o) => paras(ps || [], 'p:txBody').replace('__BP__', bodyPr(o || {}));
+  // ---- shapes ----
+  const shape = (o) => {
+    const id = nid();
+    return '<p:sp><p:nvSpPr><p:cNvPr id="' + id + '" name="s' + id + '"/>' +
+      '<p:cNvSpPr><a:spLocks noChangeArrowheads="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>' +
+      '<p:spPr><a:xfrm><a:off x="' + X(o.x) + '" y="' + X(o.y) + '"/>' +
+      '<a:ext cx="' + X(o.w) + '" cy="' + X(o.h) + '"/></a:xfrm>' +
+      '<a:prstGeom prst="' + (o.round ? 'roundRect' : 'rect') + '"><a:avLst/></a:prstGeom>' +
+      (o.fill ? '<a:solidFill><a:srgbClr val="' + o.fill + '"/></a:solidFill>' : '<a:noFill/>') +
+      (o.line ? '<a:ln w="' + (o.lnW || 19050) + '"><a:solidFill><a:srgbClr val="' + (o.lineColor || o.fill) + '"/></a:solidFill></a:ln>'
+              : '<a:ln><a:noFill/></a:ln>') +
+      '</p:spPr>' + txBody(o.paras || [], o) + '</p:sp>';
+  };
+  /* a native table (a:tbl), so every importer keeps it a table: rows take
+     their height (o.rowHs per row, or o.rowH), the head row in the panel
+     colour and amber, the body banded */
+  const table = (o) => {
+    const id = nid(), hs = o.rows.map((_, ri) => (o.rowHs ? o.rowHs[ri] : o.rowH) || 0.34);
+    const W = o.colW.reduce((a, b) => a + b, 0), H = hs.reduce((a, b) => a + b, 0);
+    const ln = tag => '<a:' + tag + ' w="6350"><a:solidFill><a:srgbClr val="' + C.line + '"/></a:solidFill></a:' + tag + '>';
+    const rows = o.rows.map((row, ri) => {
+      const idx = (o.r0 || 0) + ri;
+      return '<a:tr h="' + X(hs[ri]) + '">' + row.map((cell, ci) => {
+        const al = (o.aligns && o.aligns[ci]) || (ci === 0 ? 'l' : 'r');
+        const body = paras([{ runs:[{ t:cell.t, sz:cell.sz || o.sz || 11, b:!!cell.b || idx === 0,
+          color:cell.color || (idx === 0 ? C.amber : C.white) }], align:al }], 'a:txBody').replace('__BP__', '<a:bodyPr/>');
+        return '<a:tc>' + body + '<a:tcPr marL="' + X(0.08) + '" marR="' + X(0.08) + '" marT="' + X(0.03) + '" marB="' + X(0.03) + '" anchor="ctr">' +
+          ln('lnL') + ln('lnR') + ln('lnT') + ln('lnB') +
+          '<a:solidFill><a:srgbClr val="' + (idx === 0 ? C.panel : (idx % 2 ? '22313B' : C.bg)) + '"/></a:solidFill></a:tcPr></a:tc>';
+      }).join('') + '</a:tr>';
+    }).join('');
+    return '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="' + id + '" name="Table ' + id + '"/>' +
+      '<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>' +
+      '<p:xfrm><a:off x="' + X(o.x) + '" y="' + X(o.y) + '"/><a:ext cx="' + X(W) + '" cy="' + X(H) + '"/></p:xfrm>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl>' +
+      '<a:tblPr firstRow="1" bandRow="1"/><a:tblGrid>' + o.colW.map(w => '<a:gridCol w="' + X(w) + '"/>').join('') + '</a:tblGrid>' +
+      rows + '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>';
+  };
+  const bgRect = () => shape({ x:0, y:0, w:13.333, h:7.5, fill:C.bg });
+  /* v1.124 (Architecture Advisor): a PNG picture, placed in inches like a shape */
+  const pic = o => ({ pic:true, x:o.x, y:o.y, w:o.w, h:o.h, bytes:o.bytes });
+  // ---- package ----
+  function pack(slides) {
+    const F = {};
+    const slideNames = slides.map((_, i) => 'ppt/slides/slide' + (i + 1) + '.xml');
+    F['[Content_Types].xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Default Extension="png" ContentType="image/png"/>' +
+      '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>' +
+      '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>' +
+      '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>' +
+      '<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+      '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+      slideNames.map(n => '<Override PartName="/' + n + '" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>').join('') +
+      '</Types>';
+    F['_rels/.rels'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
+      '</Relationships>';
+    const sldIds = slides.map((_, i) =>
+      '<p:sldId id="' + (256 + i) + '" r:id="rId' + (i + 3) + '"/>').join('');
+    F['ppt/presentation.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+      '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
+      '<p:sldIdLst>' + sldIds + '</p:sldIdLst>' +
+      '<p:sldSz cx="' + SW + '" cy="' + SH + '"/>' +
+      '<p:notesSz cx="6858000" cy="9144000"/></p:presentation>';
+    let rels = '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>';
+    slides.forEach((_, i) => {
+      rels += '<Relationship Id="rId' + (i + 3) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide' + (i + 1) + '.xml"/>';
+    });
+    F['ppt/_rels/presentation.xml.rels'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + rels + '</Relationships>';
+    F['ppt/slideMasters/slideMaster1.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr>' +
+      '<a:solidFill><a:srgbClr val="' + C.bg + '"/></a:solidFill></p:bgPr></p:bg>' +
+      '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+      '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + SW + '" cy="' + SH + '"/>' +
+      '<a:chOff x="0" y="0"/><a:chExt cx="' + SW + '" cy="' + SH + '"/></a:xfrm></p:grpSpPr>' +
+      '</p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" ' +
+      'accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>' +
+      '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>' +
+      '<p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr sz="4400" b="1"/></a:lvl1pPr></p:titleStyle>' +
+      '<p:bodyStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:bodyStyle>' +
+      '<p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:otherStyle></p:txStyles></p:sldMaster>';
+    F['ppt/slideMasters/_rels/slideMaster1.xml.rels'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>' +
+      '</Relationships>';
+    F['ppt/slideLayouts/slideLayout1.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1">' +
+      '<p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/>' +
+      '<p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/>' +
+      '<a:ext cx="' + SW + '" cy="' + SH + '"/><a:chOff x="0" y="0"/>' +
+      '<a:chExt cx="' + SW + '" cy="' + SH + '"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld>' +
+      '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>';
+    F['ppt/slideLayouts/_rels/slideLayout1.xml.rels'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>' +
+      '</Relationships>';
+    F['ppt/theme/theme1.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Advisor">' +
+      '<a:themeElements><a:clrScheme name="Advisor">' +
+      '<a:dk1><a:srgbClr val="1B2730"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>' +
+      '<a:dk2><a:srgbClr val="243B46"/></a:dk2><a:lt2><a:srgbClr val="9AA7B0"/></a:lt2>' +
+      '<a:accent1><a:srgbClr val="E8A33D"/></a:accent1><a:accent2><a:srgbClr val="7FB3A3"/></a:accent2>' +
+      '<a:accent3><a:srgbClr val="8FCB8F"/></a:accent3><a:accent4><a:srgbClr val="D98C8C"/></a:accent4>' +
+      '<a:accent5><a:srgbClr val="3A4034"/></a:accent5><a:accent6><a:srgbClr val="33454F"/></a:accent6>' +
+      '<a:hlink><a:srgbClr val="E8A33D"/></a:hlink><a:folHlink><a:srgbClr val="9AA7B0"/></a:folHlink>' +
+      '</a:clrScheme><a:fontScheme name="Advisor">' +
+      '<a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>' +
+      '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>' +
+      '<a:fmtScheme name="Advisor"><a:fillStyleLst>' +
+      '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>' +
+      '<a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>' +
+      '<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>' +
+      '<a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst>' +
+      '</a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>';
+    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    F['docProps/core.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" ' +
+      'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" ' +
+      'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+      '<dc:title>Architecture Advisor — popular model report</dc:title>' +
+      '<dc:creator>Nuno Dinis Cortiços</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">' +
+      now + '</dcterms:created></cp:coreProperties>';
+    F['docProps/app.xml'] =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" ' +
+      'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+      '<Application>Architecture Advisor PT</Application><Slides>' + slides.length + '</Slides></Properties>';
+    const head = (shapes) =>
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>' +
+      '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
+      '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + SW + '" cy="' + SH + '"/>' +
+      '<a:chOff x="0" y="0"/><a:chExt cx="' + SW + '" cy="' + SH + '"/></a:xfrm></p:grpSpPr>' +
+      shapes.join('') + '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
+    let media = 0;
+    slides.forEach((shapes, i) => {
+      let rx = '';
+      const out = shapes.map(s => {
+        if (typeof s === 'string') return s;
+        const n = ++media, rid = 'rId' + (n + 100), id = nid();
+        F['ppt/media/image' + n + '.png'] = s.bytes;
+        rx += '<Relationship Id="' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image' + n + '.png"/>';
+        return '<p:pic><p:nvPicPr><p:cNvPr id="' + id + '" name="pic' + id + '"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>' +
+          '<p:blipFill><a:blip r:embed="' + rid + '"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>' +
+          '<p:spPr><a:xfrm><a:off x="' + X(s.x) + '" y="' + X(s.y) + '"/><a:ext cx="' + X(s.w) + '" cy="' + X(s.h) + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>';
+      });
+      F[slideNames[i]] = head(out);
+      F['ppt/slides/_rels/slide' + (i + 1) + '.xml.rels'] =
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>' +
+        rx + '</Relationships>';
+    });
+    // ---- stored zip ----
+    const names = Object.keys(F);
+    const chunks = [];
+    const central = [];
+    let offset = 0;
+    names.forEach(nm => {
+      const data = typeof F[nm] === 'string' ? enc.encode(F[nm]) : F[nm];
+      const crc = crc32(data);
+      const nl = enc.encode(nm);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true);
+      lh.setUint16(4, 20, true);
+      lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true);
+      lh.setUint16(10, 0x21, true);
+      lh.setUint16(12, 0x21, true);
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, data.length, true);
+      lh.setUint32(22, data.length, true);
+      lh.setUint16(26, nl.length, true);
+      lh.setUint16(28, 0, true);
+      chunks.push(new Uint8Array(lh.buffer), nl, data);
+      central.push({ nm:nl, crc, len:data.length, offset });
+      offset += 30 + nl.length + data.length;
+    });
+    const csize = central.reduce((a, c) => a + 46 + c.nm.length, 0);
+    const cstart = offset;
+    central.forEach(c => {
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true);
+      ch.setUint16(4, 20, true);
+      ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true);
+      ch.setUint16(12, 0x21, true);
+      ch.setUint16(14, 0x21, true);
+      ch.setUint32(16, c.crc, true);
+      ch.setUint32(20, c.len, true);
+      ch.setUint32(24, c.len, true);
+      ch.setUint16(28, c.nm.length, true);
+      ch.setUint16(30, 0, true);
+      ch.setUint16(32, 0, true);
+      ch.setUint16(34, 0, true);
+      ch.setUint16(36, 0, true);
+      ch.setUint32(38, 0, true);
+      ch.setUint32(42, c.offset, true);
+      chunks.push(new Uint8Array(ch.buffer), c.nm);
+    });
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, names.length, true);
+    end.setUint16(10, names.length, true);
+    end.setUint32(12, csize, true);
+    end.setUint32(16, cstart, true);
+    chunks.push(new Uint8Array(end.buffer));
+    return new Blob(chunks, { type:'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+  }
+  return { build:pack, C, shape, table, bgRect, esc, pic };
+})();
+
+/* ==================== ODP engine (v2.41.0): native OpenDocument output ====================
+   Same shape/table call pattern as the PPTX engine above, so the report code
+   below runs unchanged against either writer. Positioning in inches in,
+   centimetres on the wire. Styling follows what LibreOffice itself writes:
+   fills and strokes live in named graphic styles (note the svg: namespace on
+   stroke attributes), text in named paragraph/text styles — no inline fo:.
+   Tables are grids of boxes, exactly like the .pptx ones. */
+const VODP = (() => {
+  const C = { bg:'1B2730', panel:'243B46', line:'3A4F59', amber:'E8A33D', teal:'7FB3A3',
+              white:'FFFFFF', muted:'9AA7B0', box:'3A4034', green:'8FCB8F', red:'D98C8C' };
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const cm = v => (v * 2.54).toFixed(3) + 'cm';
+  const NS = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ' +
+    'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" ' +
+    'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" ' +
+    'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" ' +
+    'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" ' +
+    'xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0" ' +
+    'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" ' +
+    'xmlns:xlink="http://www.w3.org/1999/xlink"';
+  const NSMETA = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ' +
+    'xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" ' +
+    'xmlns:dc="http://purl.org/dc/elements/1.1/"';
+  let nuid = 0;
+  const gstyles = {};
+  /* v2.52.0: a frame keeps its size and wraps its text — LibreOffice grows
+     a custom shape round its text and padding by default, which pushed
+     values off the slide and split the colour strips — padding and the
+     vertical anchor ride the same style */
+  const gstyle = (fill, stroke, strokew, anchor, pad) => {
+    const k = (fill || '-') + '|' + (stroke || '-') + '|' + (strokew || 0) + '|' + (anchor || 't') + '|' + pad.join(',');
+    if (!gstyles[k]) {
+      const nm = 'gr' + Object.keys(gstyles).length;
+      gstyles[k] = '<style:style style:name="' + nm + '" style:family="graphic">' +
+        '<style:graphic-properties draw:fill="' + (fill ? 'solid' : 'none') + '"' +
+        (fill ? ' draw:fill-color="#' + fill + '"' : '') +
+        ' draw:stroke="' + (stroke ? 'solid' : 'none') + '"' +
+        (stroke ? ' svg:stroke-color="#' + stroke + '" svg:stroke-width="' + strokew + 'pt"' : '') +
+        ' draw:auto-grow-height="false" draw:auto-grow-width="false" fo:wrap-option="wrap"' +
+        ' draw:textarea-horizontal-align="justify" draw:textarea-vertical-align="' + (anchor === 'ctr' ? 'middle' : 'top') + '"' +
+        ' fo:padding-top="' + pad[0] + 'cm" fo:padding-right="' + pad[1] + 'cm" fo:padding-bottom="' + pad[2] + 'cm" fo:padding-left="' + pad[3] + 'cm"' +
+        ' draw:shadow="hidden"/></style:style>';
+    }
+    return 'gr' + Object.keys(gstyles).indexOf(k);
+  };
+  const pstyles = {};
+  const pstyle = (align) => {
+    const k = 'p|' + (align || 'l');
+    if (!pstyles[k]) {
+      const nm = 'P' + Object.keys(pstyles).length;
+      const al = align === 'r' ? 'end' : align === 'ctr' ? 'center' : 'start';
+      pstyles[k] = '<style:style style:name="' + nm + '" style:family="paragraph">' +
+        '<style:paragraph-properties fo:margin-left="0cm" fo:margin-right="0cm" ' +
+        'fo:margin-top="0cm" fo:margin-bottom="0cm" fo:text-align="' + al + '"/>' +
+        '</style:style>';
+    }
+    return 'P' + Object.keys(pstyles).indexOf(k);
+  };
+  const tstyles = {};
+  const tstyle = (o) => {
+    const k = 't|' + (o.sz || 12) + '|' + (o.color || C.white) + '|' + (o.b ? 'b' : '') + (o.i ? 'i' : '');
+    if (!tstyles[k]) {
+      const nm = 'T' + Object.keys(tstyles).length;
+      tstyles[k] = '<style:style style:name="' + nm + '" style:family="text">' +
+        '<style:text-properties fo:font-family="Calibri" fo:font-size="' + (o.sz || 12) + 'pt" ' +
+        'fo:color="#' + (o.color || C.white) + '"' +
+        (o.b ? ' fo:font-weight="bold"' : '') + (o.i ? ' fo:font-style="italic"' : '') +
+        '/></style:style>';
+    }
+    return 'T' + Object.keys(tstyles).indexOf(k);
+  };
+  const run = (t, o) => '<text:span text:style-name="' + tstyle(o) + '">' + esc(t) + '</text:span>';
+  const para = (runs, o) => {
+    o = o || {};
+    return '<text:p text:style-name="' + pstyle(o.align) + '">' +
+      runs.filter(r => String(r.t) !== '').map(r => run(r.t, r)).join('') + '</text:p>';
+  };
+  const txbox = (o) => {
+    const pad = (o.padT !== undefined ? o.padT * 2.54 : 0.15).toFixed(2);
+    return '<draw:text-box fo:padding-left="0.23cm" fo:padding-right="0.18cm" ' +
+      'fo:padding-top="' + pad + 'cm" fo:padding-bottom="0.15cm" fo:min-height="' + cm(o.h) + '">' +
+      (o.paras || []).map(p => para(p.runs, p)).join('') + '</draw:text-box>';
+  };
+  const shape = (o) => {
+    const id = ++nuid;
+    const p2 = v => (v * 2.54).toFixed(2);
+    const gs = gstyle(o.fill || null, o.line ? (o.lineColor || o.fill) : null,
+      o.line ? ((o.lnW || 19050) / 12700).toFixed(2) : 0, o.anchor,
+      [p2(o.padT !== undefined ? o.padT : 0.05), p2(o.padR !== undefined ? o.padR : 0.1), p2(o.padB !== undefined ? o.padB : 0.05), p2(o.padL !== undefined ? o.padL : 0.1)]);
+    // draw:text-style-name gives the shape a default paragraph context (as LO writes it)
+    if (!pstyles['p|l']) pstyle('l');
+    return '<draw:custom-shape draw:style-name="' + gs + '" draw:text-style-name="P0" ' +
+      'draw:name="s' + id + '" draw:layer="layout" svg:x="' + cm(o.x) +
+      '" svg:y="' + cm(o.y) + '" svg:width="' + cm(o.w) + '" svg:height="' + cm(o.h) + '">' +
+      (o.paras || []).map(pp => para(pp.runs, pp)).join('') +
+      '<draw:enhanced-geometry draw:mirror-horizontal="false" draw:mirror-vertical="false" ' +
+      'draw:glue-points="?f0 0 0 ?f1 ?f0 ?f2 ?f3 ?f1" draw:text-areas="0 0 ?f3 ?f2" ' +
+      'svg:viewBox="0 0 0 0" draw:type="ooxml-rect" ' +
+      'draw:enhanced-path="M 0 0 L ?f3 0 ?f3 ?f2 0 ?f2 Z N">' +
+      '<draw:equation draw:name="f0" draw:formula="logwidth/2"/>' +
+      '<draw:equation draw:name="f1" draw:formula="logheight/2"/>' +
+      '<draw:equation draw:name="f2" draw:formula="logheight"/>' +
+      '<draw:equation draw:name="f3" draw:formula="logwidth"/>' +
+      '</draw:enhanced-geometry></draw:custom-shape>';
+  };
+  const table = (o) => {
+    const out = [];
+    let y = o.y;
+    o.rows.forEach((row, ri) => {
+      let x = o.x;
+      const rh = (o.rowHs ? o.rowHs[ri] : o.rowH) || 0.34;
+      const idx = (o.r0 || 0) + ri;
+      row.forEach((cell, ci) => {
+        const w = o.colW[ci];
+        const al = (o.aligns && o.aligns[ci]) || (ci === 0 ? 'l' : 'r');
+        out.push(shape({ x, y, w, h:rh, anchor:'ctr', padT:0.03, padB:0.03, padL:0.08, padR:0.08,
+          fill:idx === 0 ? C.panel : (idx % 2 ? '22313B' : C.bg),
+          line:1, lineColor:C.line, lnW:6350,
+          paras:[{ runs:[{ t:cell.t, sz:cell.sz || o.sz || 11, b:!!cell.b || idx === 0,
+            color:cell.color || (idx === 0 ? C.amber : C.white) }], align:al }] }));
+        x += w;
+      });
+      y += rh;
+    });
+    return out.join('');
+  };
+  const bgRect = () => shape({ x:0, y:0, w:13.333, h:7.5, fill:C.bg,
+    paras:[{ runs:[{ t:' ', sz:10 }] }] });
+  const CRC = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  const crc32 = bytes => {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+  const enc = new TextEncoder();
+  /* v1.124 (Architecture Advisor): a PNG picture in a draw:frame, kept in Pictures/ */
+  const pic = o => ({ pic:true, x:o.x, y:o.y, w:o.w, h:o.h, bytes:o.bytes });
+  function pack(slides) {
+    const F = {}, pics = [];
+    slides = slides.map(shapes => shapes.map(s => {
+      if (typeof s === 'string') return s;
+      const nm = 'Pictures/image' + (pics.length + 1) + '.png';
+      pics.push({ nm, bytes:s.bytes });
+      return '<draw:frame draw:name="' + nm + '" draw:layer="layout" svg:x="' + cm(s.x) + '" svg:y="' + cm(s.y) + '" svg:width="' + cm(s.w) + '" svg:height="' + cm(s.h) + '">' +
+        '<draw:image xlink:href="' + nm + '" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>';
+    }));
+    const autost = ['<style:page-layout style:name="PM0">' +
+      '<style:page-layout-properties fo:margin-top="0cm" fo:margin-bottom="0cm" fo:margin-left="0cm" fo:margin-right="0cm" ' +
+      'fo:page-width="33.867cm" fo:page-height="19.05cm" style:print-orientation="landscape"/>' +
+      '</style:page-layout>'];
+    F['mimetype'] = 'application/vnd.oasis.opendocument.presentation';
+    F['META-INF/manifest.xml'] =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">' +
+      '<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.presentation"/>' +
+      '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' +
+      '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>' +
+      '<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>' +
+      pics.map(q => '<manifest:file-entry manifest:full-path="' + q.nm + '" manifest:media-type="image/png"/>').join('') +
+      '</manifest:manifest>';
+    pics.forEach(q => { F[q.nm] = q.bytes; });
+    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    F['meta.xml'] =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<office:document-meta ' + NSMETA + ' office:version="1.2">' +
+      '<office:meta><meta:generator>Architecture Advisor PT</meta:generator>' +
+      '<dc:title>Architecture Advisor — popular model report</dc:title>' +
+      '<dc:creator>Nuno Dinis Cortiços</dc:creator><dc:date>' + now + '</dc:date>' +
+      '</office:meta></office:document-meta>';
+    F['styles.xml'] =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<office:document-styles ' + NS + ' office:version="1.2">' +
+      '<office:styles>' +
+      '<style:style style:name="dp1" style:family="drawing-page">' +
+      '<style:drawing-page-properties draw:fill="solid" draw:fill-color="#' + C.bg + '" presentation:background-visible="true" presentation:background-objects-visible="true"/></style:style>' +
+      '</office:styles><office:automatic-styles>' + autost.join('') + '</office:automatic-styles>' +
+      '<office:master-styles>' +
+      '<draw:layer-set><draw:layer draw:name="layout"/><draw:layer draw:name="background"/><draw:layer draw:name="backgroundobjects"/></draw:layer-set>' +
+      /* v2.52.0: a master page is style:master-page — the draw: name made
+         LibreOffice drop it, and its 33.9 cm page with it, for a default 28 cm one */
+      '<style:master-page style:name="Default" style:page-layout-name="PM0" draw:style-name="dp1"/>' +
+      '</office:master-styles></office:document-styles>';
+    F['content.xml'] =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<office:document-content ' + NS + ' office:version="1.2">' +
+      '<office:scripts/><office:font-face-decls>' +
+      '<style:font-face style:name="Calibri" svg:font-family="Calibri"/>' +
+      '</office:font-face-decls><office:automatic-styles>' +
+      Object.keys(gstyles).map(k => gstyles[k]).join('') +
+      Object.keys(pstyles).map(k => pstyles[k]).join('') +
+      Object.keys(tstyles).map(k => tstyles[k]).join('') +
+      '</office:automatic-styles><office:body><office:presentation>' +
+      slides.map((shapes, i) =>
+        '<draw:page draw:name="page' + (i + 1) + '" draw:style-name="dp1" ' +
+        'draw:master-page-name="Default">' +
+        shapes.join('') + '</draw:page>').join('') +
+      '</office:presentation></office:body></office:document-content>';
+    const names = Object.keys(F);
+    const chunks = [];
+    const central = [];
+    let offset = 0;
+    names.forEach(nm => {
+      const data = typeof F[nm] === 'string' ? enc.encode(F[nm]) : F[nm];
+      const crc = crc32(data);
+      const nl = enc.encode(nm);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true);
+      lh.setUint16(4, 20, true);
+      lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true);
+      lh.setUint16(10, 0x21, true);
+      lh.setUint16(12, 0x21, true);
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, data.length, true);
+      lh.setUint32(22, data.length, true);
+      lh.setUint16(26, nl.length, true);
+      lh.setUint16(28, 0, true);
+      chunks.push(new Uint8Array(lh.buffer), nl, data);
+      central.push({ nm:nl, crc, len:data.length, offset });
+      offset += 30 + nl.length + data.length;
+    });
+    const csize = central.reduce((a, c) => a + 46 + c.nm.length, 0);
+    const cstart = offset;
+    central.forEach(c => {
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true);
+      ch.setUint16(4, 20, true);
+      ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true);
+      ch.setUint16(12, 0x21, true);
+      ch.setUint16(14, 0x21, true);
+      ch.setUint32(16, c.crc, true);
+      ch.setUint32(20, c.len, true);
+      ch.setUint32(24, c.len, true);
+      ch.setUint16(28, c.nm.length, true);
+      ch.setUint16(30, 0, true);
+      ch.setUint16(32, 0, true);
+      ch.setUint16(34, 0, true);
+      ch.setUint16(36, 0, true);
+      ch.setUint32(38, 0, true);
+      ch.setUint32(42, c.offset, true);
+      chunks.push(new Uint8Array(ch.buffer), c.nm);
+    });
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, names.length, true);
+    end.setUint16(10, names.length, true);
+    end.setUint32(12, csize, true);
+    end.setUint32(16, cstart, true);
+    chunks.push(new Uint8Array(end.buffer));
+    return new Blob(chunks, { type:'application/vnd.oasis.opendocument.presentation' });
+  }
+  return { build:pack, C, shape, table, bgRect, esc, pic };
+})();
+
+
+/* ============================ 7f. THE POPULAR MODELLER: GEOMETRY (v1.124) =================
+   The Olgyay engine reads every plan as axis-aligned rectangles: its walls, its
+   roofs, its shading and its exports all rest on that. The popular houses need
+   what it cannot draw — round plans, cones and corbelled domes, several bodies
+   (the oven annex, the separate kitchen, the tower), courtyards closed by a wall,
+   houses in a row — and the parts that make them legible: chimneys of each
+   region, outside stairs, varandas, parapets, buttresses, barras and frames.
+   So the popular study gets a modeller of its own. Its model (VM) lives in the
+   study (STATE.vern.vm), is drawn in isometric, plan and elevation, measured,
+   compared with the archetype, exported (SVG, DXF, report), and its main body
+   can be handed to the other tabs, which keep their calculations.
+
+   Local metres: x east along the main facade, y north toward the back, z up.
+   A volume is centred on (x, y) with plan extents L (x) × D (y).
+   ====================================================================== */
+
+const VM_WALL = {
+  whitewash:{ c:'#F2EFE6', t:0.5, rho:1800, en:'whitewashed (lime render)', pt:'caiada (reboco de cal)' },
+  stone:{ c:'#B9AE9A', t:0.6, rho:2200, en:'stone rubble', pt:'alvenaria de pedra' },
+  granite:{ c:'#A7A39A', t:0.6, rho:2400, en:'granite', pt:'granito' },
+  schist:{ c:'#7E7466', t:0.55, rho:2300, en:'schist', pt:'xisto' },
+  basalt:{ c:'#56565A', t:0.6, rho:2500, en:'basalt', pt:'basalto' },
+  limestone:{ c:'#D8CDB4', t:0.55, rho:2200, en:'limestone', pt:'calcário' },
+  earth:{ c:'#C9A77E', t:0.5, rho:1900, en:'rammed earth or adobe', pt:'taipa ou adobe' },
+  timber:{ c:'#9B6B43', t:0.05, rho:500, en:'timber boards', pt:'tabuado de madeira' }
+};
+const VM_ROOFMAT = {
+  tile:{ c:'#A9573B', en:'channel tile', pt:'telha de canudo' }, marseille:{ c:'#B5603D', en:'Marseille tile', pt:'telha marselha' },
+  thatch:{ c:'#B89A5E', en:'thatch', pt:'colmo' }, slate:{ c:'#4B5058', en:'slate or schist slabs', pt:'lousa ou lajes de xisto' },
+  stone:{ c:'#8E8A80', en:'stone slabs', pt:'lajes de pedra' }, earth:{ c:'#7C6B4E', en:'earth and turf', pt:'terra e erva' },
+  timber:{ c:'#5E4632', en:'tarred boards', pt:'tabuado alcatroado' }, lime:{ c:'#ECE8DE', en:'lime screed (açoteia)', pt:'betonilha de cal (açoteia)' }
+};
+const VM_ROOFS = {
+  flat:{ en:'flat (açoteia, terrace)', pt:'plana (açoteia, terraço)' }, shed:{ en:'one slope', pt:'uma água' },
+  gable:{ en:'two slopes', pt:'duas águas' }, hip:{ en:'four slopes', pt:'quatro águas' },
+  pyramid:{ en:'pyramid', pt:'piramidal' }, tesoura:{ en:'scissor roofs, one per room', pt:'telhados de tesoura, um por divisão' },
+  ground:{ en:'thatch to the ground (A-frame)', pt:'colmo até ao chão (em A)' }, cone:{ en:'cone', pt:'cónica' },
+  dome:{ en:'corbelled dome', pt:'falsa cúpula' }
+};
+const VM_CHIM = {
+  box:{ en:'plain stack', pt:'chaminé simples' }, alg:{ en:'Algarve pierced chimney', pt:'chaminé algarvia rendilhada' },
+  ale:{ en:'great Alentejo chimney (wide, inside the wall)', pt:'grande chaminé alentejana (larga, dentro da parede)' }, az:{ en:'Azores «mãos postas»', pt:'açoriana «mãos postas»' },
+  mad:{ en:'Madeira prismatic chimney', pt:'chaminé madeirense prismática' }, talha:{ en:'jar top (Felgar)', pt:'boca de talha (Felgar)' }
+};
+const VM_VAR = {
+  corrida:{ en:'running varanda', pt:'varanda corrida' }, reentrante:{ en:'recessed varanda', pt:'varanda reentrante' },
+  envidracada:{ en:'glazed varanda', pt:'varanda envidraçada' }, sacada:{ en:'balcony (sacada)', pt:'varanda de sacada' }
+};
+const VM_FACES = ['S', 'E', 'N', 'W'];
+const vmClone = o => JSON.parse(JSON.stringify(o));
+
+/* ---------------------------------------------------------------- the model */
+let VM_ID = 0;
+function vmVol(o) {
+  return Object.assign({ id:'v' + (++VM_ID) + Date.now().toString(36).slice(-3), name:{ en:'Main body', pt:'Corpo principal' }, kind:'rect', x:0, y:0, L:10, D:6, fl:1, fh:2.6,
+    raise:0, roof:{ type:'gable', th:24, bei:0.3, mat:'tile', ridge:'auto', par:0, cells:2, beirado:1 },
+    wall:{ mat:'whitewash', barra:null, cunhais:false, frames:'cal', buttress:0 }, open:{ S:[], E:[], N:[], W:[] } }, o || {});
+}
+const vmOp = (t, pos, w, h, fl) => ({ t, pos, w, h, fl:fl || 0 });
+
+/** Wall material read from the archetype's render prompt and its walls line. */
+function vmWallOf(T) {
+  const m = T.model, rp = typeof m.render === 'function' ? m.render({ nuts:'' }) : m.render, s = ((rp && rp.en) || '') + ' ' + ((m.walls && m.walls.en) || '');
+  if (/basalt/i.test(s)) return 'basalt';
+  if (/^granite|granite stone/i.test(rp.en)) return 'granite';
+  if (/^schist|schist walls/i.test(rp.en)) return 'schist';
+  if (/^timber/i.test(rp.en)) return 'timber';
+  if (/^stone/i.test(rp.en)) return /limestone/i.test(s) ? 'limestone' : 'stone';
+  if (/whitewash|plaster/i.test(rp.en)) return 'whitewash';
+  if (/earth|taipa|adobe/i.test(s)) return 'earth';
+  return 'whitewash';
+}
+function vmRoofMatOf(T) {
+  const rp = typeof T.model.render === 'function' ? T.model.render({ nuts:'' }) : T.model.render, s = (rp && rp.en) || '';
+  if (/thatch/i.test(s)) return 'thatch';
+  if (/slate/i.test(s)) return 'slate';
+  if (/timber roof/i.test(s)) return 'timber';
+  if (/barrel|canudo/i.test(s)) return 'tile';
+  return 'tile';
+}
+/** The model's openings, per face and floor, as the modeller's own list. */
+function vmOpenOf(m, L, D) {
+  const o = {};
+  VM_FACES.forEach(f => {
+    const src = m.open && m.open[f], out = o[f] = [];
+    if (!src || !src.units || !(src.wwr > 0)) return;
+    src.units.forEach(u => { for (let k = 0; k < m.fl; k++) {
+      const F = u.floors && u.floors[k] ? u.floors[k] : {}, on = 'on' in F ? F.on : u.on !== false, door = 'door' in F ? F.door : !!u.door;
+      if (!on) continue;
+      const len = f === 'S' || f === 'N' ? L : D;
+      out.push(vmOp(door ? 'd' : 'w', u.pos === undefined ? 0.5 : u.pos, door ? 0.9 : Math.max(0.5, Math.min(1.2, (u.frac || 0.15) * len * 0.6)), door ? 2.0 : 1.0, k));
+    } });
+  });
+  return o;
+}
+/** The archetype as the modeller draws it: its own model, then what its sources add. */
+function vmFromType(k) {
+  const T = VERN_TYPES[k];
+  if (!T) return null;
+  const m = T.model, dist = typeof vDist === 'function' ? vDist(k) : [];
+  const south = dist.some(d => ['Faro', 'Beja', 'Évora', 'Portalegre', 'Setúbal', 'Santarém', 'Lisboa'].indexOf(d) >= 0);
+  const z = m.roof.zones && m.roof.zones.length > 1 ? m.roof.zones : null;
+  const rt = n => n === 0 ? 'flat' : n === 1 ? 'shed' : n === 2 ? 'gable' : 'hip';
+  const wm = vmWallOf(T), rm = vmRoofMatOf(T);
+  const base = vmVol({ L:m.L, D:m.D, fl:m.fl, fh:m.fh, raise:m.raise ? +m.raise.h || 0 : 0,
+    roof:{ type:rt(m.roof.n), th:m.roof.th || 0, bei:m.roof.bei || 0, mat:m.roof.n === 0 ? 'lime' : rm, ridge:'auto', par:m.roof.n === 0 ? 0.6 : 0, cells:2, beirado:south ? 2 : 1 },
+    wall:{ mat:wm, barra:wm === 'whitewash' && south ? '#3F6FA8' : null, cunhais:wm === 'whitewash', frames:wm === 'whitewash' ? (south ? 'cor' : 'cal') : 'cantaria', buttress:0 },
+    open:vmOpenOf(m, m.L, m.D) });
+  if (m.raise && m.raise.kind === 'piers') base.piers = true;
+  const vm = { v:1, type:k, vols:[base], els:[], court:{ on:false, x:0, y:-6, L:16, D:12, h:2, gate:{ face:'S', pos:0.5, w:3 } }, row:{ n:1 } };
+  /* roof parts of the model as separate bodies: a tiled part beside a flat açoteia */
+  if (z) {
+    vm.vols = z.map((q, i) => { const w = (q.f1 - q.f0) * m.L, v = vmVol(vmClone(base)); v.id = base.id + i; v.L = w; v.x = -m.L / 2 + (q.f0 + q.f1) / 2 * m.L;
+      v.roof.type = rt(q.n); v.roof.th = q.th || 0; v.roof.mat = q.n === 0 ? 'lime' : base.roof.mat; v.roof.par = q.n === 0 ? 0.6 : 0;
+      v.name = i === 0 ? base.name : { en:'Part ' + (i + 1), pt:'Parte ' + (i + 1) };
+      VM_FACES.forEach(f => { v.open[f] = base.open[f].filter(o => f === 'S' || f === 'N' ? (o.pos >= q.f0 && o.pos < q.f1) : (f === 'E' ? i === z.length - 1 : i === 0))
+        .map(o => Object.assign({}, o, { pos:f === 'S' || f === 'N' ? (o.pos - q.f0) / (q.f1 - q.f0) : o.pos })); });
+      return v; });
+  }
+  if (m.balc && m.fl >= 2) vm.els.push({ t:'varanda', vol:0, face:'S', kind:'corrida', pos:0.5, w:Math.min(m.balc, m.L - 2), floor:1 }, { t:'stair', vol:0, face:'S', along:'par', pos:0.12, w:1.1, landing:true, porch:false });
+  if (m.loggia) vm.els.push({ t:'varanda', vol:0, face:'S', kind:'reentrante', pos:0.5, w:m.loggia.w, floor:(m.loggia.lv || 1) - 1 });
+  if (m.roof.latada) vm.els.push({ t:'latada', vol:0, face:'S', pos:0.5, w:Math.min(8, m.L - 1), d:3 });
+  else if (m.roof.porch) vm.els.push({ t:'alpendre', vol:0, face:'S', pos:0.5, w:Math.min(8, m.L - 1), d:2.2 });
+  const sumEn = (T.summary && T.summary.en) || '';
+  const noChim = /no chimney|without (a )?chimney|rarely a chimney|few chimneys|no chimneys/i.test(sumEn);
+  if (/chimney/i.test(sumEn) && !noChim && m.roof.n !== 0) {
+    const kind = dist.indexOf('Faro') >= 0 ? 'alg' : dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal'].indexOf(d) >= 0) ? 'ale' : dist[0] === 'Açores' ? 'az' : dist[0] === 'Madeira' ? 'mad' : 'box';
+    vm.els.push({ t:'chimney', vol:0, kind, u:kind === 'ale' ? 0.62 : 0.78, v:kind === 'ale' ? 0.25 : 0.6, h:kind === 'ale' ? 1.5 : 1.2 });
+  }
+  if (m.icon === 'windmill') { base.kind = 'round'; base.L = base.D = Math.max(m.L, m.D); base.roof.type = 'cone'; base.roof.th = 40; base.roof.mat = rm === 'thatch' ? 'thatch' : 'timber'; }
+  const ov = VM_OVR[k];
+  if (ov) ov(vm, base);
+  return vm;
+}
+/* what the sources add to the archetypes the one-bar model could not draw */
+const vmOven = (vol, face, pos) => ({ t:'oven', vol, face, pos, r:0.9 });
+const VM_OVR = {
+  'pt-chafurdao':(vm, b) => { Object.assign(b, { kind:'round', L:5, D:5 }); Object.assign(b.roof, { type:'dome', mat:'earth', bei:0, th:0 }); b.wall = { mat:'granite', barra:null, cunhais:false, frames:null, buttress:0 }; },
+  'pt-choca':(vm, b) => { Object.assign(b, { kind:'round', L:4.5, D:4.5 }); Object.assign(b.roof, { type:'cone', th:50, mat:'thatch', bei:0.4 }); },
+  'pt-barroso-redonda':(vm, b) => { Object.assign(b.roof, { type:'pyramid', th:45, mat:'thatch', bei:0.4 });
+    vm.vols.push(vmVol({ name:{ en:'Round house beside it', pt:'Casa redonda ao lado' }, kind:'round', x:7, y:1, L:5, D:5, fl:1, fh:2.0, roof:{ type:'cone', th:48, bei:0.4, mat:'thatch' }, wall:vmClone(b.wall), open:{ S:[vmOp('d', 0.5, 0.9, 1.8)], E:[], N:[], W:[] } })); },
+  'pt-moinho-vento':(vm, b) => { b.name = { en:'Tower', pt:'Torre' }; },
+  'md-santana':(vm, b) => { Object.assign(b.roof, { type:'ground', th:62, mat:'thatch', bei:0 }); b.fh = 1.0; b.wall.mat = 'timber'; b.wall.barra = null; },
+  'md-redonda':(vm, b) => { b.kind = 'round'; b.L = b.D = Math.max(b.L, b.D); b.roof.type = 'cone'; },
+  'pt-tavira':(vm, b) => { Object.assign(b.roof, { type:'tesoura', th:42, cells:2 }); },
+  'pt-alg-taipa':(vm, b) => { vm.els.push(vmOven(0, 'E', 0.5)); },
+  'pt-alg-monchique':(vm, b) => { vm.els.push(vmOven(0, 'E', 0.4)); },
+  'pt-saloia':(vm, b) => { vm.els.push(vmOven(0, 'E', 0.5)); },
+  'pt-saloia-elementar':(vm, b) => { vm.els.push(vmOven(0, 'W', 0.5)); },
+  'pt-torreada':(vm, b) => { vm.vols.push(vmVol({ name:{ en:'Tower', pt:'Torre' }, x:b.L / 2 - 2, y:b.D / 2 + 2, L:4, D:4, fl:2, fh:2.6, roof:{ type:'hip', th:25, bei:0.3, mat:'tile' }, wall:vmClone(b.wall), open:{ S:[vmOp('w', 0.5, 0.8, 1, 1)], E:[vmOp('w', 0.5, 0.8, 1, 1)], N:[], W:[] } })); },
+  'pt-alentejo':(vm, b) => { vm.court = { on:true, x:0, y:-b.D / 2 - 5, L:b.L + 6, D:10, h:1.8, open:'N', gate:{ face:'S', pos:0.3, w:3 } }; },
+  'pt-monte-patio':(vm, b) => { vm.court = { on:true, x:0, y:-b.D / 2 - 7, L:b.L, D:14, h:2.2, open:'N', gate:{ face:'S', pos:0.5, w:3.5 } };
+    vm.vols.push(vmVol({ name:{ en:'Stores and stables', pt:'Armazéns e cavalariças' }, x:-b.L / 2 + 2.5, y:-b.D / 2 - 7, L:5, D:12, fl:1, fh:2.8, roof:{ type:'gable', th:22, bei:0.2, mat:'tile' }, wall:vmClone(b.wall), open:{ S:[], E:[vmOp('d', 0.3, 2.4, 2.4), vmOp('d', 0.7, 1.2, 2.2)], N:[], W:[] } })); },
+  'pt-alg-pescadores':(vm, b) => { vm.row = { n:3 }; vm.vols.push(vmVol({ name:{ en:'Mirante', pt:'Mirante' }, x:b.L / 2 - 1.2, y:b.D / 2 - 1.5, L:2.2, D:2.2, fl:1, fh:2.2, raise:b.fl * b.fh, roof:{ type:'flat', th:0, bei:0, mat:'lime', par:0.5 }, wall:vmClone(b.wall), open:{ S:[vmOp('d', 0.5, 0.8, 1.9)], E:[], N:[], W:[] } })); },
+  'pt-alg-acoteia':(vm, b) => { b.roof.par = 0.8; },
+  'pt-povoa':(vm, b) => { vm.row = { n:4 }; },
+  'pt-meia-casa':(vm, b) => { vm.row = { n:3 }; },
+  'pt-cardenha':(vm, b) => { vm.row = { n:3 }; b.roof.mat = 'stone'; },
+  'pt-malhada':(vm, b) => { b.D = 3; b.y = 3.2; b.name = { en:'North range of sties', pt:'Fiada norte de furdas' }; b.open.S = Array.from({ length:6 }, (_, i) => vmOp('d', (i + 0.5) / 6, 0.8, 1.2));
+    vm.vols.push(vmVol({ name:{ en:'South range of sties', pt:'Fiada sul de furdas' }, x:0, y:-3.2, L:b.L, D:3, fl:1, fh:1.8, roof:{ type:'shed', th:15, bei:0.2, mat:'tile' }, wall:vmClone(b.wall), open:{ S:[], E:[], N:Array.from({ length:6 }, (_, i) => vmOp('d', (i + 0.5) / 6, 0.8, 1.2)), W:[] } }));
+    vm.court = { on:true, x:0, y:0, L:b.L, D:3.4, h:1.2, gate:{ face:'W', pos:0.5, w:2 } }; },
+  'pt-espigueiro':(vm, b) => { b.piers = true; b.raise = 1.0; b.open.S = [vmOp('w', 0.5, 4.5, 1.4)]; b.open.N = [vmOp('w', 0.5, 4.5, 1.4)]; b.slits = true; b.roof.mat = 'stone'; },
+  'pt-sado-taipa':(vm, b) => { b.wall.buttress = 4; },
+  'pt-mondego-alpendre':(vm, b) => { vm.els = vm.els.filter(e => e.t !== 'stair'); vm.els.push({ t:'stair', vol:0, face:'S', along:'par', pos:0.1, w:1.2, landing:true, porch:true }); },
+  'pt-beira-alta':(vm, b) => { vm.els.push({ t:'stair', vol:0, face:'S', along:'perp', pos:0.2, w:1.1, landing:true, porch:false }, { t:'varanda', vol:0, face:'S', kind:'envidracada', pos:0.6, w:4, floor:1 }); },
+  'pt-beira':(vm, b) => { vm.els.push({ t:'stair', vol:0, face:'S', along:'perp', pos:0.2, w:1.0, landing:true, porch:true }); },
+  'pt-tmontes':(vm, b) => { vm.els.push({ t:'stair', vol:0, face:'S', along:'par', pos:0.15, w:1.0, landing:true, porch:false }, { t:'varanda', vol:0, face:'S', kind:'corrida', pos:0.6, w:4.5, floor:1 }); },
+  'pt-tm-alpendrada':(vm, b) => { vm.els.push({ t:'chimney', vol:0, kind:'talha', u:0.7, v:0.5, h:0.6 }); },
+  'pt-minho':(vm, b) => { if (!vm.els.some(e => e.t === 'stair')) vm.els.push({ t:'stair', vol:0, face:'S', along:'par', pos:0.12, w:1.1, landing:true, porch:false }); },
+  'pt-porto-arredores':(vm, b) => { b.wall.frames = 'cantaria'; b.wall.cunhais = true; },
+  'az-corvo':(vm, b) => { vm.els.push({ t:'stair', vol:0, face:'E', along:'par', pos:0.2, w:1.0, landing:true, porch:false }); },
+  'az-pico':(vm, b) => { vm.vols.push(vmVol({ name:{ en:'Raised kitchen', pt:'Cozinha sobrelevada' }, x:b.L / 2 + 2, y:0, L:4, D:b.D, fl:1, fh:b.fh + 0.8, roof:{ type:'gable', th:b.roof.th, bei:0.3, mat:b.roof.mat }, wall:vmClone(b.wall), open:{ S:[vmOp('d', 0.5, 0.9, 2)], E:[], N:[], W:[] } })); vm.els.push(vmOven(1, 'E', 0.5)); },
+  'az-linear':(vm, b) => { vm.els.push(vmOven(0, 'W', 0.5)); },
+  'az-integrada':(vm, b) => { vm.els.push(vmOven(0, 'E', 0.5)); },
+  'az-imperio':(vm, b) => { b.wall.frames = 'cor'; b.wall.barra = '#3F6FA8'; },
+  'pt-forno-comum':(vm, b) => { vm.els.push(vmOven(0, 'N', 0.5)); },
+  'pt-nora':(vm, b) => { Object.assign(b, { kind:'round', L:7, D:7, fh:0.9 }); b.roof = { type:'flat', th:0, bei:0, mat:'lime', par:0 };
+    vm.vols.push(vmVol({ name:{ en:'Tank', pt:'Tanque' }, x:6, y:-1, L:4, D:3, fl:1, fh:0.8, roof:{ type:'flat', th:0, bei:0, mat:'lime', par:0 }, wall:vmClone(b.wall), open:{ S:[], E:[], N:[], W:[] } })); }
+};
+/** The student's model of this study: stored with the study, started from the archetype. */
+function vmRead() {
+  const R = vernRead();
+  if (!R) return null;
+  if (!R.V.vm || R.V.vm.type !== R.type) R.V.vm = vmFromType(R.type);
+  if (!R.V.rooms || R.V.roomsType !== R.type) { R.V.rooms = typeof vmDefaultRooms === 'function' ? vmDefaultRooms(R.V.vm) : []; R.V.roomsType = R.type; }
+  return { R, vm:R.V.vm, ref:vmFromType(R.type) };
+}
+/** Every body drawn: the volumes, repeated along x for a row of houses with party walls. */
+function vmAllVols(vm) {
+  const n = Math.max(1, Math.min(8, (vm.row && vm.row.n) | 0 || 1));
+  if (n === 1) return vm.vols.map((v, i) => Object.assign({}, v, { _i:i, _r:0 }));
+  const bb = vmBBox({ vols:vm.vols, row:{ n:1 } }), w = bb[2] - bb[0], out = [];
+  for (let r = 0; r < n; r++) vm.vols.forEach((v, i) => out.push(Object.assign({}, v, { x:v.x + (r - (n - 1) / 2) * w, _i:i, _r:r, _party:{ W:r > 0, E:r < n - 1 } })));
+  return out;
+}
+function vmBBox(vm) {
+  const vs = vm.vols.length ? (vm.row && vm.row.n > 1 ? vmAllVols(vm) : vm.vols) : [vmVol()];
+  let b = [Infinity, Infinity, -Infinity, -Infinity];
+  vs.forEach(v => { b = [Math.min(b[0], v.x - v.L / 2), Math.min(b[1], v.y - v.D / 2), Math.max(b[2], v.x + v.L / 2), Math.max(b[3], v.y + v.D / 2)]; });
+  if (vm.court && vm.court.on) { const c = vm.court; b = [Math.min(b[0], c.x - c.L / 2), Math.min(b[1], c.y - c.D / 2), Math.max(b[2], c.x + c.L / 2), Math.max(b[3], c.y + c.D / 2)]; }
+  return b;
+}
+
+/* ---------------------------------------------------------------- measures */
+const vmPerim = v => v.kind === 'rect' ? 2 * (v.L + v.D) : Math.PI * (3 * (v.L + v.D) / 2 - Math.sqrt((3 * v.L / 2 + v.D / 2) * (v.L / 2 + 3 * v.D / 2))) ;
+const vmArea = v => v.kind === 'rect' ? v.L * v.D : Math.PI * v.L * v.D / 4;
+const vmH = v => v.fl * v.fh;
+/** Height of the roof's highest point above the wall head. */
+function vmRoofRise(v) {
+  const r = v.roof, th = (r.th || 0) * Math.PI / 180, a = Math.min(v.L, v.D) / 2, A = Math.max(v.L, v.D);
+  switch (r.type) {
+    case 'flat': return r.par || 0;
+    case 'shed': return Math.min(v.L, v.D) * Math.tan(th);
+    case 'gable': case 'hip': case 'pyramid': case 'cone': return (r.type === 'pyramid' || r.type === 'cone' ? Math.max(v.L, v.D) / 2 : a) * Math.tan(th);
+    case 'tesoura': return Math.min(a, A / (2 * Math.max(1, r.cells || 2))) * Math.tan(th);
+    case 'ground': return a * Math.tan(th);
+    case 'dome': return a * 0.9;
+  }
+  return 0;
+}
+/** The roof's surface: slopes over their plan, a cone's mantle, a dome's cap. */
+function vmRoofArea(v) {
+  const r = v.roof, th = (r.th || 0) * Math.PI / 180, A = vmArea(v), e = r.bei || 0, Ae = v.kind === 'rect' ? (v.L + 2 * e) * (v.D + 2 * e) : Math.PI * (v.L + 2 * e) * (v.D + 2 * e) / 4;
+  if (r.type === 'flat') return A;
+  if (r.type === 'cone') { const rr = (v.L + v.D) / 4 + e, h = vmRoofRise(v); return Math.PI * rr * Math.hypot(rr, h); }
+  if (r.type === 'dome') { const rr = (v.L + v.D) / 4, h = vmRoofRise(v); return Math.PI * (rr * rr + h * h); }
+  return Ae / Math.max(0.2, Math.cos(th));
+}
+function vmOpenArea(v, f) { return (v.open[f] || []).reduce((a, o) => a + o.w * o.h, 0); }
+/** The model's numbers, body by body and in all. */
+function vmMetrics(vm) {
+  const vs = vmAllVols(vm);
+  let foot = 0, floor = 0, wall = 0, glaze = 0, door = 0, roof = 0, vol = 0, party = 0, massW = 0;
+  vs.forEach(v => {
+    const H = vmH(v), A = vmArea(v), P = vmPerim(v);
+    foot += A; floor += A * v.fl; roof += vmRoofArea(v);
+    let wa = P * H;
+    if (v._party) { if (v._party.W) { wa -= v.D * H / 2; party += v.D * H / 2; } if (v._party.E) { wa -= v.D * H / 2; party += v.D * H / 2; } }
+    wall += wa;
+    VM_FACES.forEach(f => (v.open[f] || []).forEach(o => { if (o.t === 'w') glaze += o.w * o.h; else door += o.w * o.h; }));
+    vol += A * H + (v.roof.type === 'flat' ? 0 : A * vmRoofRise(v) / (['cone', 'pyramid'].indexOf(v.roof.type) >= 0 ? 3 : v.roof.type === 'dome' ? 1.5 : 2));
+    const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash; massW += wa * W.t * W.rho;
+  });
+  const env = wall + roof + foot, main = vm.vols[0] || vmVol(), bb = vmBBox(vm);
+  const earthRoof = vm.vols.some(v => v.roof.mat === 'earth' || v.roof.type === 'dome');
+  return { n:vs.length, foot, floor, wall, glaze, door, roof, vol, env, sv:vol > 0 ? env / vol : 0, glazePct:wall > 0 ? 100 * glaze / wall : 0,
+    ratio:main.L / main.D, fl:main.fl, H:vmH(main) + vmRoofRise(main), party, massW:wall > 0 ? massW / wall : 0, earthRoof,
+    bbox:[bb[2] - bb[0], bb[3] - bb[1]], roofType:main.roof.type, th:main.roof.th, wallMat:main.wall.mat };
+}
+
+/* ---------------------------------------------------------------- 3D faces */
+const VM_VIEW = [1, -1, 1];   // the isometric viewer looks down this way: x − y + z grows toward it
+const vmShade = (hex, k) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255, f = c => Math.max(0, Math.min(255, Math.round(c * k)));
+  return '#' + [f(r), f(g), f(b)].map(c => c.toString(16).padStart(2, '0')).join(''); };
+const vmNorm = P => { const a = P[0], b = P[1], c = P[2], u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]], l = Math.hypot(...n) || 1; return n.map(q => q / l); };
+const vmKey = P => P.reduce((a, p) => a + p[0] - p[1] + p[2], 0) / P.length;
+/** Light from the south-west, high: a face's shade from its normal. */
+const vmLit = (hex, n) => vmShade(hex, 0.72 + 0.28 * Math.max(0, -0.35 * n[0] - 0.55 * n[1] + 0.75 * n[2]) + 0.06);
+/** The ring of a plan (rect corners or an ellipse), grown by e, at height z. */
+function vmRing(v, e, z, N) {
+  const a = v.L / 2 + e, b = v.D / 2 + e;
+  if (v.kind === 'rect') return [[v.x - a, v.y - b, z], [v.x + a, v.y - b, z], [v.x + a, v.y + b, z], [v.x - a, v.y + b, z]];
+  N = N || 28;
+  return Array.from({ length:N }, (_, i) => { const t = -Math.PI / 2 + i / N * 2 * Math.PI; return [v.x + a * Math.cos(t), v.y + b * Math.sin(t), z]; });
+}
+/** The roof's height above the wall head at a plan point (for chimneys and stairs). */
+function vmRoofAt(v, x, y) {
+  const r = v.roof, th = (r.th || 0) * Math.PI / 180, dx = Math.abs(x - v.x), dy = Math.abs(y - v.y);
+  const alongX = r.ridge === 'x' || (r.ridge !== 'y' && v.L >= v.D);
+  switch (r.type) {
+    case 'flat': return 0;
+    case 'shed': return (y - (v.y - v.D / 2)) * Math.tan(th);
+    case 'gable': case 'ground': return Math.max(0, ((alongX ? v.D : v.L) / 2 - (alongX ? dy : dx)) * Math.tan(th));
+    case 'hip': return Math.max(0, Math.min(v.D / 2 - dy, v.L / 2 - dx) * Math.tan(th));
+    case 'pyramid': case 'cone': return Math.max(0, (Math.max(v.L, v.D) / 2 - Math.hypot(dx * Math.max(v.L, v.D) / v.L, dy * Math.max(v.L, v.D) / v.D)) * Math.tan(th));
+    case 'tesoura': return Math.max(0, Math.min(v.D / 2 - dy, (v.L / Math.max(1, r.cells || 2)) / 2 - Math.abs(((x - v.x + v.L / 2) % (v.L / Math.max(1, r.cells || 2))) - v.L / Math.max(1, r.cells || 2) / 2)) * Math.tan(th));
+    case 'dome': { const rr = Math.min(v.L, v.D) / 2, q = Math.min(1, Math.hypot(dx, dy) / rr); return vmRoofRise(v) * Math.sqrt(1 - q * q); }
+  }
+  return 0;
+}
+/**
+ * Every face of one body, in world metres, with its fill: the walls (culled to
+ * those that face the viewer), the openings and their frames on them, the
+ * barra and the corners, the roof in its form, the parapet.
+ */
+function vmVolFaces(v, opts) {
+  const F = [], push = (P, fill, o) => F.push(Object.assign({ P, fill, n:vmNorm(P) }, o || {}));
+  const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash, wc = W.c, z0 = v.raise || 0, H = z0 + vmH(v), r = v.roof, rc = (VM_ROOFMAT[r.mat] || VM_ROOFMAT.tile).c;
+  const th = (r.th || 0) * Math.PI / 180, e = r.type === 'flat' ? 0 : r.bei || 0, alongX = r.ridge === 'x' || (r.ridge !== 'y' && v.L >= v.D);
+  const x0 = v.x - v.L / 2, x1 = v.x + v.L / 2, y0 = v.y - v.D / 2, y1 = v.y + v.D / 2;
+  const lime = v.wall.mat === 'whitewash';
+  /* piers or a plinth under a raised floor */
+  if (z0 > 0.05 && !v._onTop) {
+    if (v.piers) { const nx = Math.max(2, Math.round(v.L / 1.5)); for (let i = 0; i <= nx; i++) { const px = x0 + i * (v.L - 0.25) / nx; [y0, y1 - 0.25].forEach(py => {
+        push([[px, py, 0], [px + 0.25, py, 0], [px + 0.25, py, z0], [px, py, z0]], '#8E8A80'); push([[px + 0.25, py, 0], [px + 0.25, py + 0.25, 0], [px + 0.25, py + 0.25, z0], [px + 0.25, py, z0]], '#77736A');
+        push([[px - 0.12, py - 0.12, z0 - 0.05], [px + 0.37, py - 0.12, z0 - 0.05], [px + 0.37, py + 0.37, z0 - 0.05], [px - 0.12, py + 0.37, z0 - 0.05]], '#9A968C', { top:true }); }); } }
+    else if (v.kind === 'rect') { push([[x0, y0, 0], [x1, y0, 0], [x1, y0, z0], [x0, y0, z0]], '#8E8A80'); push([[x1, y0, 0], [x1, y1, 0], [x1, y1, z0], [x1, y0, z0]], '#77736A'); }
+  }
+  /* walls */
+  if (v.kind === 'rect') {
+    const sides = { S:[[x0, y0], [x1, y0]], E:[[x1, y0], [x1, y1]], N:[[x1, y1], [x0, y1]], W:[[x0, y1], [x0, y0]] };
+    VM_FACES.forEach(f => {
+      if (v._party && v._party[f]) return;
+      const [a, b] = sides[f], P = [[a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], H], [a[0], a[1], H]];
+      /* the gable's triangle on the ends across the ridge, the shed's rise on the sides */
+      if (r.type === 'gable' && ((alongX && (f === 'E' || f === 'W')) || (!alongX && (f === 'S' || f === 'N')))) {
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], hh = (alongX ? v.D : v.L) / 2 * Math.tan(th);
+        P.splice(3, 0, [mid[0], mid[1], H + hh]);
+      } else if (r.type === 'shed' && (f === 'E' || f === 'W')) {
+        const rise = v.D * Math.tan(th); if (f === 'E') P[2] = [b[0], b[1], H + rise]; else P[3] = [a[0], a[1], H + rise];
+      } else if (r.type === 'shed' && f === 'N') { const rise = v.D * Math.tan(th); P[2][2] += rise; P[3][2] += rise; }
+      push(P, f === 'S' || f === 'N' ? wc : vmShade(wc, 0.86), { wall:f });
+      /* barra, corners, buttresses and the openings on the faces seen */
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]), dir = [(b[0] - a[0]) / len, (b[1] - a[1]) / len], out = { S:[0, -1], E:[1, 0], N:[0, 1], W:[-1, 0] }[f];
+      const at = (u, z, d) => [a[0] + dir[0] * u + out[0] * (d || 0.02), a[1] + dir[1] * u + out[1] * (d || 0.02), z];
+      const bh = 0.45;
+      if (v.wall.barra && lime) push([at(0, z0), at(len, z0), at(len, z0 + bh), at(0, z0 + bh)], v.wall.barra, { thin:true });
+      else if (lime && !z0) push([at(0, 0), at(len, 0), at(len, 0.3), at(0, 0.3)], vmShade(wc, 0.72), { thin:true });
+      if (v.wall.cunhais) [[0, 0.3], [len - 0.3, len]].forEach(([p, q]) => push([at(p, z0 + bh), at(q, z0 + bh), at(q, H), at(p, H)], v.wall.barra && lime ? vmShade(v.wall.barra, 1.1) : vmShade(wc, lime ? 0.88 : 1.15), { thin:true }));
+      if (v.wall.buttress && (f === 'S' || f === 'N')) for (let i = 1; i <= v.wall.buttress; i++) { const u = i * len / (v.wall.buttress + 1), hb = vmH(v) * 0.75;
+        push([at(u - 0.3, z0, 0.6), at(u + 0.3, z0, 0.6), at(u + 0.3, z0 + hb * 0.55, 0.6), at(u - 0.3, z0 + hb, 0.02)], vmShade(wc, 0.95), { thin:true });
+        push([at(u + 0.3, z0, 0.6), at(u + 0.3, z0, 0.02), at(u + 0.3, z0 + hb, 0.02), at(u + 0.3, z0 + hb * 0.55, 0.6)], vmShade(wc, 0.78), { thin:true }); }
+      (v.open[f] || []).forEach(o => {
+        const cu = o.pos * len, z = z0 + o.fl * v.fh + (o.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
+        const fr = v.wall.frames ? 0.13 : 0;
+        if (fr) push([at(cu - o.w / 2 - fr, z - (o.t === 'd' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, z - (o.t === 'd' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, zz + fr, 0.03), at(cu - o.w / 2 - fr, zz + fr, 0.03)],
+          v.wall.frames === 'cantaria' ? '#CFC6B4' : v.wall.frames === 'cor' ? (v.wall.barra || '#3F6FA8') : vmShade(wc, lime ? 0.84 : 1.2), { thin:true });
+        push([at(cu - o.w / 2, z, 0.04), at(cu + o.w / 2, z, 0.04), at(cu + o.w / 2, zz, 0.04), at(cu - o.w / 2, zz, 0.04)], o.t === 'd' ? '#5A4632' : (v.slits ? '#2E2A26' : '#3E4C57'), { thin:true, open:o.t });
+        if (v.slits && o.t === 'w') for (let s = 1; s < 8; s++) push([at(cu - o.w / 2 + s * o.w / 8 - 0.04, z, 0.05), at(cu - o.w / 2 + s * o.w / 8 + 0.04, z, 0.05), at(cu - o.w / 2 + s * o.w / 8 + 0.04, zz, 0.05), at(cu - o.w / 2 + s * o.w / 8 - 0.04, zz, 0.05)], '#B8B2A6', { thin:true });
+      });
+    });
+  } else {
+    const lo = vmRing(v, 0, z0), hi = vmRing(v, 0, H), N = lo.length;
+    for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([lo[i], lo[j], hi[j], hi[i]], wc, { wall:'R' }); }
+    if (v.wall.barra && lime) { const b0 = vmRing(v, 0.02, z0), b1 = vmRing(v, 0.02, z0 + 0.45); for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([b0[i], b0[j], b1[j], b1[i]], v.wall.barra, { thin:true }); } }
+    /* openings on a round wall: placed by face, at the ring's point that faces it */
+    VM_FACES.forEach(f => (v.open[f] || []).forEach(o => {
+      const ang = { S:-Math.PI / 2, E:0, N:Math.PI / 2, W:Math.PI }[f] + (o.pos - 0.5) * 1.2, a = v.L / 2 + 0.03, b = v.D / 2 + 0.03;
+      const c = [v.x + a * Math.cos(ang), v.y + b * Math.sin(ang)], t = [-Math.sin(ang), Math.cos(ang)];
+      const z = z0 + o.fl * v.fh + (o.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
+      push([[c[0] - t[0] * o.w / 2, c[1] - t[1] * o.w / 2, z], [c[0] + t[0] * o.w / 2, c[1] + t[1] * o.w / 2, z], [c[0] + t[0] * o.w / 2, c[1] + t[1] * o.w / 2, zz], [c[0] - t[0] * o.w / 2, c[1] - t[1] * o.w / 2, zz]], o.t === 'd' ? '#5A4632' : '#3E4C57', { thin:true, open:o.t });
+    }));
+  }
+  /* roofs */
+  const rf = (P, o) => push(P, rc, Object.assign({ roof:true }, o || {}));
+  if (r.type === 'flat') {
+    const top = vmRing(v, 0, H);
+    push(top, VM_ROOFMAT[r.mat] ? VM_ROOFMAT[r.mat].c : '#ECE8DE', { roof:true, top:true });
+    if (r.par > 0.05) { const t0 = vmRing(v, 0, H), t1 = vmRing(v, 0, H + r.par), N = t0.length;
+      for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([t0[i], t0[j], t1[j], t1[i]], wc, { par:true }); }
+      if (lime && v.wall.barra) { const c0 = vmRing(v, 0.03, H + r.par - 0.12), c1 = vmRing(v, 0.03, H + r.par); for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([c0[i], c0[j], c1[j], c1[i]], v.wall.barra, { thin:true }); } } }
+  } else if (r.type === 'cone' || r.type === 'pyramid' && v.kind !== 'rect') {
+    const ring = vmRing(v, e, H - e * Math.tan(th)), apex = [v.x, v.y, H + vmRoofRise(v)], N = ring.length;
+    for (let i = 0; i < N; i++) rf([ring[i], ring[(i + 1) % N], apex]);
+  } else if (r.type === 'dome') {
+    const K = 7, rr = vmRoofRise(v);
+    const rect2 = v.kind === 'rect' ? Object.assign({}, v, { kind:'oval' }) : v;
+    const R0 = Array.from({ length:K + 1 }, (_, k) => { const p = k / K * Math.PI / 2, s = Math.cos(p); return vmRing(Object.assign({}, rect2, { L:v.L * s, D:v.D * s }), 0, H + rr * Math.sin(p)); });
+    for (let k = 0; k < K; k++) { const A = R0[k], B = R0[k + 1], N = A.length; for (let i = 0; i < N; i++) { const j = (i + 1) % N; rf([A[i], A[j], B[j], B[i]], { fill:vmShade(rc, 0.92 + 0.02 * k) }); } }
+  } else if (r.type === 'shed') {
+    const rise = v.D * Math.tan(th);
+    rf([[x0 - e, y0 - e, H - e * Math.tan(th)], [x1 + e, y0 - e, H - e * Math.tan(th)], [x1 + e, y1 + e, H + rise + e * Math.tan(th)], [x0 - e, y1 + e, H + rise + e * Math.tan(th)]]);
+  } else if (r.type === 'gable' || r.type === 'ground') {
+    let ee = e, dz = e * Math.tan(th);
+    const span = (alongX ? v.D : v.L) / 2, hh = span * Math.tan(th);
+    if (r.type === 'ground') { ee = Math.max(0.2, (H - 0.25) / Math.tan(th)); dz = H - 0.25; }
+    if (alongX) {
+      rf([[x0 - e, y0 - ee, H - dz], [x1 + e, y0 - ee, H - dz], [x1 + e, v.y, H + hh], [x0 - e, v.y, H + hh]]);
+      rf([[x1 + e, y1 + ee, H - dz], [x0 - e, y1 + ee, H - dz], [x0 - e, v.y, H + hh], [x1 + e, v.y, H + hh]]);
+      if (r.type === 'ground') [x0, x1].forEach(xx => push([[xx, y0 - ee + 0.1, 0.25], [xx, y1 + ee - 0.1, 0.25], [xx, v.y, H + hh - 0.05]], xx === x1 ? vmShade(wc, 0.86) : wc, { wall:xx === x1 ? 'E' : 'W' }));
+    } else {
+      rf([[x1 + ee, y0 - e, H - dz], [x1 + ee, y1 + e, H - dz], [v.x, y1 + e, H + hh], [v.x, y0 - e, H + hh]]);
+      rf([[x0 - ee, y1 + e, H - dz], [x0 - ee, y0 - e, H - dz], [v.x, y0 - e, H + hh], [v.x, y1 + e, H + hh]]);
+    }
+  } else if (r.type === 'hip' || r.type === 'pyramid' || r.type === 'tesoura') {
+    const cells = r.type === 'tesoura' ? Math.max(1, r.cells | 0 || 2) : 1, cw = v.L / cells;
+    for (let c = 0; c < cells; c++) {
+      const cx0 = x0 + c * cw - (c === 0 ? e : 0), cx1 = x0 + (c + 1) * cw + (c === cells - 1 ? e : 0), dz = e * Math.tan(th);
+      const L2 = cx1 - cx0, D2 = v.D + 2 * e, rr = r.type === 'pyramid' ? null : Math.min(L2, D2) / 2;
+      const a = [cx0, y0 - e, H - dz], b = [cx1, y0 - e, H - dz], cc = [cx1, y1 + e, H - dz], d = [cx0, y1 + e, H - dz];
+      if (r.type === 'pyramid') { const ap = [(cx0 + cx1) / 2, v.y, H - dz + Math.max(L2, D2) / 2 * Math.tan(th)]; rf([a, b, ap]); rf([b, cc, ap]); rf([cc, d, ap]); rf([d, a, ap]); continue; }
+      const hz = H - dz + rr * Math.tan(th);
+      if (L2 >= D2) { const r0 = [cx0 + rr, v.y, hz], r1 = [cx1 - rr, v.y, hz]; rf([a, b, r1, r0]); rf([b, cc, r1]); rf([cc, d, r0, r1]); rf([d, a, r0]); }
+      else { const r0 = [(cx0 + cx1) / 2, y0 - e + rr, hz], r1 = [(cx0 + cx1) / 2, y1 + e - rr, hz]; rf([a, b, r0]); rf([b, cc, r1, r0]); rf([cc, d, r1]); rf([d, a, r0, r1]); }
+    }
+  }
+  return F;
+}
+/** The pieces the elements add: chimneys, stairs, varandas, ovens, porches, pergolas. */
+function vmElFaces(vm, vs) {
+  const F = [], push = (P, fill, o) => F.push(Object.assign({ P, fill, n:vmNorm(P) }, o || {}));
+  const box = (x, y, z, w, d, h, c, o) => { const X = x + w, Y = y + d, Z = z + h;
+    push([[x, y, z], [X, y, z], [X, y, Z], [x, y, Z]], c, o); push([[X, y, z], [X, Y, z], [X, Y, Z], [X, y, Z]], vmShade(c, 0.82), o);
+    push([[X, Y, z], [x, Y, z], [x, Y, Z], [X, Y, Z]], vmShade(c, 0.7), o); push([[x, Y, z], [x, y, z], [x, y, Z], [x, Y, Z]], vmShade(c, 0.9), o);
+    push([[x, y, Z], [X, y, Z], [X, Y, Z], [x, Y, Z]], vmShade(c, 1.06), o); };
+  (vm.els || []).forEach(E => vs.filter(v => v._i === E.vol).forEach(v => {
+    const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash, wc = W.c, z0 = v.raise || 0, H = z0 + vmH(v), x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = v.x + v.L / 2, y1 = v.y + v.D / 2;
+    const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
+    /* a point on a face: u along it (west→east, south→north), d out of it */
+    const at = (u, d) => f === 'S' ? [x0 + u, y0 - d] : f === 'N' ? [x0 + u, y1 + d] : f === 'E' ? [x1 + d, y0 + u] : [x0 - d, y0 + u];
+    const o = { el:E.t };
+    if (E.t === 'chimney') {
+      const k = E.kind || 'box';
+      const cx = x0 + (E.u || 0.75) * v.L, cy = y0 + (E.v || 0.5) * v.D, zb = H + vmRoofAt(v, cx, cy) - 0.25, h = (E.h || 1.2) + 0.25;
+      if (k === 'talha') { box(cx, cy, zb, 0.45, 0.45, h * 0.6, '#9C5A3C', o); box(cx - 0.05, cy - 0.05, zb + h * 0.6, 0.55, 0.55, 0.1, '#7E462E', o); return; }
+      const w = k === 'mad' ? 0.45 : k === 'az' ? 0.8 : k === 'ale' ? 1.2 : 0.6, d = k === 'az' ? 0.5 : k === 'ale' ? 0.7 : w, hh = k === 'mad' ? h + 0.4 : h;
+      box(cx, cy, zb, w, d, hh, wc, o);
+      if (k === 'alg') { for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) push([[cx + 0.1 + j * 0.25, cy - 0.01, zb + hh - 0.85 + i * 0.25], [cx + 0.25 + j * 0.25, cy - 0.01, zb + hh - 0.85 + i * 0.25], [cx + 0.25 + j * 0.25, cy - 0.01, zb + hh - 0.7 + i * 0.25], [cx + 0.1 + j * 0.25, cy - 0.01, zb + hh - 0.7 + i * 0.25]], '#3E4C57', o);
+        const ap = [cx + w / 2, cy + d / 2, zb + hh + 0.55]; push([[cx, cy, zb + hh], [cx + w, cy, zb + hh], ap], vmShade(wc, 0.95), o); push([[cx + w, cy, zb + hh], [cx + w, cy + d, zb + hh], ap], vmShade(wc, 0.8), o); }
+      else if (k === 'az') { push([[cx, cy, zb + hh], [cx + w, cy, zb + hh], [cx + w / 2, cy, zb + hh + 0.45]], vmShade(wc, 0.98), o); push([[cx + w, cy, zb + hh], [cx + w, cy + d, zb + hh], [cx + w / 2, cy + d, zb + hh + 0.45], [cx + w / 2, cy, zb + hh + 0.45]], vmShade(wc, 0.8), o); }
+      else box(cx - 0.06, cy - 0.06, zb + hh, w + 0.12, d + 0.12, 0.08, vmShade(wc, 0.9), o);
+      return;
+    }
+    if (E.t === 'stair') {
+      const top = z0 + v.fh, n = Math.max(4, Math.round(top / 0.19)), tr = 0.28, w = E.w || 1.1, u0 = (E.pos || 0.1) * len, stone = '#A49D90';
+      if (E.along === 'perp') { for (let i = 0; i < n; i++) { const [px, py] = at(u0, 0); const dd = (n - i) * tr;
+          if (f === 'S') box(px, py - dd, 0, w, tr, (i + 1) * top / n, stone, o); else if (f === 'E') box(px + dd - tr, py, 0, tr, w, (i + 1) * top / n, stone, o);
+          else if (f === 'N') box(px, py + dd - tr, 0, w, tr, (i + 1) * top / n, stone, o); else box(px - dd, py, 0, tr, w, (i + 1) * top / n, stone, o); }
+      } else { for (let i = 0; i < n; i++) { const [px, py] = at(u0 + (E.landing ? 1.2 : 0) + i * tr, 0);
+          if (f === 'S') box(px, py - w, 0, tr, w, top - i * top / n, stone, o); else if (f === 'N') box(px, py, 0, tr, w, top - i * top / n, stone, o);
+          else if (f === 'E') box(px, py, 0, w, tr, top - i * top / n, stone, o); else box(px - w, py, 0, w, tr, top - i * top / n, stone, o); } }
+      if (E.landing) { const [px, py] = at(u0, 0); if (f === 'S') box(px, py - w, top - 0.18, 1.2, w, 0.18, stone, o); else if (f === 'E') box(px, py, top - 0.18, w, 1.2, 0.18, stone, o); else if (f === 'N') box(px, py, top - 0.18, 1.2, w, 0.18, stone, o); else box(px - w, py, top - 0.18, w, 1.2, 0.18, stone, o);
+        if (E.porch && f === 'S') { [[px, py - w], [px + 1.1, py - w]].forEach(q => box(q[0], q[1], top, 0.1, 0.1, 2.0, '#6E4B2E', o));
+          push([[px - 0.1, py - w - 0.2, top + 2.0], [px + 1.3, py - w - 0.2, top + 2.0], [px + 1.3, py, top + 2.4], [px - 0.1, py, top + 2.4]], (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c, o); } }
+      return;
+    }
+    if (E.t === 'varanda') {
+      const w = Math.min(E.w || 4, len - 0.4), u0 = (E.pos || 0.5) * len - w / 2, z = z0 + (E.floor || 0) * v.fh, [px, py] = at(u0, 0), d = 1.1, wood = '#8A6A48';
+      if (E.kind === 'reentrante') { const [qx, qy] = at(u0 + w, 0.03); push([[px, py - (f === 'S' ? 0.03 : 0), z], [qx, qy, z], [qx, qy, z + v.fh * 0.92], [px, py - (f === 'S' ? 0.03 : 0), z + v.fh * 0.92]], 'rgba(40,32,26,.6)', o);
+        if (f === 'S') [px + 0.15, px + w - 0.4].forEach(cx => box(cx, py - 0.25, z, 0.25, 0.25, v.fh * 0.92, '#CFC6B4', o)); return; }
+      if (f !== 'S') return;
+      if (E.kind === 'envidracada') { box(px, py - d, z, w, d, v.fh * 0.95, 'rgba(170,205,225,.75)', o); for (let i = 1; i < 6; i++) push([[px + i * w / 6, py - d - 0.01, z], [px + i * w / 6 + 0.05, py - d - 0.01, z], [px + i * w / 6 + 0.05, py - d - 0.01, z + v.fh * 0.95], [px + i * w / 6, py - d - 0.01, z + v.fh * 0.95]], '#F4F1EA', o); return; }
+      const dd = E.kind === 'sacada' ? 0.5 : d;
+      box(px, py - dd, z - 0.12, w, dd, 0.12, wood, o);
+      push([[px, py - dd, z], [px + w, py - dd, z], [px + w, py - dd, z + 0.95], [px, py - dd, z + 0.95]], 'rgba(110,80,50,.45)', o);
+      for (let t = 0; t <= w + 1e-6; t += Math.max(0.12, w / 18)) push([[px + t, py - dd - 0.005, z], [px + t + 0.04, py - dd - 0.005, z], [px + t + 0.04, py - dd - 0.005, z + 0.95], [px + t, py - dd - 0.005, z + 0.95]], '#5E4126', o);
+      if (E.kind === 'corrida') { [px, px + w - 0.12].forEach(cx => box(cx, py - dd, z, 0.12, 0.12, v.fh - 0.1, wood, o));
+        push([[px - 0.2, py - dd - 0.3, z + v.fh - 0.1], [px + w + 0.2, py - dd - 0.3, z + v.fh - 0.1], [px + w + 0.2, py, z + v.fh + 0.25], [px - 0.2, py, z + v.fh + 0.25]], (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c, o); }
+      return;
+    }
+    if (E.t === 'oven') {
+      const r = E.r || 0.9, [cx, cy] = at((E.pos || 0.5) * len, r * 0.6), ov = vmVol({ kind:'round', x:cx, y:cy, L:2 * r, D:2 * r, fl:1, fh:0.9, roof:{ type:'dome', mat:'lime', bei:0 }, wall:{ mat:v.wall.mat === 'whitewash' ? 'whitewash' : v.wall.mat, barra:null, frames:null }, open:{ S:[], E:[], N:[], W:[] } });
+      vmVolFaces(ov).forEach(q => F.push(Object.assign(q, o))); return;
+    }
+    if (E.t === 'alpendre' || E.t === 'latada') {
+      if (f !== 'S') return;
+      const w = Math.min(E.w || 6, v.L), d = E.d || 2.4, u0 = (E.pos || 0.5) * len - w / 2, [px, py] = at(u0, 0), z = Math.min(H, z0 + v.fh) - 0.1;
+      [px + 0.1, px + w - 0.25].forEach(cx => box(cx, py - d, 0, 0.15, 0.15, z, E.t === 'latada' ? '#6E4B2E' : '#E9E4D8', o));
+      if (E.t === 'latada') { for (let t = 0; t <= w + 1e-6; t += 0.6) push([[px + t, py - d, z], [px + t + 0.06, py - d, z], [px + t + 0.06, py, z], [px + t, py, z]], '#6E4B2E', o);
+        push([[px, py - d, z + 0.08], [px + w, py - d, z + 0.08], [px + w, py, z + 0.08], [px, py, z + 0.08]], 'rgba(110,150,70,.55)', o); }
+      else push([[px - 0.2, py - d - 0.2, z], [px + w + 0.2, py - d - 0.2, z], [px + w + 0.2, py, z + 0.45], [px - 0.2, py, z + 0.45]], (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c, o);
+    }
+  }));
+  return F;
+}
+/** The courtyard wall with its gate. */
+function vmCourtFaces(vm) {
+  const F = [], c = vm.court;
+  if (!c || !c.on) return F;
+  const x0 = c.x - c.L / 2, x1 = c.x + c.L / 2, y0 = c.y - c.D / 2, y1 = c.y + c.D / 2, t = 0.4, col = '#E9E4D8';
+  const sides = { S:[[x0, y0], [x1, y0]], E:[[x1, y0], [x1, y1]], N:[[x1, y1], [x0, y1]], W:[[x0, y1], [x0, y0]] };
+  VM_FACES.forEach(f => {
+    if (c.open === f) return;   // the side the house itself closes
+    const [a, b] = sides[f], len = Math.hypot(b[0] - a[0], b[1] - a[1]), dir = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+    const parts = c.gate && c.gate.face === f ? [[0, Math.max(0, c.gate.pos * len - c.gate.w / 2)], [Math.min(len, c.gate.pos * len + c.gate.w / 2), len]] : [[0, len]];
+    parts.forEach(([p, q]) => { if (q - p < 0.05) return; const A = [a[0] + dir[0] * p, a[1] + dir[1] * p], B = [a[0] + dir[0] * q, a[1] + dir[1] * q];
+      const P = [[A[0], A[1], 0], [B[0], B[1], 0], [B[0], B[1], c.h], [A[0], A[1], c.h]]; F.push({ P, fill:f === 'E' || f === 'W' ? vmShade(col, 0.86) : col, n:vmNorm(P), court:true });
+      const T = [[A[0], A[1], c.h], [B[0], B[1], c.h], [B[0] - dir[1] * t, B[1] + dir[0] * t, c.h], [A[0] - dir[1] * t, A[1] + dir[0] * t, c.h]]; F.push({ P:T, fill:vmShade(col, 1.04), n:[0, 0, 1], court:true }); });
+    if (c.gate && c.gate.face === f) { const g0 = c.gate.pos * len - c.gate.w / 2, g1 = c.gate.pos * len + c.gate.w / 2;
+      [g0 - 0.5, g1].forEach(p => { const A = [a[0] + dir[0] * p, a[1] + dir[1] * p]; const P = [[A[0], A[1], 0], [A[0] + dir[0] * 0.5, A[1] + dir[1] * 0.5, 0], [A[0] + dir[0] * 0.5, A[1] + dir[1] * 0.5, c.h + 0.5], [A[0], A[1], c.h + 0.5]]; F.push({ P, fill:'#D8D2C4', n:vmNorm(P), court:true }); }); }
+  });
+  return F;
+}
+/** All faces of the model in drawing order, back to front, the hidden walls left out. */
+function vmFaces(vm) {
+  const vs = vmAllVols(vm);
+  /* a body on top of another (a mirante) stands on its roof */
+  vs.forEach(v => { if (v.raise > 0.5 && !v.piers) v._onTop = true; });
+  let F = vmCourtFaces(vm);
+  vs.forEach(v => vmVolFaces(v).forEach(q => F.push(Object.assign(q, { vol:v._i }))));
+  F = F.concat(vmElFaces(vm, vs));
+  F = F.filter(q => q.thin || q.roof || q.top || q.court || q.el || (q.n[0] * VM_VIEW[0] + q.n[1] * VM_VIEW[1] + q.n[2] * VM_VIEW[2]) > -1e-6);
+  F.forEach(q => { q.k = vmKey(q.P) + (q.thin ? 0.02 : 0) + (q.el ? 0.03 : 0); });
+  return F.sort((a, b) => a.k - b.k);
+}
+
+/* ---------------------------------------------------------------- drawings */
+const VM_C30 = Math.cos(Math.PI / 6);
+const vmIso = p => [(p[0] + p[1]) * VM_C30, (p[0] - p[1]) * 0.5 - p[2]];
+const vmPts = P => P.map(p => p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ');
+/** The model in isometric, as an SVG string. */
+function vmIsoSVG(vm, w, opts) {
+  opts = opts || {};
+  const F = vmFaces(vm), out = [], all = [];
+  const bb = vmBBox(vm), sh = [[bb[0] - 0.5, bb[1] - 0.5, 0], [bb[2] + 1, bb[1] - 0.5, 0], [bb[2] + 1, bb[3] + 1, 0], [bb[0] - 0.5, bb[3] + 1, 0]].map(vmIso);
+  out.push('<polygon points="' + vmPts(sh) + '" fill="rgba(0,0,0,.08)"/>'); sh.forEach(p => all.push(p));
+  F.forEach(q => { const P = q.P.map(vmIso); P.forEach(p => all.push(p));
+    const fill = q.fill.indexOf('rgba') === 0 ? q.fill : (q.thin || q.el ? q.fill : vmLit(q.fill, q.n));
+    out.push('<polygon points="' + vmPts(P) + '" fill="' + fill + '" stroke="rgba(0,0,0,.35)" stroke-width="' + (q.thin ? 0.015 : 0.035) + '" stroke-linejoin="round"/>');
+    if (q.roof && !q.top && q.P.length >= 3) { /* courses of the covering */
+      const a = q.P[0], b = q.P[1], c = q.P[q.P.length - 1], n = Math.max(2, Math.round(Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]) / 0.35));
+      for (let k = 1; k < n; k++) { const t = k / n, A = vmIso([a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t]), B = vmIso(q.P.length === 3 ? [b[0] + (c[0] - b[0]) * t, b[1] + (c[1] - b[1]) * t, b[2] + (c[2] - b[2]) * t] : [b[0] + (q.P[2][0] - b[0]) * t, b[1] + (q.P[2][1] - b[1]) * t, b[2] + (q.P[2][2] - b[2]) * t]);
+        out.push('<line x1="' + A[0].toFixed(2) + '" y1="' + A[1].toFixed(2) + '" x2="' + B[0].toFixed(2) + '" y2="' + B[1].toFixed(2) + '" stroke="rgba(0,0,0,.18)" stroke-width="0.025"/>'); }
+    }
+  });
+  const xs = all.map(p => p[0]), ys = all.map(p => p[1]), x0 = Math.min(...xs), y0 = Math.min(...ys), W = Math.max(...xs) - x0, H = Math.max(...ys) - y0, pad = 0.6;
+  const vb = [x0 - pad, y0 - pad, W + 2 * pad, H + 2 * pad].map(v => +v.toFixed(2)).join(' '), h = Math.round(w * (H + 2 * pad) / (W + 2 * pad));
+  return '<svg xmlns="http://www.w3.org/2000/svg" class="vmiso" viewBox="' + vb + '" width="' + w + '" height="' + h + '">' + (opts.bg ? '<rect x="' + (x0 - pad) + '" y="' + (y0 - pad) + '" width="' + (W + 2 * pad) + '" height="' + (H + 2 * pad) + '" fill="' + opts.bg + '"/>' : '') + out.join('') + '</svg>';
+}
+/** The plan: bodies, walls by their thickness, openings, the elements' marks, the rooms, north and a scale. */
+function vmPlanSVG(vm, w, opts) {
+  opts = opts || {};
+  const vs = vmAllVols(vm), bb = vmBBox(vm), pad = 2.5, X0 = bb[0] - pad, Y1 = bb[3] + pad, Wm = bb[2] - bb[0] + 2 * pad, Hm = bb[3] - bb[1] + 2 * pad, s = w / Wm, h = Math.round(Hm * s);
+  const P = (x, y) => [((x - X0) * s).toFixed(1), ((Y1 - y) * s).toFixed(1)], o = [];
+  o.push('<rect width="' + w + '" height="' + h + '" fill="' + (opts.bg || '#FBFAF7') + '"/>');
+  const c = vm.court;
+  if (c && c.on) { const a = P(c.x - c.L / 2, c.y + c.D / 2); o.push('<rect x="' + a[0] + '" y="' + a[1] + '" width="' + (c.L * s).toFixed(1) + '" height="' + (c.D * s).toFixed(1) + '" fill="#F1EDE3" stroke="#8A8274" stroke-width="' + (0.4 * s).toFixed(1) + '" stroke-dasharray="' + (c.gate ? '' : '') + '"/>');
+    const g = c.gate; if (g) { const len = g.face === 'S' || g.face === 'N' ? c.L : c.D, u = g.pos * len - g.w / 2, p0 = g.face === 'S' ? P(c.x - c.L / 2 + u, c.y - c.D / 2) : g.face === 'N' ? P(c.x - c.L / 2 + u, c.y + c.D / 2) : g.face === 'E' ? P(c.x + c.L / 2, c.y - c.D / 2 + u + g.w) : P(c.x - c.L / 2, c.y - c.D / 2 + u + g.w);
+      o.push('<rect x="' + (+p0[0] - (g.face === 'E' || g.face === 'W' ? 0.3 * s : 0)) + '" y="' + (+p0[1] - (g.face === 'S' || g.face === 'N' ? 0.3 * s : 0)) + '" width="' + ((g.face === 'S' || g.face === 'N' ? g.w : 0.6) * s).toFixed(1) + '" height="' + ((g.face === 'E' || g.face === 'W' ? g.w : 0.6) * s).toFixed(1) + '" fill="#F1EDE3"/>'); } }
+  vs.forEach(v => {
+    const Wt = (VM_WALL[v.wall.mat] || VM_WALL.whitewash).t, sel = opts.sel === v._i;
+    const fillC = sel ? '#F4E3C2' : '#EFEAE0', st = sel ? '#B5772A' : '#3A3530';
+    if (v.kind === 'rect') { const a = P(v.x - v.L / 2, v.y + v.D / 2); o.push('<rect data-vol="' + v._i + '" x="' + a[0] + '" y="' + a[1] + '" width="' + (v.L * s).toFixed(1) + '" height="' + (v.D * s).toFixed(1) + '" fill="' + fillC + '" stroke="' + st + '" stroke-width="' + Math.max(1.5, Wt * s).toFixed(1) + '" style="cursor:move"/>'); }
+    else { const a = P(v.x, v.y); o.push('<ellipse data-vol="' + v._i + '" cx="' + a[0] + '" cy="' + a[1] + '" rx="' + (v.L / 2 * s).toFixed(1) + '" ry="' + (v.D / 2 * s).toFixed(1) + '" fill="' + fillC + '" stroke="' + st + '" stroke-width="' + Math.max(1.5, Wt * s).toFixed(1) + '" style="cursor:move"/>'); }
+    /* openings: a gap in the wall line, a door's swing */
+    if (v.kind === 'rect') VM_FACES.forEach(f => (v.open[f] || []).filter(q => q.fl === 0 || opts.allFloors).forEach(q => {
+      const len = f === 'S' || f === 'N' ? v.L : v.D, u = q.pos * len, x0 = v.x - v.L / 2, y0 = v.y - v.D / 2;
+      const [cx, cy] = f === 'S' ? [x0 + u, y0] : f === 'N' ? [x0 + u, y0 + v.D] : f === 'E' ? [x0 + v.L, y0 + u] : [x0, y0 + u];
+      const hor = f === 'S' || f === 'N', a = P(cx - (hor ? q.w / 2 : 0), cy + (hor ? 0 : q.w / 2));
+      o.push('<rect x="' + (+a[0] - (hor ? 0 : Wt * s / 2 + 1)) + '" y="' + (+a[1] - (hor ? Wt * s / 2 + 1 : 0)) + '" width="' + ((hor ? q.w : Wt + 0.08) * s).toFixed(1) + '" height="' + ((hor ? Wt + 0.08 : q.w) * s).toFixed(1) + '" fill="' + (q.t === 'd' ? '#FBFAF7' : '#CFE0EA') + '" stroke="#3A3530" stroke-width="0.6"/>');
+    }));
+    const lc = P(v.x, v.y); if (!opts.noLabels) o.push('<text x="' + lc[0] + '" y="' + (+lc[1] + 4) + '" font-size="' + Math.max(9, Math.min(12, s * 0.9)).toFixed(0) + '" text-anchor="middle" fill="#6B645A" font-family="sans-serif">' + (v._r ? '' : VL(v.name).replace(/&/g, '&amp;')) + '</text>');
+  });
+  /* elements */
+  (vm.els || []).forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
+    const x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
+    const at = (u, d) => f === 'S' ? [x0 + u, y0 - d] : f === 'N' ? [x0 + u, y0 + v.D + d] : f === 'E' ? [x0 + v.L + d, y0 + u] : [x0 - d, y0 + u];
+    if (E.t === 'chimney') { const p = P(x0 + (E.u || 0.75) * v.L, y0 + (E.v || 0.5) * v.D + 0.6); o.push('<rect x="' + p[0] + '" y="' + p[1] + '" width="' + (0.7 * s).toFixed(1) + '" height="' + (0.6 * s).toFixed(1) + '" fill="#6B645A"/>'); }
+    if (E.t === 'stair') { const w = E.w || 1.1, n = 8, u0 = (E.pos || 0.1) * len;
+      for (let i = 0; i <= n; i++) { const [ax, ay] = E.along === 'perp' ? at(u0, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, 0); const [bx, by] = E.along === 'perp' ? at(u0 + w, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, w);
+        const A = P(ax, ay), B = P(bx, by); o.push('<line x1="' + A[0] + '" y1="' + A[1] + '" x2="' + B[0] + '" y2="' + B[1] + '" stroke="#6B645A" stroke-width="1"/>'); } }
+    if (E.t === 'varanda' || E.t === 'alpendre' || E.t === 'latada') { const w = E.w || 4, d = E.t === 'varanda' ? (E.kind === 'reentrante' ? -1 : E.kind === 'sacada' ? 0.5 : 1.1) : (E.d || 2.4), u0 = (E.pos || 0.5) * len - w / 2;
+      const A = P(...at(u0, Math.max(0, d))), B = P(...at(u0 + w, Math.min(0, d)));
+      o.push('<rect x="' + Math.min(A[0], B[0]) + '" y="' + Math.min(A[1], B[1]) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="none" stroke="#8A6A48" stroke-width="1.2" stroke-dasharray="4 3"/>'); }
+    if (E.t === 'oven') { const r = E.r || 0.9, p = P(...at((E.pos || 0.5) * len, r * 0.6)); o.push('<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (r * s).toFixed(1) + '" fill="#E7DFD0" stroke="#3A3530" stroke-width="1.5"/>'); }
+  }));
+  /* rooms */
+  (opts.rooms || []).forEach((q, i) => { const a = P(q.x - q.w / 2, q.y + q.d / 2);
+    o.push('<rect data-room="' + i + '" x="' + a[0] + '" y="' + a[1] + '" width="' + (q.w * s).toFixed(1) + '" height="' + (q.d * s).toFixed(1) + '" fill="' + (q.bad ? 'rgba(217,140,140,.35)' : 'rgba(127,179,163,.28)') + '" stroke="' + (q.bad ? '#B55' : '#4E8A78') + '" stroke-width="1" style="cursor:move"/>');
+    const c = P(q.x, q.y); o.push('<text x="' + c[0] + '" y="' + c[1] + '" font-size="10" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + VL(q.n).replace(/&/g, '&amp;') + '</text>');
+    o.push('<text x="' + c[0] + '" y="' + (+c[1] + 11) + '" font-size="9" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + fmt(q.w * q.d, 1) + ' m²</text>');
+    const h2 = P(q.x + q.w / 2, q.y - q.d / 2); o.push('<rect data-roomsize="' + i + '" x="' + (+h2[0] - 5) + '" y="' + (+h2[1] - 5) + '" width="9" height="9" fill="#4E8A78" style="cursor:nwse-resize"/>'); });
+  /* north and a scale bar of 5 m */
+  o.push('<g font-family="sans-serif" font-size="11" fill="#3A3530"><path d="M' + (w - 22) + ',30 l7,-18 l7,18 l-7,-5 z" fill="#3A3530"/><text x="' + (w - 15) + '" y="44" text-anchor="middle">N</text>');
+  o.push('<rect x="14" y="' + (h - 18) + '" width="' + (5 * s).toFixed(1) + '" height="5" fill="#3A3530"/><text x="14" y="' + (h - 24) + '">5 m</text></g>');
+  return { svg:'<svg xmlns="http://www.w3.org/2000/svg" class="vmplan" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' + o.join('') + '</svg>', s, X0, Y1, w, h };
+}
+/** The elevation of a face, seen square-on: walls, openings, the roof's outline. */
+function vmElevSVG(vm, face, w, opts) {
+  opts = opts || {};
+  face = face || 'S';
+  const vs = vmAllVols(vm), across = face === 'S' || face === 'N', bb = vmBBox(vm);
+  const u = v => across ? (face === 'S' ? v.x : -v.x) : (face === 'E' ? v.y : -v.y), half = v => across ? v.L / 2 : v.D / 2;
+  const depth = v => face === 'S' ? -v.y : face === 'N' ? v.y : face === 'E' ? v.x : -v.x;
+  const umin = Math.min(...vs.map(v => u(v) - half(v))) - 2, umax = Math.max(...vs.map(v => u(v) + half(v))) + 2;
+  const zmax = Math.max(...vs.map(v => (v.raise || 0) + vmH(v) + vmRoofRise(v))) + 1.5, s = w / (umax - umin), h = Math.round((zmax + 0.8) * s);
+  const P = (uu, z) => [((uu - umin) * s).toFixed(1), (h - (z + 0.6) * s).toFixed(1)], o = [];
+  o.push('<rect width="' + w + '" height="' + h + '" fill="' + (opts.bg || '#FBFAF7') + '"/>');
+  o.push('<line x1="0" y1="' + P(0, 0)[1] + '" x2="' + w + '" y2="' + P(0, 0)[1] + '" stroke="#3A3530" stroke-width="1.5"/>');
+  vs.slice().sort((a, b) => depth(b) - depth(a)).forEach(v => {
+    const c = u(v), hw = half(v), z0 = v.raise || 0, H = z0 + vmH(v), r = v.roof, th = (r.th || 0) * Math.PI / 180, e = r.type === 'flat' ? 0 : r.bei || 0;
+    const wc = (VM_WALL[v.wall.mat] || VM_WALL.whitewash).c, rc = (VM_ROOFMAT[r.mat] || VM_ROOFMAT.tile).c;
+    const poly = (pts, f, st) => o.push('<polygon points="' + pts.map(p => P(p[0], p[1]).join(',')).join(' ') + '" fill="' + f + '" stroke="' + (st || '#3A3530') + '" stroke-width="1"/>');
+    poly([[c - hw, z0], [c + hw, z0], [c + hw, H], [c - hw, H]], wc);
+    if (v.wall.barra && v.wall.mat === 'whitewash') poly([[c - hw, z0], [c + hw, z0], [c + hw, z0 + 0.45], [c - hw, z0 + 0.45]], v.wall.barra, 'none');
+    const alongX = r.ridge === 'x' || (r.ridge !== 'y' && v.L >= v.D), rise = vmRoofRise(v), seenSlope = across ? alongX : !alongX;
+    if (r.type === 'flat') { if (r.par) poly([[c - hw, H], [c + hw, H], [c + hw, H + r.par], [c - hw, H + r.par]], wc); }
+    else if (r.type === 'dome') { const pts = []; for (let i = 0; i <= 16; i++) { const a = i / 16 * Math.PI; pts.push([c - hw * Math.cos(a), H + rise * Math.sin(a)]); } poly(pts, rc); }
+    else if (r.type === 'cone' || r.type === 'pyramid') poly([[c - hw - e, H - e * Math.tan(th)], [c + hw + e, H - e * Math.tan(th)], [c, H + rise]], rc);
+    else if (r.type === 'shed') poly(across ? [[c - hw - e, H], [c + hw + e, H], [c + hw + e, H + 0.25], [c - hw - e, H + 0.25]] : [[c - hw - e, H], [c + hw + e, H + rise], [c + hw + e, H + rise + 0.2], [c - hw - e, H + 0.2]], rc);
+    else if (r.type === 'tesoura') { const n = Math.max(1, r.cells | 0 || 2); for (let i = 0; i < n; i++) { const a = c - hw + i * 2 * hw / n, b = a + 2 * hw / n; poly([[a - (i ? 0 : e), H], [b + (i === n - 1 ? e : 0), H], [(a + b) / 2, H + Math.min(hw / n, v.D / 2) * Math.tan(th)]], rc); } }
+    else if (seenSlope && (r.type === 'gable' || r.type === 'ground')) poly([[c - hw - e, H - e * Math.tan(th)], [c + hw + e, H - e * Math.tan(th)], [c + hw + e, H + rise], [c - hw - e, H + rise]], rc);
+    else if (r.type === 'gable' || r.type === 'ground') poly([[c - hw - e, H - e * Math.tan(th)], [c + hw + e, H - e * Math.tan(th)], [c, H + rise]], rc);
+    else { const run = Math.min(v.L, v.D) / 2, top = Math.max(0, hw - run), y = H - e * Math.tan(th);
+      poly(top > 0.05 ? [[c - hw - e, y], [c + hw + e, y], [c + top, H + rise], [c - top, H + rise]] : [[c - hw - e, y], [c + hw + e, y], [c, H + rise]], rc); }
+    (v.open[face] || []).forEach(q => { const len = across ? v.L : v.D, uu = (face === 'S' || face === 'E' ? -hw + q.pos * len : hw - q.pos * len) + c, z = z0 + q.fl * v.fh + (q.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + q.h, z0 + (q.fl + 1) * v.fh - 0.1);
+      poly([[uu - q.w / 2, z], [uu + q.w / 2, z], [uu + q.w / 2, zz], [uu - q.w / 2, zz]], q.t === 'd' ? '#5A4632' : '#3E4C57'); });
+  });
+  (vm.els || []).filter(E => E.t === 'chimney').forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
+    const z0 = v.raise || 0, H = z0 + vmH(v), x = v.x - v.L / 2 + (E.u || 0.75) * v.L, y = v.y - v.D / 2 + (E.v || 0.5) * v.D, uu = across ? (face === 'S' ? x : -x) : (face === 'E' ? y : -y);
+    const zb = H + vmRoofAt(v, x, y) - 0.2, zt = zb + (E.h || 1.2) + 0.2, ww = E.kind === 'ale' ? 1.2 : 0.6;
+    o.push('<polygon points="' + [[uu - ww / 2, zb], [uu + ww / 2, zb], [uu + ww / 2, zt], [uu - ww / 2, zt]].map(p => P(p[0], p[1]).join(',')).join(' ') + '" fill="#F2EFE6" stroke="#3A3530" stroke-width="1"/>'); }));
+  o.push('<text x="10" y="16" font-family="sans-serif" font-size="12" fill="#3A3530">' + VL({ en:{ S:'South', E:'East', N:'North', W:'West' }[face] + ' elevation', pt:'Alçado ' + { S:'sul', E:'nascente', N:'norte', W:'poente' }[face] }) + '</text>');
+  return '<svg xmlns="http://www.w3.org/2000/svg" class="vmelev" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' + o.join('') + '</svg>';
+}
+/** A plan and the south elevation as DXF (R12, lines and circles), metres. */
+function vmDXF(vm) {
+  const L = [], line = (a, b, layer) => L.push('0', 'LINE', '8', layer, '10', a[0].toFixed(3), '20', a[1].toFixed(3), '30', '0', '11', b[0].toFixed(3), '21', b[1].toFixed(3), '31', '0');
+  const poly = (pts, layer) => pts.forEach((p, i) => line(p, pts[(i + 1) % pts.length], layer));
+  const vs = vmAllVols(vm);
+  vs.forEach(v => { const ring = vmRing(v, 0, 0).map(p => [p[0], p[1]]), Wt = (VM_WALL[v.wall.mat] || VM_WALL.whitewash).t;
+    poly(ring, 'PLAN_WALL_OUT'); poly(vmRing(v, -Wt, 0).map(p => [p[0], p[1]]), 'PLAN_WALL_IN'); });
+  if (vm.court && vm.court.on) poly(vmRing(Object.assign({ kind:'rect' }, vm.court), 0, 0).map(p => [p[0], p[1]]), 'PLAN_COURT');
+  ((STATE.vern && STATE.vern.rooms) || []).forEach(q => poly([[q.x - q.w / 2, q.y - q.d / 2], [q.x + q.w / 2, q.y - q.d / 2], [q.x + q.w / 2, q.y + q.d / 2], [q.x - q.w / 2, q.y + q.d / 2]], 'PLAN_ROOMS'));
+  /* the south elevation, drawn below the plan */
+  const bb = vmBBox(vm), dy = bb[1] - 6;
+  vs.forEach(v => { const z0 = v.raise || 0, H = z0 + vmH(v), x0 = v.x - v.L / 2, x1 = v.x + v.L / 2, rise = vmRoofRise(v);
+    poly([[x0, dy + z0], [x1, dy + z0], [x1, dy + H], [x0, dy + H]], 'ELEV_S_WALL');
+    if (v.roof.type !== 'flat') { if (['cone', 'pyramid', 'dome'].indexOf(v.roof.type) >= 0 || (v.roof.type === 'gable' && v.L < v.D)) { line([x0, dy + H], [v.x, dy + H + rise], 'ELEV_S_ROOF'); line([v.x, dy + H + rise], [x1, dy + H], 'ELEV_S_ROOF'); }
+      else { line([x0, dy + H], [x0, dy + H + rise], 'ELEV_S_ROOF'); line([x0, dy + H + rise], [x1, dy + H + rise], 'ELEV_S_ROOF'); line([x1, dy + H + rise], [x1, dy + H], 'ELEV_S_ROOF'); } }
+    (v.open.S || []).forEach(q => { const u = x0 + q.pos * v.L, z = z0 + q.fl * v.fh + (q.t === 'd' ? 0 : 0.9); poly([[u - q.w / 2, dy + z], [u + q.w / 2, dy + z], [u + q.w / 2, dy + z + q.h], [u - q.w / 2, dy + z + q.h]], 'ELEV_S_OPEN'); }); });
+  return ['0', 'SECTION', '2', 'ENTITIES'].concat(L, ['0', 'ENDSEC', '0', 'EOF']).join('\n');
+}
+
+/* ============================ 7g. THE POPULAR MODELLER: THE TAB (v1.124) =================
+   «Draw the model»: the bodies and the parts of the house, edited in a list and
+   moved on the plan; drawn in isometric, plan and elevation; measured; compared
+   with the archetype; read against Olgyay; its rooms laid out; exported as SVG,
+   DXF and as a report for PowerPoint, Google Slides, Canva and LibreOffice.
+   ====================================================================== */
+
+const VMT = (en, pt) => VL({ en, pt });
+let VM_SEL = 0, VM_FACE = 'S', VM_ROOMFL = 0;
+
+function vmStyle() {
+  if ($('#vmCSS')) return;
+  document.head.appendChild(el('style', { id:'vmCSS', text:
+    '.vmwrap{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:18px;align-items:start;max-width:1280px}'
+    + '@media (max-width:900px){.vmwrap{grid-template-columns:1fr}}'
+    + '.vmed{border:1px solid var(--line);border-radius:8px;background:var(--wash);padding:10px 12px;font-size:12.5px}'
+    + '.vmed h4{margin:10px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.vmed h4:first-child{margin-top:0}'
+    + '.vmrow{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin:4px 0}.vmrow label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}'
+    + '.vmrow input,.vmrow select{font:inherit;font-size:12.5px;padding:3px 5px;border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--ink)}'
+    + '.vmlist{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0}.vmlist button,.vmbtns button{font:inherit;font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:var(--ink)}'
+    + '.vmlist button.on{border-color:var(--c3);box-shadow:0 0 0 1px var(--c3);background:#EEF7F5}.vmbtns{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}'
+    + '.vmbtns button.pri{background:var(--c3);border-color:var(--c3);color:#fff}'
+    + '.vmel{border-top:1px dashed var(--line);padding-top:6px;margin-top:6px}.vmel .x{float:right;border:none;background:none;color:var(--c2);cursor:pointer;font-size:12px}'
+    + '.vmview{border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px;margin-bottom:12px}.vmview svg{max-width:100%;height:auto;display:block;margin:0 auto}'
+    + '.vmviews2{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:900px){.vmviews2{grid-template-columns:1fr}}'
+    + '.vmcap{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;display:flex;gap:8px;align-items:center}'
+    + '.vmcap select{font-size:11px}.vmok{color:#2F7D4F;font-weight:650}.vmno{color:#B4473F;font-weight:650}'
+    + '.vmfind{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}.vmfind input,.vmfind select{font:inherit;font-size:12.5px;padding:4px 6px;border:1px solid var(--line);border-radius:6px}'
+    + '.vmgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}.vmgrid figure{margin:0;border:1px solid var(--line);border-radius:6px;padding:6px;text-align:center;cursor:pointer;background:#fff}'
+    + '.vmgrid figure:hover{border-color:var(--c3)}.vmgrid figcaption{font-size:11px;line-height:1.25}.vmgrid figcaption i{display:block;color:var(--c3);font-style:normal;font-size:10.5px}'
+    + '.exportmenu{position:absolute;z-index:90;min-width:280px;max-width:320px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 26px rgba(16,24,40,.14);padding:6px}'
+    + '.exportitem{display:block;width:100%;text-align:left;border:none;background:none;padding:8px 10px;border-radius:7px;cursor:pointer;font:inherit;color:var(--ink)}.exportitem:hover{background:var(--wash)}'
+    + '.exportitem b{display:block;font-size:13px}.exportitem span{display:block;font-size:11.5px;color:var(--muted)}'
+    + '.exportguide{position:fixed;z-index:95;right:24px;top:96px;width:340px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 26px rgba(16,24,40,.14);padding:14px 16px;font-size:12.5px;color:var(--ink2)}'
+    + '.exportguide b{display:block;font-size:13.5px;color:var(--ink);margin-bottom:6px}.exportguide ol{margin:6px 0 10px 18px;padding:0}.exportguide li{margin:3px 0;line-height:1.45}'
+    + '.exportguide .row{display:flex;gap:8px;justify-content:flex-end}.exportguide button{font:inherit;font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}'
+    + '.exportguide button.solid{background:var(--c3);color:#fff;border-color:var(--c3)}' }));
+}
+
+/* ---------------------------------------------------------------- small field builders */
+function vmNum(label, get, set, lo, hi, step) {
+  return el('label', null, [document.createTextNode(label), el('input', { type:'number', min:lo, max:hi, step:step || 0.1, value:+(+get()).toFixed(2),
+    onchange:e => { const v = clamp(+e.target.value, lo, hi); if (isFinite(v)) { set(v); vmChanged(); } } })]);
+}
+function vmSel(label, opts, get, set, rebuild) {
+  const s = el('select', { onchange:e => { set(e.target.value); vmChanged(rebuild); } });
+  opts.forEach(([v, l]) => s.appendChild(el('option', { value:v, text:l, selected:String(get()) === String(v) ? 'selected' : null })));
+  return el('label', null, [document.createTextNode(label), s]);
+}
+function vmChk(label, get, set) {
+  return el('label', { style:'flex-direction:row;align-items:center;gap:6px' }, [el('input', { type:'checkbox', checked:get() ? 'checked' : null, onchange:e => { set(e.target.checked); vmChanged(); } }), document.createTextNode(label)]);
+}
+const vmFaceOpts = () => VM_FACES.map(f => [f, VL({ en:{ S:'south', E:'east', N:'north', W:'west' }[f], pt:{ S:'sul', E:'nascente', N:'norte', W:'poente' }[f] })]);
+let VM_REDRAW = null, VM_REBUILD = null;
+function vmChanged(rebuild) { if (rebuild && VM_REBUILD) VM_REBUILD(); else if (VM_REDRAW) VM_REDRAW(); }
+
+/* ---------------------------------------------------------------- comparison, Olgyay, rooms */
+/** The student's model against the archetype's, line by line. */
+function vmCompare(ref, vm) {
+  const a = vmMetrics(ref), b = vmMetrics(vm), rows = [];
+  const near = (x, y, tol) => Math.abs(x - y) <= Math.max(tol * Math.abs(x), 1e-6);
+  const add = (label, va, vb, ok, f) => rows.push({ label, a:f ? f(va) : va, b:f ? f(vb) : vb, ok });
+  const m1 = v => fmt(v, 1), m0 = v => fmt(v, 0);
+  add(VMT('Bodies', 'Corpos'), a.n, b.n, a.n === b.n);
+  add(VMT('Footprint (m²)', 'Área de implantação (m²)'), a.foot, b.foot, near(a.foot, b.foot, 0.2), m1);
+  add(VMT('Storeys of the main body', 'Pisos do corpo principal'), a.fl, b.fl, a.fl === b.fl);
+  add(VMT('Height to the top (m)', 'Altura total (m)'), a.H, b.H, near(a.H, b.H, 0.2), m1);
+  add(VMT('Proportion of the main body (L/D)', 'Proporção do corpo principal (L/P)'), a.ratio, b.ratio, near(a.ratio, b.ratio, 0.15), v => fmt(v, 2));
+  add(VMT('Roof form', 'Forma da cobertura'), VL(VM_ROOFS[a.roofType]), VL(VM_ROOFS[b.roofType]), a.roofType === b.roofType);
+  add(VMT('Roof pitch (°)', 'Inclinação (°)'), a.th, b.th, Math.abs(a.th - b.th) <= 5, m0);
+  add(VMT('Wall', 'Parede'), VL(VM_WALL[a.wallMat]), VL(VM_WALL[b.wallMat]), a.wallMat === b.wallMat);
+  add(VMT('Glazed share of the walls (%)', 'Fração envidraçada das paredes (%)'), a.glazePct, b.glazePct, b.glazePct <= a.glazePct * 1.3 + 1, m1);
+  add(VMT('Envelope / volume (S/V, 1/m)', 'Envolvente / volume (S/V, 1/m)'), a.sv, b.sv, near(a.sv, b.sv, 0.2), v => fmt(v, 2));
+  const els = m => { const o = {}; (m.els || []).forEach(e => { const k = e.t + (e.kind ? ':' + e.kind : ''); o[k] = (o[k] || 0) + 1; }); return o; };
+  const ea = els(ref), eb = els(vm), name = k => { const [t, kd] = k.split(':'); return t === 'chimney' ? VL(VM_CHIM[kd] || VM_CHIM.box) : t === 'varanda' ? VL(VM_VAR[kd] || VM_VAR.corrida)
+    : VL({ stair:{ en:'outside stair', pt:'escada exterior' }, oven:{ en:'projecting oven', pt:'forno saliente' }, alpendre:{ en:'porch', pt:'alpendre' }, latada:{ en:'vine pergola', pt:'latada' } }[t] || { en:t, pt:t }); };
+  [...new Set(Object.keys(ea).concat(Object.keys(eb)))].forEach(k => add(name(k), ea[k] || 0, eb[k] || 0, (ea[k] || 0) === (eb[k] || 0)));
+  add(VMT('Courtyard wall', 'Pátio murado'), ref.court && ref.court.on ? '✓' : '—', vm.court && vm.court.on ? '✓' : '—', !!(ref.court && ref.court.on) === !!(vm.court && vm.court.on));
+  add(VMT('Houses in the row', 'Casas em banda'), (ref.row || {}).n || 1, (vm.row || {}).n || 1, ((ref.row || {}).n || 1) === ((vm.row || {}).n || 1));
+  return rows;
+}
+/** The site's optimum by Olgyay (adapted to Portugal), the archetype and the student's model. */
+function vmOlgyay(R, vm) {
+  const C = STATE.clim, K = C && C.k, code = K ? K.code : '';
+  const OI = (typeof ptOptimum === 'function' && C ? ptOptimum(code, C.t, STATE.site.nuts) : null) || ({ Cfb:{ az:170, r:1.4 }, Cfa:{ az:170, r:1.4 }, Csc:{ az:170, r:1.4 }, BSk:{ az:160, r:1.3 }, BSh:{ az:160, r:1.3 } }[code] || { az:163, r:1.4 });
+  const m = R.T.model, b = vmMetrics(vm);
+  const rows = [
+    [VMT('Proportion (long/short side)', 'Proporção (lado maior/menor)'), fmt(OI.r, 2), fmt(Math.max(m.L, m.D) / Math.min(m.L, m.D), 2), fmt(Math.max(b.ratio, 1 / b.ratio), 2)],
+    [VMT('Main facade facing (°)', 'Orientação da fachada principal (°)'), fmt(OI.az, 0), fmt(m.rot, 0), fmt(m.rot, 0)],
+    [VMT('Storeys', 'Pisos'), OI.fl ? String(OI.fl) : '—', String(m.fl), String(b.fl)]
+  ];
+  const notes = [];
+  const ra = Math.max(m.L, m.D) / Math.min(m.L, m.D);
+  if (ra > OI.r * 1.25) notes.push(VMT('The archetype is more elongated than Olgyay’s optimum: a long front to the sun, often one room deep — it trades compactness for light and through-draught.', 'O arquétipo é mais alongado do que o óptimo de Olgyay: uma frente longa ao sol, muitas vezes com uma só divisão de fundo — troca a compacidade pela luz e pela ventilação cruzada.'));
+  else if (ra < OI.r * 0.8) notes.push(VMT('The archetype is more compact than Olgyay’s optimum: less skin for its volume — it keeps heat in (or out) by mass rather than by orientation.', 'O arquétipo é mais compacto do que o óptimo de Olgyay: menos pele para o seu volume — guarda o calor (ou a frescura) pela massa mais do que pela orientação.'));
+  else notes.push(VMT('The archetype’s proportion sits close to Olgyay’s optimum for this climate.', 'A proporção do arquétipo está próxima do óptimo de Olgyay para este clima.'));
+  if (Math.abs(((m.rot - OI.az) + 540) % 360 - 180) > 30) notes.push(VMT('Its main facade turns away from the optimum azimuth: the popular house answered the road, the slope, the wind or the neighbour before the sun.', 'A fachada principal afasta-se do azimute óptimo: a casa popular respondeu ao caminho, à encosta, ao vento ou ao vizinho antes do sol.'));
+  if (b.glazePct < 6) notes.push(VMT('Openings far below what Olgyay would admit to the winter sun: mass and few, small openings carry the comfort.', 'Vãos muito abaixo do que Olgyay admitiria ao sol de inverno: a massa e os poucos e pequenos vãos garantem o conforto.'));
+  if (b.earthRoof) notes.push(VMT('An earth or turf cover: inertia on the roof as well as on the walls.', 'Uma cobertura de terra ou erva: inércia na cobertura e não só nas paredes.'));
+  return { OI, rows, notes, code };
+}
+/** The rooms a house of this kind usually holds, laid out in its main body. */
+function vmDefaultRooms(vm) {
+  const v = vm.vols[0];
+  if (!v) return [];
+  const R = [], x0 = v.x - v.L / 2, y = v.y, w3 = v.L / 3;
+  const room = (n, x, w, fl) => R.push({ n, x, y, w:Math.max(1.5, w - 0.6), d:Math.max(1.5, v.D - 0.9), fl });
+  if (v.fl >= 2) {
+    room({ en:'Store (loja)', pt:'Loja' }, x0 + v.L / 4, v.L / 2, 0); room({ en:'Byre (corte)', pt:'Corte' }, x0 + 3 * v.L / 4, v.L / 2, 0);
+    room({ en:'Kitchen', pt:'Cozinha' }, x0 + w3 / 2, w3, 1); room({ en:'Hall (sala)', pt:'Sala' }, x0 + 1.5 * w3, w3, 1); room({ en:'Bedroom', pt:'Quarto' }, x0 + 2.5 * w3, w3, 1);
+  } else {
+    room({ en:'Bedroom', pt:'Quarto' }, x0 + w3 / 2, w3, 0); room({ en:'Casa de fora', pt:'Casa de fora' }, x0 + 1.5 * w3, w3, 0); room({ en:'Kitchen', pt:'Cozinha' }, x0 + 2.5 * w3, w3, 0);
+  }
+  return R;
+}
+/** Each room checked: inside a body that has that floor, not over another room. */
+function vmRoomChecks(vm, rooms) {
+  const vs = vmAllVols(vm).filter(v => !v._r);
+  const inside = (q, v) => { if (q.fl >= v.fl) return false; const pts = [[q.x - q.w / 2, q.y - q.d / 2], [q.x + q.w / 2, q.y - q.d / 2], [q.x + q.w / 2, q.y + q.d / 2], [q.x - q.w / 2, q.y + q.d / 2]];
+    return pts.every(p => v.kind === 'rect' ? p[0] >= v.x - v.L / 2 - 1e-6 && p[0] <= v.x + v.L / 2 + 1e-6 && p[1] >= v.y - v.D / 2 - 1e-6 && p[1] <= v.y + v.D / 2 + 1e-6
+      : ((p[0] - v.x) / (v.L / 2)) ** 2 + ((p[1] - v.y) / (v.D / 2)) ** 2 <= 1.0001); };
+  rooms.forEach((q, i) => {
+    q.inVol = vs.some(v => inside(q, v));
+    q.over = rooms.some((o, j) => j !== i && o.fl === q.fl && Math.abs(o.x - q.x) < (o.w + q.w) / 2 - 0.05 && Math.abs(o.y - q.y) < (o.d + q.d) / 2 - 0.05);
+    q.bad = !q.inVol || q.over;
+  });
+  const kitchen = rooms.some(q => /cozinha|kitchen/i.test(VL(q.n)));
+  return { kitchen, ok:rooms.filter(q => !q.bad).length, n:rooms.length, area:rooms.reduce((a, q) => a + q.w * q.d, 0) };
+}
+function vmPassToStudy(vm) {
+  const v = vm.vols[0];
+  if (!v) return;
+  MASS.L = Math.round(v.L * 2) / 2; MASS.D = Math.round(v.D * 2) / 2; MASS.fl = v.fl; MASS.fh = Math.max(2.0, v.fh);
+  const n = { flat:0, shed:1, gable:2, ground:2, hip:3, pyramid:3, tesoura:3, cone:3, dome:3 }[v.roof.type];
+  ROOF.n = n; ROOF.th = n === 0 ? 0 : Math.min(60, v.roof.type === 'dome' ? 35 : v.roof.th); delete ROOF.zones; ROOF.roofSel = -1;
+  try { migrateRoofGlobals(MASS, ROOF); } catch (e) { }
+  toast(VMT('The main body is now the study’s massing — the other tabs measure it.', 'O corpo principal passou a ser a volumetria do estudo — os outros separadores medem-no.'));
+  refreshAll();
+}
+
+/* ---------------------------------------------------------------- the finder */
+/** Search and filter every archetype: by words, group, district, wall, roof and storeys. */
+function vmFinder(host, onPick) {
+  vmStyle();
+  const st = { q:'', g:'', d:'', w:'', r:'', f:'' };
+  const box = host.appendChild(el('div', { class:'vmfinder' }));
+  const bar = box.appendChild(el('div', { class:'vmfind' }));
+  const grid = box.appendChild(el('div', { class:'vmgrid' }));
+  const meta = {};
+  Object.keys(VERN_TYPES).forEach(k => { const T = VERN_TYPES[k], vm = vmFromType(k), v = vm.vols[0];
+    meta[k] = { g:T.support ? 'sup' : T.region === 'azores' ? 'az' : T.region === 'mainland' ? 'pt' : 'md', d:vDist(k), w:v.wall.mat, r:v.roof.type, f:v.fl,
+      text:(VL(T.name) + ' ' + VL(T.where) + ' ' + vDist(k).join(' ') + ' ' + T.name.en + ' ' + T.name.pt).toLowerCase() }; });
+  const sel = (key, label, opts) => { const s = el('select', { onchange:e => { st[key] = e.target.value; draw(); } }); s.appendChild(el('option', { value:'', text:label })); opts.forEach(([v, l]) => s.appendChild(el('option', { value:v, text:l }))); bar.appendChild(s); };
+  bar.appendChild(el('input', { type:'search', placeholder:VMT('Search: Soajo, taipa, chimney…', 'Pesquisar: Soajo, taipa, chaminé…'), oninput:e => { st.q = e.target.value.toLowerCase().trim(); draw(); } }));
+  sel('g', VMT('All groups', 'Todos os grupos'), [['md', 'Madeira'], ['az', VMT('Azores', 'Açores')], ['pt', VMT('Mainland', 'Continente')], ['sup', VMT('Support structures', 'Estruturas de apoio')]]);
+  sel('d', VMT('All districts', 'Todos os distritos'), DISTRICTS.map(d => [d[0], d[0]]).sort((a, b) => a[0].localeCompare(b[0], 'pt')));
+  sel('w', VMT('Any wall', 'Qualquer parede'), Object.keys(VM_WALL).map(k => [k, VL(VM_WALL[k])]));
+  sel('r', VMT('Any roof', 'Qualquer cobertura'), Object.keys(VM_ROOFS).map(k => [k, VL(VM_ROOFS[k])]));
+  sel('f', VMT('Any storeys', 'Quaisquer pisos'), [['1', '1'], ['2', '2'], ['3', '3']]);
+  const count = bar.appendChild(el('span', { class:'vm', style:'align-self:center;font-size:12px;color:var(--muted)' }));
+  function draw() {
+    const words = st.q.split(/\s+/).filter(Boolean);
+    const ks = Object.keys(meta).filter(k => { const m = meta[k];
+      return words.every(w => m.text.indexOf(w) >= 0) && (!st.g || m.g === st.g) && (!st.d || m.d.indexOf(st.d) >= 0) && (!st.w || m.w === st.w) && (!st.r || m.r === st.r) && (!st.f || String(m.f) === st.f); });
+    count.textContent = ks.length + ' / ' + Object.keys(meta).length;
+    grid.innerHTML = '';
+    ks.forEach(k => { const f = grid.appendChild(el('figure', { title:VL(VERN_TYPES[k].where), onclick:() => onPick(k) }));
+      f.innerHTML = vIcon(k, 90) + '<figcaption>' + VL(VERN_TYPES[k].name).replace(/ \(.*\)$/, '') + '<i>' + vDist(k).join(', ') + '</i></figcaption>'; });
+  }
+  draw();
+  return box;
+}
+
+/* ---------------------------------------------------------------- the tab */
+function buildModeller(host) {
+  vmStyle(); vernStyle();
+  pageHead(host, 'Draw the model', '');
+  const h = host.querySelector('.pagehead');
+  h.querySelector('h2').textContent = VMT('Draw the model', 'Desenhar o modelo');
+  h.querySelector('p').textContent = VMT('Build the house as the popular builder did — several bodies, round or long, each with its roof; the chimney, the stair, the varanda, the oven, the courtyard wall — and see it in isometric, plan and elevation, measured and compared with the archetype.',
+    'Construa a casa como o construtor popular — vários corpos, redondos ou compridos, cada um com a sua cobertura; a chaminé, a escada, a varanda, o forno, o muro do pátio — e veja-a em isométrica, planta e alçado, medida e comparada com o arquétipo.');
+  const D = vmRead();
+  if (!D) { host.appendChild(el('div', { class:'warn', text:VMT('No popular model for this place.', 'Não há modelo popular para este lugar.') })); return; }
+  const R = D.R;
+  if (!R.V.rooms || R.V.roomsType !== R.type) { R.V.rooms = vmDefaultRooms(R.V.vm); R.V.roomsType = R.type; }
+  VM_SEL = Math.min(VM_SEL, R.V.vm.vols.length - 1);
+  const top = host.appendChild(el('div', { class:'vmbtns' }));
+  const wrap = host.appendChild(el('div', { class:'vmwrap' }));
+  const ed = wrap.appendChild(el('div', { class:'vmed' }));
+  const views = wrap.appendChild(el('div'));
+  const below = host.appendChild(el('div', { style:'max-width:1280px' }));
+  const vm = () => R.V.vm;
+
+  top.appendChild(el('button', { type:'button', text:VMT('Start again from the archetype', 'Recomeçar do arquétipo'), onclick:() => { R.V.vm = vmFromType(R.type); R.V.rooms = vmDefaultRooms(R.V.vm); VM_SEL = 0; vmChanged(true); } }));
+  top.appendChild(el('button', { type:'button', text:VMT('Hand the main body to the study', 'Passar o corpo principal ao estudo'), title:VMT('The other tabs then measure it (sun, roof, openings, ventilation).', 'Os outros separadores passam a medi-lo (sol, cobertura, vãos, ventilação).'), onclick:() => vmPassToStudy(vm()) }));
+  const dl = (txt, name, type) => download(new Blob([txt], { type }), slugify(sitePrefix() + name) + (type.indexOf('svg') >= 0 ? '.svg' : '.dxf'));
+  top.appendChild(el('button', { type:'button', text:'SVG — ' + VMT('isometric', 'isométrica'), onclick:() => dl(vmIsoSVG(vm(), 1200, { bg:'#ffffff' }), 'modelo-isometrica', 'image/svg+xml') }));
+  top.appendChild(el('button', { type:'button', text:'SVG — ' + VMT('plan', 'planta'), onclick:() => dl(vmPlanSVG(vm(), 1200, { rooms:R.V.rooms.filter(q => q.fl === VM_ROOMFL) }).svg, 'modelo-planta', 'image/svg+xml') }));
+  top.appendChild(el('button', { type:'button', text:'SVG — ' + VMT('elevation', 'alçado'), onclick:() => dl(vmElevSVG(vm(), VM_FACE, 1200), 'modelo-alcado-' + VM_FACE, 'image/svg+xml') }));
+  top.appendChild(el('button', { type:'button', text:'DXF — ' + VMT('plan and elevation', 'planta e alçado'), onclick:() => dl(vmDXF(vm()), 'modelo', 'application/dxf') }));
+  top.appendChild(el('button', { type:'button', id:'btnVmReport', class:'pri', text:VMT('Report ▾', 'Relatório ▾'), onclick:() => vmToggleExportMenu() }));
+
+  /* ---- the editor ---- */
+  function drawEditor() {
+    ed.innerHTML = '';
+    const M = vm();
+    ed.appendChild(el('h4', { text:VMT('Bodies', 'Corpos') }));
+    const lst = ed.appendChild(el('div', { class:'vmlist' }));
+    M.vols.forEach((v, i) => lst.appendChild(el('button', { type:'button', class:i === VM_SEL ? 'on' : '', text:VL(v.name), onclick:() => { VM_SEL = i; vmChanged(true); } })));
+    const add = (o) => { const b = M.vols[VM_SEL] || M.vols[0]; const v = vmVol(Object.assign({ x:b ? b.x + b.L / 2 + 3 : 0, y:b ? b.y : 0, wall:vmClone(b ? b.wall : vmVol().wall) }, o)); M.vols.push(v); VM_SEL = M.vols.length - 1; vmChanged(true); };
+    const ab = ed.appendChild(el('div', { class:'vmbtns' }));
+    ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('long body', 'corpo comprido'), onclick:() => add({ name:{ en:'Annex', pt:'Anexo' }, L:5, D:4, fh:2.4, roof:{ type:'shed', th:18, bei:0.2, mat:'tile', par:0, cells:2, beirado:1, ridge:'auto' } }) }));
+    ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('round body', 'corpo redondo'), onclick:() => add({ name:{ en:'Round body', pt:'Corpo redondo' }, kind:'round', L:4.5, D:4.5, fh:2.2, roof:{ type:'cone', th:45, bei:0.3, mat:'thatch', par:0, cells:2, beirado:1, ridge:'auto' } }) }));
+    ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('tower', 'torre'), onclick:() => add({ name:{ en:'Tower', pt:'Torre' }, L:4, D:4, fl:2, fh:2.6, roof:{ type:'hip', th:25, bei:0.3, mat:'tile', par:0, cells:2, beirado:1, ridge:'auto' } }) }));
+    ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('separate kitchen', 'cozinha separada'), onclick:() => add({ name:{ en:'Kitchen', pt:'Cozinha' }, L:4, D:4, fh:2.4, roof:{ type:'gable', th:28, bei:0.25, mat:'tile', par:0, cells:2, beirado:1, ridge:'auto' } }) }));
+    const v = M.vols[VM_SEL];
+    if (v) {
+      const r1 = ed.appendChild(el('div', { class:'vmrow' }));
+      r1.appendChild(vmSel(VMT('Plan', 'Planta'), [['rect', VMT('rectangle', 'retângulo')], ['round', VMT('round', 'circular')], ['oval', VMT('oval', 'oval')]], () => v.kind, x => { v.kind = x; if (x === 'round') v.D = v.L; }));
+      r1.appendChild(el('label', null, [document.createTextNode(VMT('Name', 'Nome')), el('input', { value:VL(v.name), onchange:e => { v.name = { en:e.target.value, pt:e.target.value }; vmChanged(true); } })]));
+      r1.appendChild(vmNum(v.kind === 'round' ? VMT('Diameter (m)', 'Diâmetro (m)') : VMT('Length L (m)', 'Comprimento L (m)'), () => v.L, x => { v.L = x; if (v.kind === 'round') v.D = x; }, 1, 60, 0.5));
+      if (v.kind !== 'round') r1.appendChild(vmNum(VMT('Depth D (m)', 'Profundidade P (m)'), () => v.D, x => { v.D = x; }, 1, 40, 0.5));
+      r1.appendChild(vmNum(VMT('Storeys', 'Pisos'), () => v.fl, x => { v.fl = Math.round(x); }, 1, 4, 1));
+      r1.appendChild(vmNum(VMT('Storey height (m)', 'Pé-direito (m)'), () => v.fh, x => { v.fh = x; }, 0.6, 5, 0.1));
+      r1.appendChild(vmNum(VMT('x (m, east)', 'x (m, nascente)'), () => v.x, x => { v.x = x; }, -80, 80, 0.5));
+      r1.appendChild(vmNum(VMT('y (m, north)', 'y (m, norte)'), () => v.y, x => { v.y = x; }, -80, 80, 0.5));
+      r1.appendChild(vmNum(VMT('Raised floor / on top (m)', 'Sobrelevado / em cima (m)'), () => v.raise || 0, x => { v.raise = x; }, 0, 12, 0.1));
+      r1.appendChild(vmChk(VMT('on piers', 'sobre pés'), () => !!v.piers, x => { v.piers = x; }));
+      ed.appendChild(el('h4', { text:VMT('Roof', 'Cobertura') }));
+      const r2 = ed.appendChild(el('div', { class:'vmrow' }));
+      r2.appendChild(vmSel(VMT('Form', 'Forma'), Object.keys(VM_ROOFS).map(k => [k, VL(VM_ROOFS[k])]), () => v.roof.type, x => { v.roof.type = x; if (x === 'flat') v.roof.mat = 'lime'; if (x === 'dome' && v.roof.mat === 'tile') v.roof.mat = 'earth'; }, true));
+      r2.appendChild(vmSel(VMT('Covering', 'Revestimento'), Object.keys(VM_ROOFMAT).map(k => [k, VL(VM_ROOFMAT[k])]), () => v.roof.mat, x => { v.roof.mat = x; }));
+      if (['flat', 'dome'].indexOf(v.roof.type) < 0) r2.appendChild(vmNum(VMT('Pitch (°)', 'Inclinação (°)'), () => v.roof.th, x => { v.roof.th = x; }, 3, 70, 1));
+      if (['flat', 'dome', 'ground'].indexOf(v.roof.type) < 0) r2.appendChild(vmNum(VMT('Eave (m)', 'Beiral (m)'), () => v.roof.bei, x => { v.roof.bei = x; }, 0, 1.5, 0.05));
+      if (v.roof.type === 'gable' || v.roof.type === 'ground') r2.appendChild(vmSel(VMT('Ridge', 'Cumeeira'), [['auto', VMT('along the long side', 'pelo lado maior')], ['x', VMT('east–west', 'nascente–poente')], ['y', VMT('north–south', 'norte–sul')]], () => v.roof.ridge || 'auto', x => { v.roof.ridge = x; }));
+      if (v.roof.type === 'tesoura') r2.appendChild(vmNum(VMT('Roofs (rooms)', 'Telhados (divisões)'), () => v.roof.cells || 2, x => { v.roof.cells = Math.round(x); }, 1, 8, 1));
+      if (v.roof.type === 'flat') r2.appendChild(vmNum(VMT('Parapet (m)', 'Platibanda (m)'), () => v.roof.par || 0, x => { v.roof.par = x; }, 0, 1.5, 0.05));
+      if (['flat', 'dome', 'cone'].indexOf(v.roof.type) < 0) r2.appendChild(vmSel(VMT('Beirado', 'Beirado'), [['1', VMT('single', 'simples')], ['2', VMT('double', 'duplo')], ['0', VMT('none', 'sem')]], () => v.roof.beirado == null ? 1 : v.roof.beirado, x => { v.roof.beirado = +x; }));
+      ed.appendChild(el('h4', { text:VMT('Walls', 'Paredes') }));
+      const r3 = ed.appendChild(el('div', { class:'vmrow' }));
+      r3.appendChild(vmSel(VMT('Material', 'Material'), Object.keys(VM_WALL).map(k => [k, VL(VM_WALL[k])]), () => v.wall.mat, x => { v.wall.mat = x; }));
+      r3.appendChild(vmSel(VMT('Barra', 'Barra'), [['', VMT('none', 'sem')], ['#3F6FA8', VMT('blue', 'azul')], ['#C9A040', VMT('ochre', 'ocre')], ['#8E3B2E', VMT('ox-blood', 'sangue de boi')], ['#4F7A4A', VMT('green', 'verde')], ['#6B6B6B', VMT('grey', 'cinzenta')]], () => v.wall.barra || '', x => { v.wall.barra = x || null; }));
+      r3.appendChild(vmSel(VMT('Frames of the openings', 'Molduras dos vãos'), [['', VMT('none', 'sem')], ['cal', VMT('lime band', 'faixa caiada')], ['cantaria', VMT('cut stone', 'cantaria')], ['cor', VMT('coloured', 'pintadas')]], () => v.wall.frames || '', x => { v.wall.frames = x || null; }));
+      r3.appendChild(vmNum(VMT('Buttresses (per long side)', 'Contrafortes (por lado maior)'), () => v.wall.buttress || 0, x => { v.wall.buttress = Math.round(x); }, 0, 8, 1));
+      r3.appendChild(vmChk(VMT('coloured corners (cunhais)', 'cunhais marcados'), () => !!v.wall.cunhais, x => { v.wall.cunhais = x; }));
+      ed.appendChild(el('h4', { text:VMT('Openings of this body', 'Vãos deste corpo') }));
+      VM_FACES.forEach(f => (v.open[f] || []).forEach((o, i) => { const row = ed.appendChild(el('div', { class:'vmrow vmel' }));
+        row.appendChild(vmSel(VMT('Face', 'Fachada'), vmFaceOpts(), () => f, x => { v.open[f].splice(i, 1); (v.open[x] = v.open[x] || []).push(o); }, true));
+        row.appendChild(vmSel(VMT('Kind', 'Tipo'), [['w', VMT('window', 'janela')], ['d', VMT('door', 'porta')]], () => o.t, x => { o.t = x; if (x === 'd') o.h = 2; }));
+        row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => o.pos, x => { o.pos = x; }, 0, 1, 0.05));
+        row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => o.w, x => { o.w = x; }, 0.2, 6, 0.1));
+        row.appendChild(vmNum(VMT('Height (m)', 'Altura (m)'), () => o.h, x => { o.h = x; }, 0.2, 3, 0.1));
+        row.appendChild(vmNum(VMT('Storey (0 = ground)', 'Piso (0 = térreo)'), () => o.fl, x => { o.fl = Math.round(x); }, 0, 3, 1));
+        row.appendChild(el('button', { type:'button', class:'x', text:'✕ ' + VMT('remove', 'remover'), onclick:() => { v.open[f].splice(i, 1); vmChanged(true); } })); }));
+      const ob = ed.appendChild(el('div', { class:'vmbtns' }));
+      ob.appendChild(el('button', { type:'button', text:'+ ' + VMT('window', 'janela'), onclick:() => { v.open.S.push(vmOp('w', 0.5, 0.8, 1.0)); vmChanged(true); } }));
+      ob.appendChild(el('button', { type:'button', text:'+ ' + VMT('door', 'porta'), onclick:() => { v.open.S.push(vmOp('d', 0.5, 0.9, 2.0)); vmChanged(true); } }));
+      if (M.vols.length > 1) ob.appendChild(el('button', { type:'button', style:'color:var(--c2)', text:VMT('Remove this body', 'Remover este corpo'), onclick:() => { M.els = M.els.filter(e => e.vol !== VM_SEL).map(e => Object.assign(e, { vol:e.vol > VM_SEL ? e.vol - 1 : e.vol })); M.vols.splice(VM_SEL, 1); VM_SEL = 0; vmChanged(true); } }));
+    }
+    /* elements */
+    ed.appendChild(el('h4', { text:VMT('Parts of the house', 'Elementos da casa') }));
+    const volOpts = M.vols.map((q, i) => [i, VL(q.name)]);
+    (M.els || []).forEach((E, i) => {
+      const row = ed.appendChild(el('div', { class:'vmrow vmel' }));
+      const title = E.t === 'chimney' ? VMT('Chimney', 'Chaminé') : E.t === 'stair' ? VMT('Outside stair', 'Escada exterior') : E.t === 'varanda' ? VMT('Varanda', 'Varanda') : E.t === 'oven' ? VMT('Projecting oven', 'Forno saliente') : E.t === 'latada' ? VMT('Vine pergola', 'Latada') : VMT('Porch', 'Alpendre');
+      row.appendChild(el('b', { text:title, style:'grid-column:1/-1;font-size:12px' }));
+      row.appendChild(vmSel(VMT('Body', 'Corpo'), volOpts, () => E.vol, x => { E.vol = +x; }));
+      if (E.t !== 'chimney') row.appendChild(vmSel(VMT('Face', 'Fachada'), vmFaceOpts(), () => E.face || 'S', x => { E.face = x; }));
+      if (E.t === 'chimney') { row.appendChild(vmSel(VMT('Kind', 'Tipo'), Object.keys(VM_CHIM).map(k => [k, VL(VM_CHIM[k])]), () => E.kind, x => { E.kind = x; }, true));
+        { row.appendChild(vmNum(VMT('Along (0–1)', 'Ao longo (0–1)'), () => E.u, x => { E.u = x; }, 0, 0.95, 0.05)); row.appendChild(vmNum(VMT('Across (0–1)', 'Na profundidade (0–1)'), () => E.v, x => { E.v = x; }, 0, 0.95, 0.05)); row.appendChild(vmNum(VMT('Height (m)', 'Altura (m)'), () => E.h || 1.2, x => { E.h = x; }, 0.3, 4, 0.1)); } }
+      if (E.t === 'stair') { row.appendChild(vmSel(VMT('Run', 'Lanço'), [['par', VMT('along the wall', 'encostado à parede')], ['perp', VMT('out from the wall', 'perpendicular à parede')]], () => E.along, x => { E.along = x; }));
+        row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 0.9, 0.05)); row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 0.7, 2, 0.1));
+        row.appendChild(vmChk(VMT('landing', 'patamar'), () => !!E.landing, x => { E.landing = x; })); row.appendChild(vmChk(VMT('porch over the landing', 'alpendre no patamar'), () => !!E.porch, x => { E.porch = x; })); }
+      if (E.t === 'varanda') { row.appendChild(vmSel(VMT('Kind', 'Tipo'), Object.keys(VM_VAR).map(k => [k, VL(VM_VAR[k])]), () => E.kind, x => { E.kind = x; }));
+        row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 1, 0.05)); row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 0.8, 20, 0.1));
+        row.appendChild(vmNum(VMT('Storey (0 = ground)', 'Piso (0 = térreo)'), () => E.floor || 0, x => { E.floor = Math.round(x); }, 0, 3, 1)); }
+      if (E.t === 'oven') { row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 1, 0.05)); row.appendChild(vmNum(VMT('Radius (m)', 'Raio (m)'), () => E.r || 0.9, x => { E.r = x; }, 0.5, 2, 0.1)); }
+      if (E.t === 'alpendre' || E.t === 'latada') { row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 1, 20, 0.5)); row.appendChild(vmNum(VMT('Depth (m)', 'Profundidade (m)'), () => E.d, x => { E.d = x; }, 1, 6, 0.1)); }
+      row.appendChild(el('button', { type:'button', class:'x', text:'✕ ' + VMT('remove', 'remover'), onclick:() => { M.els.splice(i, 1); vmChanged(true); } }));
+    });
+    const eb = ed.appendChild(el('div', { class:'vmbtns' }));
+    const addEl = o => { (M.els = M.els || []).push(Object.assign({ vol:VM_SEL }, o)); vmChanged(true); };
+    eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('chimney', 'chaminé'), onclick:() => addEl({ t:'chimney', kind:'box', u:0.75, v:0.55, h:1.2, face:'E' }) }));
+    eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('stair', 'escada'), onclick:() => addEl({ t:'stair', face:'S', along:'par', pos:0.1, w:1.1, landing:true, porch:false }) }));
+    eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('varanda', 'varanda'), onclick:() => addEl({ t:'varanda', face:'S', kind:'corrida', pos:0.5, w:4, floor:1 }) }));
+    eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('oven', 'forno'), onclick:() => addEl({ t:'oven', face:'E', pos:0.5, r:0.9 }) }));
+    eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('porch', 'alpendre'), onclick:() => addEl({ t:'alpendre', face:'S', pos:0.5, w:6, d:2.2 }) }));
+    eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('vine pergola', 'latada'), onclick:() => addEl({ t:'latada', face:'S', pos:0.5, w:6, d:3 }) }));
+    /* courtyard and row */
+    ed.appendChild(el('h4', { text:VMT('Courtyard and row', 'Pátio e banda') }));
+    const c = M.court, r4 = ed.appendChild(el('div', { class:'vmrow' }));
+    r4.appendChild(vmChk(VMT('courtyard closed by a wall', 'pátio fechado por muro'), () => !!c.on, x => { c.on = x; }));
+    if (c.on) { r4.appendChild(vmNum(VMT('Courtyard length (m)', 'Comprimento do pátio (m)'), () => c.L, x => { c.L = x; }, 3, 80, 0.5)); r4.appendChild(vmNum(VMT('Courtyard depth (m)', 'Profundidade do pátio (m)'), () => c.D, x => { c.D = x; }, 3, 80, 0.5));
+      r4.appendChild(vmNum('x (m)', () => c.x, x => { c.x = x; }, -80, 80, 0.5)); r4.appendChild(vmNum('y (m)', () => c.y, x => { c.y = x; }, -80, 80, 0.5)); r4.appendChild(vmNum(VMT('Wall height (m)', 'Altura do muro (m)'), () => c.h, x => { c.h = x; }, 0.5, 5, 0.1));
+      r4.appendChild(vmSel(VMT('Gate (porta carral) on', 'Portão (porta carral) a'), vmFaceOpts(), () => c.gate.face, x => { c.gate.face = x; }));
+      r4.appendChild(vmSel(VMT('Side closed by the house', 'Lado fechado pela casa'), [['', VMT('none', 'nenhum')]].concat(vmFaceOpts()), () => c.open || '', x => { c.open = x || null; })); r4.appendChild(vmNum(VMT('Gate width (m)', 'Largura do portão (m)'), () => c.gate.w, x => { c.gate.w = x; }, 1, 6, 0.1)); }
+    r4.appendChild(vmNum(VMT('Houses in a row (party walls)', 'Casas em banda (paredes-meias)'), () => (M.row || {}).n || 1, x => { M.row = { n:Math.round(x) }; }, 1, 8, 1));
+  }
+
+  /* ---- the views ---- */
+  const isoBox = views.appendChild(el('div', { class:'vmview' }));
+  const pair = views.appendChild(el('div', { class:'vmviews2' }));
+  const planBox = pair.appendChild(el('div', { class:'vmview' }));
+  const elevBox = pair.appendChild(el('div', { class:'vmview' }));
+  const metBox = below.appendChild(el('div'));
+  function drawViews() {
+    const M = vm();
+    isoBox.innerHTML = '<p class="vmcap">' + VMT('Isometric — from the south-east', 'Isométrica — de sudeste') + '</p>' + vmIsoSVG(M, 760);
+    const rooms = R.V.rooms; vmRoomChecks(M, rooms);
+    const PL = vmPlanSVG(M, 520, { sel:VM_SEL, rooms:rooms.filter(q => q.fl === VM_ROOMFL) });
+    planBox.innerHTML = '';
+    const cap = planBox.appendChild(el('p', { class:'vmcap', html:VMT('Plan — drag a body or a room', 'Planta — arraste um corpo ou uma divisão') + ' · ' }));
+    const fs = el('select', { onchange:e => { VM_ROOMFL = +e.target.value; drawViews(); } });
+    for (let k = 0; k < Math.max(...M.vols.map(v => v.fl)); k++) fs.appendChild(el('option', { value:k, text:k === 0 ? VMT('ground floor', 'piso térreo') : VMT('floor ', 'piso ') + k, selected:k === VM_ROOMFL ? 'selected' : null }));
+    cap.appendChild(fs);
+    planBox.insertAdjacentHTML('beforeend', PL.svg);
+    vmPlanDrag(planBox.querySelector('svg'), PL);
+    elevBox.innerHTML = '';
+    const ec = elevBox.appendChild(el('p', { class:'vmcap', text:VMT('Elevation', 'Alçado') + ' · ' }));
+    const es = el('select', { onchange:e => { VM_FACE = e.target.value; drawViews(); } });
+    vmFaceOpts().forEach(([f, l]) => es.appendChild(el('option', { value:f, text:l, selected:f === VM_FACE ? 'selected' : null })));
+    ec.appendChild(es);
+    elevBox.insertAdjacentHTML('beforeend', vmElevSVG(M, VM_FACE, 520));
+    drawBelow();
+  }
+  function vmPlanDrag(svg, PL) {
+    if (!svg) return;
+    let drag = null;
+    const pt = ev => { const b = svg.getBoundingClientRect(); return [(ev.clientX - b.left) * PL.w / b.width, (ev.clientY - b.top) * PL.h / b.height]; };
+    svg.addEventListener('pointerdown', ev => {
+      const t = ev.target, p = pt(ev), M = vm(), rooms = R.V.rooms.filter(q => q.fl === VM_ROOMFL);
+      if (t.dataset.roomsize !== undefined) drag = { kind:'size', q:rooms[+t.dataset.roomsize], p, w0:rooms[+t.dataset.roomsize].w, d0:rooms[+t.dataset.roomsize].d };
+      else if (t.dataset.room !== undefined) { const q = rooms[+t.dataset.room]; drag = { kind:'room', q, p, x0:q.x, y0:q.y }; }
+      else if (t.dataset.vol !== undefined) { const i = +t.dataset.vol, v = M.vols[i]; VM_SEL = i; drag = { kind:'vol', v, p, x0:v.x, y0:v.y }; }
+      if (drag) { svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+    });
+    svg.addEventListener('pointermove', ev => {
+      if (!drag) return;
+      const p = pt(ev), dx = Math.round((p[0] - drag.p[0]) / PL.s * 4) / 4, dy = -Math.round((p[1] - drag.p[1]) / PL.s * 4) / 4;
+      if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
+      else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
+      else { drag.q.w = Math.max(1, drag.w0 + dx); drag.q.d = Math.max(1, drag.d0 - dy); }
+      const PL2 = vmPlanSVG(vm(), 520, { sel:VM_SEL, rooms:(vmRoomChecks(vm(), R.V.rooms), R.V.rooms.filter(q => q.fl === VM_ROOMFL)) });
+      svg.innerHTML = PL2.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
+    });
+    const up = () => { if (drag) { drag = null; drawEditor(); drawViews(); } };
+    svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+  }
+
+  /* ---- below: numbers, comparison, Olgyay, rooms ---- */
+  function drawBelow() {
+    const M = vm(), mt = vmMetrics(M), ref = D.ref;
+    metBox.innerHTML = '';
+    metBox.appendChild(section(VMT('The model in numbers', 'O modelo em números'), null));
+    const roofMass = M.vols.map(v => v.roof.mat === 'earth' ? VMT('earth and turf ≈ 540 kg/m² — heavy, slow', 'terra e erva ≈ 540 kg/m² — pesada, lenta') : v.roof.mat === 'thatch' ? VMT('thatch ≈ 30 kg/m², λ ≈ 0.07 — light, insulating (R ≈ 4 m²K/W at 30 cm)', 'colmo ≈ 30 kg/m², λ ≈ 0,07 — leve, isolante (R ≈ 4 m²K/W a 30 cm)')
+      : v.roof.mat === 'lime' ? VMT('açoteia on vaults or joists — mass on top', 'açoteia sobre abóbadas ou barrotes — massa por cima') : v.roof.mat === 'slate' || v.roof.mat === 'stone' ? VMT('stone slabs ≈ 100 kg/m²', 'lajes ≈ 100 kg/m²') : VMT('tile on timber ≈ 50 kg/m²', 'telha sobre madeira ≈ 50 kg/m²'));
+    metBox.appendChild(dataTable([VMT('Measure', 'Medida'), VMT('Value', 'Valor')], [
+      [VMT('Bodies drawn', 'Corpos desenhados'), mt.n], [VMT('Footprint', 'Implantação'), fmt(mt.foot, 1) + ' m²'], [VMT('Floor area', 'Área de pavimento'), fmt(mt.floor, 1) + ' m²'],
+      [VMT('Enclosed volume', 'Volume'), fmt(mt.vol, 0) + ' m³'], [VMT('Outside walls', 'Paredes exteriores'), fmt(mt.wall, 1) + ' m²' + (mt.party ? ' (' + VMT('party walls ', 'paredes-meias ') + fmt(mt.party, 1) + ' m²)' : '')],
+      [VMT('Roof surface', 'Superfície da cobertura'), fmt(mt.roof, 1) + ' m²'], [VMT('Envelope / volume (S/V)', 'Envolvente / volume (S/V)'), fmt(mt.sv, 2) + ' 1/m'],
+      [VMT('Windows / doors', 'Janelas / portas'), fmt(mt.glaze, 1) + ' / ' + fmt(mt.door, 1) + ' m² · ' + fmt(mt.glazePct, 1) + ' %'],
+      [VMT('Wall mass', 'Massa das paredes'), fmt(mt.massW, 0) + ' kg/m²'], [VMT('Roof', 'Cobertura'), [...new Set(roofMass)].join('; ')]
+    ], [0, 1]));
+    /* the comparison */
+    const rows = vmCompare(ref, M), ok = rows.filter(r => r.ok).length;
+    metBox.appendChild(section(VMT('Your model against the archetype', 'O seu modelo contra o arquétipo'), ok + ' / ' + rows.length));
+    const cmp = el('div', { class:'vmviews2' });
+    cmp.appendChild(el('div', { class:'vmview', html:'<p class="vmcap">' + VMT('Archetype', 'Arquétipo') + ' — ' + VL(R.T.name) + '</p>' + vmIsoSVG(ref, 420) }));
+    cmp.appendChild(el('div', { class:'vmview', html:'<p class="vmcap">' + VMT('Yours', 'O seu') + '</p>' + vmIsoSVG(M, 420) }));
+    metBox.appendChild(cmp);
+    metBox.appendChild(dataTable([VMT('Feature', 'Característica'), VMT('Archetype', 'Arquétipo'), VMT('Yours', 'O seu'), ''], rows.map(r => [r.label, r.a, r.b, r.ok ? '<span class="vmok">✓</span>' : '<span class="vmno">✗</span>']), [0]));
+    /* Olgyay */
+    const O = vmOlgyay(R, M);
+    metBox.appendChild(section(VMT('From the house to the climate — what Olgyay would say here', 'Da casa ao clima — o que Olgyay diria aqui'), O.code));
+    metBox.appendChild(dataTable(['', VMT('Olgyay’s optimum', 'Óptimo de Olgyay') + (O.OI.pt ? VMT(' (adapted to Portugal)', ' (adaptado a Portugal)') : ''), VMT('Archetype', 'Arquétipo'), VMT('Yours', 'O seu')], O.rows, [0]));
+    metBox.appendChild(el('ul', { class:'hint', html:O.notes.map(n => '<li>' + n + '</li>').join('') }));
+    /* rooms */
+    const rc = vmRoomChecks(M, R.V.rooms);
+    metBox.appendChild(section(VMT('Rooms', 'Divisões'), rc.ok + ' / ' + rc.n + ' ' + VMT('placed well', 'bem colocadas')));
+    metBox.appendChild(el('p', { class:'hint', text:VMT('Move and size the rooms on the plan (the square handle sizes them); pick the floor above the plan. A room must sit inside a body that has that floor, without overlapping another.', 'Mova e dimensione as divisões na planta (o quadrado no canto dimensiona-as); escolha o piso por cima da planta. Uma divisão tem de ficar dentro de um corpo que tenha esse piso, sem sobrepor outra.') }));
+    const rt = dataTable([VMT('Room', 'Divisão'), VMT('Floor', 'Piso'), VMT('Area', 'Área'), ''], R.V.rooms.map(q => [VL(q.n), q.fl === 0 ? VMT('ground', 'térreo') : String(q.fl), fmt(q.w * q.d, 1) + ' m²', q.bad ? '<span class="vmno">' + (q.inVol ? VMT('overlaps', 'sobrepõe') : VMT('outside the body', 'fora do corpo')) + '</span>' : '<span class="vmok">✓</span>']), [0]);
+    metBox.appendChild(rt);
+    if (!rc.kitchen) metBox.appendChild(el('p', { class:'hint', html:'<b>' + VMT('No kitchen yet', 'Ainda sem cozinha') + '</b> — ' + VMT('the hearth was the heart of the popular house.', 'a lareira era o centro da casa popular.') }));
+    const rb = metBox.appendChild(el('div', { class:'vmbtns' }));
+    const addRoom = (en, pt) => { const v = vm().vols[0]; R.V.rooms.push({ n:{ en, pt }, x:v.x, y:v.y, w:3, d:3, fl:VM_ROOMFL }); drawViews(); };
+    [['Kitchen', 'Cozinha'], ['Bedroom', 'Quarto'], ['Casa de fora', 'Casa de fora'], ['Hall (sala)', 'Sala'], ['Store (loja)', 'Loja'], ['Byre (corte)', 'Corte'], ['Wine cellar', 'Adega'], ['Alcove', 'Alcova']].forEach(([en, pt]) => rb.appendChild(el('button', { type:'button', text:'+ ' + VMT(en, pt), onclick:() => addRoom(en, pt) })));
+    rb.appendChild(el('button', { type:'button', text:VMT('Remove the last room', 'Remover a última divisão'), onclick:() => { R.V.rooms.pop(); drawViews(); } }));
+    rb.appendChild(el('button', { type:'button', text:VMT('Rooms of the type', 'Divisões do tipo'), onclick:() => { R.V.rooms = vmDefaultRooms(vm()); drawViews(); } }));
+  }
+  VM_REDRAW = () => { drawViews(); };
+  VM_REBUILD = () => { drawEditor(); drawViews(); };
+  drawEditor(); drawViews();
+}
+
+/* ---------------------------------------------------------------- the report */
+let vmExMenu = null;
+function vmCloseExportMenu() { if (!vmExMenu) return; vmExMenu.remove(); vmExMenu = null; document.removeEventListener('pointerdown', vmOutsideExport, true); }
+function vmOutsideExport(ev) { if (vmExMenu && !vmExMenu.contains(ev.target) && !(ev.target.closest && ev.target.closest('#btnVmReport, #btnVmReport2'))) vmCloseExportMenu(); }
+function vmToggleExportMenu(btn) {
+  if (vmExMenu) { vmCloseExportMenu(); return; }
+  vmStyle();
+  const b = btn || $('#btnVmReport');
+  const item = (title, desc, fn) => el('button', { class:'exportitem', role:'menuitem', html:'<b>' + title + '</b><span>' + desc + '</span>', onclick:() => { vmCloseExportMenu(); fn(); } });
+  vmExMenu = el('div', { class:'exportmenu', role:'menu' }, [
+    item('PowerPoint (.pptx)', VMT('Download the .pptx report', 'Descarregar o relatório .pptx'), () => vmExportReport('pptx')),
+    item('Google Slides', VMT('Saves a .pptx, then opens Slides to convert it into a native deck', 'Guarda um .pptx e abre o Slides para o converter numa apresentação nativa'), () => vmExportReport('pptx').then(ok => ok && vmExportGuide('slides'))),
+    item('Canva', VMT('Saves a .pptx, then opens Canva to convert it into a native design', 'Guarda um .pptx e abre o Canva para o converter num design nativo'), () => vmExportReport('pptx').then(ok => ok && vmExportGuide('canva'))),
+    item('LibreOffice / OpenOffice (.odp)', VMT('Download the .odp report', 'Descarregar o relatório .odp'), () => vmExportReport('odp'))
+  ]);
+  document.body.appendChild(vmExMenu);
+  const r = b.getBoundingClientRect();
+  vmExMenu.style.top = (r.bottom + window.scrollY + 6) + 'px';
+  vmExMenu.style.left = Math.max(8, r.right + window.scrollX - 300) + 'px';
+  document.addEventListener('pointerdown', vmOutsideExport, true);
+}
+function vmExportGuide(kind) {
+  const old = document.querySelector('.exportguide'); if (old) old.remove();
+  const G = kind === 'slides'
+    ? { name:'Google Slides', url:'https://docs.google.com/presentation/', steps:[VMT('The report was saved as a .pptx in your downloads.', 'O relatório foi guardado como .pptx nas transferências.'), VMT('Open Google Slides and click the folder icon (Open file picker).', 'Abra o Google Slides e clique no ícone da pasta (Abrir seletor de ficheiros).'), VMT('Choose Upload and drop the .pptx there — Slides opens it as a native deck you can edit and share.', 'Escolha Carregar e largue lá o .pptx — o Slides abre-o como apresentação nativa, editável e partilhável.')] }
+    : { name:'Canva', url:'https://www.canva.com/', steps:[VMT('The report was saved as a .pptx in your downloads.', 'O relatório foi guardado como .pptx nas transferências.'), VMT('Open Canva and choose Create a design ▸ Import file, or drag the .pptx onto the Canva home page.', 'Abra o Canva e escolha Criar um design ▸ Importar ficheiro, ou arraste o .pptx para a página inicial.'), VMT('Canva opens it as an editable presentation design.', 'O Canva abre-o como apresentação editável.')] };
+  const box = el('div', { class:'exportguide', role:'dialog' }, [el('b', { text:VMT('Open the report in ', 'Abrir o relatório no ') + G.name }), el('ol', {}, G.steps.map(x => el('li', { text:x }))),
+    el('div', { class:'row' }, [el('button', { text:VMT('Close', 'Fechar'), onclick:() => box.remove() }), el('button', { class:'solid', text:VMT('Open ', 'Abrir ') + G.name, onclick:() => { window.open(G.url, '_blank', 'noopener'); box.remove(); } })])]);
+  document.body.appendChild(box);
+}
+/** An SVG string as PNG bytes, at the given pixel width. */
+function vmPng(svg, wpx) {
+  return new Promise(res => {
+    const m = svg.match(/viewBox="([-\d. ]+)"/), vb = m ? m[1].split(' ').map(Number) : [0, 0, 100, 100], hpx = Math.round(wpx * vb[3] / vb[2]);
+    const s2 = svg.replace(/width="[\d.]+" height="[\d.]+"/, 'width="' + wpx + '" height="' + hpx + '"');
+    const img = new Image();
+    img.onload = () => { const c = document.createElement('canvas'); c.width = wpx; c.height = hpx; const x = c.getContext('2d'); x.fillStyle = '#ffffff'; x.fillRect(0, 0, wpx, hpx); x.drawImage(img, 0, 0, wpx, hpx);
+      c.toBlob(b => b.arrayBuffer().then(a => res({ bytes:new Uint8Array(a), w:wpx, h:hpx })), 'image/png'); };
+    img.onerror = () => res(null);
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s2);
+  });
+}
+/** The report of the popular study: the archetype, the student's model, its drawings, numbers, checks, Olgyay, rooms and sources. */
+async function vmExportReport(format) {
+  const D = vmRead();
+  if (!D) { toast(VMT('Nothing to export yet', 'Ainda nada para exportar')); return false; }
+  try {
+    const R = D.R, M = R.V.vm, ref = D.ref, T = R.T, E = format === 'odp' ? VODP : VPPTX, C = E.C, S = STATE.site;
+    const date = new Date().toLocaleDateString(LANG === 'pt' ? 'pt-PT' : 'en-GB');
+    const fit = (img, x, y, w, h) => { if (!img) return null; const k = Math.min(w / img.w, h / img.h), ww = img.w * k, hh = img.h * k; return E.pic({ x:x + (w - ww) / 2, y:y + (h - hh) / 2, w:ww, h:hh, bytes:img.bytes }); };
+    const head = (title, sub) => [E.bgRect(), E.shape({ x:0.6, y:0.35, w:10.6, h:0.75, paras:[{ runs:[{ t:title, sz:28, b:1 }] }] }),
+      E.shape({ x:0.6, y:1.05, w:10.6, h:0.45, paras:[{ runs:[{ t:sub, sz:14, color:C.amber }] }] }),
+      E.shape({ x:11.2, y:0.35, w:1.6, h:0.45, fill:C.amber, round:1, padT:0.06, paras:[{ runs:[{ t:(vDist(R.type)[0] || '').slice(0, 14), sz:11, b:1, color:'1B2730' }], align:'ctr' }], anchor:'ctr' })];
+    const text = (x, y, w, h, lines, sz) => E.shape({ x, y, w, h, paras:lines.map(l => ({ runs:[{ t:l, sz:sz || 13 }] })) });
+    const tbl = (x, y, colW, rows, rowH) => E.table({ x, y, colW, rows:rows.map(r => r.map(c => ({ t:String(c).replace(/<[^>]+>/g, '') }))), rowH:rowH || 0.32, sz:10.5 });
+    const [isoS, isoA, plan, elS, elE] = await Promise.all([vmPng(vmIsoSVG(M, 900), 1400), vmPng(vmIsoSVG(ref, 900), 1200), vmPng(vmPlanSVG(M, 900, { rooms:R.V.rooms.filter(q => q.fl === 0) }).svg, 1400), vmPng(vmElevSVG(M, 'S', 900), 1300), vmPng(vmElevSVG(M, 'E', 900), 1300)]);
+    const mt = vmMetrics(M), cmp = vmCompare(ref, M), O = vmOlgyay(R, M), rc = vmRoomChecks(M, R.V.rooms);
+    const sl = [];
+    sl.push(head(VMT('Popular architecture study', 'Estudo de arquitetura popular'), (S.place || S.nuts || '') + ' · ' + VL(T.name)).concat([
+      text(0.6, 1.8, 5.6, 4.8, [vDistTxt(R.type), VL(T.where), '', VMT('Altitude ', 'Altitude ') + fmt(R.alt, 0) + ' m' + (R.bandName ? ' · ' + VL(R.bandName) : ''), date, '', 'Architecture Advisor PT ' + APP.version], 14),
+      fit(isoS, 6.4, 1.6, 6.4, 5.4)].filter(Boolean)));
+    sl.push(head(VMT('The archetype', 'O arquétipo'), VL(T.name)).concat([fit(isoA, 0.6, 1.7, 5.4, 4.6), text(6.3, 1.7, 6.5, 5.4, [VL(T.summary)], 12),
+      text(0.6, 6.4, 12, 0.8, [VMT('Sources: ', 'Fontes: ') + [...new Set(T.feats.map(f => f.src).filter(k => k && VERN_SRC[k] && k !== 'INF'))].map(k => VERN_SRC[k].tag).join('; ')], 10)].filter(Boolean)));
+    sl.push(head(VMT('The model drawn', 'O modelo desenhado'), VMT('Isometric and plan', 'Isométrica e planta')).concat([fit(isoS, 0.5, 1.7, 6.2, 5.4), fit(plan, 6.8, 1.7, 6.0, 5.4)].filter(Boolean)));
+    sl.push(head(VMT('Elevations', 'Alçados'), VMT('South and east', 'Sul e nascente')).concat([fit(elS, 0.5, 1.8, 6.2, 5.0), fit(elE, 6.8, 1.8, 6.0, 5.0)].filter(Boolean)));
+    sl.push(head(VMT('The model in numbers', 'O modelo em números'), VMT('Footprint, volume, envelope, openings, mass', 'Implantação, volume, envolvente, vãos, massa')).concat([tbl(0.6, 1.8, [6.0, 6.0], [[VMT('Measure', 'Medida'), VMT('Value', 'Valor')],
+      [VMT('Bodies', 'Corpos'), mt.n], [VMT('Footprint', 'Implantação'), fmt(mt.foot, 1) + ' m²'], [VMT('Floor area', 'Área de pavimento'), fmt(mt.floor, 1) + ' m²'], [VMT('Volume', 'Volume'), fmt(mt.vol, 0) + ' m³'],
+      [VMT('Outside walls', 'Paredes exteriores'), fmt(mt.wall, 1) + ' m²'], [VMT('Roof', 'Cobertura'), fmt(mt.roof, 1) + ' m²'], ['S/V', fmt(mt.sv, 2) + ' 1/m'],
+      [VMT('Glazing', 'Envidraçado'), fmt(mt.glazePct, 1) + ' %'], [VMT('Wall mass', 'Massa das paredes'), fmt(mt.massW, 0) + ' kg/m²']], 0.4)]));
+    sl.push(head(VMT('Against the archetype', 'Contra o arquétipo'), cmp.filter(r => r.ok).length + ' / ' + cmp.length).concat([tbl(0.6, 1.7, [5.2, 2.6, 2.6, 1.2], [[VMT('Feature', 'Característica'), VMT('Archetype', 'Arquétipo'), VMT('Yours', 'O seu'), '']].concat(cmp.slice(0, 15).map(r => [r.label, r.a, r.b, r.ok ? '✓' : '✗'])), 0.32)]));
+    const checks = T.feats.filter(f => f.get).map(f => { const o = vOk(f); return [VL(f.label), typeof f.model === 'string' ? f.model : VL(f.model), vVal(f, o.v), o.ok ? '✓' : '✗', VERN_SRC[f.src] ? VERN_SRC[f.src].tag : '']; });
+    if (checks.length) sl.push(head(VMT('The archetype’s checklist', 'A lista de verificação do arquétipo'), VMT('On the study’s tabs', 'Nos separadores do estudo')).concat([tbl(0.6, 1.7, [3.8, 3.4, 2.0, 0.8, 2.2], [[VMT('Check', 'Verificação'), VMT('Model', 'Modelo'), VMT('Yours', 'O seu'), '', VMT('Source', 'Fonte')]].concat(checks.slice(0, 14)), 0.33)]));
+    sl.push(head(VMT('From the house to the climate', 'Da casa ao clima'), VMT('Olgyay’s optimum, the archetype and yours', 'O óptimo de Olgyay, o arquétipo e o seu') + ' · ' + O.code).concat([tbl(0.6, 1.7, [4.4, 2.8, 2.6, 2.4], [['', 'Olgyay', VMT('Archetype', 'Arquétipo'), VMT('Yours', 'O seu')]].concat(O.rows), 0.4), text(0.6, 3.9, 12, 3, O.notes, 12)]));
+    sl.push(head(VMT('Rooms', 'Divisões'), rc.ok + ' / ' + rc.n + ' ' + VMT('placed well', 'bem colocadas')).concat([tbl(0.6, 1.7, [4.4, 2.0, 2.4, 3.2], [[VMT('Room', 'Divisão'), VMT('Floor', 'Piso'), VMT('Area', 'Área'), '']].concat(R.V.rooms.slice(0, 14).map(q => [VL(q.n), q.fl === 0 ? VMT('ground', 'térreo') : q.fl, fmt(q.w * q.d, 1) + ' m²', q.bad ? (q.inVol ? VMT('overlaps', 'sobrepõe') : VMT('outside the body', 'fora do corpo')) : '✓'])), 0.34)]));
+    const bib = ARCH_BIB.filter(g => g.types && g.types.indexOf(R.type) >= 0).reduce((a, g) => a.concat(g.refs), []).map(r => r.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&'));
+    if (bib.length) sl.push(head(VMT('Sources', 'Fontes'), VMT('Archetypes bibliography (APA 7)', 'Bibliografia dos arquétipos (APA 7)')).concat([text(0.6, 1.7, 12.1, 5.6, bib.slice(0, 12), 10)]));
+    const blob = E.build(sl);
+    download(blob, slugify(sitePrefix() + VMT('popular study', 'estudo popular')) + '.' + (format === 'odp' ? 'odp' : 'pptx'));
+    toast(VMT('Report exported', 'Relatório exportado'));
+    return true;
+  } catch (e) { console.error(e); toast(VMT('The report could not be built', 'Não foi possível construir o relatório')); return false; }
+}
 
 const TABS_OLGYAY = [
   { key:'environment', label:'Environmental', build:buildEnvironment },
