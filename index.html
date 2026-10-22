@@ -966,7 +966,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.146.0',
+  version:     '1.147.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23284,7 +23284,7 @@ function vmRoofArea(v) {
   if (r.type === 'dome') { const rr = (v.L + v.D) / 4, h = vmRoofRise(v); return Math.PI * (rr * rr + h * h); }
   return Ae / Math.max(0.2, Math.cos(th));
 }
-function vmOpenArea(v, f) { return (v.open[f] || []).reduce((a, o) => a + o.w * o.h, 0); }
+function vmOpenArea(v, f) { return (v.open[f] || []).filter(o => o.fl < v.fl).reduce((a, o) => a + o.w * o.h, 0); }
 /** The model's numbers, body by body and in all. */
 function vmMetrics(vm) {
   const vs = vmAllVols(vm);
@@ -23295,7 +23295,7 @@ function vmMetrics(vm) {
     let wa = P * H;
     if (v._party) { if (v._party.W) { wa -= v.D * H / 2; party += v.D * H / 2; } if (v._party.E) { wa -= v.D * H / 2; party += v.D * H / 2; } }
     wall += wa;
-    VM_FACES.forEach(f => (v.open[f] || []).forEach(o => { if (o.t === 'w') glaze += o.w * o.h; else door += o.w * o.h; }));
+    VM_FACES.forEach(f => (v.open[f] || []).filter(o => o.fl < v.fl).forEach(o => { if (o.t === 'w') glaze += o.w * o.h; else door += o.w * o.h; }));
     vol += A * H + (v.roof.type === 'flat' ? 0 : A * vmRoofRise(v) / (['cone', 'pyramid'].indexOf(v.roof.type) >= 0 ? 3 : v.roof.type === 'dome' ? 1.5 : 2));
     const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash; massW += wa * W.t * W.rho;
   });
@@ -23381,7 +23381,7 @@ function vmVolFaces(v, opts) {
       if (v.wall.buttress && (f === 'S' || f === 'N')) for (let i = 1; i <= v.wall.buttress; i++) { const u = i * len / (v.wall.buttress + 1), hb = vmH(v) * 0.75;
         push([at(u - 0.3, z0, 0.6), at(u + 0.3, z0, 0.6), at(u + 0.3, z0 + hb * 0.55, 0.6), at(u - 0.3, z0 + hb, 0.02)], vmShade(wc, 0.95), { thin:true });
         push([at(u + 0.3, z0, 0.6), at(u + 0.3, z0, 0.02), at(u + 0.3, z0 + hb, 0.02), at(u + 0.3, z0 + hb * 0.55, 0.6)], vmShade(wc, 0.78), { thin:true }); }
-      (v.open[f] || []).forEach(o => {
+      (v.open[f] || []).filter(o => o.fl < v.fl).forEach(o => {
         const cu = o.pos * len, z = z0 + o.fl * v.fh + (o.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
         const fr = v.wall.frames ? 0.13 : 0;
         if (fr) push([at(cu - o.w / 2 - fr, z - (o.t === 'd' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, z - (o.t === 'd' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, zz + fr, 0.03), at(cu - o.w / 2 - fr, zz + fr, 0.03)],
@@ -23396,7 +23396,7 @@ function vmVolFaces(v, opts) {
     for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([lo[i], lo[j], hi[j], hi[i]], wc, { wall:'R' }); segs.push(F[F.length - 1]); }
     if (v.wall.barra && lime) { const b0 = vmRing(v, 0.02, z0), b1 = vmRing(v, 0.02, z0 + 0.45); for (let i = 0; i < N; i++) { const j = (i + 1) % N; host = segs[i]; push([b0[i], b0[j], b1[j], b1[i]], v.wall.barra, { thin:true }); } host = null; }
     /* openings on a round wall: placed by face, at the ring's point that faces it */
-    VM_FACES.forEach(f => (v.open[f] || []).forEach(o => {
+    VM_FACES.forEach(f => (v.open[f] || []).filter(o => o.fl < v.fl).forEach(o => {
       const ang = { S:-Math.PI / 2, E:0, N:Math.PI / 2, W:Math.PI }[f] + (o.pos - 0.5) * 1.2, a = v.L / 2 + 0.03, b = v.D / 2 + 0.03;
       const c = [v.x + a * Math.cos(ang), v.y + b * Math.sin(ang)], t = [-Math.sin(ang), Math.cos(ang)];
       const z = z0 + o.fl * v.fh + (o.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
@@ -23666,15 +23666,18 @@ function vmElevSVG(vm, face, w, opts) {
     else if (r.type === 'gable' || r.type === 'ground') poly([[c - hw - e, H - e * Math.tan(th)], [c + hw + e, H - e * Math.tan(th)], [c, H + rise]], rc);
     else { const run = Math.min(v.L, v.D) / 2, top = Math.max(0, hw - run), y = H - e * Math.tan(th);
       poly(top > 0.05 ? [[c - hw - e, y], [c + hw + e, y], [c + top, H + rise], [c - top, H + rise]] : [[c - hw - e, y], [c + hw + e, y], [c, H + rise]], rc); }
-    (v.open[face] || []).forEach(q => { const len = across ? v.L : v.D, uu = (face === 'S' || face === 'E' ? -hw + q.pos * len : hw - q.pos * len) + c, z = z0 + q.fl * v.fh + (q.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + q.h, z0 + (q.fl + 1) * v.fh - 0.1);
+    (v.open[face] || []).filter(q => q.fl < v.fl).forEach(q => { const len = across ? v.L : v.D, uu = (face === 'S' || face === 'E' ? -hw + q.pos * len : hw - q.pos * len) + c, z = z0 + q.fl * v.fh + (q.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + q.h, z0 + (q.fl + 1) * v.fh - 0.1);
       poly([[uu - q.w / 2, z], [uu + q.w / 2, z], [uu + q.w / 2, zz], [uu - q.w / 2, zz]], q.t === 'd' ? '#5A4632' : '#3E4C57'); });
   });
+  /* a black dot on top of each body's wall: drag it down or up to take a storey off or put one back, the roof riding on top */
+  if (opts.handles) vs.filter(v => !v._r).forEach(v => { const z0 = v.raise || 0, H = z0 + vmH(v), p = P(u(v), H);
+    o.push('<circle data-hvol="' + v._i + '" cx="' + p[0] + '" cy="' + p[1] + '" r="7" fill="#1F1C19" stroke="#fff" stroke-width="2" style="cursor:ns-resize"><title>' + VL({ en:'Drag down or up: storeys of this body', pt:'Arraste para baixo ou para cima: pisos deste corpo' }) + '</title></circle>'); });
   (vm.els || []).filter(E => E.t === 'chimney').forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
     const z0 = v.raise || 0, H = z0 + vmH(v), x = v.x - v.L / 2 + (E.u || 0.75) * v.L, y = v.y - v.D / 2 + (E.v || 0.5) * v.D, uu = across ? (face === 'S' ? x : -x) : (face === 'E' ? y : -y);
     const zb = H + vmRoofAt(v, x, y) - 0.2, zt = zb + (E.h || 1.2) + 0.2, ww = E.kind === 'ale' ? 1.2 : E.kind === 'esp' ? 1.8 : 0.6;
     o.push('<polygon points="' + [[uu - ww / 2, zb], [uu + ww / 2, zb], [uu + ww / 2, zt], [uu - ww / 2, zt]].map(p => P(p[0], p[1]).join(',')).join(' ') + '" fill="#F2EFE6" stroke="#3A3530" stroke-width="1"/>'); }));
   o.push('<text x="10" y="16" font-family="sans-serif" font-size="12" fill="#3A3530">' + VL({ en:{ S:'South', E:'East', N:'North', W:'West' }[face] + ' elevation', pt:'Alçado ' + { S:'sul', E:'nascente', N:'norte', W:'poente' }[face] }) + '</text>');
-  return '<svg xmlns="http://www.w3.org/2000/svg" class="vmelev" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' + o.join('') + '</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" class="vmelev" data-s="' + s.toFixed(4) + '" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' + o.join('') + '</svg>';
 }
 /** A plan and the south elevation as DXF (R12, lines and circles), metres. */
 function vmDXF(vm) {
@@ -24032,8 +24035,37 @@ function buildModeller(host) {
     const es = el('select', { onchange:e => { VM_FACE = e.target.value; drawViews(); } });
     vmFaceOpts().forEach(([f, l]) => es.appendChild(el('option', { value:f, text:l, selected:f === VM_FACE ? 'selected' : null })));
     ec.appendChild(es);
-    elevBox.insertAdjacentHTML('beforeend', vmElevSVG(M, VM_FACE, 520));
+    elevBox.insertAdjacentHTML('beforeend', vmElevSVG(M, VM_FACE, 520, { handles:true }));
+    vmHeightDrag(elevBox);
     drawBelow();
+  }
+  /** Dragging a body's wall-top dot on the elevation: the wall shortens or grows by whole storeys, the roof as it was on top. */
+  function vmHeightDrag(box) {
+    const svg = box.querySelector('svg.vmelev');
+    if (!svg) return;
+    let drag = null;
+    const sc = () => { const b = svg.getBoundingClientRect(); return +svg.dataset.s * b.height / +svg.getAttribute('height'); };
+    svg.addEventListener('pointerdown', ev => {
+      const t = ev.target;
+      if (!t.dataset || t.dataset.hvol === undefined) return;
+      const v = vm().vols[+t.dataset.hvol];
+      if (!v) return;
+      drag = { v, y0:ev.clientY, H0:v.fl * v.fh, fh:v.fh, s:sc() };
+      try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
+      ev.preventDefault();
+    });
+    svg.addEventListener('pointermove', ev => {
+      if (!drag) return;
+      const want = drag.H0 + (drag.y0 - ev.clientY) / drag.s, fl = clamp(Math.round(want / drag.fh), 1, 6);
+      if (fl === drag.v.fl) return;
+      drag.v.fl = fl;
+      const nw = vmElevSVG(vm(), VM_FACE, 520, { handles:true }), vb = (nw.match(/viewBox="([^"]+)"/) || [])[1], hh = (nw.match(/ height="([^"]+)"/) || [])[1];
+      if (vb) svg.setAttribute('viewBox', vb); if (hh) svg.setAttribute('height', hh); svg.dataset.s = (nw.match(/data-s="([^"]+)"/) || [])[1] || svg.dataset.s;
+      svg.innerHTML = nw.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
+      toast(VL(drag.v.name) + ': ' + fl + ' ' + (fl === 1 ? VMT('storey', 'piso') : VMT('storeys', 'pisos')));
+    });
+    const up = () => { if (drag) { drag = null; drawEditor(); drawViews(); } };
+    svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
   }
   function vmPlanDrag(svg, PL) {
     if (!svg) return;
