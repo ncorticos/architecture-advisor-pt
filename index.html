@@ -965,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.134.0',
+  version:     '1.135.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20207,7 +20207,7 @@ Object.assign(MN_TYPES, {
       pt:'Pescadores vindos da Vieira de Leiria que viveram primeiro nos barcos, depois em palheiros de caniço, depois em casas de madeira erguidas sobre estacas acima das cheias do Tejo. Pequena e simples, qualquer que fosse a família: uma divisão principal polivalente e duas muito menores; uma galeria ou varanda de madeira; a cozinha fora, num anexo de madeira, ou dentro; telha nas aldeias que a podiam pagar. As estacas forradas a tábuas formam uma pequena cave.' },
     model:{ L:7, D:4, fl:1, fh:2.4, rot:180, form:'rect', raise:{ h:1.2, kind:'piers' }, roof:{ n:2, th:25, bei:0.3, porch:true },
       open:{ S:vOpen([W(0.2, 0.25), D(0.5, 0.35), W(0.8, 0.25)], 0.12), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
-      render:{ en:'timber walls, tile roof, blue door', pt:'paredes de madeira, telhado de telha, porta azul' },
+      render:{ en:'timber walls, tile roof, blue door', pt:'paredes de madeira, telhado de telha, porta azul' }, paint:'#6E9CC4',
       walls:{ en:'timber boards on a timber frame, raised on stakes', pt:'tábuas de madeira sobre estrutura de madeira, erguida em estacas' } },
     feats:[
       vFloors({ en:'1, on stakes', pt:'1, sobre estacas' }, 1, 1, 'NER'),
@@ -20927,6 +20927,25 @@ Object.assign(VERN_SRC, {
   DGA:{ tag:'Dias & Galhano', cite:'Dias, J., &amp; Galhano, F. (1953/1986). <i>Aparelhos de elevar a água de rega: Contribuição para o estudo do regadio em Portugal</i>. Lisboa: Dom Quixote.', url:'https://books.openedition.org/etnograficapress/6163' },
   GEO:{ tag:'Geoparque Algarvensis', cite:'Geoparque Algarvensis (Loulé, Silves, Albufeira). «Nora de Messines» — Património etnográfico.', url:'https://geoparquealgarvensis.pt/patrimonio-cultura/59-patrimonio-etnografico/579-nora-de-messines' }
 });
+/* the Tagus avieiros, from the villages themselves: Palhota and Escaroupim */
+Object.assign(VERN_SRC, {
+  AND:{ tag:'Andarilho 2022', cite:'Andarilho. (2022, 9 de março). «Palhota, uma das mais bonitas aldeias avieiras».', url:'https://andarilho.pt/2022/03/09/palhota-uma-das-mais-bonitas-aldeias-avieiras/' },
+  ADA:{ tag:'Alma de Aventureiros', cite:'Alma de Aventureiros. «Escaroupim e Palhota — Histórias de avieiros no Tejo».', url:'https://almadeaventureiros.pt/ainda-existem-avieiros-no-tejo/' },
+  CSM:{ tag:'CM Salvaterra de Magos', cite:'Câmara Municipal de Salvaterra de Magos. «Casa típica avieira» — Aldeia Avieira do Escaroupim.', url:'https://www.cm-salvaterrademagos.pt/concelho/aldeia-avieira-do-escaroupim/item/3622-casa-tipica-avieira' },
+  MAR:{ tag:'Marafona 2015', cite:'Marafona, S. C. M. <i>Os Avieiros: Cultura e reabilitação do património vernacular</i> (dissertação de mestrado). Porto: FAUP — the Palhota settlement.', url:'https://repositorio-aberto.up.pt/handle/10216/77208' }
+});
+vAdd('pt-avieiro', [
+  vI('site', { en:'First the boat was the house; then cane huts on the bank; then timber houses raised on stakes against the floods. The stakes, of timber at first and of variable height, are now mostly cement pillars; the landing stage still stands on timber piles.', pt:'Primeiro o barco foi a casa; depois palheiros de caniço na margem; depois casas de madeira erguidas em estacas contra as cheias. As estacas, primeiro de madeira e de altura variável, são hoje sobretudo pilares de cimento; o cais continua sobre estacaria de madeira.' }, 'ADA'),
+  vI('visualization', { en:'Small, of timber painted in bright colours — the habit brought from Vieira de Leiria; two slopes; reached by an outside stair to the varanda.', pt:'Pequena, de madeira pintada de cores vivas — hábito trazido da Vieira de Leiria; duas águas; acesso por escada exterior até à varanda.' }, 'CSM'),
+  vI('site', { en:'Inside (the Casa Típica of Escaroupim): the kitchen with its hearth lined in brick and filled with beaten earth, the sala with the clothes chests, small bedrooms with iron beds — and over the bedrooms a loft for the fishing gear.', pt:'Por dentro (a Casa Típica do Escaroupim): a cozinha com a lareira ladeada de tijolo e cheia de terra batida, a sala com os baús da roupa, quartos pequenos com camas de ferro — e por cima dos quartos um sótão para os apetrechos de pesca.' }, 'CSM'),
+  vI('site', { en:'Palhota (Valada, Cartaxo), on the right bank: about twenty houses of avieiro build, most on stakes — it was once called «Mouchão das Casas Altas»; the 1979 floods swept away its small southern group. Alves Redol lived there for months while writing «Avieiros» (1942). At least two house types: the original, kept, and a newer one.', pt:'Palhota (Valada, Cartaxo), na margem direita: cerca de duas dezenas de casas de traça avieira, a maioria palafitas — chegou a chamar-se «Mouchão das Casas Altas»; as cheias de 1979 levaram o pequeno núcleo sul. Alves Redol viveu lá meses enquanto escrevia «Avieiros» (1942). Pelo menos dois tipos de casa: o original, preservado, e um mais recente.' }, 'AND')
+]);
+(() => { const g = ARCH_BIB.find(x => x.types && x.types.indexOf('pt-avieiro') >= 0) || ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
+  if (g) { if (g.types && g.types.indexOf('pt-avieiro') < 0) g.types.push('pt-avieiro');
+    g.refs.push('Andarilho. (2022, March 9). <i>Palhota, uma das mais bonitas aldeias avieiras</i>. https://andarilho.pt/2022/03/09/palhota-uma-das-mais-bonitas-aldeias-avieiras/',
+      'Alma de Aventureiros. (n.d.). <i>Escaroupim e Palhota: Histórias de avieiros no Tejo</i>. https://almadeaventureiros.pt/ainda-existem-avieiros-no-tejo/',
+      'Câmara Municipal de Salvaterra de Magos. (n.d.). <i>Casa típica avieira</i>. https://www.cm-salvaterrademagos.pt/concelho/aldeia-avieira-do-escaroupim/item/3622-casa-tipica-avieira',
+      'Marafona, S. C. M. (2015). <i>Os Avieiros: Cultura e reabilitação do património vernacular</i> [Master’s dissertation, Universidade do Porto]. https://repositorio-aberto.up.pt/handle/10216/77208'); } })();
 /* The town houses of the icons — drawn between their neighbours — and the
    dwellings the sources give no chimney (the smoke through the tiles). */
 const VICON_URBAN = ['pt-porto-esguia', 'pt-porto-ilha', 'pt-lisboa-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-ale-d',
@@ -20969,7 +20988,7 @@ function vIcon(key, size) {
   if (!T) return '';
   const m = T.model, L = m.L, Dd = m.D, fl = m.fl, fh = m.fh, H = fl * fh;
   const rp = typeof m.render === 'function' ? m.render({ nuts:'' }) : m.render, pr = parseRenderPrompt(rp.en);
-  const wc = pr.wall ? pr.wall.c : '#E8E4DC', rc = pr.roof ? pr.roof.c : '#A45E41', dc = pr.door ? pr.door.c : '#5A4632';
+  const wcAll = m.paint || (pr.wall ? pr.wall.c : '#E8E4DC'), wc = wcAll, rc = pr.roof ? pr.roof.c : '#A45E41', dc = pr.door ? pr.door.c : '#5A4632';
   const wk = pr.wall ? pr.wall.key : 'plaster', rk = pr.roof ? pr.roof.key : 'tile';
   const R = m.roof, zones = R.zones && R.zones.length ? R.zones : [{ f0:0, f1:1, n:R.n, th:R.th, par:R.par }];
   const rz = m.raise ? +m.raise.h || 0 : 0, rkind = m.raise ? m.raise.kind : null;
@@ -21199,6 +21218,8 @@ function vIcon(key, size) {
       out.push('<path d="M' + a[0].toFixed(2) + ',' + a[1].toFixed(2) + ' Q' + (b[0] + 0.6).toFixed(2) + ',' + b[1].toFixed(2) + ' ' + c[0].toFixed(2) + ',' + c[1].toFixed(2) + '" fill="none" stroke="rgba(140,140,140,' + (0.5 - k * 0.1) + ')" stroke-width="' + (0.16 - k * 0.03).toFixed(2) + '" stroke-linecap="round"/>'); });
   }
   if (dwelling && !smokeOnly) {
+    /* a painted timber house has a masonry chimney, whitewashed */
+    const wc = m.paint ? '#ECE8E0' : wcAll;
     /* the Alentejo chimney: wide, rising from inside the wall, off the centre */
     const cw = chimKind === 'ale' ? 1.1 : 0.6, cx = chimKind === 'ale' ? L * 0.66 : Math.min(L * 0.72, L - 0.9), cy = chimKind === 'ale' ? Dd * 0.3 : Dd * 0.55, zb = roofZ(cx + cw / 2, cy) - 0.2, zt = Math.max(zb + 1.3, roofZ(cx, Dd / 2) + 0.6);
     face([P(cx, cy, zb), P(cx + cw, cy, zb), P(cx + cw, cy, zt), P(cx, cy, zt)], wc, 0.05); face([P(cx + cw, cy, zb), P(cx + cw, cy + 0.6, zb), P(cx + cw, cy + 0.6, zt), P(cx + cw, cy, zt)], vShade(wc, 0.8), 0.05);
@@ -21210,6 +21231,22 @@ function vIcon(key, size) {
   }
   /* a porch or a vine pergola in front of the south wall */
   if (R.porch || R.latada) { const w = Math.min(8, Math.max(1, L - 2)), x = (L - w) / 2, d = 2.2, z = Math.min(H, fh) - 0.15;
+    if (rz > 0 && rkind === 'piers') {
+      /* on stakes the porch stands on a timber deck — the long varanda to the river — with its rail and the stair down to the ground at one end */
+      const wood = '#8A6A48', dark = '#5E4126', n = Math.max(3, Math.ceil(rz / 0.19)), r = rz / n, t = 0.26, sw = 0.9, xs = x + w;
+      for (let k = 0; k <= Math.round(w / 1.6); k++) { const px = x + 0.05 + (w - 0.2) * k / Math.max(1, Math.round(w / 1.6));
+        face([P(px, -d, -rz), P(px + 0.15, -d, -rz), P(px + 0.15, -d, 0), P(px, -d, 0)], '#6E5238', 0.03); }
+      face([P(x, -d, -0.12), P(x + w, -d, -0.12), P(x + w, -d, 0), P(x, -d, 0)], vShade(wood, 0.8), 0.03);
+      face([P(x + w, -d, -0.12), P(x + w, 0, -0.12), P(x + w, 0, 0), P(x + w, -d, 0)], vShade(wood, 0.65), 0.03);
+      face([P(x, -d, 0), P(x + w, -d, 0), P(x + w, 0, 0), P(x, 0, 0)], wood, 0.03);
+      for (let j = 0; j < n; j++) { const a = xs + j * t, b = a + t, h = -r * (j + 1);
+        face([P(a, -d, -rz), P(b, -d, -rz), P(b, -d, h), P(a, -d, h)], vShade(wood, 0.75), 0.02);
+        face([P(b, -d, -rz), P(b, -d + sw, -rz), P(b, -d + sw, h), P(b, -d, h)], vShade(wood, 0.62), 0.02);
+        face([P(a, -d, h), P(b, -d, h), P(b, -d + sw, h), P(a, -d + sw, h)], vShade(wood, 1.1), 0.02); }
+      const nb = Math.max(2, Math.round(w / 0.25));
+      for (let k = 1; k < nb; k++) line(P(x + w * k / nb, -d, 0), P(x + w * k / nb, -d, 0.9), dark, 0.04);
+      line(P(x, -d, 0.9), P(x + w, -d, 0.9), dark, 0.09); line(P(x, -d, 0.9), P(x, 0, 0.9), dark, 0.07); line(P(x, -d, 0), P(x, -d, 0.9), dark, 0.07);
+    }
     [x + 0.1, x + w - 0.25].forEach(px => face([P(px, -d, 0), P(px + 0.15, -d, 0), P(px + 0.15, -d, z), P(px, -d, z)], '#6E4B2E', 0.03));
     if (R.latada) { for (let t = 0; t <= 1.001; t += 0.125) line(P(x + w * t, -d, z), P(x + w * t, 0, z), '#6E4B2E', 0.05); face([P(x, -d, z + 0.08), P(x + w, -d, z + 0.08), P(x + w, 0, z + 0.08), P(x, 0, z + 0.08)], 'rgba(110,150,70,.55)', 0.02); }
     else face([P(x, -d, z), P(x + w, -d, z), P(x + w, 0, z + 0.4), P(x, 0, z + 0.4)], vShade(rc, 0.95)); }
