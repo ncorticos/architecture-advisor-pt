@@ -956,7 +956,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.126.0',
+  version:     '1.127.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -18916,6 +18916,8 @@ function vernOptimum(C) {
 
 
 /* --- writing the model into the tabs -------------------------------------- */
+/** The point a fraction f along a wall, its middle when the model sets none. */
+const vAlong = (sg, f) => { const k = f === undefined ? 0.5 : f; return [sg.a[0] + (sg.b[0] - sg.a[0]) * k, sg.a[1] + (sg.b[1] - sg.a[1]) * k]; };
 function vernApply(scope) {
   const R = vernRead();
   if (!R) return;
@@ -18945,12 +18947,13 @@ function vernApply(scope) {
   if ((all || scope === 'site') && m.loggia) {
     /* a recessed porch or loggia cut into the main facade, on the ground floor unless the model says otherwise */
     const sg = planModel(MASS).segs.filter(q => segFace(q) === 'S').reduce((a, q) => !a || q.len > a.len ? q : a, null);
-    if (sg) MASS.balc = [{ f:'S', x:(sg.a[0] + sg.b[0]) / 2, y:(sg.a[1] + sg.b[1]) / 2, mode:'in', w:Math.min(m.loggia.w, Math.floor(sg.len * 10) / 10), d:m.loggia.d, lv:m.loggia.lv || 1, corner:0 }];
+    if (sg) MASS.balc = [{ f:'S', x:vAlong(sg, m.loggia.at)[0], y:vAlong(sg, m.loggia.at)[1], mode:'in', w:Math.min(m.loggia.w, Math.floor(sg.len * 10) / 10), d:m.loggia.d || 1.5, lv:m.loggia.lv || 1, corner:0 }];
   }
   if ((all || scope === 'site') && m.balc && MASS.fl >= 2) {
     /* the varanda on the main facade, reached by its outside stair */
     const sg = planModel(MASS).segs.filter(q => segFace(q) === 'S').reduce((a, q) => !a || q.len > a.len ? q : a, null);
-    if (sg) MASS.balc = [{ f:'S', x:(sg.a[0] + sg.b[0]) / 2, y:(sg.a[1] + sg.b[1]) / 2, mode:'out', w:Math.min(m.balc, Math.floor(sg.len)), d:1.2, lv:Math.min(m.balcLv || 2, MASS.fl), corner:0, stair:{ w:STAIR_W } }];
+    /* beside a loggia it is the landing at the stair's head, so both are kept */
+    if (sg) MASS.balc = (m.loggia ? MASS.balc : []).concat([{ f:'S', x:vAlong(sg, m.balcAt)[0], y:vAlong(sg, m.balcAt)[1], mode:'out', w:Math.min(m.balc, Math.floor(sg.len)), d:1.2, lv:Math.min(m.balcLv || 2, MASS.fl), corner:0, stair:{ w:STAIR_W } }]);
   }
   if (all || scope === 'openings') {
     ['S', 'N', 'E', 'W'].forEach(f => {
@@ -19560,8 +19563,8 @@ const MN_TYPES = {
     where:{ en:'The plateaus of Trás-os-Montes — Barroso, Montesinho, Mirandês; the Douro valleys in schist and tile', pt:'Os planaltos de Trás-os-Montes — Barroso, Montesinho, Terra de Miranda; os vales do Douro em xisto e telha' },
     summary:{ en:'Stone, two floors of different use — animals and stores below, the house above — an outside stair and a balcony. Raw stone without lime; thatch or slate, tile only from the mid-20th century. The kitchen is the essential room; often no oven, the village oven shared. The larger houses close a patio (curralada) behind a carriage door; in Barroso the elementary house has one room per floor.',
       pt:'Pedra, dois pisos de funções diferentes — animais e arrumos em baixo, a casa em cima — escada exterior e varanda. Pedra crua, sem cal; colmo ou lousa, a telha só a partir de meados do século XX. A cozinha é a divisão essencial; muitas vezes sem forno, partilhado o forno do povo. As casas maiores fecham um pátio (curralada) atrás da porta carral; no Barroso a casa elementar tem uma divisão por piso.' },
-    model:{ L:7, D:6, fl:2, fh:2.4, rot:180, form:'rect', balc:2.5, roof:{ n:2, th:32, bei:0.25 },
-      open:{ S:vOpen([D(0.2, 0.35, [{ door:true }, { door:true }]), W(0.7, 0.3, [{ on:false }, { on:true }])], 0.07, 1.0, 1.8), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+    model:{ L:7, D:6, fl:2, fh:2.4, rot:180, form:'rect', balc:2.5, balcAt:0.24, roof:{ n:2, th:32, bei:0.25 },
+      open:{ S:vOpen([Object.assign(D(0.2, 0.35, [{ door:true }, { door:true }]), { off:-1.6 }), W(0.7, 0.3, [{ on:false }, { on:true }])], 0.07, 1.0, 1.8), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
       render:S => S.nuts === 'Douro' ? { en:'schist walls, tile roof, timber door', pt:'paredes de xisto, telhado de telha, porta de madeira' } : { en:'granite stone walls, slate roof, timber door', pt:'paredes de granito, telhado de lousa, porta de madeira' },
       walls:{ en:'schist or granite as the place gives it, without lime; timber for balconies, floors and roof', pt:'xisto ou granito conforme o lugar, sem cal; madeira nas varandas, soalhos e coberturas' } },
     feats:[
@@ -19580,8 +19583,8 @@ const MN_TYPES = {
     where:{ en:'Beira Interior, Cova da Beira, the foothills of the Estrela; schist villages of the Pinhal Interior', pt:'Beira Interior, Cova da Beira, a encosta da Estrela; as aldeias do xisto do Pinhal Interior' },
     summary:{ en:'Compact, of exposed stone and small windows, on two storeys with stores below; porches with outside stairs, sometimes glazed against the strong winds; no chimney, so no heat is lost; often a patio in front for farm work. Granite, schist and clay; thatch was common. A surveyed farmhouse at the foot of the Estrela faces south-east, sheltered from the wind by a line of trees, deciduous trees shading its patio to the south, its back bermed into the ground on the north.',
       pt:'Compacta, de pedra à vista e janelas pequenas, em dois pisos com arrumos em baixo; alpendres com escadas exteriores, por vezes envidraçados contra os ventos fortes; sem chaminé, para não perder calor; muitas vezes um pátio à frente para os trabalhos agrícolas. Granito, xisto e barro; o colmo era comum. Uma casa levantada no sopé da Estrela vira a sudeste, abrigada do vento por uma cortina de árvores, árvores de folha caduca a sombrear o pátio a sul, as costas enterradas no terreno a norte.' },
-    model:{ L:8, D:6, fl:2, fh:2.4, rot:140, form:'rect', balc:2.5, roof:{ n:2, th:32, bei:0.25 },
-      open:{ S:vOpen([D(0.2, 0.35, [{ door:true }, { door:true }]), W(0.7, 0.3, [{ on:false }, { on:true }])], 0.08, 1.0, 1.8), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+    model:{ L:8, D:6, fl:2, fh:2.4, rot:140, form:'rect', balc:2.5, balcAt:0.2, roof:{ n:2, th:32, bei:0.25 },
+      open:{ S:vOpen([Object.assign(D(0.2, 0.35, [{ door:true }, { door:true }]), { off:-1.8 }), W(0.7, 0.3, [{ on:false }, { on:true }])], 0.08, 1.0, 1.8), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
       render:S => /Pinhal Interior/.test(S.nuts || '') ? { en:'schist walls, slate roof, timber door', pt:'paredes de xisto, telhado de lousa, porta de madeira' } : { en:'granite stone walls, tile roof, timber door', pt:'paredes de granito, telhado de telha, porta de madeira' },
       walls:{ en:'granite or schist, exposed; pine and oak inside', pt:'granito ou xisto à vista; pinho e carvalho no interior' } },
     feats:[
@@ -20961,16 +20964,52 @@ function vIcon(key, size) {
     if (lime && south) { [[0, 0.3], [L - 0.3, L]].forEach(([a, b]) => face([P(a, -0.01, bh), P(b, -0.01, bh), P(b, -0.01, H), P(a, -0.01, H)], vShade(barC, 1.05), 0.015));
       face([P(L + 0.01, 0, bh), P(L + 0.01, 0.3, bh), P(L + 0.01, 0.3, H), P(L + 0.01, 0, H)], vShade(barC, 0.85), 0.015); }
     else { [[0, 0.3], [L - 0.3, L]].forEach(([a, b]) => face([P(a, -0.01, bh), P(b, -0.01, bh), P(b, -0.01, H), P(a, -0.01, H)], vShade(wc, 0.9), 0.015)); } }
+  /* the varanda on the south wall, laid out before the openings it moves:
+     a loggia (varanda recolhida) cut back into its storey; a projecting
+     balcony — or the landing beside a loggia — reached by its stone stair
+     along the front, to the side with more room, as the Site tab builds it */
+  const lg = m.loggia ? (() => {
+    const w = Math.min(m.loggia.w, L - 1), lv = clamp(m.loggia.lv || 1, 1, fl);
+    const x0 = m.loggia.at === undefined ? (L - w) / 2 : clamp(m.loggia.at * L - w / 2, 0.3, L - 0.3 - w);
+    return { x0, x1:x0 + w, lv, d:Math.min(m.loggia.d || 1.5, Dd - 1.5), z0:(lv - 1) * fh, z1:lv * fh - 0.2, cols:m.loggia.cols || 0 };
+  })() : null;
+  const bl = m.balc && fl >= 2 ? (() => {
+    const w = Math.min(m.balc, L - 1), lv = clamp(m.balcLv || 2, 2, fl), z = fh * (lv - 1), d = 1.0;
+    const x = m.balcAt === undefined ? (L - w) / 2 : clamp(m.balcAt * L - w / 2, 0.3, L - 0.3 - w);
+    const n = Math.max(2, Math.ceil(z / 0.19)), r = z / n, roomE = L - x - w, roomW = x;
+    const dir = roomE >= roomW ? 1 : -1, room = dir > 0 ? roomE : roomW;
+    const fits = rm => rm / n >= 0.22;
+    /* straight along the front; else down to the south-east corner and round it along the east wall */
+    const st = { n, r, d, dir, n1:n, t1:Math.min(0.275, room / n), n2:0, t2:0 };
+    if (!fits(room)) {
+      if (roomE > 0.5) { st.dir = 1; st.n1 = Math.max(1, Math.min(n - 2, Math.floor(roomE / 0.25))); st.t1 = Math.min(0.275, roomE / st.n1);
+        st.n2 = n - st.n1 - 1; st.t2 = Math.min(0.275, (Dd - 0.3) / Math.max(1, st.n2)); }
+      else st.t1 = room / n;
+    }
+    return { x, w, lv, z, d, st };
+  })() : null;
   /* openings on the south (and east) walls, floor by floor, from the model itself */
   const openings = (fc, len, at) => {
     const o = m.open && m.open[fc];
     if (!o || !o.units || !(o.wwr > 0)) return;
     const sill = o.sillZ || 0.9, head = o.headZ || 1.8, hh = Math.max(0.4, head - sill);
     const band = Math.min(len * 0.92, o.wwr * len * H / (fl * hh));
+    const taken = [];
     o.units.forEach(u => { for (let k = 0; k < fl; k++) {
       const F = u.floors && u.floors[k] ? u.floors[k] : {}, on = 'on' in F ? F.on : u.on !== false, door = 'door' in F ? F.door : !!u.door;
       if (!on || (u.floors && !u.floors[k] && k > 0 && !u.floors.length)) continue;
-      const w = Math.max(door ? 0.8 : 0.45, Math.min(door ? 1.4 : 1.4, (u.frac || 0.2) * band)), cx = (len - band) / 2 + (u.pos === undefined ? 0.5 : u.pos) * band;
+      const w = Math.max(door ? 0.8 : 0.45, Math.min(door ? 1.4 : 1.4, (u.frac || 0.2) * band));
+      let cx = (len - band) / 2 + ('pos' in F ? F.pos : u.pos === undefined ? 0.5 : u.pos) * band + (+('off' in F ? F.off : u.off) || 0);
+      if (fc === 'S') {
+        /* the door of the varanda's storey opens onto it; what falls in a loggia's mouth stands on its back wall */
+        if (door && bl && k === bl.lv - 1) cx = bl.x + bl.w / 2;
+        if (lg && k === lg.lv - 1 && cx + w / 2 > lg.x0 && cx - w / 2 < lg.x1) continue;
+        /* clear of the openings already on this storey */
+        const hit = c => taken.some(s => s.k === k && c - w / 2 < s.b + 0.3 && c + w / 2 > s.a - 0.3);
+        if (hit(cx)) { const ks = taken.filter(s => s.k === k), r = Math.max(...ks.map(s => s.b)) + 0.3 + w / 2, l = Math.min(...ks.map(s => s.a)) - 0.3 - w / 2;
+          cx = r + w / 2 < len - 0.2 ? r : l; }
+        taken.push({ k, a:cx - w / 2, b:cx + w / 2 });
+      }
       const z0 = k * fh + (door ? 0.02 : sill), z1 = k * fh + (door ? Math.min(2.1, fh * 0.86) : Math.min(head, fh - 0.15));
       const q = [at(cx - w / 2, z0), at(cx + w / 2, z0), at(cx + w / 2, z1), at(cx - w / 2, z1)];
       const fr = 0.13, Q = [at(cx - w / 2 - fr, z0 - (door ? 0 : fr)), at(cx + w / 2 + fr, z0 - (door ? 0 : fr)), at(cx + w / 2 + fr, z1 + fr), at(cx - w / 2 - fr, z1 + fr)];
@@ -20983,14 +21022,70 @@ function vIcon(key, size) {
   };
   openings('S', L, (u, z) => P(u, -0.02, z));
   openings('E', Dd, (u, z) => P(L + 0.02, u, z));
-  /* a loggia cut into the front */
-  if (m.loggia) { const w = Math.min(m.loggia.w, L - 1), x = (L - w) / 2; face([P(x, -0.03, 0), P(x + w, -0.03, 0), P(x + w, -0.03, fh * 0.92), P(x, -0.03, fh * 0.92)], 'rgba(40,32,26,.55)', 0.04); }
-  /* the balcony with its stair, on the upper floor */
-  if (m.balc && fl >= 2) { const w = Math.min(m.balc, L - 2.2), x = Math.max(1.8, (L - w) / 2), z = fh * ((m.balcLv || 2) - 1), d = 1.0;
-    face([P(x, -d, z), P(x + w, -d, z), P(x + w, 0, z), P(x, 0, z)], '#8A6A48', 0.04);
-    face([P(x, -d, z), P(x + w, -d, z), P(x + w, -d, z + 0.9), P(x, -d, z + 0.9)], 'rgba(110,80,50,.55)', 0.04);
-    for (let t = 0; t <= 1.001; t += 0.25) line(P(x + w * t, -d, z), P(x + w * t, -d, z + 0.9), '#5E4126', 0.05);
-    if ((m.balcLv || 2) === 2) face([P(x - 1.6, -d + 0.1, 0), P(x, -d + 0.1, z), P(x, -0.1, z), P(x - 1.6, -0.1, 0)], '#9A9488', 0.04); }
+  /* the loggia: its floor, side and back wall seen through the mouth, a timber guard across it above the ground floor */
+  if (lg) {
+    const { x0, x1, z0, z1, d:dl } = lg, id = 'vlg' + (vIcon.uid = (vIcon.uid || 0) + 1), mouth = [P(x0, -0.03, z0), P(x1, -0.03, z0), P(x1, -0.03, z1), P(x0, -0.03, z1)];
+    out.push('<defs><clipPath id="' + id + '"><polygon points="' + fmtP(mouth) + '"/></clipPath></defs><g clip-path="url(#' + id + ')">');
+    face([P(x0, dl, z0), P(x1, dl, z0), P(x1, dl, z1 + dl), P(x0, dl, z1 + dl)], vShade(wc, 0.55), 0.03);
+    const bd = x0 + Math.min(0.9, (x1 - x0) / 3);
+    face([P(bd, dl - 0.02, z0), P(bd + 0.85, dl - 0.02, z0), P(bd + 0.85, dl - 0.02, z0 + 2.0), P(bd, dl - 0.02, z0 + 2.0)], vShade(dc, 0.8), 0.04);
+    face([P(x0, 0, z0), P(x0, dl, z0), P(x0, dl, z1 + dl), P(x0, 0, z1 + dl)], vShade(wc, 0.7), 0.03);
+    face([P(x0, 0, z0), P(x1, 0, z0), P(x1, dl, z0), P(x0, dl, z0)], lg.lv > 1 ? '#7A5C3E' : vShade(wc, 0.62), 0.03);
+    out.push('</g>');
+    face([P(x0, -0.03, z1 - 0.02), P(x1, -0.03, z1 - 0.02), P(x1, -0.03, z1 + 0.14), P(x0, -0.03, z1 + 0.14)], lg.lv > 1 ? '#6E5238' : vShade(wc, 0.9), 0.03);
+    if (lg.lv > 1) {
+      const gh = 0.9, nb = Math.max(2, Math.round((x1 - x0) / 0.2));
+      for (let k = 1; k < nb; k++) line(P(x0 + (x1 - x0) * k / nb, -0.04, z0), P(x0 + (x1 - x0) * k / nb, -0.04, z0 + gh), '#5E4126', 0.04);
+      line(P(x0, -0.04, z0 + gh), P(x1, -0.04, z0 + gh), '#5E4126', 0.09); line(P(x0, -0.04, z0 + 0.06), P(x1, -0.04, z0 + 0.06), '#5E4126', 0.07);
+    }
+    for (let k = 1; k <= lg.cols; k++) { const cx = x0 + (x1 - x0) * k / (lg.cols + 1);
+      face([P(cx - 0.12, -0.05, z0), P(cx + 0.12, -0.05, z0), P(cx + 0.12, -0.05, z1), P(cx - 0.12, -0.05, z1)], vShade(wc, 1.05), 0.03); }
+  }
+  /* the balcony with its stair: timber slab on beam ends, balustered parapet, the stair a run of stone blocks */
+  if (bl) {
+    const { x, w, z, d, st } = bl, ph = 0.9, wood = '#8A6A48', dark = '#5E4126';
+    const blocks = [];
+    const sStart = st.dir > 0 ? x + w : x;
+    for (let j = 0; j < st.n1; j++) { const a = sStart + st.dir * j * st.t1, b = a + st.dir * st.t1;
+      blocks.push([Math.min(a, b), Math.max(a, b), -d, 0, z - j * st.r]); }
+    if (st.n2 > 0) {
+      const zc = z - st.n1 * st.r, xc = sStart + st.n1 * st.t1;
+      blocks.push([xc, xc + d, -d, 0, zc]);
+      for (let j = 0; j < st.n2; j++) blocks.push([xc, xc + d, j * st.t2, (j + 1) * st.t2, zc - (j + 1) * st.r]);
+    }
+    const stone = ['#B9B3A6', '#9A9488', '#837D72'];
+    /* block by block, far to near; the sides of one flight read as one stepped stone face, so they carry no joints */
+    const flat = (ps, fill) => { ps.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(ps) + '" fill="' + fill + '" stroke="' + fill + '" stroke-width="0.02"/>'); };
+    const edge = ps => out.push('<polyline points="' + fmtP(ps) + '" fill="none" stroke="rgba(0,0,0,.4)" stroke-width="0.04" stroke-linejoin="round"/>');
+    const drawStair = () => {
+      blocks.slice().sort((p, q) => (p[0] + p[1] - p[2] - p[3]) - (q[0] + q[1] - q[2] - q[3])).forEach(([a, b, c, e, h]) => {
+        flat([P(a, c, 0), P(b, c, 0), P(b, c, h), P(a, c, h)], stone[1]);
+        flat([P(b, c, 0), P(b, e, 0), P(b, e, h), P(b, c, h)], stone[2]);
+        face([P(a, c, h), P(b, c, h), P(b, e, h), P(a, e, h)], stone[0], 0.03);
+        edge([P(a, c, h), P(b, c, h), P(b, c, 0)]);
+        if (c === -d) edge([P(b, c, h), P(b, e, h)]); });
+      blocks.slice(0, st.n1).forEach(([a, b, c, e, h], j) => { if (j === st.n1 - 1 || st.n2) edge([P(st.dir > 0 ? b : a, c, 0), P(st.dir > 0 ? a : b, c, 0)]); });
+      const last = blocks[st.n1 - 1];
+      edge([P(sStart, -d, 0), P(st.dir > 0 ? last[1] : last[0], -d, 0)]);
+    };
+    const drawBalc = () => {
+      for (let k = 0; k <= Math.round(w / 0.8); k++) { const bx = x + 0.1 + (w - 0.2) * k / Math.max(1, Math.round(w / 0.8));
+        face([P(bx - 0.06, -d - 0.04, z - 0.32), P(bx + 0.06, -d - 0.04, z - 0.32), P(bx + 0.06, -d - 0.04, z - 0.14), P(bx - 0.06, -d - 0.04, z - 0.14)], dark, 0.02);
+        line(P(bx, 0, z - 0.25), P(bx, -d, z - 0.25), dark, 0.07); }
+      face([P(x, -d, z - 0.14), P(x + w, -d, z - 0.14), P(x + w, -d, z), P(x, -d, z)], vShade(wood, 0.8), 0.03);
+      face([P(x + w, -d, z - 0.14), P(x + w, 0, z - 0.14), P(x + w, 0, z), P(x + w, -d, z)], vShade(wood, 0.65), 0.03);
+      face([P(x, -d, z), P(x + w, -d, z), P(x + w, 0, z), P(x, 0, z)], wood, 0.03);
+      const rail = (a, b) => { const len = Math.hypot(b[0] - a[0], b[1] - a[1]), nb = Math.max(1, Math.round(len / 0.2));
+        for (let k = 1; k < nb; k++) { const p = lerp(a, b, k / nb); line(P(p[0], p[1], z), P(p[0], p[1], z + ph), dark, 0.04); }
+        line(P(a[0], a[1], z + ph), P(b[0], b[1], z + ph), dark, 0.09); line(P(a[0], a[1], z + 0.06), P(b[0], b[1], z + 0.06), dark, 0.06); };
+      const post = (px, py) => line(P(px, py, z), P(px, py, z + ph + 0.05), dark, 0.1);
+      if (st.dir > 0) rail([x, 0], [x, -d]);
+      rail([x, -d], [x + w, -d]);
+      if (st.dir < 0) rail([x + w, -d], [x + w, 0]);
+      post(x, -d); post(x + w, -d);
+    };
+    if (st.dir > 0) { drawBalc(); drawStair(); } else { drawStair(); drawBalc(); }
+  }
   /* the shadow of the eave on the front wall, and the beirado: a row of tile ends along it */
   if (zones.some(z => z.n !== 0)) { face([P(0, -0.01, H - 0.32), P(L, -0.01, H - 0.32), P(L, -0.01, H), P(0, -0.01, H)], 'rgba(0,0,0,.16)', 0.001);
     face([P(L + 0.01, 0, H - 0.32), P(L + 0.01, Dd, H - 0.32), P(L + 0.01, Dd, H), P(L + 0.01, 0, H)], 'rgba(0,0,0,.12)', 0.001); }
@@ -21615,7 +21710,7 @@ const BASE_TYPES = {
     where:{ en:'The Mondego country round Coimbra — Torre de Vilela, Tavarede, Ereira; the «varandim» house of the schist slopes beyond Portela', pt:'O Mondego em volta de Coimbra — Torre de Vilela, Tavarede, Ereira; a casa de varandim das encostas de xisto além da Portela' },
     summary:{ en:'Two storeys: stores below, the dwelling above reached by an outside stone stair parallel to the front, ending in a landing under a porch; a recessed varanda carried on two stone columns. Mesquita de Figueiredo (1913) called it «a type very widespread in Portugal, which some have named the Portuguese house».',
       pt:'Dois pisos: lojas em baixo, a habitação em cima, servida por uma escada exterior de pedra paralela à fachada que termina num patamar alpendrado; uma varanda reentrante sustentada por duas colunas de pedra. Mesquita de Figueiredo (1913) chamou-lhe «um tipo muito espalhado em Portugal, a que alguns chamaram casa portugueza».' },
-    model:{ L:10, D:7, fl:2, fh:2.7, rot:180, form:'rect', balc:3.5, loggia:{ w:3.2 }, roof:{ n:3, th:26, bei:0.4 },
+    model:{ L:10, D:7, fl:2, fh:2.7, rot:180, form:'rect', loggia:{ w:3.2, d:1.8, lv:2, at:0.25, cols:2 }, balc:1.5, balcAt:0.48, roof:{ n:3, th:26, bei:0.4 },
       open:{ S:vOpen([D(0.15, 0.1, [{ door:true }, { on:false }]), W(0.75, 0.1, [{ on:false }, { on:true }]), D(0.5, 0.1, [{ on:false }, { door:true }])], 0.1), N:vOpen([W(0.5, 0.1, [{ on:false }, { on:true }])], 0.02), E:vOpen([W(0.5, 0.15, [{ on:false }, { on:true }])], 0.03), W:{ wwr:0.01, units:vOff() } },
       render:{ en:'whitewash walls, barrel tile roof, green door', pt:'parede caiada, telha de canudo, porta verde' },
       walls:{ en:'limestone or schist rubble, rendered and whitewashed; stone stair and columns', pt:'alvenaria de calcário ou xisto, rebocada e caiada; escada e colunas de pedra' } },
@@ -21648,7 +21743,7 @@ const BASE_TYPES = {
     where:{ en:'The schist and granite villages of Trás-os-Montes and the Alto Douro — round Vila Real, Mirandela, Moncorvo (Felgar)', pt:'As aldeias de xisto e granito de Trás-os-Montes e do Alto Douro — em volta de Vila Real, Mirandela, Moncorvo (Felgar)' },
     summary:{ en:'Two storeys of schist or granite, the varanda recessed into the middle of the front under the main roof, stores and animals below; two slopes of tile. At Felgar (Moncorvo) the potters set the tops of broken water jars on the roofs as chimneys (Jorge Dias).',
       pt:'Dois pisos de xisto ou granito, a varanda recolhida a meio da fachada sob o telhado principal, lojas e animais em baixo; duas águas de telha. No Felgar (Moncorvo) os oleiros pousam nos telhados as partes superiores das talhas como chaminés (Jorge Dias).' },
-    model:{ L:10, D:7, fl:2, fh:2.6, rot:180, form:'rect', loggia:{ w:4.5 }, roof:{ n:2, th:22, bei:0.35 },
+    model:{ L:10, D:7, fl:2, fh:2.6, rot:180, form:'rect', loggia:{ w:3.6, d:1.8, lv:2, at:0.22 }, balc:1.2, balcAt:0.46, roof:{ n:2, th:22, bei:0.35 },
       open:{ S:vOpen([D(0.2, 0.1, [{ door:true }, { on:false }]), D(0.5, 0.1, [{ on:false }, { door:true }]), W(0.8, 0.08, [{ on:false }, { on:true }])], 0.1), N:{ wwr:0.01, units:vOff() }, E:vOpen([W(0.5, 0.1, [{ on:false }, { on:true }])], 0.02), W:{ wwr:0.01, units:vOff() } },
       render:{ en:'schist walls, tile roof, timber door', pt:'paredes de xisto, telha, porta de madeira' },
       walls:{ en:'schist or granite blocks, bare', pt:'xisto ou granito, à vista' } },
