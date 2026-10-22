@@ -966,7 +966,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.145.0',
+  version:     '1.146.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23343,7 +23343,9 @@ function vmRoofAt(v, x, y) {
  * barra and the corners, the roof in its form, the parapet.
  */
 function vmVolFaces(v, opts) {
-  const F = [], push = (P, fill, o) => F.push(Object.assign({ P, fill, n:vmNorm(P) }, o || {}));
+  /* a thin face (barra, quoin, frame, opening) belongs to the wall it is laid on: it is drawn with that wall, never before it */
+  let host = null;
+  const F = [], push = (P, fill, o) => F.push(Object.assign({ P, fill, n:vmNorm(P) }, o || {}, o && o.thin && host ? { host } : {}));
   const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash, wc = W.c, z0 = v.raise || 0, H = z0 + vmH(v), r = v.roof, rc = (VM_ROOFMAT[r.mat] || VM_ROOFMAT.tile).c;
   const th = (r.th || 0) * Math.PI / 180, e = r.type === 'flat' ? 0 : r.bei || 0, alongX = r.ridge === 'x' || (r.ridge !== 'y' && v.L >= v.D);
   const x0 = v.x - v.L / 2, x1 = v.x + v.L / 2, y0 = v.y - v.D / 2, y1 = v.y + v.D / 2;
@@ -23368,7 +23370,7 @@ function vmVolFaces(v, opts) {
       } else if (r.type === 'shed' && (f === 'E' || f === 'W')) {
         const rise = v.D * Math.tan(th); if (f === 'E') P[2] = [b[0], b[1], H + rise]; else P[3] = [a[0], a[1], H + rise];
       } else if (r.type === 'shed' && f === 'N') { const rise = v.D * Math.tan(th); P[2][2] += rise; P[3][2] += rise; }
-      push(P, f === 'S' || f === 'N' ? wc : vmShade(wc, 0.86), { wall:f });
+      push(P, f === 'S' || f === 'N' ? wc : vmShade(wc, 0.86), { wall:f }); host = F[F.length - 1];
       /* barra, corners, buttresses and the openings on the faces seen */
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]), dir = [(b[0] - a[0]) / len, (b[1] - a[1]) / len], out = { S:[0, -1], E:[1, 0], N:[0, 1], W:[-1, 0] }[f];
       const at = (u, z, d) => [a[0] + dir[0] * u + out[0] * (d || 0.02), a[1] + dir[1] * u + out[1] * (d || 0.02), z];
@@ -23389,9 +23391,10 @@ function vmVolFaces(v, opts) {
       });
     });
   } else {
-    const lo = vmRing(v, 0, z0), hi = vmRing(v, 0, H), N = lo.length;
-    for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([lo[i], lo[j], hi[j], hi[i]], wc, { wall:'R' }); }
-    if (v.wall.barra && lime) { const b0 = vmRing(v, 0.02, z0), b1 = vmRing(v, 0.02, z0 + 0.45); for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([b0[i], b0[j], b1[j], b1[i]], v.wall.barra, { thin:true }); } }
+    host = null;
+    const lo = vmRing(v, 0, z0), hi = vmRing(v, 0, H), N = lo.length, segs = [];
+    for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([lo[i], lo[j], hi[j], hi[i]], wc, { wall:'R' }); segs.push(F[F.length - 1]); }
+    if (v.wall.barra && lime) { const b0 = vmRing(v, 0.02, z0), b1 = vmRing(v, 0.02, z0 + 0.45); for (let i = 0; i < N; i++) { const j = (i + 1) % N; host = segs[i]; push([b0[i], b0[j], b1[j], b1[i]], v.wall.barra, { thin:true }); } host = null; }
     /* openings on a round wall: placed by face, at the ring's point that faces it */
     VM_FACES.forEach(f => (v.open[f] || []).forEach(o => {
       const ang = { S:-Math.PI / 2, E:0, N:Math.PI / 2, W:Math.PI }[f] + (o.pos - 0.5) * 1.2, a = v.L / 2 + 0.03, b = v.D / 2 + 0.03;
@@ -23401,6 +23404,7 @@ function vmVolFaces(v, opts) {
     }));
   }
   /* roofs */
+  host = null;
   const rf = (P, o) => push(P, rc, Object.assign({ roof:true }, o || {}));
   if (r.type === 'flat') {
     const top = vmRing(v, 0, H);
@@ -23538,12 +23542,22 @@ function vmFaces(vm) {
   let F = vmCourtFaces(vm);
   vs.forEach(v => vmVolFaces(v).forEach(q => F.push(Object.assign(q, { vol:v._i }))));
   F = F.concat(vmElFaces(vm, vs));
-  F = F.filter(q => q.thin || q.roof || q.top || q.court || q.el || (q.n[0] * VM_VIEW[0] + q.n[1] * VM_VIEW[1] + q.n[2] * VM_VIEW[2]) > -1e-6);
-  F.forEach(q => { q.k = vmKey(q.P) + (q.thin ? 0.02 : 0) + (q.el ? 0.03 : 0); });
+  /* the model turned on the spot by VM_AZ, the view staying where it is */
+  if (VM_AZ) { const R = vmTurn(vm); F.forEach(q => { q.P = q.P.map(R); q.n = vmNorm(q.P); }); }
+  const seen = q => (q.n[0] * VM_VIEW[0] + q.n[1] * VM_VIEW[1] + q.n[2] * VM_VIEW[2]) > -1e-6;
+  F = F.filter(q => q.host ? seen(q.host) : (q.thin || q.roof || q.top || q.court || q.el || seen(q)));
+  F.forEach((q, i) => { q.k = (q.host ? vmKey(q.host.P) + 0.02 : vmKey(q.P) + (q.thin ? 0.02 : 0)) + (q.el ? 0.03 : 0) + i * 1e-7; });
   return F.sort((a, b) => a.k - b.k);
 }
 
 /* ---------------------------------------------------------------- drawings */
+/** The turn of the isometric, in degrees: 0 from the south-east, as the icons. */
+let VM_AZ = 0;
+/** Turning a point about the model's centre by VM_AZ. */
+function vmTurn(vm) {
+  const bb = vmBBox(vm), cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, a = VM_AZ * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
+  return p => [cx + (p[0] - cx) * c - (p[1] - cy) * sn, cy + (p[0] - cx) * sn + (p[1] - cy) * c, p[2]];
+}
 const VM_C30 = Math.cos(Math.PI / 6);
 const vmIso = p => [(p[0] + p[1]) * VM_C30, (p[0] - p[1]) * 0.5 - p[2]];
 const vmPts = P => P.map(p => p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ');
@@ -23551,7 +23565,7 @@ const vmPts = P => P.map(p => p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ')
 function vmIsoSVG(vm, w, opts) {
   opts = opts || {};
   const F = vmFaces(vm), out = [], all = [];
-  const bb = vmBBox(vm), sh = [[bb[0] - 0.5, bb[1] - 0.5, 0], [bb[2] + 1, bb[1] - 0.5, 0], [bb[2] + 1, bb[3] + 1, 0], [bb[0] - 0.5, bb[3] + 1, 0]].map(vmIso);
+  const bb = vmBBox(vm), sh = [[bb[0] - 0.5, bb[1] - 0.5, 0], [bb[2] + 1, bb[1] - 0.5, 0], [bb[2] + 1, bb[3] + 1, 0], [bb[0] - 0.5, bb[3] + 1, 0]].map(vmTurn(vm)).map(vmIso);
   out.push('<polygon points="' + vmPts(sh) + '" fill="rgba(0,0,0,.08)"/>'); sh.forEach(p => all.push(p));
   F.forEach(q => { const P = q.P.map(vmIso); P.forEach(p => all.push(p));
     const fill = q.fill.indexOf('rgba') === 0 ? q.fill : (q.thin || q.el ? q.fill : vmLit(q.fill, q.n));
@@ -23582,13 +23596,21 @@ function vmPlanSVG(vm, w, opts) {
     if (v.kind === 'rect') { const a = P(v.x - v.L / 2, v.y + v.D / 2); o.push('<rect data-vol="' + v._i + '" x="' + a[0] + '" y="' + a[1] + '" width="' + (v.L * s).toFixed(1) + '" height="' + (v.D * s).toFixed(1) + '" fill="' + fillC + '" stroke="' + st + '" stroke-width="' + Math.max(1.5, Wt * s).toFixed(1) + '" style="cursor:move"/>'); }
     else { const a = P(v.x, v.y); o.push('<ellipse data-vol="' + v._i + '" cx="' + a[0] + '" cy="' + a[1] + '" rx="' + (v.L / 2 * s).toFixed(1) + '" ry="' + (v.D / 2 * s).toFixed(1) + '" fill="' + fillC + '" stroke="' + st + '" stroke-width="' + Math.max(1.5, Wt * s).toFixed(1) + '" style="cursor:move"/>'); }
     /* openings: a gap in the wall line, a door's swing */
-    if (v.kind === 'rect') VM_FACES.forEach(f => (v.open[f] || []).filter(q => q.fl === 0 || opts.allFloors).forEach(q => {
+    const flN = opts.fl || 0;
+    if (v.kind !== 'rect') VM_FACES.forEach(f => (v.open[f] || []).filter(q => q.fl === flN || opts.allFloors).forEach(q => {
+      /* on a round wall, at the ring's point facing that way, as the isometric places it */
+      const ang = { S:-Math.PI / 2, E:0, N:Math.PI / 2, W:Math.PI }[f] + (q.pos - 0.5) * 1.2, c0 = P(v.x + v.L / 2 * Math.cos(ang), v.y + v.D / 2 * Math.sin(ang));
+      o.push('<circle cx="' + c0[0] + '" cy="' + c0[1] + '" r="' + Math.max(3, q.w / 2 * s).toFixed(1) + '" fill="' + (q.t === 'd' ? '#FBFAF7' : '#CFE0EA') + '" stroke="#3A3530" stroke-width="0.6"/>');
+    }));
+    if (v.kind === 'rect') VM_FACES.forEach(f => (v.open[f] || []).filter(q => q.fl === flN || opts.allFloors).forEach(q => {
       const len = f === 'S' || f === 'N' ? v.L : v.D, u = q.pos * len, x0 = v.x - v.L / 2, y0 = v.y - v.D / 2;
       const [cx, cy] = f === 'S' ? [x0 + u, y0] : f === 'N' ? [x0 + u, y0 + v.D] : f === 'E' ? [x0 + v.L, y0 + u] : [x0, y0 + u];
       const hor = f === 'S' || f === 'N', a = P(cx - (hor ? q.w / 2 : 0), cy + (hor ? 0 : q.w / 2));
       o.push('<rect x="' + (+a[0] - (hor ? 0 : Wt * s / 2 + 1)) + '" y="' + (+a[1] - (hor ? Wt * s / 2 + 1 : 0)) + '" width="' + ((hor ? q.w : Wt + 0.08) * s).toFixed(1) + '" height="' + ((hor ? Wt + 0.08 : q.w) * s).toFixed(1) + '" fill="' + (q.t === 'd' ? '#FBFAF7' : '#CFE0EA') + '" stroke="#3A3530" stroke-width="0.6"/>');
     }));
-    const lc = P(v.x, v.y); if (!opts.noLabels) o.push('<text x="' + lc[0] + '" y="' + (+lc[1] + 4) + '" font-size="' + Math.max(9, Math.min(12, s * 0.9)).toFixed(0) + '" text-anchor="middle" fill="#6B645A" font-family="sans-serif">' + (v._r ? '' : VL(v.name).replace(/&/g, '&amp;')) + '</text>');
+    /* the body's name: at its middle when no rooms are drawn in it, else along its north wall, clear of the rooms' names */
+    const inRooms = (opts.rooms || []).some(q => Math.abs(q.x - v.x) < v.L / 2 && Math.abs(q.y - v.y) < v.D / 2);
+    const lc = inRooms ? P(v.x, v.y + v.D / 2 - 0.35 - 12 / s) : P(v.x, v.y); if (!opts.noLabels) o.push('<text x="' + lc[0] + '" y="' + (+lc[1] + 4) + '" font-size="' + Math.max(9, Math.min(12, s * 0.9)).toFixed(0) + '" text-anchor="middle" fill="#6B645A" font-family="sans-serif">' + (v._r ? '' : VL(v.name).replace(/&/g, '&amp;')) + '</text>');
   });
   /* elements */
   (vm.els || []).forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
@@ -23606,8 +23628,10 @@ function vmPlanSVG(vm, w, opts) {
   /* rooms */
   (opts.rooms || []).forEach((q, i) => { const a = P(q.x - q.w / 2, q.y + q.d / 2);
     o.push('<rect data-room="' + i + '" x="' + a[0] + '" y="' + a[1] + '" width="' + (q.w * s).toFixed(1) + '" height="' + (q.d * s).toFixed(1) + '" fill="' + (q.bad ? 'rgba(217,140,140,.35)' : 'rgba(127,179,163,.28)') + '" stroke="' + (q.bad ? '#B55' : '#4E8A78') + '" stroke-width="1" style="cursor:move"/>');
-    const c = P(q.x, q.y); o.push('<text x="' + c[0] + '" y="' + c[1] + '" font-size="10" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + VL(q.n).replace(/&/g, '&amp;') + '</text>');
-    o.push('<text x="' + c[0] + '" y="' + (+c[1] + 11) + '" font-size="9" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + fmt(q.w * q.d, 1) + ' m²</text>');
+    /* name and area kept inside their room: the type shrinks to the room's width and height */
+    const c = P(q.x, q.y), nm = VL(q.n), fs = Math.max(6, Math.min(10, q.w * s / Math.max(4, nm.length * 0.6), q.d * s / 2.6));
+    o.push('<text x="' + c[0] + '" y="' + (+c[1] - fs * 0.15).toFixed(1) + '" font-size="' + fs.toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + nm.replace(/&/g, '&amp;') + '</text>');
+    o.push('<text x="' + c[0] + '" y="' + (+c[1] + fs * 1.05).toFixed(1) + '" font-size="' + (fs * 0.9).toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + fmt(q.w * q.d, 1) + ' m²</text>');
     const h2 = P(q.x + q.w / 2, q.y - q.d / 2); o.push('<rect data-roomsize="' + i + '" x="' + (+h2[0] - 5) + '" y="' + (+h2[1] - 5) + '" width="9" height="9" fill="#4E8A78" style="cursor:nwse-resize"/>'); });
   /* north and a scale bar of 5 m */
   o.push('<g font-family="sans-serif" font-size="11" fill="#3A3530"><path d="M' + (w - 22) + ',30 l7,-18 l7,18 l-7,-5 z" fill="#3A3530"/><text x="' + (w - 15) + '" y="44" text-anchor="middle">N</text>');
@@ -23978,9 +24002,24 @@ function buildModeller(host) {
   const metBox = below.appendChild(el('div'));
   function drawViews() {
     const M = vm();
-    isoBox.innerHTML = '<p class="vmcap">' + VMT('Isometric — from the south-east', 'Isométrica — de sudeste') + '</p>' + vmIsoSVG(M, 760);
+    /* where the eye stands round the model: the south-east turned with it */
+    const fromTxt = () => { const k = Math.round(((135 + VM_AZ) % 360) / 45) % 8;
+      return (LANG === 'pt' ? ['norte', 'nordeste', 'nascente', 'sudeste', 'sul', 'sudoeste', 'poente', 'noroeste'] : ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'])[k] + (VM_AZ % 45 ? ' (' + VM_AZ + '°)' : ''); };
+    isoBox.innerHTML = '';
+    const ib = isoBox.appendChild(el('p', { class:'vmcap', html:VMT('Isometric — from the ', 'Isométrica — de ') + fromTxt() + ' · ' }));
+    const turn = d => { VM_AZ = ((VM_AZ + d) % 360 + 360) % 360; drawViews(); };
+    ib.appendChild(el('button', { type:'button', class:'btn small', text:'⟲', title:VMT('Turn the model', 'Rodar o modelo'), onclick:() => turn(-45) }));
+    ib.appendChild(el('button', { type:'button', class:'btn small', text:'⟳', title:VMT('Turn the model', 'Rodar o modelo'), onclick:() => turn(45) }));
+    if (VM_AZ) ib.appendChild(el('button', { type:'button', class:'btn small', text:VMT('From the south-east', 'De sudeste'), onclick:() => { VM_AZ = 0; drawViews(); } }));
+    isoBox.insertAdjacentHTML('beforeend', vmIsoSVG(M, 760));
+    { const sv = isoBox.querySelector('svg.vmiso'); if (sv) { let x0 = null, a0 = 0; sv.style.cursor = 'grab'; sv.style.touchAction = 'none';
+      sv.addEventListener('pointerdown', ev => { x0 = ev.clientX; a0 = VM_AZ; try { sv.setPointerCapture(ev.pointerId); } catch (e) {} });
+      sv.addEventListener('pointermove', ev => { if (x0 === null) return; const a = Math.round((a0 + (ev.clientX - x0) * 0.6) / 15) * 15; if (a !== VM_AZ) { VM_AZ = ((a % 360) + 360) % 360;
+        const nw = vmIsoSVG(vm(), 760), vb = (nw.match(/viewBox="([^"]+)"/) || [])[1], hh = (nw.match(/height="([^"]+)"/) || [])[1];
+        if (vb) sv.setAttribute('viewBox', vb); if (hh) sv.setAttribute('height', hh); sv.innerHTML = nw.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } });
+      const end = () => { if (x0 !== null) { x0 = null; drawViews(); } }; sv.addEventListener('pointerup', end); sv.addEventListener('pointercancel', end); } }
     const rooms = R.V.rooms; vmRoomChecks(M, rooms);
-    const PL = vmPlanSVG(M, 520, { sel:VM_SEL, rooms:rooms.filter(q => q.fl === VM_ROOMFL) });
+    const PL = vmPlanSVG(M, 520, { sel:VM_SEL, fl:VM_ROOMFL, rooms:rooms.filter(q => q.fl === VM_ROOMFL) });
     planBox.innerHTML = '';
     const cap = planBox.appendChild(el('p', { class:'vmcap', html:VMT('Plan — drag a body or a room', 'Planta — arraste um corpo ou uma divisão') + ' · ' }));
     const fs = el('select', { onchange:e => { VM_ROOMFL = +e.target.value; drawViews(); } });
@@ -24013,7 +24052,7 @@ function buildModeller(host) {
       if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
       else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
       else { drag.q.w = Math.max(1, drag.w0 + dx); drag.q.d = Math.max(1, drag.d0 - dy); }
-      const PL2 = vmPlanSVG(vm(), 520, { sel:VM_SEL, rooms:(vmRoomChecks(vm(), R.V.rooms), R.V.rooms.filter(q => q.fl === VM_ROOMFL)) });
+      const PL2 = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl:VM_ROOMFL, rooms:(vmRoomChecks(vm(), R.V.rooms), R.V.rooms.filter(q => q.fl === VM_ROOMFL)) });
       svg.innerHTML = PL2.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
     });
     const up = () => { if (drag) { drag = null; drawEditor(); drawViews(); } };
