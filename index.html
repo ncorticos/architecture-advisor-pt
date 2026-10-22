@@ -965,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.133.0',
+  version:     '1.134.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20167,8 +20167,8 @@ Object.assign(MN_TYPES, {
     where:{ en:'Ribatejo — the plains of Santarém, Almeirim, Salvaterra de Magos', pt:'Ribatejo — as planícies de Santarém, Almeirim, Salvaterra de Magos' },
     summary:{ en:'The house of the wage labourer of the great estates: a shelter reduced to the essential. Long, with blind gables, under two slopes; the rooms in a line — the casa de fora, the kitchen, the bedroom — on one storey; usually a single outside door and rare windows. A hearth in the kitchen but the oven outside, attached or in its own small building, as in the Alentejo. Earth where stone is scarce; whitewash, coloured bands.',
       pt:'A casa do assalariado das grandes propriedades: um abrigo reduzido ao mínimo essencial. Alongada, de empenas cegas, com cobertura de duas águas; as divisões em fila — a “casa de fora”, a cozinha e o quarto — num único piso; em geral uma só porta exterior e raras janelas. Lareira na cozinha mas o forno fora, anexo ou numa dependência isolada, como no Alentejo. Terra onde a pedra escasseia; caiação, barras coloridas.' },
-    model:{ L:11, D:4.5, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:20, bei:0.2 },
-      open:{ S:vOpen([D(0.45, 0.6), W(0.8, 0.3)], 0.05, 1.0, 1.7), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
+    model:{ L:11, D:4.5, fl:1, fh:2.4, rot:180, form:'rect', roof:{ n:2, th:20, bei:0.2 }, annex:{ side:'E', L:3, h:1.9, oven:true },
+      open:{ S:vOpen([W(0.04, 0.085), D(0.2, 0.12), W(0.36, 0.085), W(0.62, 0.085), D(0.79, 0.12), W(0.96, 0.085)], 0.2, 1.0, 1.7), N:{ wwr:0.02, units:vOff() }, E:{ wwr:0.02, units:vOff() }, W:{ wwr:0.02, units:vOff() } },
       render:{ en:'whitewash walls, tile roof, blue door', pt:'parede caiada, telhado de telha, porta azul' },
       walls:{ en:'adobe or taipa, whitewashed', pt:'adobe ou taipa, caiados' } },
     feats:[
@@ -20177,7 +20177,8 @@ Object.assign(MN_TYPES, {
       vRoofN(null, { en:'two slopes', pt:'duas águas' }, [2], 'NER'),
       vPitch({ en:'tile', pt:'telha' }, 15, 28, 'INF'),
       vN('openings', { en:'Openings in the gables', pt:'Vãos nas empenas' }, { en:'none — blind gables', pt:'nenhum — empenas cegas' }, () => vCount(['E', 'W']).all, 0, 0, '', 'NER'),
-      vN('openings', { en:'Outside doors', pt:'Portas exteriores' }, { en:'usually one', pt:'em geral uma' }, () => vCount().doors, 1, 1, '', 'NER'),
+      vN('openings', { en:'Outside doors', pt:'Portas exteriores' }, { en:'usually one to each dwelling — rows of labourers’ dwellings repeat it', pt:'em geral uma por fogo — as fiadas de fogos de assalariados repetem-na' }, () => vCount().doors, 1, 3, '', 'NER'),
+      vI('site', { en:'At one gable end a lower annex under one slope — the oven house, the oven’s vault bulging from its wall — continues the line of the house (the oven «attached», as in the Alentejo).', pt:'Num dos topos, um anexo mais baixo de uma água — a casa do forno, com a abóbada do forno saliente da parede — prolonga a linha da casa (o forno «anexo», como no Alentejo).' }, 'NER'),
       vGlaze(6, 'NER'),
       vI('ventilation', { en:'The oven outside the house — attached or in its own building — keeps its heat out of the rooms; the hearth alone stays in the kitchen.', pt:'O forno fora da casa — anexo ou numa dependência — mantém o seu calor fora dos compartimentos; só a lareira fica na cozinha.' }, 'NER'),
       vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster', 'earth'], 'NER')
@@ -20974,7 +20975,7 @@ function vIcon(key, size) {
   const rz = m.raise ? +m.raise.h || 0 : 0, rkind = m.raise ? m.raise.kind : null;
   /* the regional details: the coloured barra and cut corners of the south, the chimney of each region */
   const dist = typeof vDist === 'function' ? vDist(key) : [], south = dist.some(d => ['Faro', 'Beja', 'Évora', 'Portalegre', 'Setúbal', 'Santarém', 'Lisboa'].indexOf(d) >= 0);
-  const chimKind = dist.indexOf('Faro') >= 0 ? 'alg' : dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal'].indexOf(d) >= 0) ? 'ale' : dist[0] === 'Açores' ? 'az' : 'box';
+  const chimKind = dist.indexOf('Faro') >= 0 ? 'alg' : dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal', 'Santarém'].indexOf(d) >= 0) ? 'ale' : dist[0] === 'Açores' ? 'az' : 'box';
   const lime = wk === 'plaster' || /whitewash/i.test(rp.en), barC = /ochre|yellow/i.test(rp.en) ? '#C9A040' : '#3F6FA8';
   const c30 = Math.cos(Math.PI / 6), s30 = 0.5;
   const P = (x, y, z) => [(x + y) * c30, (x - y) * s30 - z - rz];
@@ -20988,7 +20989,7 @@ function vIcon(key, size) {
   const ticks = (a, b, c, d, len, step, col, w) => { const n = Math.max(1, Math.floor(len / step)); for (let k = 1; k < n; k++) { const t = k / n; line(lerp(a, b, t), lerp(d, c, t), col, w); } };
   /* the setting: a town house between its neighbours, a street before it; a house on its own on a disc of ground */
   const urban = VICON_URBAN.indexOf(key) >= 0, nbr = urban ? vNeighbours(m, L, Dd, H, zones, P, face, out) : null;
-  const ground = (gx, gy, gr) => { const R0 = gr || Math.hypot(L, Dd) / 2 + 1.6, ox = gx === undefined ? L / 2 : gx, oy = gy === undefined ? Dd / 2 : gy, pts = Array.from({ length:48 }, (_, i) => { const a = i / 48 * 2 * Math.PI; return P(ox + R0 * Math.cos(a), oy + R0 * Math.sin(a), -rz); });
+  const ground = (gx, gy, gr) => { const La0 = m.annex ? m.annex.L || 3 : 0, R0 = gr || Math.hypot(L + La0, Dd) / 2 + 1.6, ox = gx === undefined ? (L + La0) / 2 : gx, oy = gy === undefined ? Dd / 2 : gy, pts = Array.from({ length:48 }, (_, i) => { const a = i / 48 * 2 * Math.PI; return P(ox + R0 * Math.cos(a), oy + R0 * Math.sin(a), -rz); });
     pts.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(pts) + '" fill="#E3E5D6" stroke="#C9CDB8" stroke-width="0.05"/>'); };
   if (urban) nbr.street(); else ground();
   if (urban) nbr.west();
@@ -21343,6 +21344,20 @@ function vIcon(key, size) {
     drum(cx, cy, r, 0, h, wc, tex ? tex[0] : 0, tex ? tex[1] : '');
     sideOpen(cx, cy, r, -Math.PI / 2 - 0.4 / r, -Math.PI / 2 + 0.4 / r, 0.02, Math.min(1.7, h - 0.2), dc);
     cone(cx, cy, r + 0.35, h - 0.1, r * 1.3, rk === 'thatch' ? '#B5965A' : rc, rk === 'thatch');
+  }
+  /* a lower annex at a gable end — the oven house under one slope falling away from the house, the oven's vault bulging from its end */
+  if (m.annex && !m.icon) {
+    const A = m.annex, La = A.L || 3, hi = H - 0.15, ha = Math.min(A.h || hi - 0.4, hi - 0.2), ta = (hi - ha) / La, xa = L, xb = L + La;
+    face([P(xa, -0.01, 0), P(xb, -0.01, 0), P(xb, -0.01, ha), P(xa, -0.01, hi)], wc, 0.04);
+    if (lime && south) face([P(xa, -0.02, 0), P(xb, -0.02, 0), P(xb, -0.02, 0.35), P(xa, -0.02, 0.35)], barC, 0.02);
+    face([P(xb, 0, 0), P(xb, Dd, 0), P(xb, Dd, ha), P(xb, 0, ha)], vShade(wc, 0.82), 0.04);
+    if (lime && south) face([P(xb + 0.01, 0, 0), P(xb + 0.01, Dd, 0), P(xb + 0.01, Dd, 0.35), P(xb + 0.01, 0, 0.35)], vShade(barC, 0.8), 0.02);
+    const dx = xa + La * 0.45, dq = [P(dx - 0.4, -0.02, 0.02), P(dx + 0.4, -0.02, 0.02), P(dx + 0.4, -0.02, 1.8), P(dx - 0.4, -0.02, 1.8)];
+    if (lime && south) face([P(dx - 0.53, -0.02, 0.02), P(dx + 0.53, -0.02, 0.02), P(dx + 0.53, -0.02, 1.93), P(dx - 0.53, -0.02, 1.93)], barC, 0.02);
+    face(dq, dc, 0.05);
+    const e2 = 0.25, rf = [P(xa, -e2, hi), P(xb + e2, -e2, ha - e2 * ta), P(xb + e2, Dd + e2, ha - e2 * ta), P(xa, Dd + e2, hi)];
+    face(rf, rc); roofTex(rf[0], rf[1], rf[2], rf[3], Math.hypot(La, hi - ha), Dd);
+    if (A.oven) { const oc = Dd * 0.5; drum(xb + 0.15, oc, 0.95, 0, 0.6, wc); dome(xb + 0.15, oc, 0.95, 0.6, wc); }
   }
   /* a watermill: the arches of the wheel chambers in its plinth, the water running out */
   if (m.icon === 'watermill' && rz > 0) {
