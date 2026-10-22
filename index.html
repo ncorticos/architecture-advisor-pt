@@ -966,7 +966,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.147.0',
+  version:     '1.148.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23723,6 +23723,7 @@ function vmStyle() {
     + '.vmel{border-top:1px dashed var(--line);padding-top:6px;margin-top:6px}.vmel .x{float:right;border:none;background:none;color:var(--c2);cursor:pointer;font-size:12px}'
     + '.vmview{border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px;margin-bottom:12px}.vmview svg{max-width:100%;height:auto;display:block;margin:0 auto}'
     + '.vmviews2{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:900px){.vmviews2{grid-template-columns:1fr}}'
+    + '.vmplans{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}.vmplan1{border:1px solid transparent;border-radius:8px;padding:2px}.vmplan1.on{border-color:var(--c3)}.vmplan1 svg{width:100%;height:auto}'
     + '.vmcap{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 4px;display:flex;gap:8px;align-items:center}'
     + '.vmcap select{font-size:11px}.vmok{color:#2F7D4F;font-weight:650}.vmno{color:#B4473F;font-weight:650}'
     + '.vmfind{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}.vmfind input,.vmfind select{font:inherit;font-size:12.5px;padding:4px 6px;border:1px solid var(--line);border-radius:6px}'
@@ -23801,16 +23802,23 @@ function vmOlgyay(R, vm) {
 }
 /** The rooms a house of this kind usually holds, laid out in its main body. */
 function vmDefaultRooms(vm) {
-  const v = vm.vols[0];
-  if (!v) return [];
-  const R = [], x0 = v.x - v.L / 2, y = v.y, w3 = v.L / 3;
-  const room = (n, x, w, fl) => R.push({ n, x, y, w:Math.max(1.5, w - 0.6), d:Math.max(1.5, v.D - 0.9), fl });
-  if (v.fl >= 2) {
-    room({ en:'Store (loja)', pt:'Loja' }, x0 + v.L / 4, v.L / 2, 0); room({ en:'Byre (corte)', pt:'Corte' }, x0 + 3 * v.L / 4, v.L / 2, 0);
-    room({ en:'Kitchen', pt:'Cozinha' }, x0 + w3 / 2, w3, 1); room({ en:'Hall (sala)', pt:'Sala' }, x0 + 1.5 * w3, w3, 1); room({ en:'Bedroom', pt:'Quarto' }, x0 + 2.5 * w3, w3, 1);
-  } else {
-    room({ en:'Bedroom', pt:'Quarto' }, x0 + w3 / 2, w3, 0); room({ en:'Casa de fora', pt:'Casa de fora' }, x0 + 1.5 * w3, w3, 0); room({ en:'Kitchen', pt:'Cozinha' }, x0 + 2.5 * w3, w3, 0);
-  }
+  /* the main body as the popular house divides it — stores and byre below, kitchen, sala and bedroom above — and the
+     other bodies a room on each of their floors; a third floor and above under the roof as bedrooms and the loft */
+  const R = [];
+  (vm.vols || []).forEach((v, vi) => {
+    if (!v) return;
+    const x0 = v.x - v.L / 2, w3 = v.L / 3;
+    const room = (n, x, w, fl) => R.push({ n, x, y:v.y, w:Math.max(1.5, w - 0.6), d:Math.max(1.5, v.D - 0.9), fl });
+    if (vi === 0) {
+      if (v.fl >= 2) {
+        room({ en:'Store (loja)', pt:'Loja' }, x0 + v.L / 4, v.L / 2, 0); room({ en:'Byre (corte)', pt:'Corte' }, x0 + 3 * v.L / 4, v.L / 2, 0);
+        room({ en:'Kitchen', pt:'Cozinha' }, x0 + w3 / 2, w3, 1); room({ en:'Hall (sala)', pt:'Sala' }, x0 + 1.5 * w3, w3, 1); room({ en:'Bedroom', pt:'Quarto' }, x0 + 2.5 * w3, w3, 1);
+        for (let k = 2; k < v.fl; k++) { room({ en:'Bedroom', pt:'Quarto' }, x0 + v.L / 4, v.L / 2, k); room(k === v.fl - 1 ? { en:'Loft (sótão)', pt:'Sótão' } : { en:'Bedroom', pt:'Quarto' }, x0 + 3 * v.L / 4, v.L / 2, k); }
+      } else {
+        room({ en:'Bedroom', pt:'Quarto' }, x0 + w3 / 2, w3, 0); room({ en:'Casa de fora', pt:'Casa de fora' }, x0 + 1.5 * w3, w3, 0); room({ en:'Kitchen', pt:'Cozinha' }, x0 + 2.5 * w3, w3, 0);
+      }
+    } else for (let k = 0; k < v.fl; k++) room(k === 0 && v.fl >= 2 ? { en:'Store (arrumos)', pt:'Arrumos' } : k === 0 ? { en:'Room', pt:'Divisão' } : { en:'Bedroom', pt:'Quarto' }, v.x, v.L, k);
+  });
   return R;
 }
 /** Each room checked: inside a body that has that floor, not over another room. */
@@ -24022,14 +24030,19 @@ function buildModeller(host) {
         if (vb) sv.setAttribute('viewBox', vb); if (hh) sv.setAttribute('height', hh); sv.innerHTML = nw.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } });
       const end = () => { if (x0 !== null) { x0 = null; drawViews(); } }; sv.addEventListener('pointerup', end); sv.addEventListener('pointercancel', end); } }
     const rooms = R.V.rooms; vmRoomChecks(M, rooms);
-    const PL = vmPlanSVG(M, 520, { sel:VM_SEL, fl:VM_ROOMFL, rooms:rooms.filter(q => q.fl === VM_ROOMFL) });
+    /* one plan per floor, side by side: each with its openings and its rooms; a click picks the floor new rooms go to */
     planBox.innerHTML = '';
-    const cap = planBox.appendChild(el('p', { class:'vmcap', html:VMT('Plan — drag a body or a room', 'Planta — arraste um corpo ou uma divisão') + ' · ' }));
-    const fs = el('select', { onchange:e => { VM_ROOMFL = +e.target.value; drawViews(); } });
-    for (let k = 0; k < Math.max(...M.vols.map(v => v.fl)); k++) fs.appendChild(el('option', { value:k, text:k === 0 ? VMT('ground floor', 'piso térreo') : VMT('floor ', 'piso ') + k, selected:k === VM_ROOMFL ? 'selected' : null }));
-    cap.appendChild(fs);
-    planBox.insertAdjacentHTML('beforeend', PL.svg);
-    vmPlanDrag(planBox.querySelector('svg'), PL);
+    planBox.style.gridColumn = '1 / -1';
+    planBox.appendChild(el('p', { class:'vmcap', html:VMT('Plans — drag a body or a room; click a plan to add rooms to that floor', 'Plantas — arraste um corpo ou uma divisão; clique numa planta para lhe juntar divisões') }));
+    const grid = planBox.appendChild(el('div', { class:'vmplans' })), nFl = Math.max(...M.vols.map(v => v.fl));
+    if (VM_ROOMFL >= nFl) VM_ROOMFL = 0;
+    for (let k = 0; k < nFl; k++) {
+      const PL = vmPlanSVG(M, 520, { sel:VM_SEL, fl:k, rooms:rooms.filter(q => q.fl === k) });
+      const fig = grid.appendChild(el('div', { class:'vmplan1' + (k === VM_ROOMFL ? ' on' : '') }));
+      fig.appendChild(el('p', { class:'vmcap', text:k === 0 ? VMT('Ground floor (0)', 'Piso 0 — térreo') : VMT('Floor ', 'Piso ') + k }));
+      fig.insertAdjacentHTML('beforeend', PL.svg);
+      vmPlanDrag(fig.querySelector('svg'), PL, k);
+    }
     elevBox.innerHTML = '';
     const ec = elevBox.appendChild(el('p', { class:'vmcap', text:VMT('Elevation', 'Alçado') + ' · ' }));
     const es = el('select', { onchange:e => { VM_FACE = e.target.value; drawViews(); } });
@@ -24067,12 +24080,13 @@ function buildModeller(host) {
     const up = () => { if (drag) { drag = null; drawEditor(); drawViews(); } };
     svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
   }
-  function vmPlanDrag(svg, PL) {
+  function vmPlanDrag(svg, PL, fl) {
     if (!svg) return;
     let drag = null;
     const pt = ev => { const b = svg.getBoundingClientRect(); return [(ev.clientX - b.left) * PL.w / b.width, (ev.clientY - b.top) * PL.h / b.height]; };
     svg.addEventListener('pointerdown', ev => {
-      const t = ev.target, p = pt(ev), M = vm(), rooms = R.V.rooms.filter(q => q.fl === VM_ROOMFL);
+      if (VM_ROOMFL !== fl) { VM_ROOMFL = fl; svg.closest('.vmplans') && svg.closest('.vmplans').querySelectorAll('.vmplan1').forEach((d, i) => d.classList.toggle('on', i === fl)); }
+      const t = ev.target, p = pt(ev), M = vm(), rooms = R.V.rooms.filter(q => q.fl === fl);
       if (t.dataset.roomsize !== undefined) drag = { kind:'size', q:rooms[+t.dataset.roomsize], p, w0:rooms[+t.dataset.roomsize].w, d0:rooms[+t.dataset.roomsize].d };
       else if (t.dataset.room !== undefined) { const q = rooms[+t.dataset.room]; drag = { kind:'room', q, p, x0:q.x, y0:q.y }; }
       else if (t.dataset.vol !== undefined) { const i = +t.dataset.vol, v = M.vols[i]; VM_SEL = i; drag = { kind:'vol', v, p, x0:v.x, y0:v.y }; }
@@ -24084,7 +24098,7 @@ function buildModeller(host) {
       if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
       else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
       else { drag.q.w = Math.max(1, drag.w0 + dx); drag.q.d = Math.max(1, drag.d0 - dy); }
-      const PL2 = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl:VM_ROOMFL, rooms:(vmRoomChecks(vm(), R.V.rooms), R.V.rooms.filter(q => q.fl === VM_ROOMFL)) });
+      const PL2 = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:(vmRoomChecks(vm(), R.V.rooms), R.V.rooms.filter(q => q.fl === fl)) });
       svg.innerHTML = PL2.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
     });
     const up = () => { if (drag) { drag = null; drawEditor(); drawViews(); } };
