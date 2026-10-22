@@ -965,7 +965,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.136.0',
+  version:     '1.137.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21386,6 +21386,33 @@ function vIcon(key, size) {
     sideOpen(cx, cy, r, am - da, am + da, 0.75, 1.3, '#2E2A26');
     box(cx + 0.6, cy + 0.2, 1.9, cx + 0.9, cy + 0.5, 2.25, wc);
   }
+  if (m.icon === 'eira') {
+    /* the threshing floor: a disc of flagstones on a low kerb of stones set on edge, a low wall round most of it, sheaves waiting */
+    out.length = 0; all.length = 0; ground(L / 2, Dd / 2, L / 2 + 2.2);
+    const cx = L / 2, cy = Dd / 2, r = L / 2 - 0.4, kz = 0.25;
+    drum(cx, cy, r, 0, kz, '#A39C8E');
+    disc(cx, cy, r, kz, '#C9C3B6');
+    /* the flags: rings of irregular slabs */
+    for (let ring = 1; ring <= 4; ring++) { const rr = r * ring / 4.4, nseg = 5 + ring * 4;
+      const pts = Array.from({ length:41 }, (_, i) => { const a = i / 40 * 2 * Math.PI; return P(cx + rr * Math.cos(a), cy + rr * Math.sin(a), kz + 0.005); });
+      out.push('<polyline points="' + fmtP(pts) + '" fill="none" stroke="rgba(80,72,60,.35)" stroke-width="0.04"/>');
+      for (let k = 0; k < nseg; k++) { const a = (k + (ring % 2) * 0.5) / nseg * 2 * Math.PI, r0 = r * (ring - 1) / 4.4, r1 = ring === 4 ? r : rr;
+        line(P(cx + r0 * Math.cos(a), cy + r0 * Math.sin(a), kz + 0.005), P(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a), kz + 0.005), 'rgba(80,72,60,.3)', 0.035); } }
+    /* the low wall: the back three quarters of the round, its coping in a lighter course */
+    const wr = r + 0.25, wh = 0.75, NA = 40, a0 = -Math.PI / 4 + 0.55, a1 = a0 + 1.5 * Math.PI;
+    const wp = (a, z, rr) => P(cx + rr * Math.cos(a), cy + rr * Math.sin(a), z);
+    for (let i = 0; i < NA; i++) { const a = a0 + (a1 - a0) * i / NA, b = a0 + (a1 - a0) * (i + 1) / NA, mid = (a + b) / 2, facing = Math.cos(mid) - Math.sin(mid);
+      if (facing > 0) continue;
+      face([wp(a, 0, wr), wp(b, 0, wr), wp(b, wh, wr), wp(a, wh, wr)], vShade('#8F887B', 0.9 - 0.15 * facing), 0.02); }
+    for (let i = 0; i < NA; i++) { const a = a0 + (a1 - a0) * i / NA, b = a0 + (a1 - a0) * (i + 1) / NA;
+      face([wp(a, wh, wr - 0.2), wp(b, wh, wr - 0.2), wp(b, wh, wr + 0.2), wp(a, wh, wr + 0.2)], '#B8724E', 0.015); }
+    for (let i = 0; i < NA; i++) { const a = a0 + (a1 - a0) * i / NA, b = a0 + (a1 - a0) * (i + 1) / NA, mid = (a + b) / 2, facing = Math.cos(mid) - Math.sin(mid);
+      if (facing <= 0) continue;
+      face([wp(a, 0, wr + 0.2), wp(b, 0, wr + 0.2), wp(b, wh, wr + 0.2), wp(a, wh, wr + 0.2)], vShade('#8F887B', 0.95 + 0.1 * facing), 0.02);
+      face([wp(a, wh, wr - 0.2), wp(b, wh, wr - 0.2), wp(b, wh, wr + 0.2), wp(a, wh, wr + 0.2)], '#B8724E', 0.015); }
+    /* sheaves of straw stacked on the floor */
+    [[cx - 1.6, cy + 2.2], [cx - 0.6, cy + 2.6], [cx + 1.9, cy + 1.4]].forEach(([sx, sy]) => cone(sx, sy, 0.55, kz, 1.1, '#C9A24E', true));
+  }
   if (m.icon === 'roundhut') {
     /* the shepherds' round hut: a drum of schist rubble under a conical thatch, its door to the front */
     out.length = 0; all.length = 0; ground();
@@ -22265,11 +22292,12 @@ vernNames();
   sup('pt-eira', { name:{ en:'Eira — the threshing floor', pt:'Eira — o terreiro de malhar' },
     where:{ en:'Every grain village of the north and the Beira, often communal — Soajo on its granite outcrop, Ramires (Cinfães), Vila da Ponte, Paradinha', pt:'Todas as aldeias de cereal do norte e da Beira, muitas vezes comunitária — o Soajo sobre o seu penedo de granito, Ramires (Cinfães), Vila da Ponte, Paradinha' },
     summary:{ en:'An open floor of granite slabs (or of beaten earth and lime) where the grain was threshed and dried, a little raised and open to the wind, with the espigueiros or canastros round it; many were shared by the village.', pt:'Um terreiro aberto de lajes de granito (ou de terra batida e cal) onde se malhava e secava o grão, um pouco elevado e aberto ao vento, com os espigueiros ou canastros à volta; muitas eram comuns à aldeia.' },
-    model:{ L:10, D:10, fl:1, fh:2.0, rot:180, form:'rect', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0, units:vOff() }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+    model:{ L:10, D:10, fl:1, fh:2.0, rot:180, form:'rect', icon:'eira', roof:{ n:0, th:0, bei:0 }, open:{ S:{ wwr:0, units:vOff() }, N:{ wwr:0, units:vOff() }, E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
       render:{ en:'granite stone walls', pt:'granito' }, walls:{ en:'granite slabs laid flat', pt:'lajes de granito assentes' } },
     feats:[ vN('site', { en:'Side of the floor', pt:'Lado do terreiro' }, { en:'about 8–12 m (inference)', pt:'cerca de 8–12 m (inferência)' }, () => MASS.L, 6, 14, 'm', 'INF'),
       vI('ventilation', { en:'Open to the prevailing wind: the chaff blown off as the grain was thrown up (winnowing).', pt:'Aberta ao vento dominante: a moinha levada pelo vento quando se joeirava o grão.' }, 'INF'),
-      vI('site', { en:'The espigueiros and canastros stand round the eira — at Soajo 24 on the same outcrop.', pt:'Os espigueiros e canastros erguem-se à volta da eira — no Soajo, 24 sobre o mesmo penedo.' }, 'ANP') ] }, ['Viana do Castelo', 'Braga', 'Vila Real', 'Viseu', 'Aveiro']);
+      vI('site', { en:'The espigueiros and canastros stand round the eira — at Soajo 24 on the same outcrop.', pt:'Os espigueiros e canastros erguem-se à volta da eira — no Soajo, 24 sobre o mesmo penedo.' }, 'ANP'),
+      vI('site', { en:'Round, never square: a disc of flagstones — or of beaten earth and lime — bordered by a kerb of stones set on edge, often closed by a low wall on part of its round, open to the side the carts came in.', pt:'Redonda, nunca quadrada: um disco de lajes — ou de terra batida e cal — rematado por um lancil de pedras ao alto, muitas vezes fechado por um muro baixo em parte da volta, aberto do lado por onde entravam os carros.' }, 'INF') ] }, ['Viana do Castelo', 'Braga', 'Vila Real', 'Viseu', 'Aveiro']);
   sup('pt-pombal', { name:{ en:'Pombal — the dovecote of Trás-os-Montes', pt:'Pombal — o pombal transmontano' },
     where:{ en:'The plateaus of the Nordeste Transmontano — Vimioso (Uva), Mogadouro, Miranda, Bragança', pt:'Os planaltos do Nordeste Transmontano — Vimioso (Uva), Mogadouro, Miranda, Bragança' },
     summary:{ en:'A small free-standing building of schist or granite, round, horseshoe or square in plan, its roof of one slope falling to the north, whitewashed bands round the holes where the pigeons enter; dung for the fields, meat for the house. Many now abandoned and in ruins.', pt:'Uma pequena construção isolada de xisto ou granito, de planta circular, em ferradura ou quadrada, cobertura de uma água a cair para norte, faixas caiadas em volta dos orifícios por onde entram os pombos; estrume para os campos, carne para a casa. Muitos hoje abandonados e em ruína.' },
