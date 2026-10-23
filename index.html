@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.158.4',
+  version:     '1.158.5',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23877,10 +23877,12 @@ function vmPlanSVG(vm, w, opts) {
   });
   o.push(...ops);
   /* elements */
+  const chimTop = [];
   (vm.els || []).forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
     const x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
     const at = (u, d) => f === 'S' ? [x0 + u, y0 - d] : f === 'N' ? [x0 + u, y0 + v.D + d] : f === 'E' ? [x0 + v.L + d, y0 + u] : [x0 - d, y0 + u];
-    if (E.t === 'chimney') { const p = P(x0 + (E.u || 0.75) * v.L, y0 + (E.v || 0.5) * v.D + 0.6); o.push('<rect x="' + p[0] + '" y="' + p[1] + '" width="' + (0.7 * s).toFixed(1) + '" height="' + (0.6 * s).toFixed(1) + '" fill="#6B645A"/>'); }
+    if (E.t === 'chimney') { const p = P(x0 + (E.u === undefined ? 0.75 : E.u) * v.L - 0.35, y0 + (E.v === undefined ? 0.5 : E.v) * v.D + 0.3);
+      chimTop.push('<rect data-chim="' + vm.els.indexOf(E) + '" x="' + p[0] + '" y="' + p[1] + '" width="' + (0.7 * s).toFixed(1) + '" height="' + (0.6 * s).toFixed(1) + '" fill="#6B645A" stroke="#3A342E" stroke-width="1" style="cursor:move"><title>' + VMT('Chimney — drag it where you want it', 'Chaminé — arraste-a para onde a quiser') + '</title></rect>'); }
     if (E.t === 'stair') { const w = E.w || 1.1, n = 8, u0 = (E.pos || 0.1) * len;
       for (let i = 0; i <= n; i++) { const [ax, ay] = E.along === 'perp' ? at(u0, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, 0); const [bx, by] = E.along === 'perp' ? at(u0 + w, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, w);
         const A = P(ax, ay), B = P(bx, by); o.push('<line x1="' + A[0] + '" y1="' + A[1] + '" x2="' + B[0] + '" y2="' + B[1] + '" stroke="#6B645A" stroke-width="1"/>'); } }
@@ -23898,6 +23900,8 @@ function vmPlanSVG(vm, w, opts) {
     o.push('<text x="' + c[0] + '" y="' + (+c[1] + fs * 1.05).toFixed(1) + '" font-size="' + (fs * 0.9).toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + fmt(q.w * q.d, 1) + ' m²</text>');
     const h2 = P(q.x + q.w / 2, q.y - q.d / 2); o.push('<rect data-roomsize="' + i + '" x="' + (+h2[0] - 5) + '" y="' + (+h2[1] - 5) + '" width="9" height="9" fill="#4E8A78" style="cursor:nwse-resize"/>'); });
   o.push(...courtH);
+  /* the chimneys over the rooms, so they can always be picked and dragged */
+  o.push(...chimTop);
   /* north and a scale bar of 5 m */
   o.push('<g font-family="sans-serif" font-size="11" fill="#3A3530"><path d="M' + (w - 22) + ',30 l7,-18 l7,18 l-7,-5 z" fill="#3A3530"/><text x="' + (w - 15) + '" y="44" text-anchor="middle">N</text>');
   o.push('<rect x="14" y="' + (h - 18) + '" width="' + (5 * s).toFixed(1) + '" height="5" fill="#3A3530"/><text x="14" y="' + (h - 24) + '">5 m</text></g>');
@@ -24110,8 +24114,22 @@ function vmPassToStudy(vm, wi) {
   const n = { flat:0, shed:1, gable:2, ground:2, hip:3, pyramid:3, tesoura:3, cone:3, dome:3 }[v.roof.type];
   ROOF.n = n; ROOF.th = n === 0 ? 0 : Math.min(60, v.roof.type === 'dome' ? 35 : v.roof.th); delete ROOF.zones; ROOF.roofSel = -1;
   try { migrateRoofGlobals(MASS, ROOF); } catch (e) { }
+  vmChimToRoof(vm, wi);
   toast(wi ? VMT('Now working on: ', 'Agora a trabalhar: ') + VL(v.name) : VMT('The main body is now the study’s massing — the other tabs measure it.', 'O corpo principal passou a ser a volumetria do estudo — os outros separadores medem-no.'));
   refreshAll();
+}
+/** The Roof tab's family for a modeller chimney: the kind it is drawn as, else the place's own. */
+const vmChimFamOf = (E, R) => ({ alg:'rendilhada', ale:'alentejana', rib:'arca', sal:'saloia', az:'maos', mad:'arca', esp:'granito', talha:'arca', box:'arca',
+  gran:E.wall === 'schist' ? 'xisto' : E.wall === 'basalt' ? 'basalto' : 'granito' })[E.kind] || chimneyOf(STATE.site);
+/** The chimney the student placed on this body in the modeller, carried to the Roof tab where it stands — its family, its place. */
+function vmChimToRoof(vm, wi) {
+  const E = (vm.els || []).find(e => e.t === 'chimney' && (e.vol || 0) === (wi || 0));
+  if (!E || !ROOF.zones || !ROOF.zones.length) return;
+  let R = null; try { R = vernRead(); } catch (e) { }
+  const fu = clamp(E.u === undefined ? 0.75 : E.u, 0.05, 0.95), fv = clamp(E.v === undefined ? 0.5 : E.v, 0.05, 0.95);
+  const zi = Math.max(0, ROOF.zones.findIndex(z => fu >= (z.f0 || 0) - 1e-6 && fu <= (z.f1 === undefined ? 1 : z.f1) + 1e-6));
+  ROOF.zones.forEach(z => { delete z.chim; });
+  ROOF.zones[zi].chim = { on:true, fam:vmChimFamOf(E, R), picked:true, x:+((fu - 0.5) * MASS.L).toFixed(2), y:+((fv - 0.5) * MASS.D).toFixed(2) };
 }
 /** The body the other tabs work on: picked from the model's bodies, the rest staying as glass around it. */
 function vmWorkOn(i) {
@@ -24343,7 +24361,7 @@ function buildModeller(host) {
     /* one plan per floor, side by side: each with its openings and its rooms; a click picks the floor new rooms go to */
     planBox.innerHTML = '';
     planBox.style.gridColumn = '1 / -1';
-    planBox.appendChild(el('p', { class:'vmcap', html:VMT('Plans — drag a body or a room; click a plan to add rooms to that floor', 'Plantas — arraste um corpo ou uma divisão; clique numa planta para lhe juntar divisões') }));
+    planBox.appendChild(el('p', { class:'vmcap', html:VMT('Plans — drag a body, a room or the chimney; click a plan to add rooms to that floor', 'Plantas — arraste um corpo, uma divisão ou a chaminé; clique numa planta para lhe juntar divisões') }));
     /* open a window or a door straight on a plan: arm it, then click a wall of that floor; drag an opening along its wall, double-click to remove it */
     const tools = planBox.appendChild(el('div', { class:'vmbtns' }));
     if (!vmPlanDrag.esc) { vmPlanDrag.esc = true; document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && VM_ARM) { VM_ARM = null; if (VM_REDRAW) VM_REDRAW(); } }); }
@@ -24438,6 +24456,7 @@ function buildModeller(host) {
       else if (t.dataset.roomsize !== undefined) drag = { kind:'size', q:rooms[+t.dataset.roomsize], p, w0:rooms[+t.dataset.roomsize].w, d0:rooms[+t.dataset.roomsize].d };
       else if (t.dataset.room !== undefined) { const q = rooms[+t.dataset.room]; VM_ROOMSEL = q; VM_OPSEL = null; drag = { kind:'room', q, p, x0:q.x, y0:q.y };
         if (!drag.moved) { const PLs = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:R.V.rooms.filter(r => r.fl === fl) }); svg.innerHTML = PLs.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } }
+      else if (t.dataset.chim !== undefined) { const E = (M.els || [])[+t.dataset.chim]; if (E) drag = { kind:'chim', E, p }; }
       else if (t.dataset.vol !== undefined) { const i = +t.dataset.vol, v = M.vols[i]; VM_SEL = i; drag = { kind:'vol', v, p, x0:v.x, y0:v.y }; }
       if (drag) { svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
     });
@@ -24447,6 +24466,10 @@ function buildModeller(host) {
       const dx = Math.round((p[0] - drag.p[0]) / PL.s * 4) / 4, dy = -Math.round((p[1] - drag.p[1]) / PL.s * 4) / 4;
       if (drag.kind === 'op') { const W = wallAt(p, drag.vi, drag.f); if (W) { const len = drag.f === 'S' || drag.f === 'N' ? drag.v.L : drag.v.D; drag.op.pos = +clamp(W.t, drag.op.w / 2 / len + 0.02, 1 - drag.op.w / 2 / len - 0.02).toFixed(3); } }
       else if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
+      else if (drag.kind === 'chim') { /* the chimney goes where the student puts it: anywhere inside a body, onto another body as well */
+        const [wx, wy] = toW(p), vols = vm().vols, inside = vols.findIndex(v => v.kind === 'rect' ? Math.abs(wx - v.x) <= v.L / 2 && Math.abs(wy - v.y) <= v.D / 2 : Math.hypot((wx - v.x) / (v.L / 2), (wy - v.y) / (v.D / 2)) <= 1);
+        const vi = inside >= 0 ? inside : (drag.E.vol || 0), v = vols[vi]; drag.E.vol = vi;
+        drag.E.u = +clamp((wx - (v.x - v.L / 2)) / v.L, 0.05, 0.95).toFixed(3); drag.E.v = +clamp((wy - (v.y - v.D / 2)) / v.D, 0.05, 0.95).toFixed(3); }
       else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
       else if (drag.kind === 'court') { /* the opposite corner stays; the yard keeps at least 2 m a side */
         const nx = drag.cx + dx, ny = drag.cy + dy, c = drag.c; if (Math.abs(nx - drag.fx) >= 2) { c.L = Math.abs(nx - drag.fx); c.x = (nx + drag.fx) / 2; } if (Math.abs(ny - drag.fy) >= 2) { c.D = Math.abs(ny - drag.fy); c.y = (ny + drag.fy) / 2; } }
