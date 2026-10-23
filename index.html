@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.158.1',
+  version:     '1.158.2',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24236,7 +24236,7 @@ function buildModeller(host) {
       if (M.vols.length > 1) ob.appendChild(el('button', { type:'button', style:'color:var(--c2)', text:VMT('Remove this body', 'Remover este corpo'), onclick:() => { M.els = M.els.filter(e => e.vol !== VM_SEL).map(e => Object.assign(e, { vol:e.vol > VM_SEL ? e.vol - 1 : e.vol })); M.vols.splice(VM_SEL, 1); VM_SEL = 0; vmChanged(true); } }));
     }
     /* elements */
-    ed.appendChild(el('h4', { text:VMT('Parts of the house', 'Elementos da casa') }));
+    ed.appendChild(el('h4', { class:'vmparts', text:VMT('Parts of the house', 'Elementos da casa') }));
     const volOpts = M.vols.map((q, i) => [i, VL(q.name)]);
     (M.els || []).forEach((E, i) => {
       const row = ed.appendChild(el('div', { class:'vmrow vmel' }));
@@ -24275,6 +24275,9 @@ function buildModeller(host) {
       r4.appendChild(vmSel(VMT('Gate (porta carral) on', 'Portão (porta carral) a'), vmFaceOpts(), () => c.gate.face, x => { c.gate.face = x; }));
       r4.appendChild(vmSel(VMT('Side closed by the house', 'Lado fechado pela casa'), [['', VMT('none', 'nenhum')]].concat(vmFaceOpts()), () => c.open || '', x => { c.open = x || null; })); r4.appendChild(vmNum(VMT('Gate width (m)', 'Largura do portão (m)'), () => c.gate.w, x => { c.gate.w = x; }, 1, 6, 0.1)); }
     r4.appendChild(vmNum(VMT('Houses in a row (party walls)', 'Casas em banda (paredes-meias)'), () => (M.row || {}).n || 1, x => { M.row = { n:Math.round(x) }; }, 1, 8, 1));
+    /* the parts of the house and the yard first, at the top beside the isometric they are seen in; the bodies follow */
+    const mk = ed.querySelector('h4.vmparts');
+    if (mk) { const nodes = []; for (let n = mk; n; n = n.nextSibling) nodes.push(n); const first = ed.firstChild; nodes.forEach(n => ed.insertBefore(n, first)); ed.insertBefore(el('hr', { style:'border:0;border-top:1px solid var(--line);margin:12px 0' }), first); }
   }
 
   /* ---- the views ---- */
