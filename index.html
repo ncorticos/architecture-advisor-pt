@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.158.0',
+  version:     '1.158.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24330,13 +24330,16 @@ function buildModeller(host) {
       fig.insertAdjacentHTML('beforeend', PL.svg);
       vmPlanDrag(fig.querySelector('svg'), PL, k);
     }
-    elevBox.innerHTML = '';
-    const ec = elevBox.appendChild(el('p', { class:'vmcap', text:VMT('Elevation', 'Alçado') + ' · ' }));
-    const es = el('select', { onchange:e => { VM_FACE = e.target.value; drawViews(); } });
-    vmFaceOpts().forEach(([f, l]) => es.appendChild(el('option', { value:f, text:l, selected:f === VM_FACE ? 'selected' : null })));
-    ec.appendChild(es);
-    elevBox.insertAdjacentHTML('beforeend', vmElevSVG(M, VM_FACE, 520, { handles:true }));
-    vmHeightDrag(elevBox);
+    /* all four elevations at once, laid out as on a sheet: the south above, east and west either side, the north below */
+    elevBox.innerHTML = ''; elevBox.style.gridColumn = '1 / -1';
+    elevBox.appendChild(el('p', { class:'vmcap', text:VMT('Elevations — drag the dot on a body to change its height', 'Alçados — arraste o ponto de um corpo para mudar a sua altura') }));
+    const eg = elevBox.appendChild(el('div', { style:'display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"s s" "w e" "n n";gap:10px;justify-items:center' }));
+    /* one scale for the four: each drawing as wide as its facade is long */
+    const ebb = vmBBox(M), ex = ebb[2] - ebb[0] + 4, ey = ebb[3] - ebb[1] + 4, eW = 560 / Math.max(ex, ey);
+    vmFaceOpts().forEach(([f, l]) => { const cell = eg.appendChild(el('div', { style:'grid-area:' + f.toLowerCase() + ';text-align:center' })), wpx = Math.round(eW * (f === 'S' || f === 'N' ? ex : ey));
+      cell.insertAdjacentHTML('beforeend', vmElevSVG(M, f, wpx, { handles:true }));
+      const sv = cell.querySelector('svg'); if (sv) { sv.style.maxWidth = '100%'; sv.style.height = 'auto'; }
+      vmHeightDrag(cell); });
     drawBelow();
     alignSide();
   }
