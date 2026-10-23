@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.158.3',
+  version:     '1.158.4',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -18463,7 +18463,7 @@ style === 'sketch' ? '#EFEBE0'
      prompt copied, and gemini.google.com opened in a new tab. */
   props.appendChild(el('div', { class:'gh', text:'Photorealistic image (Gemini)' }));
   const gemBox = props.appendChild(el('div', { class:'controls' }));
-  const gemNote = el('div', { class:'hint', html:t('Frame the view first — zoom and turn it: Gemini keeps the framing. Opens Gemini in a new tab — sign in there with your university Google account. Then attach the downloaded image, paste the prompt (Ctrl/⌘ V) and send.') });
+  const gemNote = el('div', { class:'hint', html:t('Frame the view first — zoom and turn it: Gemini keeps the framing. One copy carries the view and the prompt together: Open in Gemini copies both and opens Gemini in a new tab — sign in there with your university Google account, paste (Ctrl/⌘ V) and send. Where the browser cannot copy an image, the view is downloaded instead: attach it, then paste the prompt.') });
   const gemWarn = el('div', { class:'hint', text:t('What Gemini returns is an AI illustration, not the model: check that storeys, roof and openings were kept before using it.') });
   gemWarn.style.color = '#9A3412';
   /** The prompt, in the page's language, from the model as it stands. */
@@ -18494,15 +18494,36 @@ style === 'sketch' ? '#EFEBE0'
     ].join('\n');
   }
   const copyText = (txt, done) => { try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, () => fallbackCopy(txt, done)); else fallbackCopy(txt, done); } catch (e) { fallbackCopy(txt, done); } };
-  gemBox.appendChild(el('button', { class:'btn solid', text:'Open in Gemini', title:t('Download the view, copy the prompt and open Gemini'),
+  /* the view as a file the student attaches by hand — the fallback where the
+     clipboard takes no image */
+  const downloadView = () => { try { const a = document.createElement('a'); a.href = renderPanel.canvas.toDataURL('image/png'); a.download = 'vista-render-' + (S.place || S.nuts || 'local').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '-') + '.png'; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} };
+  /* One copy, the view and the prompt together: a clipboard item with the PNG,
+     the plain text and an HTML version holding both, so one paste in Gemini
+     brings the image and the words. The PNG is handed over as a promise inside
+     the click, as Safari asks. Where the clipboard takes no image (older
+     browsers, a refused permission), the view is downloaded and the prompt
+     copied as text — the earlier two-step way. */
+  const copyViewAndPrompt = (ok, fallback) => {
+    refreshRender();
+    const txt = geminiPrompt(), cv = renderPanel.canvas;
+    const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const twoStep = () => { downloadView(); copyText(txt, fallback); };
+    try {
+      if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) { twoStep(); return; }
+      const png = new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('png')), 'image/png'));
+      const html = '<img src="' + cv.toDataURL('image/png') + '" alt="view"><p>' + esc(txt).replace(/\n/g, '<br>') + '</p>';
+      const item = new ClipboardItem({ 'image/png':png, 'text/plain':new Blob([txt], { type:'text/plain' }), 'text/html':new Blob([html], { type:'text/html' }) });
+      navigator.clipboard.write([item]).then(ok, twoStep);
+    } catch (e) { twoStep(); }
+  };
+  gemBox.appendChild(el('button', { class:'btn solid', text:'Open in Gemini', title:t('Copy the view and the prompt together and open Gemini'),
     onclick: () => {
-      refreshRender();
-      /* the view as a file the student attaches in Gemini */
-      try { const a = document.createElement('a'); a.href = renderPanel.canvas.toDataURL('image/png'); a.download = 'vista-render-' + (S.place || S.nuts || 'local').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '-') + '.png'; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {}
-      copyText(geminiPrompt(), () => toast(t('Image downloaded and prompt copied — attach the image in Gemini and paste the prompt')));
+      copyViewAndPrompt(() => toast(t('View and prompt copied — paste them in Gemini (Ctrl/⌘ V) and send')),
+        () => toast(t('Image downloaded and prompt copied — attach the image in Gemini and paste the prompt')));
       window.open('https://gemini.google.com/app', '_blank', 'noopener');
     } }));
-  gemBox.appendChild(el('button', { class:'btn', text:'Copy the photoreal render prompt', onclick:() => copyText(geminiPrompt(), () => toast(t('Prompt copied'))) }));
+  gemBox.appendChild(el('button', { class:'btn', text:'Copy the view and the photoreal prompt', onclick:() => copyViewAndPrompt(() => toast(t('View and prompt copied')),
+    () => toast(t('Image downloaded and prompt copied — attach the image in Gemini and paste the prompt'))) }));
   props.appendChild(gemNote); props.appendChild(gemWarn);
 
   KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showNb, embas, cant, cam:{ az:CAM.az, el:CAM.el } }; });
@@ -28665,8 +28686,12 @@ Object.assign(PT, {
   "Download the view, copy the prompt and open Gemini": "Descarregar a vista, copiar o pedido e abrir o Gemini",
   "Copy the photoreal render prompt": "Copiar o prompt de renderização fotorrealista",
   "Prompt copied": "Prompt copiado",
+  "Copy the view and the prompt together and open Gemini": "Copiar a vista e o prompt juntos e abrir o Gemini",
+  "View and prompt copied — paste them in Gemini (Ctrl/⌘ V) and send": "Vista e prompt copiados — cole-os no Gemini (Ctrl/⌘ V) e envie",
+  "Copy the view and the photoreal prompt": "Copiar a vista e o prompt fotorrealista",
+  "View and prompt copied": "Vista e prompt copiados",
   "Image downloaded and prompt copied — attach the image in Gemini and paste the prompt": "Imagem descarregada e pedido copiado — anexe a imagem no Gemini e cole o pedido",
-  "Frame the view first — zoom and turn it: Gemini keeps the framing. Opens Gemini in a new tab — sign in there with your university Google account. Then attach the downloaded image, paste the prompt (Ctrl/⌘ V) and send.": "Enquadre primeiro a vista — aproxime e rode: o Gemini mantém o enquadramento. Abre o Gemini num novo separador — entre aí com a sua conta Google da universidade. Depois anexe a imagem descarregada, cole o pedido (Ctrl/⌘ V) e envie.",
+  "Frame the view first — zoom and turn it: Gemini keeps the framing. One copy carries the view and the prompt together: Open in Gemini copies both and opens Gemini in a new tab — sign in there with your university Google account, paste (Ctrl/⌘ V) and send. Where the browser cannot copy an image, the view is downloaded instead: attach it, then paste the prompt.": "Enquadre primeiro a vista — aproxime e rode: o Gemini mantém o enquadramento. Uma só cópia leva a vista e o prompt juntos: Abrir no Gemini copia ambos e abre o Gemini num novo separador — entre aí com a sua conta Google da universidade, cole (Ctrl/⌘ V) e envie. Onde o navegador não consegue copiar uma imagem, a vista é descarregada: anexe-a e cole depois o prompt.",
   "What Gemini returns is an AI illustration, not the model: check that storeys, roof and openings were kept before using it.": "O que o Gemini devolve é uma ilustração gerada por IA, não o modelo: confirme que os pisos, o telhado e os vãos se mantiveram antes de a usar.",
   "Popular here": "Popular aqui",
   "Wall finishes": "Acabamentos de parede",
