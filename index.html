@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.158.2',
+  version:     '1.158.3',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24221,8 +24221,13 @@ function buildModeller(host) {
       r3.appendChild(vmSel(VMT('Frames of the openings', 'Molduras dos vãos'), [['', VMT('none', 'sem')], ['cal', VMT('lime band', 'faixa caiada')], ['cantaria', VMT('cut stone', 'cantaria')], ['cor', VMT('coloured', 'pintadas')]], () => v.wall.frames || '', x => { v.wall.frames = x || null; }));
       r3.appendChild(vmSel(VMT('Buttresses (both long sides)', 'Contrafortes (nos dois lados maiores)'), [['none', VMT('none', 'nenhum')], ['corners', VMT('at the corners', 'nos cunhais')], ['half', VMT('corners + half', 'cunhais + a meio')], ['thirds', VMT('corners + thirds', 'cunhais + terços')], ['quarters', VMT('corners + quarters', 'cunhais + quartos')]], () => vmButtMode(v), x => { v.wall.butt = x; v.wall.buttress = x === 'none' ? 0 : 1; }));
       r3.appendChild(vmChk(VMT('coloured corners (cunhais)', 'cunhais marcados'), () => !!v.wall.cunhais, x => { v.wall.cunhais = x; }));
-      ed.appendChild(el('h4', { text:VMT('Openings of this body', 'Vãos deste corpo') }));
-      VM_FACES.forEach(f => (v.open[f] || []).forEach((o, i) => { const row = ed.appendChild(el('div', { class:'vmrow vmel' }));
+      /* the openings of one floor at a time: the floor picked here or by clicking its plan */
+      const flE = Math.max(0, Math.min(VM_ROOMFL || 0, v.fl - 1));
+      ed.appendChild(el('h4', { text:VMT('Openings of this body', 'Vãos deste corpo') + (v.fl > 1 ? ' — ' + (flE ? VMT('floor ', 'piso ') + flE : VMT('ground floor', 'piso térreo')) : '') }));
+      if (v.fl > 1) { const fb = ed.appendChild(el('div', { class:'seg', style:'display:flex;gap:4px;margin:0 0 6px' }));
+        for (let k = 0; k < v.fl; k++) fb.appendChild(el('button', { type:'button', class:'btn small' + (k === flE ? ' solid' : ''), 'aria-pressed':String(k === flE), text:k ? VMT('Floor ', 'Piso ') + k : VMT('Ground', 'Térreo'),
+          onclick:() => { VM_ROOMFL = k; drawEditor(); drawViews(); } })); }
+      VM_FACES.forEach(f => (v.open[f] || []).forEach((o, i) => { if ((o.fl || 0) !== flE) return; const row = ed.appendChild(el('div', { class:'vmrow vmel' }));
         row.appendChild(vmSel(VMT('Face', 'Fachada'), vmFaceOpts(), () => f, x => { v.open[f].splice(i, 1); (v.open[x] = v.open[x] || []).push(o); }, true));
         row.appendChild(vmSel(VMT('Kind', 'Tipo'), [['w', VMT('window', 'janela')], ['d', VMT('door', 'porta')]], () => o.t, x => { o.t = x; if (x === 'd') o.h = 2; }));
         row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => o.pos, x => { o.pos = x; }, 0, 1, 0.05));
@@ -24231,8 +24236,8 @@ function buildModeller(host) {
         row.appendChild(vmNum(VMT('Storey (0 = ground)', 'Piso (0 = térreo)'), () => o.fl, x => { o.fl = Math.round(x); }, 0, 3, 1));
         row.appendChild(el('button', { type:'button', class:'x', text:'✕ ' + VMT('remove', 'remover'), onclick:() => { v.open[f].splice(i, 1); vmChanged(true); } })); }));
       const ob = ed.appendChild(el('div', { class:'vmbtns' }));
-      ob.appendChild(el('button', { type:'button', text:'+ ' + VMT('window', 'janela'), onclick:() => { v.open.S.push(vmOp('w', 0.5, 0.8, 1.0)); vmChanged(true); } }));
-      ob.appendChild(el('button', { type:'button', text:'+ ' + VMT('door', 'porta'), onclick:() => { v.open.S.push(vmOp('d', 0.5, 0.9, 2.0)); vmChanged(true); } }));
+      ob.appendChild(el('button', { type:'button', text:'+ ' + VMT('window', 'janela'), onclick:() => { v.open.S.push(vmOp('w', 0.5, 0.8, 1.0, flE)); vmChanged(true); } }));
+      ob.appendChild(el('button', { type:'button', text:'+ ' + VMT('door', 'porta'), onclick:() => { v.open.S.push(vmOp('d', 0.5, 0.9, 2.0, flE)); vmChanged(true); } }));
       if (M.vols.length > 1) ob.appendChild(el('button', { type:'button', style:'color:var(--c2)', text:VMT('Remove this body', 'Remover este corpo'), onclick:() => { M.els = M.els.filter(e => e.vol !== VM_SEL).map(e => Object.assign(e, { vol:e.vol > VM_SEL ? e.vol - 1 : e.vol })); M.vols.splice(VM_SEL, 1); VM_SEL = 0; vmChanged(true); } }));
     }
     /* elements */
@@ -24405,7 +24410,7 @@ function buildModeller(host) {
         if (op) { VM_OPSEL = op; VM_ROOMSEL = null; drag = { kind:'op', v, vi:+vi, f, op, p:pt(ev) }; svg.setPointerCapture(ev.pointerId); ev.preventDefault();
           const PLs = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:R.V.rooms.filter(r => r.fl === fl) }); svg.innerHTML = PLs.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); return; }
       }
-      if (VM_ROOMFL !== fl) { VM_ROOMFL = fl; svg.closest('.vmplans') && svg.closest('.vmplans').querySelectorAll('.vmplan1').forEach((d, i) => d.classList.toggle('on', i === fl)); }
+      if (VM_ROOMFL !== fl) { VM_ROOMFL = fl; svg.closest('.vmplans') && svg.closest('.vmplans').querySelectorAll('.vmplan1').forEach((d, i) => d.classList.toggle('on', i === fl)); drawEditor(); }
       const t = ev.target, p = pt(ev), M = vm(), rooms = R.V.rooms.filter(q => q.fl === fl);
       if (t.dataset.court !== undefined) { const c = M.court, ci = +t.dataset.court, sx = ci === 1 || ci === 2 ? 1 : -1, sy = ci >= 2 ? 1 : -1;
         drag = { kind:'court', c, p, fx:c.x - sx * c.L / 2, fy:c.y - sy * c.D / 2, cx:c.x + sx * c.L / 2, cy:c.y + sy * c.D / 2 }; }
