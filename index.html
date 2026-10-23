@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.152.1',
+  version:     '1.153.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -14379,7 +14379,7 @@ function buildVentilation(host) {
   rail.appendChild(el('div', { class:'gh', text:'Support structures' }));
   const supSel = el('select', { class:'supsel', style:'max-width:100%;font:inherit;font-size:12px' });
   supKeys().forEach(k => supSel.appendChild(el('option', { value:k, text:VL(VERN_TYPES[k].name).replace(/ \(.*\)$/, '').replace(/ — .*$/, '') })));
-  supBtn = el('button', { class:'btn small', text:'Place', onclick: () => {
+  supBtn = el('button', { class:'btn small', text:'Place the structure', onclick: () => {
     const k = supSel.value, on = supArmed !== k;
     supArmed = on ? k : null; wallArmed = on; plantArmed = null;
     paintTools();
@@ -18012,7 +18012,9 @@ style === 'sketch' ? '#EFEBE0'
         const zx = M.zAt(+ch.x, +ch.y);
         if (zx !== null && isFinite(zx)) {
           chimSync(ch);
-          pushChimFaces(items, chimneyFaces(ch.fam, +ch.x, +ch.y, zx, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy)), f => ({ pts:f.pts, fill:f.fill, chim:true, d:dc(f.pts) }));
+          /* the stack is a solid: only its faces turned to the camera, so a face behind can never be painted over the one in front —
+             a long saloio stack astride the ridge stands on neither slope, and by centroids alone its far side came over its near one */
+          pushChimFaces(items, chimneyFaces(ch.fam, +ch.x, +ch.y, zx, chimEffH(ch), chimFoot(ch), chimTaper(ch), (qx, qy) => M.zAt(qx, qy)).filter(f => !f.n || f.n[2] > 0.3 || (f.n[2] > -0.3 && wallSeen(f.n))), f => ({ pts:f.pts, fill:f.fill, chim:true, d:dc(f.pts) }));
         }
       } catch (e) {}
     });
@@ -18461,7 +18463,7 @@ style === 'sketch' ? '#EFEBE0'
       copyText(geminiPrompt(), () => toast(t('Image downloaded and prompt copied — attach the image in Gemini and paste the prompt')));
       window.open('https://gemini.google.com/app', '_blank', 'noopener');
     } }));
-  gemBox.appendChild(el('button', { class:'btn', text:'Copy the prompt again', onclick:() => copyText(geminiPrompt(), () => toast(t('Prompt copied'))) }));
+  gemBox.appendChild(el('button', { class:'btn', text:'Copy the photoreal render prompt', onclick:() => copyText(geminiPrompt(), () => toast(t('Prompt copied'))) }));
   props.appendChild(gemNote); props.appendChild(gemWarn);
 
   KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showNb, embas, cant, cam:{ az:CAM.az, el:CAM.el } }; });
@@ -18560,7 +18562,7 @@ const VERN_SRC = {
     url:'https://visitmadeira.com/pt/onde-ir/porto-santo/a-descoberta-da-ilha/casa-de-salao' },
   INF:{ tag:'inference', cite:'Teaching inference: the sources describe the feature but give no figure; the number makes the model drawable and is not a measurement.', url:null }
 };
-const vSrc = k => VERN_SRC[k] ? '<span class="vsrc' + (k === 'INF' ? ' inf' : '') + '" title="' + VERN_SRC[k].cite.replace(/<[^>]+>/g, '').replace(/"/g, '&quot;') + '">'
+const vSrc = k => VERN_SRC[k] ? '<span class="vsrc' + (k === 'INF' ? ' inf' : '') + '" title="' + (k === 'INF' ? VMT(VERN_SRC.INF.cite, 'Inferência didáctica: as fontes descrevem o elemento mas não dão um valor; o número torna o modelo desenhável e não é uma medição.') : VERN_SRC[k].cite).replace(/<[^>]+>/g, '').replace(/"/g, '&quot;') + '">'
   + (k === 'INF' ? VL({ en:'inference', pt:'inferência' }) : VERN_SRC[k].tag) + '</span>' : '';
 
 /* --- where on the island: altitude belt and face of the ridge ------------ */
@@ -19177,7 +19179,7 @@ function vernMount(host, tabKey, openFirst) {
     btns.appendChild(el('button', { type:'button', text:VL({ en:'Checklist CSV', pt:'Lista de verificação CSV' }), onclick:() => vCSV(R) }));
     const refs = Array.from(new Set(T.feats.map(f => f.src).concat(R.lines.map(l => l[1])))).filter(k => k !== 'INF' && VERN_SRC[k]);
     b.appendChild(el('ul', { class:'vrefs', html:refs.map(k => '<li>' + VERN_SRC[k].cite + (VERN_SRC[k].url ? ' <a href="' + VERN_SRC[k].url + '" target="_blank" rel="noopener noreferrer">link</a>' : '') + '</li>').join('')
-      + '<li>' + VERN_SRC.INF.cite + '</li>' }));
+      + '<li>' + VMT(VERN_SRC.INF.cite, 'Inferência didáctica: as fontes descrevem o elemento mas não dão um valor; o número torna o modelo desenhável e não é uma medição.') + '</li>' }));
   };
   box._draw = draw;
   draw();
@@ -21034,7 +21036,8 @@ function vDress(key) {
   const bar = lime && south && m.barra !== false;
   const sumEn = (T.summary && T.summary.en) || '';
   const smokeOnly = (typeof VICON_NOCHIM !== 'undefined' && VICON_NOCHIM.indexOf(key) >= 0) || /no chimney|without (a )?chimney|chimney is rare|rarely a chimney|almost no chimney|few chimneys|no chimneys|chimney.{0,10}absent/i.test(sumEn);
-  const chim = !T.support && !m.icon && (!smokeOnly || !!m.chimney);
+  /* smoke can leave through tiles, never through a flat lime roof: an açoteia house always has its chimney */
+  const chim = !T.support && (!m.icon || m.icon === 'olhao') && (!smokeOnly || !!m.chimney || !(m.roof && m.roof.n));
   const ale = dist.some(d => ['Beja', 'Évora', 'Portalegre', 'Setúbal'].indexOf(d) >= 0) && dist.indexOf('Faro') < 0;
   return { barra:bar ? barC : null, frames:m.frames || (bar ? barC : null), chimney:chim, chimAt:ale ? [0.66, 0.3] : [0.72, 0.55] };
 }
@@ -22110,6 +22113,23 @@ const SUP_TYPES = {
     ] }
 };
 Object.assign(VERN_TYPES, SUP_TYPES);
+/* No window at the very corner: in the traditional house the window stands between the door and the end of the wall,
+   in the middle of that stretch — a window pushed to the corner is a drawing habit, not a building one. Each facade's
+   windows beyond its outermost doors are centred in the wall left between door and corner (never pushed further out). */
+const VERN_WINFIX = [];
+Object.keys(VERN_TYPES).forEach(k => { const T = VERN_TYPES[k], m = T.model; if (!m || !m.open || T.support) return;
+  ['S', 'N', 'E', 'W'].forEach(f => { const o = m.open[f]; if (!o || !o.units || !o.units.length) return;
+    const isDoor = u => !!(u.door || (u.floors && u.floors[0] && u.floors[0].door)), doors = o.units.filter(u => u.on !== false && isDoor(u));
+    if (!doors.length) return;
+    const dl = doors.reduce((a, u) => u.pos < a.pos ? u : a), dr = doors.reduce((a, u) => u.pos > a.pos ? u : a);
+    const side = (ws, g0, g1, outer) => { const n = ws.length, gl = g1 - g0; if (!n || gl <= 0) return;
+      ws.sort((a, b) => a.pos - b.pos).forEach((u, i) => { const want = g0 + (i + 0.5) / n * gl;
+        if (Math.abs(u.pos - outer) < Math.abs(want - outer) && (u.frac || 0.1) < gl / n) { VERN_WINFIX.push(k + ' ' + f + ' ' + u.pos + '→' + want.toFixed(2)); u.pos = +want.toFixed(3); } }); };
+    const ws = o.units.filter(u => !isDoor(u));
+    side(ws.filter(u => u.pos < dl.pos), 0, dl.pos - (dl.frac || 0.1) / 2, 0);
+    side(ws.filter(u => u.pos > dr.pos), dr.pos + (dr.frac || 0.1) / 2, 1, 1);
+  });
+});
 vernNames();
 
 ARCH_BIB.push({ r:{ en:'Support structures — the work beside the house', pt:'Estruturas de apoio à habitação' }, types:Object.keys(SUP_TYPES), refs:[
@@ -23347,12 +23367,17 @@ function vmMetrics(vm) {
 }
 
 /* ---------------------------------------------------------------- 3D faces */
-const VM_VIEW = [1, -1, 1];   // the isometric viewer looks down this way: x − y + z grows toward it
+/** The height of the eye over the model, in degrees: 35.26 the true isometric, 90 straight down. */
+let VM_EL = 35.26;
+/** Toward the viewer: the south-east, raised by VM_EL. */
+let VM_VIEW = [1, -1, 1];
+function vmSetView() { const e = VM_EL * Math.PI / 180, c = Math.cos(e) / Math.SQRT2; VM_VIEW = [c, -c, Math.sin(e)]; }
+vmSetView();
 const vmShade = (hex, k) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255, f = c => Math.max(0, Math.min(255, Math.round(c * k)));
   return '#' + [f(r), f(g), f(b)].map(c => c.toString(16).padStart(2, '0')).join(''); };
 const vmNorm = P => { const a = P[0], b = P[1], c = P[2], u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
   const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]], l = Math.hypot(...n) || 1; return n.map(q => q / l); };
-const vmKey = P => P.reduce((a, p) => a + p[0] - p[1] + p[2], 0) / P.length;
+const vmKey = P => P.reduce((a, p) => a + p[0] * VM_VIEW[0] + p[1] * VM_VIEW[1] + p[2] * VM_VIEW[2], 0) / P.length;
 /** Light from the south-west, high: a face's shade from its normal. */
 const vmLit = (hex, n) => vmShade(hex, 0.72 + 0.28 * Math.max(0, -0.35 * n[0] - 0.55 * n[1] + 0.75 * n[2]) + 0.06);
 /** The ring of a plan (rect corners or an ellipse), grown by e, at height z. */
@@ -23449,9 +23474,15 @@ function vmVolFaces(v, opts) {
   if (r.type === 'flat') {
     const top = vmRing(v, 0, H);
     push(top, VM_ROOFMAT[r.mat] ? VM_ROOFMAT[r.mat].c : '#ECE8DE', { roof:true, top:true });
-    if (r.par > 0.05) { const t0 = vmRing(v, 0, H), t1 = vmRing(v, 0, H + r.par), N = t0.length;
-      for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([t0[i], t0[j], t1[j], t1[i]], wc, { par:true }); }
-      if (lime && v.wall.barra) { const c0 = vmRing(v, 0.03, H + r.par - 0.12), c1 = vmRing(v, 0.03, H + r.par); for (let i = 0; i < N; i++) { const j = (i + 1) % N; push([c0[i], c0[j], c1[j], c1[i]], v.wall.barra, { thin:true }); } } }
+    /* the platibanda as a wall with a thickness: outside, inside, its coping — a sheet alone showed only its rim */
+    if (r.par > 0.05) { const t0 = vmRing(v, 0, H), t1 = vmRing(v, 0, H + r.par), i0 = vmRing(v, -0.15, H), i1 = vmRing(v, -0.15, H + r.par), N = t0.length;
+      const c0 = vmRing(v, 0.03, H + r.par - 0.12), c1 = vmRing(v, 0.03, H + r.par);
+      for (let i = 0; i < N; i++) { const j = (i + 1) % N;
+        push([t0[i], t0[j], t1[j], t1[i]], wc, { par:true }); host = F[F.length - 1];
+        if (lime && v.wall.barra) push([c0[i], c0[j], c1[j], c1[i]], v.wall.barra, { thin:true, par:true });
+        host = null;
+        push([i0[j], i0[i], i1[i], i1[j]], vmShade(wc, 0.92), { par:true });
+        push([t1[i], t1[j], i1[j], i1[i]], lime && v.wall.barra ? v.wall.barra : wc, { par:true, cap:true }); } }
   } else if (r.type === 'cone' || r.type === 'pyramid' && v.kind !== 'rect') {
     const ring = vmRing(v, e, H - e * Math.tan(th)), apex = [v.x, v.y, H + vmRoofRise(v)], N = ring.length;
     for (let i = 0; i < N; i++) rf([ring[i], ring[(i + 1) % N], apex]);
@@ -23496,12 +23527,12 @@ function vmElFaces(vm, vs) {
     push([[x, y, z], [X, y, z], [X, y, Z], [x, y, Z]], c, o); push([[X, y, z], [X, Y, z], [X, Y, Z], [X, y, Z]], vmShade(c, 0.82), o);
     push([[X, Y, z], [x, Y, z], [x, Y, Z], [X, Y, Z]], vmShade(c, 0.7), o); push([[x, Y, z], [x, y, z], [x, y, Z], [x, Y, Z]], vmShade(c, 0.9), o);
     push([[x, y, Z], [X, y, Z], [X, Y, Z], [x, Y, Z]], vmShade(c, 1.06), o); };
-  (vm.els || []).forEach(E => vs.filter(v => v._i === E.vol).forEach(v => {
+  (vm.els || []).forEach((E, ei) => vs.filter(v => v._i === E.vol).forEach(v => {
     const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash, wc = W.c, z0 = v.raise || 0, H = z0 + vmH(v), x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = v.x + v.L / 2, y1 = v.y + v.D / 2;
     const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
     /* a point on a face: u along it (west→east, south→north), d out of it */
     const at = (u, d) => f === 'S' ? [x0 + u, y0 - d] : f === 'N' ? [x0 + u, y1 + d] : f === 'E' ? [x1 + d, y0 + u] : [x0 - d, y0 + u];
-    const o = { el:E.t };
+    const o = { el:E.t, ei, ev:E.vol, rr:v._r || 0 };
     if (E.t === 'chimney') {
       const k = E.kind || 'box';
       const cx = x0 + (E.u || 0.75) * v.L, cy = y0 + (E.v || 0.5) * v.D, zb = H + vmRoofAt(v, cx, cy) - 0.25, h = (E.h || 1.2) + 0.25;
@@ -23591,37 +23622,53 @@ function vmFaces(vm) {
   /* a body on top of another (a mirante) stands on its roof */
   vs.forEach(v => { if (v.raise > 0.5 && !v.piers) v._onTop = true; });
   let F = vmCourtFaces(vm);
-  vs.forEach(v => vmVolFaces(v).forEach(q => F.push(Object.assign(q, { vol:v._i }))));
+  vs.forEach(v => vmVolFaces(v).forEach(q => F.push(Object.assign(q, { vol:v._i, rr:v._r || 0 }))));
   F = F.concat(vmElFaces(vm, vs));
   /* the model turned on the spot by VM_AZ, the view staying where it is */
   if (VM_AZ) { const R = vmTurn(vm); F.forEach(q => { q.P = q.P.map(R); q.n = vmNorm(q.P); }); }
   const seen = q => (q.n[0] * VM_VIEW[0] + q.n[1] * VM_VIEW[1] + q.n[2] * VM_VIEW[2]) > -1e-6;
-  F = F.filter(q => q.host ? seen(q.host) : (q.thin || q.roof || q.top || q.court || q.el || seen(q)));
+  F = F.filter(q => q.host ? seen(q.host) : (q.thin || q.cap || q.roof || q.top || q.court || q.el || seen(q)));
+  /* the neighbours in a row only as glass volumes: the house studied is the one drawn whole */
+  F = F.filter(q => !(q.rr > 0 && (q.thin || q.host)));
+  F.forEach(q => { if (q.rr > 0) { q.ghost = true; q.fill = 'rgba(150,160,170,.10)'; } });
   F.forEach((q, i) => { q.k = (q.host ? vmKey(q.host.P) + 0.02 : vmKey(q.P) + (q.thin ? 0.02 : 0)) + (q.el ? 0.03 : 0) + i * 1e-7; });
-  return F.sort((a, b) => a.k - b.k);
+  /* painted body by body, the farthest first: in each, its walls (and what is on them), then its roof, then its chimney —
+     a face's own middle alone lets a near gable cover the roof's overhang, or a far roof slope the gable */
+  const G = new Map(), gOf = q => q.el === 'chimney' ? 'v' + q.ev + '.' + q.rr : q.el ? 'e' + q.ei + '.' + q.rr : q.vol !== undefined && !q.court ? 'v' + q.vol + '.' + q.rr : 'f' + q.k;
+  F.forEach(q => { const g = gOf(q); if (!G.has(g)) G.set(g, []); G.get(g).push(q); });
+  const rank = q => q.el === 'chimney' ? 2 : q.par ? 1.5 : q.roof || q.top ? 1 : 0, out = [];
+  [...G.values()].map(A => { const pts = A.filter(q => q.el !== 'chimney').flatMap(q => q.P), lo = [0, 1, 2].map(j => Math.min(...pts.map(p => p[j]))), hi = [0, 1, 2].map(j => Math.max(...pts.map(p => p[j])));
+    return { A, k: A.length === 1 ? A[0].k : vmKey([lo, hi]) }; })
+    .sort((a, b) => a.k - b.k).forEach(g => g.A.sort((a, b) => rank(a) - rank(b) || a.k - b.k).forEach(q => out.push(q)));
+  return out;
 }
 
 /* ---------------------------------------------------------------- drawings */
 /** The turn of the isometric, in degrees: 0 from the south-east, as the icons. */
 let VM_AZ = 0;
 /** Turning a point about the model's centre by VM_AZ. */
-function vmTurn(vm) {
-  const bb = vmBBox(vm), cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, a = VM_AZ * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
+function vmTurn(vm, back) {
+  const bb = vmBBox(vm), cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, a = (back ? -VM_AZ : VM_AZ) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
   return p => [cx + (p[0] - cx) * c - (p[1] - cy) * sn, cy + (p[0] - cx) * sn + (p[1] - cy) * c, p[2]];
 }
 const VM_C30 = Math.cos(Math.PI / 6);
-const vmIso = p => [(p[0] + p[1]) * VM_C30, (p[0] - p[1]) * 0.5 - p[2]];
+/* the eye at VM_EL over the ground: at the true isometric this is ((x + y)·cos 30°, (x − y)/2 − z) */
+const vmIso = p => { const e = VM_EL * Math.PI / 180, k = 1 / Math.cos(35.26 * Math.PI / 180);
+  return [(p[0] + p[1]) * VM_C30, ((p[0] - p[1]) / Math.SQRT2 * Math.sin(e) - p[2] * Math.cos(e)) * k]; };
 const vmPts = P => P.map(p => p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ');
 /** The model in isometric, as an SVG string. */
 function vmIsoSVG(vm, w, opts) {
   opts = opts || {};
   const F = vmFaces(vm), out = [], all = [];
-  const bb = vmBBox(vm), sh = [[bb[0] - 0.5, bb[1] - 0.5, 0], [bb[2] + 1, bb[1] - 0.5, 0], [bb[2] + 1, bb[3] + 1, 0], [bb[0] - 0.5, bb[3] + 1, 0]].map(vmTurn(vm)).map(vmIso);
+  /* the ground under everything drawn — the oven and the stairs too, not only the bodies */
+  const bb = vmBBox(vm).slice(), RB = vmTurn(vm, true);
+  F.forEach(q => q.P.forEach(p => { const u = RB(p); bb[0] = Math.min(bb[0], u[0]); bb[1] = Math.min(bb[1], u[1]); bb[2] = Math.max(bb[2], u[0]); bb[3] = Math.max(bb[3], u[1]); }));
+  const sh = [[bb[0] - 0.5, bb[1] - 0.5, 0], [bb[2] + 1, bb[1] - 0.5, 0], [bb[2] + 1, bb[3] + 1, 0], [bb[0] - 0.5, bb[3] + 1, 0]].map(vmTurn(vm)).map(vmIso);
   out.push('<polygon points="' + vmPts(sh) + '" fill="rgba(0,0,0,.08)"/>'); sh.forEach(p => all.push(p));
   F.forEach(q => { const P = q.P.map(vmIso); P.forEach(p => all.push(p));
     const fill = q.fill.indexOf('rgba') === 0 ? q.fill : (q.thin || q.el ? q.fill : vmLit(q.fill, q.n));
-    out.push('<polygon points="' + vmPts(P) + '" fill="' + fill + '" stroke="rgba(0,0,0,.35)" stroke-width="' + (q.thin ? 0.015 : 0.035) + '" stroke-linejoin="round"/>');
-    if (q.roof && !q.top && q.P.length >= 3) { /* courses of the covering */
+    out.push('<polygon points="' + vmPts(P) + '" fill="' + fill + '" stroke="' + (q.ghost ? 'rgba(60,70,80,.3)' : 'rgba(0,0,0,.35)') + '" stroke-width="' + (q.thin ? 0.015 : q.ghost ? 0.025 : 0.035) + '" stroke-linejoin="round"/>');
+    if (q.roof && !q.top && !q.ghost && q.P.length >= 3) { /* courses of the covering */
       const a = q.P[0], b = q.P[1], c = q.P[q.P.length - 1], n = Math.max(2, Math.round(Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]) / 0.35));
       for (let k = 1; k < n; k++) { const t = k / n, A = vmIso([a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t]), B = vmIso(q.P.length === 3 ? [b[0] + (c[0] - b[0]) * t, b[1] + (c[1] - b[1]) * t, b[2] + (c[2] - b[2]) * t] : [b[0] + (q.P[2][0] - b[0]) * t, b[1] + (q.P[2][1] - b[1]) * t, b[2] + (q.P[2][2] - b[2]) * t]);
         out.push('<line x1="' + A[0].toFixed(2) + '" y1="' + A[1].toFixed(2) + '" x2="' + B[0].toFixed(2) + '" y2="' + B[1].toFixed(2) + '" stroke="rgba(0,0,0,.18)" stroke-width="0.025"/>'); }
@@ -23879,7 +23926,7 @@ function vmDefaultRooms(vm) {
       } else {
         room({ en:'Bedroom', pt:'Quarto' }, x0 + w3 / 2, w3, 0); room({ en:'Casa de fora', pt:'Casa de fora' }, x0 + 1.5 * w3, w3, 0); room({ en:'Kitchen', pt:'Cozinha' }, x0 + 2.5 * w3, w3, 0);
       }
-    } else for (let k = 0; k < v.fl; k++) room(k === 0 && v.fl >= 2 ? { en:'Store (arrumos)', pt:'Arrumos' } : k === 0 ? { en:'Room', pt:'Divisão' } : { en:'Bedroom', pt:'Quarto' }, v.x, v.L, k);
+    } else for (let k = 0; k < v.fl; k++) room(k === 0 && v.fl >= 2 ? { en:'Store (arrumos)', pt:'Arrumos' } : k === 0 ? { en:'Room (free use)', pt:'Divisão (uso livre)' } : { en:'Bedroom', pt:'Quarto' }, v.x, v.L, k);
   });
   return R;
 }
@@ -24079,15 +24126,22 @@ function buildModeller(host) {
     const fromTxt = () => { const k = Math.round(((135 + VM_AZ) % 360) / 45) % 8;
       return (LANG === 'pt' ? ['norte', 'nordeste', 'nascente', 'sudeste', 'sul', 'sudoeste', 'poente', 'noroeste'] : ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'])[k] + (VM_AZ % 45 ? ' (' + VM_AZ + '°)' : ''); };
     isoBox.innerHTML = '';
-    const ib = isoBox.appendChild(el('p', { class:'vmcap', html:VMT('Isometric — from the ', 'Isométrica — de ') + fromTxt() + ' · ' }));
+    const ib = isoBox.appendChild(el('p', { class:'vmcap', html:VMT('Isometric — from the ', 'Isométrica — de ') + fromTxt() + (Math.abs(VM_EL - 35.26) > 0.5 ? VMT(', eye at ', ', olhar a ') + Math.round(VM_EL) + '°' : '') + ' · <small>' + VMT('drag: sideways turns, up/down tilts', 'arraste: para os lados roda, para cima/baixo inclina') + '</small> · ' }));
     const turn = d => { VM_AZ = ((VM_AZ + d) % 360 + 360) % 360; drawViews(); };
     ib.appendChild(el('button', { type:'button', class:'btn small', text:'⟲', title:VMT('Turn the model', 'Rodar o modelo'), onclick:() => turn(-45) }));
     ib.appendChild(el('button', { type:'button', class:'btn small', text:'⟳', title:VMT('Turn the model', 'Rodar o modelo'), onclick:() => turn(45) }));
-    if (VM_AZ) ib.appendChild(el('button', { type:'button', class:'btn small', text:VMT('From the south-east', 'De sudeste'), onclick:() => { VM_AZ = 0; drawViews(); } }));
+    /* the eye raised or lowered: from nearly level with the ground to straight down */
+    const tilt = d => { VM_EL = Math.max(5, Math.min(90, Math.round(VM_EL + d))); vmSetView(); drawViews(); };
+    ib.appendChild(el('button', { type:'button', class:'btn small', text:'⤒', title:VMT('Look from higher up', 'Ver de mais alto'), onclick:() => tilt(10) }));
+    ib.appendChild(el('button', { type:'button', class:'btn small', text:'⤓', title:VMT('Look from lower down', 'Ver de mais baixo'), onclick:() => tilt(-10) }));
+    if (VM_AZ || Math.abs(VM_EL - 35.26) > 0.5) ib.appendChild(el('button', { type:'button', class:'btn small', text:VMT('Back to the isometric', 'Voltar à isométrica'), onclick:() => { VM_AZ = 0; VM_EL = 35.26; vmSetView(); drawViews(); } }));
     isoBox.insertAdjacentHTML('beforeend', vmIsoSVG(M, 760));
     { const sv = isoBox.querySelector('svg.vmiso'); if (sv) { let x0 = null, a0 = 0; sv.style.cursor = 'grab'; sv.style.touchAction = 'none';
-      sv.addEventListener('pointerdown', ev => { x0 = ev.clientX; a0 = VM_AZ; try { sv.setPointerCapture(ev.pointerId); } catch (e) {} });
-      sv.addEventListener('pointermove', ev => { if (x0 === null) return; const a = Math.round((a0 + (ev.clientX - x0) * 0.6) / 15) * 15; if (a !== VM_AZ) { VM_AZ = ((a % 360) + 360) % 360;
+      let y0 = 0, e0 = VM_EL;
+      sv.addEventListener('pointerdown', ev => { x0 = ev.clientX; a0 = VM_AZ; y0 = ev.clientY; e0 = VM_EL; try { sv.setPointerCapture(ev.pointerId); } catch (e) {} });
+      /* sideways turns the model, up and down raises or lowers the eye */
+      sv.addEventListener('pointermove', ev => { if (x0 === null) return; const a = Math.round((a0 + (ev.clientX - x0) * 0.6) / 15) * 15, e = Math.max(5, Math.min(90, Math.round(e0 + (ev.clientY - y0) * 0.4)));
+        if (a !== VM_AZ || e !== Math.round(VM_EL)) { VM_AZ = ((a % 360) + 360) % 360; if (e !== Math.round(VM_EL)) { VM_EL = e; vmSetView(); }
         const nw = vmIsoSVG(vm(), 760), vb = (nw.match(/viewBox="([^"]+)"/) || [])[1], hh = (nw.match(/height="([^"]+)"/) || [])[1];
         if (vb) sv.setAttribute('viewBox', vb); if (hh) sv.setAttribute('height', hh); sv.innerHTML = nw.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } });
       const end = () => { if (x0 !== null) { x0 = null; drawViews(); } }; sv.addEventListener('pointerup', end); sv.addEventListener('pointercancel', end); } }
@@ -24182,7 +24236,8 @@ function buildModeller(host) {
     });
     svg.addEventListener('pointermove', ev => {
       if (!drag) return;
-      const p = pt(ev), dx = Math.round((p[0] - drag.p[0]) / PL.s * 4) / 4, dy = -Math.round((p[1] - drag.p[1]) / PL.s * 4) / 4;
+      const p = pt(ev); if (Math.hypot(p[0] - drag.p[0], p[1] - drag.p[1]) > 3) drag.moved = true; if (!drag.moved) return;
+      const dx = Math.round((p[0] - drag.p[0]) / PL.s * 4) / 4, dy = -Math.round((p[1] - drag.p[1]) / PL.s * 4) / 4;
       if (drag.kind === 'op') { const W = wallAt(p, drag.vi, drag.f); if (W) { const len = drag.f === 'S' || drag.f === 'N' ? drag.v.L : drag.v.D; drag.op.pos = +clamp(W.t, drag.op.w / 2 / len + 0.02, 1 - drag.op.w / 2 / len - 0.02).toFixed(3); } }
       else if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
       else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
@@ -24190,11 +24245,17 @@ function buildModeller(host) {
       const PL2 = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:(vmRoomChecks(vm(), R.V.rooms), R.V.rooms.filter(q => q.fl === fl)) });
       svg.innerHTML = PL2.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
     });
-    const up = () => { if (drag) { drag = null; drawEditor(); drawViews(); } };
+    /* a click that did not move leaves the plan as it is, so a double-click still finds its room or its opening */
+    const up = () => { if (drag) { const mv = drag.moved; drag = null; if (mv) { drawEditor(); drawViews(); } } };
     svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
     svg.addEventListener('dblclick', ev => {
-      if (!ev.target.dataset || !ev.target.dataset.op) return;
-      const [vi, f, qi] = ev.target.dataset.op.split(':'), v = vm().vols[+vi];
+      /* a room renamed in place: the student's own word for it */
+      /* with the pointer captured the event comes from the drawing itself: the room is the one under the pointer */
+      const hit = document.elementFromPoint(ev.clientX, ev.clientY) || ev.target;
+      if (hit.dataset && hit.dataset.room !== undefined) { const q = R.V.rooms.filter(r => r.fl === fl)[+hit.dataset.room];
+        const nm = q && window.prompt(VMT('Name of the room', 'Nome da divisão'), VL(q.n)); if (q && nm && nm.trim()) { q.n = { en:nm.trim(), pt:nm.trim() }; drawViews(); } return; }
+      if (!hit.dataset || !hit.dataset.op) return;
+      const [vi, f, qi] = hit.dataset.op.split(':'), v = vm().vols[+vi];
       if (v && v.open[f]) { v.open[f].splice(+qi, 1); drawEditor(); drawViews(); }
     });
   }
@@ -24231,11 +24292,17 @@ function buildModeller(host) {
     metBox.appendChild(section(VMT('Rooms', 'Divisões'), rc.ok + ' / ' + rc.n + ' ' + VMT('placed well', 'bem colocadas')));
     metBox.appendChild(el('p', { class:'hint', text:VMT('Move and size the rooms on the plan (the square handle sizes them); pick the floor above the plan. A room must sit inside a body that has that floor, without overlapping another.', 'Mova e dimensione as divisões na planta (o quadrado no canto dimensiona-as); escolha o piso por cima da planta. Uma divisão tem de ficar dentro de um corpo que tenha esse piso, sem sobrepor outra.') }));
     const rt = dataTable([VMT('Room', 'Divisão'), VMT('Floor', 'Piso'), VMT('Area', 'Área'), ''], R.V.rooms.map(q => [VL(q.n), q.fl === 0 ? VMT('ground', 'térreo') : String(q.fl), fmt(q.w * q.d, 1) + ' m²', q.bad ? '<span class="vmno">' + (q.inVol ? VMT('overlaps', 'sobrepõe') : VMT('outside the body', 'fora do corpo')) + '</span>' : '<span class="vmok">✓</span>']), [0]);
+    /* each room's name editable in the table, as on the plan (double-click a room there) */
+    rt.querySelectorAll('tbody tr').forEach((tr, i) => { const q = R.V.rooms[i], td = tr.firstChild; if (!q || !td) return; td.textContent = '';
+      td.appendChild(el('input', { type:'text', value:VL(q.n), class:'vmroomname', title:VMT('Rename the room', 'Mudar o nome da divisão'), style:'width:100%; min-width:9em; font:inherit; border:1px solid var(--line); border-radius:6px; padding:2px 6px',
+        onchange:e => { const v = e.target.value.trim(); if (v) { q.n = { en:v, pt:v }; drawViews(); } } })); });
     metBox.appendChild(rt);
+    metBox.appendChild(el('p', { class:'hint', html:VMT('Rename a room in the table or by double-clicking it on the plan. <b>Casa de fora</b> is the Portuguese vernacular name of the entrance room — the room entered straight from outside, the house’s parlour and passage, with chests and cupboards and no fixed use, giving on the kitchen and the bedrooms (Inquérito à Arquitectura Popular). <b>Room</b> is a room of free use.',
+      'Mude o nome de uma divisão na tabela ou com duplo clique sobre ela na planta. <b>Casa de fora</b> é o nome popular da sala de entrada — a divisão onde se entra directamente da rua, sala e passagem da casa, de arcas e armários e sem uso fixo, que dá para a cozinha e para os quartos (Inquérito à Arquitectura Popular). <b>Divisão</b> é uma divisão de uso livre.') }));
     if (!rc.kitchen) metBox.appendChild(el('p', { class:'hint', html:'<b>' + VMT('No kitchen yet', 'Ainda sem cozinha') + '</b> — ' + VMT('the hearth was the heart of the popular house.', 'a lareira era o centro da casa popular.') }));
     const rb = metBox.appendChild(el('div', { class:'vmbtns' }));
     const addRoom = (en, pt) => { const v = vm().vols[0]; R.V.rooms.push({ n:{ en, pt }, x:v.x, y:v.y, w:3, d:3, fl:VM_ROOMFL }); drawViews(); };
-    [['Kitchen', 'Cozinha'], ['Bedroom', 'Quarto'], ['Casa de fora', 'Casa de fora'], ['Hall (sala)', 'Sala'], ['Store (loja)', 'Loja'], ['Byre (corte)', 'Corte'], ['Wine cellar', 'Adega'], ['Alcove', 'Alcova']].forEach(([en, pt]) => rb.appendChild(el('button', { type:'button', text:'+ ' + VMT(en, pt), onclick:() => addRoom(en, pt) })));
+    [['Kitchen', 'Cozinha'], ['Bedroom', 'Quarto'], ['Casa de fora (entrance room)', 'Casa de fora (sala de entrada)'], ['Hall (sala)', 'Sala'], ['Store (loja)', 'Loja'], ['Byre (corte)', 'Corte'], ['Wine cellar', 'Adega'], ['Alcove', 'Alcova']].forEach(([en, pt]) => rb.appendChild(el('button', { type:'button', text:'+ ' + VMT(en, pt), onclick:() => addRoom(en, pt) })));
     rb.appendChild(el('button', { type:'button', text:VMT('Remove the last room', 'Remover a última divisão'), onclick:() => { R.V.rooms.pop(); drawViews(); } }));
     rb.appendChild(el('button', { type:'button', text:VMT('Rooms of the type', 'Divisões do tipo'), onclick:() => { R.V.rooms = vmDefaultRooms(vm()); drawViews(); } }));
   }
@@ -28305,8 +28372,8 @@ Object.assign(PT, {
   "Photorealistic image (Gemini)": "Imagem fotorrealista (Gemini)",
   "Open in Gemini": "Abrir no Gemini",
   "Download the view, copy the prompt and open Gemini": "Descarregar a vista, copiar o pedido e abrir o Gemini",
-  "Copy the prompt again": "Copiar o pedido outra vez",
-  "Prompt copied": "Pedido copiado",
+  "Copy the photoreal render prompt": "Copiar o prompt de renderização fotorrealista",
+  "Prompt copied": "Prompt copiado",
   "Image downloaded and prompt copied — attach the image in Gemini and paste the prompt": "Imagem descarregada e pedido copiado — anexe a imagem no Gemini e cole o pedido",
   "Frame the view first — zoom and turn it: Gemini keeps the framing. Opens Gemini in a new tab — sign in there with your university Google account. Then attach the downloaded image, paste the prompt (Ctrl/⌘ V) and send.": "Enquadre primeiro a vista — aproxime e rode: o Gemini mantém o enquadramento. Abre o Gemini num novo separador — entre aí com a sua conta Google da universidade. Depois anexe a imagem descarregada, cole o pedido (Ctrl/⌘ V) e envie.",
   "What Gemini returns is an AI illustration, not the model: check that storeys, roof and openings were kept before using it.": "O que o Gemini devolve é uma ilustração gerada por IA, não o modelo: confirme que os pisos, o telhado e os vãos se mantiveram antes de a usar.",
@@ -29072,6 +29139,26 @@ Object.assign(PT_HINT, {
     'O terreno aberto (plano) trava menos o vento; o terreno partido e montanhoso abriga mais (expoente da lei de potência 0,14–0,28). A exposição multiplica de novo: abrigada 0,6, moderada 1,0, exposta 1,4 (Olgyay, pp.37–40; DeKay & Brown, Estratégia 85). A classe de terreno e os doze ventos dominantes mensais derivam destas coordenadas automaticamente à entrada (reanálise ERA5 via Open-Meteo — como a consulta de altitude, só as coordenadas saem do navegador); o botão repete-a. O desenho vai mais longe: uma malha regular de 240 m de alturas do terreno é buscada para o local e desenhada sob o modelo com o seu baixo e alto, e cada linha de vento acompanha-a — subindo uma elevação, assentando numa depressão — para o juízo de exposição se ler contra a geografia real. A malha é o MDT Copernicus edição 2021 (GLO-90, resolução de 90 m, https://doi.org/10.5270/ESA-c5d3d65), servido pelo Open-Meteo sob licença livre — o mesmo modelo de elevação por trás da consulta de altitude. A exposição continua manual: lê a envolvente imediata, que nenhum produto em grelha vê.',
   'vent-air':
     'O vento desenha-se em cinco camadas numa caixa de vento de 10 m — junto ao solo, a cerca de meia altura do beirado, a 5 m, a 7,5 m e acima da cumeeira. Um sólido desvia uma camada apenas na medida em que a camada fica abaixo do seu topo: abaixo de cerca de um terço da sua altura o ar contorna-o, mais perto do topo parte contorna e parte passa por cima, e acima dele o ar passa direito por cima, subindo ao atravessar a cobertura e voltando a assentar a sotavento — numa casa baixa as camadas superiores atravessam a cobertura, como num túnel de vento, enquanto o ar à altura das pessoas é desviado em torno das paredes. Muros e plantas agem da mesma maneira às suas alturas: um arbusto ou um muro baixo curvam o ar junto ao solo, uma copa alta o ar à sua altura, e uma copa deixa passar ar conforme a sua densidade onde um muro o trava. O ar lento corre a azul, o rápido a vermelho; os pontos andam a metros por segundo reais; uma linha passa a tracejado onde corre por trás da casa; a casa e cada muro do jardim arrastam um lento anel de recirculação. Deflexão estilizada, não CFD: mostra o padrão que uma proposta dá ao vento, não velocidades medidas. Onde dois vizinhos ladeiam uma rua com o vento, o vão canaliza-o em vez de o travar — até 1,4 vezes mais rápido num desfiladeiro estreito e alinhado — e os números de Inverno e Verão sentem-no onde a boca do desfiladeiro encontra a casa.',
+});
+
+/* the Ventilation rail, the Openings caption and rail, the Visualization caption */
+Object.assign(PT, {
+  "Support structures": "Estruturas de apoio",
+  "Place the structure": "Colocar a estrutura",
+  "Clear structures": "Limpar estruturas",
+  "Wind turbine": "Aerogerador",
+  "Add a wind turbine": "Juntar um aerogerador",
+  "Click to turn it · drag to move · double-click to remove": "Clique para rodar · arraste para mover · duplo clique para remover",
+  "Roof step walls": "Paredes de remate da cobertura",
+  "From E": "De E",
+  "From W": "De W",
+  "Shading devices · selected window": "Dispositivos de sombreamento · janela seleccionada",
+  "No step walls: divide the roof into parts with different heights or pitches on the Roof tab, with a real height step between them (a shed against a flat roof, not two eaves meeting flush).": "Sem paredes de remate: divida a cobertura em partes de alturas ou inclinações diferentes no separador Telhado, com um verdadeiro degrau de altura entre elas (um telhado de uma água contra uma cobertura plana, não dois beirados que se encontram ao mesmo nível).",
+  "Glazing for each facade and shading for each window, sized against the plan fixed on Site and the roof fixed on Roof — this tab cannot change either. Choosing a facade turns the model to face it, so you can drag its window directly; the compass shows which way is which. Click a window to select it — drag its black node to push it along the wall and up or down, drag its top corner for its height and its bottom corner for its length, leaving its neighbours alone, and dress it alone with an overhang and fins; drag a fin dot to stand it where the shade belongs, double-click it to open or close it, double-click bare wall to plant a new one clear of the others. Any unit turns into a glazed door or a brick ventilation block from its row. Drag it onto another facade to move it there, or step it across with the arrows on its row.": "O envidraçado de cada fachada e o sombreamento de cada janela, dimensionados sobre a planta fixada em Local e a cobertura fixada em Telhado — este separador não altera nenhuma das duas. Escolher uma fachada roda o modelo para ela, para poder arrastar directamente a sua janela; a rosa dos ventos indica a orientação. Clique numa janela para a seleccionar — arraste o seu nó negro para a deslocar ao longo da parede e para cima ou para baixo, o canto de cima para a altura e o canto de baixo para o comprimento, sem mexer nas vizinhas, e vista-a sozinha com uma pala e alhetas; arraste o ponto de uma alheta para a pôr onde a sombra faz falta, duplo clique para a abrir ou fechar, duplo clique na parede livre para abrir uma nova afastada das outras. Qualquer vão passa a porta envidraçada ou a bloco de ventilação em tijolo a partir da sua linha. Arraste-o para outra fachada para o mudar, ou passe-o com as setas da sua linha.",
+  "The model in its terrain, finished from the material buttons. Pick wall and roof finishes — the tab dresses the massing and renders it here. Freer scenes go by brief: copy it into an image studio.": "O modelo no seu terreno, acabado com os botões de materiais. Escolha os acabamentos das paredes e da cobertura — o separador veste a volumetria e representa-a aqui. Para cenas mais livres, copie o prompt de renderização fotorrealista para o Gemini.",
+});
+Object.assign(PT_HINT, {
+  'vent-wind': 'A direcção é aquela de onde o vento sopra, em oitavos como numa rosa dos ventos. Um vento de norte atravessa o par sul–norte e apenas roça o par nascente–poente — active e desactive meses e veja o padrão azul e as duas pontuações mudarem juntos. Meses opostos no mesmo conjunto anulam-se na média, tal como o faria o tempo alternado.',
 });
 
 /* boot, last: a page opened in Portuguese renders its first screen with
