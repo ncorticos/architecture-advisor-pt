@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.154.0',
+  version:     '1.154.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23772,8 +23772,11 @@ function vmPlanSVG(vm, w, opts) {
   const vs = vmAllVols(vm), bb = vmBBox(vm), pad = 2.5, X0 = bb[0] - pad, Y1 = bb[3] + pad, Wm = bb[2] - bb[0] + 2 * pad, Hm = bb[3] - bb[1] + 2 * pad, s = w / Wm, h = Math.round(Hm * s);
   const P = (x, y) => [((x - X0) * s).toFixed(1), ((Y1 - y) * s).toFixed(1)], o = [];
   o.push('<rect width="' + w + '" height="' + h + '" fill="' + (opts.bg || '#FBFAF7') + '"/>');
-  const c = vm.court;
+  const c = vm.court, courtH = [];
   if (c && c.on) { const a = P(c.x - c.L / 2, c.y + c.D / 2); o.push('<rect x="' + a[0] + '" y="' + a[1] + '" width="' + (c.L * s).toFixed(1) + '" height="' + (c.D * s).toFixed(1) + '" fill="#F1EDE3" stroke="#8A8274" stroke-width="' + (0.4 * s).toFixed(1) + '" stroke-dasharray="' + (c.gate ? '' : '') + '"/>');
+    /* its four corners, dragged to grow or shrink the yard */
+    if (!opts.noLabels) [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy], ci) => { const q = P(c.x + sx * c.L / 2, c.y + sy * c.D / 2);
+      courtH.push('<rect data-court="' + ci + '" x="' + (+q[0] - 6) + '" y="' + (+q[1] - 6) + '" width="12" height="12" fill="#8A8274" stroke="#fff" stroke-width="1.5" style="cursor:nwse-resize"><title>' + VMT('Drag the corner of the yard wall', 'Arraste o canto do muro do pátio') + '</title></rect>'); });
     const g = c.gate; if (g) { const len = g.face === 'S' || g.face === 'N' ? c.L : c.D, u = g.pos * len - g.w / 2, p0 = g.face === 'S' ? P(c.x - c.L / 2 + u, c.y - c.D / 2) : g.face === 'N' ? P(c.x - c.L / 2 + u, c.y + c.D / 2) : g.face === 'E' ? P(c.x + c.L / 2, c.y - c.D / 2 + u + g.w) : P(c.x - c.L / 2, c.y - c.D / 2 + u + g.w);
       o.push('<rect x="' + (+p0[0] - (g.face === 'E' || g.face === 'W' ? 0.3 * s : 0)) + '" y="' + (+p0[1] - (g.face === 'S' || g.face === 'N' ? 0.3 * s : 0)) + '" width="' + ((g.face === 'S' || g.face === 'N' ? g.w : 0.6) * s).toFixed(1) + '" height="' + ((g.face === 'E' || g.face === 'W' ? g.w : 0.6) * s).toFixed(1) + '" fill="#F1EDE3"/>'); } }
   /* openings go on top of every body, so a wall a neighbour body touches still shows and takes its openings */
@@ -23825,6 +23828,7 @@ function vmPlanSVG(vm, w, opts) {
     o.push('<text x="' + c[0] + '" y="' + (+c[1] - fs * 0.15).toFixed(1) + '" font-size="' + fs.toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + nm.replace(/&/g, '&amp;') + '</text>');
     o.push('<text x="' + c[0] + '" y="' + (+c[1] + fs * 1.05).toFixed(1) + '" font-size="' + (fs * 0.9).toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + fmt(q.w * q.d, 1) + ' m²</text>');
     const h2 = P(q.x + q.w / 2, q.y - q.d / 2); o.push('<rect data-roomsize="' + i + '" x="' + (+h2[0] - 5) + '" y="' + (+h2[1] - 5) + '" width="9" height="9" fill="#4E8A78" style="cursor:nwse-resize"/>'); });
+  o.push(...courtH);
   /* north and a scale bar of 5 m */
   o.push('<g font-family="sans-serif" font-size="11" fill="#3A3530"><path d="M' + (w - 22) + ',30 l7,-18 l7,18 l-7,-5 z" fill="#3A3530"/><text x="' + (w - 15) + '" y="44" text-anchor="middle">N</text>');
   o.push('<rect x="14" y="' + (h - 18) + '" width="' + (5 * s).toFixed(1) + '" height="5" fill="#3A3530"/><text x="14" y="' + (h - 24) + '">5 m</text></g>');
@@ -24189,7 +24193,9 @@ function buildModeller(host) {
     /* courtyard and row */
     ed.appendChild(el('h4', { text:VMT('Courtyard and row', 'Pátio e banda') }));
     const c = M.court, r4 = ed.appendChild(el('div', { class:'vmrow' }));
-    r4.appendChild(vmChk(VMT('courtyard closed by a wall', 'pátio fechado por muro'), () => !!c.on, x => { c.on = x; }));
+    r4.appendChild(vmChk(VMT('courtyard closed by a wall', 'pátio fechado por muro'), () => !!c.on, x => { c.on = x;
+      /* switched on, the wall goes round the house with the yard before it, never across it; drag its corners on the plan after */
+      if (x) { const bb = vmBBox({ vols:M.vols, row:{ n:1 } }); Object.assign(c, { x:(bb[0] + bb[2]) / 2, L:bb[2] - bb[0] + 4, y:(bb[1] - 8 + bb[3] + 1.5) / 2, D:bb[3] + 1.5 - (bb[1] - 8) }); } }));
     if (c.on) { r4.appendChild(vmNum(VMT('Courtyard length (m)', 'Comprimento do pátio (m)'), () => c.L, x => { c.L = x; }, 3, 80, 0.5)); r4.appendChild(vmNum(VMT('Courtyard depth (m)', 'Profundidade do pátio (m)'), () => c.D, x => { c.D = x; }, 3, 80, 0.5));
       r4.appendChild(vmNum('x (m)', () => c.x, x => { c.x = x; }, -80, 80, 0.5)); r4.appendChild(vmNum('y (m)', () => c.y, x => { c.y = x; }, -80, 80, 0.5)); r4.appendChild(vmNum(VMT('Wall height (m)', 'Altura do muro (m)'), () => c.h, x => { c.h = x; }, 0.5, 5, 0.1));
       r4.appendChild(vmSel(VMT('Gate (porta carral) on', 'Portão (porta carral) a'), vmFaceOpts(), () => c.gate.face, x => { c.gate.face = x; }));
@@ -24312,7 +24318,9 @@ function buildModeller(host) {
       }
       if (VM_ROOMFL !== fl) { VM_ROOMFL = fl; svg.closest('.vmplans') && svg.closest('.vmplans').querySelectorAll('.vmplan1').forEach((d, i) => d.classList.toggle('on', i === fl)); }
       const t = ev.target, p = pt(ev), M = vm(), rooms = R.V.rooms.filter(q => q.fl === fl);
-      if (t.dataset.roomsize !== undefined) drag = { kind:'size', q:rooms[+t.dataset.roomsize], p, w0:rooms[+t.dataset.roomsize].w, d0:rooms[+t.dataset.roomsize].d };
+      if (t.dataset.court !== undefined) { const c = M.court, ci = +t.dataset.court, sx = ci === 1 || ci === 2 ? 1 : -1, sy = ci >= 2 ? 1 : -1;
+        drag = { kind:'court', c, p, fx:c.x - sx * c.L / 2, fy:c.y - sy * c.D / 2, cx:c.x + sx * c.L / 2, cy:c.y + sy * c.D / 2 }; }
+      else if (t.dataset.roomsize !== undefined) drag = { kind:'size', q:rooms[+t.dataset.roomsize], p, w0:rooms[+t.dataset.roomsize].w, d0:rooms[+t.dataset.roomsize].d };
       else if (t.dataset.room !== undefined) { const q = rooms[+t.dataset.room]; drag = { kind:'room', q, p, x0:q.x, y0:q.y }; }
       else if (t.dataset.vol !== undefined) { const i = +t.dataset.vol, v = M.vols[i]; VM_SEL = i; drag = { kind:'vol', v, p, x0:v.x, y0:v.y }; }
       if (drag) { svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
@@ -24324,6 +24332,8 @@ function buildModeller(host) {
       if (drag.kind === 'op') { const W = wallAt(p, drag.vi, drag.f); if (W) { const len = drag.f === 'S' || drag.f === 'N' ? drag.v.L : drag.v.D; drag.op.pos = +clamp(W.t, drag.op.w / 2 / len + 0.02, 1 - drag.op.w / 2 / len - 0.02).toFixed(3); } }
       else if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
       else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
+      else if (drag.kind === 'court') { /* the opposite corner stays; the yard keeps at least 2 m a side */
+        const nx = drag.cx + dx, ny = drag.cy + dy, c = drag.c; if (Math.abs(nx - drag.fx) >= 2) { c.L = Math.abs(nx - drag.fx); c.x = (nx + drag.fx) / 2; } if (Math.abs(ny - drag.fy) >= 2) { c.D = Math.abs(ny - drag.fy); c.y = (ny + drag.fy) / 2; } }
       else { drag.q.w = Math.max(1, drag.w0 + dx); drag.q.d = Math.max(1, drag.d0 - dy); }
       const PL2 = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:(vmRoomChecks(vm(), R.V.rooms), R.V.rooms.filter(q => q.fl === fl)) });
       svg.innerHTML = PL2.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
