@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.157.1',
+  version:     '1.157.2',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21762,7 +21762,7 @@ const popular = (key, build) => host => {
   build(host);
   const h = host.querySelector('.pagehead');
   if (h && POP_HEAD[key]) { h.querySelector('h2').textContent = VL(POP_HEAD[key].t); const p = h.querySelector('p'); if (p) p.textContent = VL(POP_HEAD[key].p); }
-  try { vernMount(host, key, true); } catch (e) { console.error(e); }
+  try { vernMount(host, key, false); } catch (e) { console.error(e); }   // folded: the student opens it when wanted
   if (['site', 'roof', 'openings', 'ventilation', 'visualization'].indexOf(key) >= 0) try { bodyBar(host); } catch (e) { console.error(e); }
 };
 
@@ -29413,6 +29413,7 @@ Object.assign(PT_HINT, {
 
 /* the Ventilation rail, the Openings caption and rail, the Visualization caption */
 Object.assign(PT, {
+  "Popular model": "Modelo popular",
   "Support structures": "Estruturas de apoio",
   "Place the structure": "Colocar a estrutura",
   "Clear structures": "Limpar estruturas",
