@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.160.1',
+  version:     '1.161.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5933,24 +5933,82 @@ function pushImportFaces(arr, map) {
   if (!IMPORT.active || !IMPORT.show.length) return;
   for (const t of IMPORT.show) arr.push({ pts:map ? t.map(map) : t, fill:IMPFILL, import:true });
 }
-/** The other bodies of the popular model, around the one being worked on: glass volumes in its plan-local
-    frame, so the student sees how they sit together while each tab measures one body. */
-let GHOST_CACHE = { key:null, faces:[] };
-function ghostFaces() {
+/** Everything the student added to the popular model beyond the body being worked on — the other bodies
+    (towers, annexes, round bodies, the houses of the row), the varandas, stairs, ovens, porches and latadas,
+    the courtyard wall — as faces in that body's plan-local frame, with their own colours: every tab draws
+    them (glass in the measuring tabs, dressed in the image), and the sun and the wind feel their bulk
+    (vmCompanionBlocks). The chimney of the body worked on is the Roof tab's own, so it is left to it. */
+let GHOST_CACHE = { key:null, faces:[], blocks:[] };
+function vmCompanion() {
   let R = null; try { R = STATE.vern && STATE.vern.type ? vernRead() : null; } catch (e) { R = null; }
-  const vm = R && R.V && R.V.vm; if (!vm || !vm.vols || vm.vols.length < 2) return [];
+  const vm = R && R.V && R.V.vm; if (!vm || !vm.vols || !vm.vols.length) return GHOST_CACHE = { key:null, faces:[], blocks:[] };
   const wi = Math.min(R.V.work || 0, vm.vols.length - 1), w = vm.vols[wi];
-  const key = JSON.stringify(vm.vols) + '|' + wi + '|' + (MASS && MASS.rot);
-  if (GHOST_CACHE.key === key) return GHOST_CACHE.faces;
+  const key = JSON.stringify([vm.vols, vm.els, vm.court, vm.row]) + '|' + wi + '|' + (MASS && MASS.rot);
+  if (GHOST_CACHE.key === key) return GHOST_CACHE;
   /* the modeller's frame faces south at 180°: the study turns its plan by the facade's azimuth */
   const a = ((MASS && isFinite(MASS.rot) ? MASS.rot : 180) - 180) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
   const tf = p => { const x = p[0] - w.x, y = p[1] - w.y; return [x * c + y * sn, -x * sn + y * c, p[2]]; };
-  const out = [];
-  vmAllVols(Object.assign({}, vm, { row:{ n:1 } })).forEach(v => { if (v._i === wi) return;
-    vmVolFaces(v).forEach(q => { if (q.thin) return; out.push(q.P.map(tf)); }); });
-  GHOST_CACHE = { key, faces:out };
-  return out;
+  const vs = vmAllVols(vm), mine = v => v._i === wi && !v._r, faces = [], blocks = [];
+  const add = (q, o) => faces.push(Object.assign({ P:q.P.map(tf), fill:q.fill, roof:!!(q.roof || q.top), thin:!!q.thin, host:!!q.host }, o || {}));
+  vmCourtFaces(vm).forEach(q => add(q, { court:true }));
+  vs.forEach(v => { if (mine(v)) return; vmVolFaces(v).forEach(q => add(q, { body:true }));
+    /* its bulk for the sun and the wind: the footprint (a round body as its ring) and the height to the eaves and half the roof */
+    const ring = v.kind === 'round' ? Array.from({ length:16 }, (_, i) => [v.x + v.L / 2 * Math.cos(i / 16 * 2 * Math.PI), v.y + v.L / 2 * Math.sin(i / 16 * 2 * Math.PI)])
+      : [[v.x - v.L / 2, v.y - v.D / 2], [v.x + v.L / 2, v.y - v.D / 2], [v.x + v.L / 2, v.y + v.D / 2], [v.x - v.L / 2, v.y + v.D / 2]];
+    const rise = v.roof && v.roof.type !== 'flat' ? Math.min(v.L, v.D) / 2 * Math.tan((v.roof.th || 0) * Math.PI / 180) / 2 : (v.roof && v.roof.par) || 0;
+    blocks.push({ poly:ring.map(q => tf([q[0], q[1], 0])).map(q => [q[0], q[1]]), h:(v.raise || 0) + vmH(v) + rise, name:v.name, row:!!v._r }); });
+  vmElFaces(vm, vs).forEach(q => { const E = vm.els[q.ei]; if (E && E.t === 'chimney' && (E.vol || 0) === wi) return; if (q.rr > 0) return; add(q, { el:true }); });
+  if (vm.court && vm.court.on) { const k = vm.court, x0 = k.x - k.L / 2, x1 = k.x + k.L / 2, y0 = k.y - k.D / 2, y1 = k.y + k.D / 2, sides = { S:[[x0, y0], [x1, y0]], E:[[x1, y0], [x1, y1]], N:[[x1, y1], [x0, y1]], W:[[x0, y1], [x0, y0]] };
+    VM_FACES.forEach(f => { if (k.open === f) return; const [p, q] = sides[f], nx = q[1] - p[1], ny = p[0] - q[0], nl = Math.hypot(nx, ny) || 1, t = 0.2;
+      blocks.push({ poly:[p, q, [q[0] + nx / nl * t, q[1] + ny / nl * t], [p[0] + nx / nl * t, p[1] + ny / nl * t]].map(z => tf([z[0], z[1], 0])).map(z => [z[0], z[1]]), h:k.h, wall:true }); }); }
+  return GHOST_CACHE = { key, faces, blocks, city:vmCityFaces(R, vm, tf) };
 }
+function ghostFaces() { return vmCompanion().faces.filter(q => !q.host).map(q => q.P); }
+/** A town house is drawn in its town: for an urban type, the street in front of its main facade with its pavements,
+    the houses across it, the neighbours to each side and the block behind — invented, of the type's own scale and the
+    place's colours, seeded by the type so they stay put. An illustration of the context, not a survey: only the image
+    (and the prompt it carries to Gemini) shows it. */
+const vmCityOn = () => { try { return !!(STATE.vern && STATE.vern.type && VICON_URBAN.indexOf(vernRead().type) >= 0); } catch (e) { return false; } };
+function vmCityFaces(R, vm, tf) {
+  if (!R || VICON_URBAN.indexOf(R.type) < 0) return [];
+  const pl = VERN_REGIONS[0] && VERN_REGIONS[0].key === 'poland';
+  const COL = pl ? ['#B5654A', '#E8DCC0', '#D9C9A3', '#C98E6B', '#EFE8D8', '#A85A43'] : ['#F2EFE6', '#E9D9B0', '#E8C9B5', '#D9E2E6', '#F0E2C8', '#E5B9A3', '#F4EBD3'];
+  let seed = 0; for (const ch of R.type) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) >>> 0; return (seed >>> 8) / 16777216; };
+  const vs = vmAllVols(vm), bb = vmBBox(vm), flMax = Math.max(...vs.map(v => v.fl)), fh = Math.max(...vs.map(v => v.fh));
+  const yF = bb[1], yB = bb[3], street = flMax >= 3 ? 10 : 8, walk = 1.8, F = [];
+  const grey = (hx, k) => vmShade(hx, k);
+  const quad = (P, fill) => F.push({ P:P.map(tf), fill, ground:true });
+  /* the street and its two pavements, along the main facade */
+  const xa = bb[0] - 40, xb = bb[2] + 40;
+  quad([[xa, yF - walk, 0.02], [xb, yF - walk, 0.02], [xb, yF, 0.02], [xa, yF, 0.02]], '#CFC8BA');
+  quad([[xa, yF - walk - street, 0.01], [xb, yF - walk - street, 0.01], [xb, yF - walk, 0.01], [xa, yF - walk, 0.01]], pl ? '#8F8A82' : '#A59E92');
+  quad([[xa, yF - 2 * walk - street, 0.02], [xb, yF - 2 * walk - street, 0.02], [xb, yF - walk - street, 0.02], [xa, yF - walk - street, 0.02]], '#CFC8BA');
+  /* a row of lots from x0 to x1, its front at yFront facing face ('S' or 'N'), depth d */
+  const row = (x0, x1, yFront, face, d) => { let x = x0;
+    while (x < x1 - 2) { const w = Math.min(x1 - x, 5.5 + rnd() * 4), fl = Math.max(1, Math.min(7, flMax + Math.round(rnd() * 2 - 1))), col = COL[Math.floor(rnd() * COL.length)];
+      const yc = face === 'S' ? yFront + d / 2 : yFront - d / 2, n = Math.max(1, Math.floor(w / 2.2)), ops = [];
+      for (let k = 0; k < fl; k++) for (let i = 0; i < n; i++) ops.push(vmOp(k === 0 && i === Math.floor(n / 2) ? 'd' : 'w', (i + 0.5) / n, k === 0 && i === Math.floor(n / 2) ? 1.1 : 0.9, k === 0 && i === Math.floor(n / 2) ? 2.2 : 1.4, k));
+      const v = vmVol({ x:x + w / 2, y:yc, L:w, D:d, fl, fh, roof:{ type:rnd() < 0.25 ? 'hip' : 'gable', th:25 + rnd() * 10, bei:0.3, mat:'tile', ridge:'x', par:0, cells:2, beirado:1 },
+        wall:{ mat:'whitewash', barra:null, cunhais:!pl, frames:pl ? null : 'cantaria', buttress:0 }, open:{ S:face === 'S' ? ops : [], N:face === 'N' ? ops : [], E:[], W:[] } });
+      vmVolFaces(v).forEach(q => { const base = VM_WALL.whitewash.c, wall = !q.roof && !q.top && !q.host && !q.thin && /^#/.test(q.fill);
+        let fill = q.fill;
+        if (wall) { const lum = h => { const n2 = parseInt(h.slice(1), 16); return ((n2 >> 16 & 255) + (n2 >> 8 & 255) + (n2 & 255)) / 3; }; fill = grey(col, lum(q.fill) / lum(base)); }
+        F.push({ P:q.P.map(tf), fill, roof:!!(q.roof || q.top), thin:!!q.thin, host:!!q.host, city:cid, c:tf([x + w / 2, yc, fl * fh / 2]), r:Math.hypot(w, d) / 2 + fl * fh / 2 }); });
+      cid++; x += w; } };
+  let cid = 1;
+  const depth = Math.max(8, Math.min(14, (bb[3] - bb[1]) * 0.8));
+  row(bb[0] - 30, bb[2] + 30, yF - 2 * walk - street, 'N', depth);          // across the street, facing the house
+  row(bb[0] - 30, bb[0] - 0.3, yF, 'S', depth);                             // the neighbours to the west, on the same front
+  row(bb[2] + 0.3, bb[2] + 30, yF, 'S', depth);                             // and to the east
+  row(bb[0] - 8, bb[2] + 8, yB + 0.6, 'S', depth);                          // the block behind
+  return F;
+}
+/** The model's other bodies and its courtyard wall as prisms in the world frame round the plot (x east, y north,
+    metres from its centre), for the routines that weigh the neighbours' shade and shelter: toW turns the plan as set on Site. */
+function vmCompanionBlocks(toW) { return vmCompanion().blocks.map(b => { const pts = b.poly.map(q => toW(q[0], q[1])), bb = [Infinity, Infinity, -Infinity, -Infinity];
+  let area = 0; pts.forEach((q, i) => { const r = pts[(i + 1) % pts.length]; area += q[0] * r[1] - r[0] * q[1]; bb[0] = Math.min(bb[0], q[0]); bb[1] = Math.min(bb[1], q[1]); bb[2] = Math.max(bb[2], q[0]); bb[3] = Math.max(bb[3], q[1]); });
+  return { pts, poly:pts, h:b.h, how:'model', model:true, bb, ccw:area > 0, cx:(bb[0] + bb[2]) / 2, cy:(bb[1] + bb[3]) / 2, r:Math.hypot(bb[2] - bb[0], bb[3] - bb[1]) / 2 }; }); }
 function pushGhostFaces(arr, map) {
   ghostFaces().forEach(P => arr.push({ pts:map ? P.map(map) : P, fill:'rgba(120,135,150,0.16)', import:true, ghost:true }));
 }
@@ -6921,6 +6979,8 @@ function buildEnvironment(host) {
     const b = (G.rot - 180) * RAD, cb = Math.cos(b), sb = Math.sin(b);
     const toW = (x, y) => [x * cb + y * sb, -x * sb + y * cb];   // the plan as turned on Site
     const nbs = nbLocal(M.pieces.map(pc => pc.poly.map(q => toW(q[0], q[1])))), inDisc = nbs.filter(b => Math.hypot(b.cx, b.cy) < FR.Rg * 0.98);
+    /* the popular model's other bodies and courtyard wall: drawn as glass with the rest, their shade falls on the design like a neighbour's */
+    const nbAll = nbs.concat(vmCompanionBlocks(toW));
     ctx.fillStyle = 'rgb(' + Math.round(251 - 22 * wx.cloud) + ',' + Math.round(251 - 18 * wx.cloud) + ',' + Math.round(249 - 12 * wx.cloud) + ')';
     ctx.fillRect(0, 0, W, H);                  // the sky greys with the month's cloud
     /* the ground: a disc of map under the building */
@@ -6992,7 +7052,7 @@ function buildEnvironment(host) {
       });
       /* a neighbour's shadow: its footprint, its roof dropped along the ray,
          and each wall swept between them */
-      nbs.forEach(b => {
+      nbAll.forEach(b => {
         if (Math.hypot(b.cx, b.cy) - b.r - b.h * k > FR.Rg) return;
         const P = b.pts, T = P.map(q => [q[0] + sx * b.h, q[1] + sy * b.h]);
         sub(P); sub(T);
@@ -7031,7 +7091,7 @@ function buildEnvironment(host) {
     const wallCol = ns => opaque(wallFill(ns ? 0.14 : 0.08, ns ? 0.85 : 1));
     /* where the neighbours shade the design now: its sunlit walls and roof
        sampled every 0.7 m or so, each sample's ray to the sun followed */
-    const blocked = sun.alt > 0.5 && nbs.length ? nbBlocker(nbs, sun, FR.half) : null;
+    const blocked = sun.alt > 0.5 && nbAll.length ? nbBlocker(nbAll, sun, FR.half) : null;
     const su = [Math.sin(sun.azi * RAD) * Math.cos(sun.alt * RAD), Math.cos(sun.azi * RAD) * Math.cos(sun.alt * RAD), Math.sin(sun.alt * RAD)];
     const stat = { sunlit:0, shaded:0 };
     /* the balconies set on Site: slabs and parapets among the faces, loggias after their wall */
@@ -14647,7 +14707,7 @@ function buildVentilation(host) {
     const toA = (wm.dir + 180) % 360;
     const [tx, ty] = localDir(toA);
     const V0 = Math.max(0, eaveWind());
-    NBV = nbVent();
+    NBV = nbVent().concat(vmCompanionBlocks((x, y) => [x, y]).map(b => { const ground = terraAt(b.cx, b.cy); return Object.assign(b, { ground, top:ground + b.h, dist:Math.hypot(b.cx, b.cy) }); }));
     const midH = clamp(h0live() * 0.55, 1.0, 2.6);
     const pp = planParts(G);
     const R = 1.45;
@@ -15152,7 +15212,7 @@ function buildVentilation(host) {
        the same depth order so near ones cover and far ones hide — drawn
        only when the student asks to see them; the wind feels them either
        way */
-    if (nbView === 'shown') NBV.forEach(nb => {
+    if (nbView === 'shown') NBV.filter(nb => !nb.model).forEach(nb => {
       const ring = nb.poly, top = nb.top;
       const tpts = ring.map(q => [q[0], q[1], top]);
       items.push({ pts:tpts, fill:'rgba(148,158,168,.45)',
@@ -15694,8 +15754,9 @@ function buildVentilation(host) {
     rows.push(['Latitude (°)', +lat.toFixed(3)], ['Longitude (°)', +lon.toFixed(3)], ['Altitude (m)', +(S.alt || 0)]);
     rows.push(['Air density (kg/m³)', +airDensity().toFixed(3)]);
     rows.push(['Terrain', terrainKey], ['Wind exposure', windKey]);
-    rows.push(['Neighbouring buildings (OpenStreetMap)', ENV.nb ? NBV.length + ' within 120 m' : 'off']);
+    rows.push(['Neighbouring buildings (OpenStreetMap)', ENV.nb ? NBV.filter(n => !n.model).length + ' within 120 m' : 'off']);
     if (ENV.nb && NBV.length) rows.push(['  of which with assumed heights', NBV.filter(n => n.how === 'assumed').length]);
+    if (NBV.some(n => n.model)) rows.push(['Other bodies and walls of the popular model (steering the wind)', NBV.filter(n => n.model).length]);
     {
       const mm = terraMinMax();
       if (terrainGrid && mm) rows.push(['Terrain grid (regular, m across)', terrainGrid.n + '×' + terrainGrid.n + ' at ' + terrainGrid.step + ' m'],
@@ -16204,7 +16265,7 @@ function buildVentilation(host) {
     expoRead.textContent = t('Terrain') + ' ' + t(TERRAIN_NAME[terrainKey]) + ' · ' + t('exposure') + ' ' + t(EXPOSURE_NAME[windKey])
       + (expoInfo.n ? ' — ' + t(expoInfo.n + ' neighbours within 120 m, their heights add up to ' + Math.round(expoInfo.sum) + ' m') : ' — ' + t('no mapped neighbours in reach'));
     nbStatus.textContent = !ENV.nb ? t('Neighbours off — switch them on for the wind to meet them.')
-      : NBV.length ? t(NBV.length + ' neighbours shape the wind (OpenStreetMap)') + (nbView === 'shown' ? '' : ' ' + t('— hidden from the model')) : t('No mapped neighbours here — the wind meets the garden alone.');
+      : NBV.some(n => !n.model) ? t(NBV.filter(n => !n.model).length + ' neighbours shape the wind (OpenStreetMap)') + (nbView === 'shown' ? '' : ' ' + t('— hidden from the model')) : t('No mapped neighbours here — the wind meets the garden alone.');
     syncNbAsk();
     placeHint.textContent = (plantArmed ? ' planting ' + plantArmed + ' — click open ground' : '') + (wallArmed ? ' placing wall — click open ground' : '');
     const sn = sunPos(SH.doy, SH.h, lat, lon, tz);
@@ -17169,6 +17230,8 @@ function buildRender(host) {
   let showGround = !K0 || K0.showGround !== false;
   /* a two-point perspective, its vanishing points far off (a camera ≈ five times the house's size away), or the parallel axonometry */
   let showPersp = !K0 || K0.showPersp !== false;
+  /* an urban type in its town: the street, the houses across it, the neighbours and the block behind */
+  let showCity = !K0 || K0.showCity !== false;
   /* Surrounding buildings as a transparent tip: the Environment tab's
      OpenStreetMap footprints, hinted as massing only — their final render
      appearance is still to be decided, so they stay deliberately plain. */
@@ -17451,6 +17514,7 @@ function buildRender(host) {
   viewBox.appendChild(checkCtl('Planting', showTrees, v => { showTrees = v; refreshRender(); }));
   viewBox.appendChild(checkCtl('Terrain relief', showGround, v => { showGround = v; refreshRender(); }));
   viewBox.appendChild(checkCtl('Perspective (off: axonometry)', showPersp, v => { showPersp = v; refreshRender(); }));
+  viewBox.appendChild(checkCtl('The town around (urban types)', showCity, v => { showCity = v; refreshRender(); }));
   viewBox.appendChild(checkCtl('Surrounding buildings', showNb, v => {
     showNb = v;
     if (v) { if (ENV.nb) wantNeighbours(nbRenderRef(), () => refreshRender()); else { ENV.nb = true; wantNeighbours(nbRenderRef(), () => refreshRender()); } }
@@ -17521,7 +17585,7 @@ function buildRender(host) {
     if (!showPersp) return { cx, cy:bottom + CAM_K * s0 * vMin, s:s0, H0, ridge, M, ax };
     /* the camera five house-sizes from the pivot at mid-height of the house's centre; the frame a little smaller so the near corner still fits */
     const bx = (bb[0] + bb[2]) / 2, by = (bb[1] + bb[3]) / 2, zc = Math.max(H0, ridge) / 2, R = Math.max(6, Math.hypot(bb[2] - bb[0], bb[3] - bb[1], ridge) / 2);
-    const D = 5 * R, s = s0 * 0.9, hc = bx * ax.d[0] + by * ax.d[1], pu = bx * ax.r[0] + by * ax.r[1], pv = hc * ax.se + zc * ax.ce, dk = CAM_K * (s0 - s);
+    const D = 5 * R, s = s0 * (showCity && vmCityOn() ? 0.72 : 0.9), hc = bx * ax.d[0] + by * ax.d[1], pu = bx * ax.r[0] + by * ax.r[1], pv = hc * ax.se + zc * ax.ce, dk = CAM_K * (s0 - s);
     /* the pivot stays where the axonometry put it */
     return { cx:cx + dk * pu, cy:bottom + CAM_K * s0 * vMin - dk * pv, s, H0, ridge, M, ax, D, d0:hc * ax.ce, pu, pv };
   };
@@ -17837,6 +17901,19 @@ style === 'sketch' ? '#EFEBE0'
         }
       }
     });
+    /* the rest of the popular model — its other bodies, the row's houses, varandas, stairs, ovens, the courtyard wall — dressed
+       in their own colours: the image shows the whole house the student drew, not the one body the other tabs measure */
+    const CO = vmCompanion();
+    /* a town house standing between the eye and the model is drawn see-through, as the Environmental view does */
+    const hb = planModel(G).bbox, hc = depthOf((hb[0] + hb[2]) / 2, (hb[1] + hb[3]) / 2, H0 / 2), hp = [[hb[0], hb[1]], [hb[2], hb[1]], [hb[2], hb[3]], [hb[0], hb[3]]].flatMap(q => [0, ridge].map(z => proj(FR, q[0], q[1], z)));
+    const hbox = [Math.min(...hp.map(q => q[0])), Math.min(...hp.map(q => q[1])), Math.max(...hp.map(q => q[0])), Math.max(...hp.map(q => q[1]))], seeThru = {};
+    if (showCity) CO.city.forEach(f => { if (!f.city || seeThru[f.city] !== undefined) return; const c = proj(FR, f.c[0], f.c[1], f.c[2]), rr = f.r * CAM_K * FR.s;
+      seeThru[f.city] = depthOf(f.c[0], f.c[1], f.c[2]) < hc && c[0] + rr > hbox[0] && c[0] - rr < hbox[2] && c[1] + rr > hbox[1] && c[1] - rr < hbox[3]; });
+    CO.faces.concat(showCity ? CO.city.filter(f => !(f.city && seeThru[f.city] && (f.host || f.thin))).map(f => f.city && seeThru[f.city] ? Object.assign({}, f, { fill:'rgba(200,206,212,.16)', glass:true }) : f) : []).forEach(f => { const P = f.P; if (P.length < 3) return;
+      const n = vmNorm(P), cull = !(f.thin || f.court || f.roof || f.ground || f.glass) && n[0] * ax.d[0] * ax.ce + n[1] * ax.d[1] * ax.ce - n[2] * ax.se > 1e-6;
+      if (cull) return;
+      items.push({ pts:P, fill:/^#[0-9a-f]{6}$/i.test(f.fill) ? shadeHex(f.fill, night ? 0.3 : 1) : f.fill,
+        d:(f.ground ? 1e3 : 0) + P.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / P.length - (f.thin || f.host ? 2e-2 : 0) }); });
     /* detached walls */
     SCENE.walls.forEach(w => {
       if (w.sup) {
@@ -18479,7 +18556,7 @@ style === 'sketch' ? '#EFEBE0'
      prompt copied, and gemini.google.com opened in a new tab. */
   props.appendChild(el('div', { class:'gh', text:'Photorealistic image (Gemini)' }));
   const gemBox = props.appendChild(el('div', { class:'controls' }));
-  const gemNote = el('div', { class:'hint', html:t('Frame the view first — zoom and turn it: Gemini keeps the framing. One copy carries the view and the prompt together: Open in Gemini copies both and opens Gemini in a new tab — sign in there with your university Google account, paste (Ctrl/⌘ V) and send. Where the browser cannot copy an image, the view is downloaded instead: attach it, then paste the prompt.') });
+  const gemNote = el('div', { class:'hint', html:t('Frame the view first — zoom and turn it: Gemini keeps the framing. One copy carries the view and the prompt together, as one image with the prompt written under the view — so a single paste always takes both. Open in Gemini copies it and opens Gemini in a new tab — sign in there with your university Google account, paste (Ctrl/⌘ V) and send. Where the browser cannot copy an image, the image is downloaded instead: attach it and send.') });
   const gemWarn = el('div', { class:'hint', text:t('What Gemini returns is an AI illustration, not the model: check that storeys, roof and openings were kept before using it.') });
   gemWarn.style.color = '#9A3412';
   /** The prompt, in the page's language, from the model as it stands. */
@@ -18496,16 +18573,16 @@ style === 'sketch' ? '#EFEBE0'
       'Local: ' + B.site.place + ' (' + B.site.nuts + ', Portugal), ' + B.site.alt + ' m de altitude, clima ' + B.site.koppen + '.' + (typ ? ' Tipo: ' + typ + ', arquitetura vernacular portuguesa.' : ''),
       'Edifício: ' + B.model.floors + ' piso(s), cerca de ' + B.model.length + ' × ' + B.model.depth + ' m, ' + roofW + (B.model.roof.pitch ? ' a ' + B.model.roof.pitch + '°' : '') + '. Paredes: ' + wall + '. Cobertura: ' + roofM + '.' + (door ? ' Portas ' + door + '.' : ''),
       'Luz: 21 de junho, ' + B.sun.hour + ' h solares, sol a ' + B.sun.altitude + '° de altura — sombras coerentes com essa posição.',
-      (nPl ? nPl + ' árvores ou arbustos onde aparecem na vista. ' : '') + (nSup.length ? 'Estruturas de apoio onde aparecem: ' + nSup.join(', ') + '. ' : '') + 'Paisagem e vegetação próprias da região.',
-      'Mantém rigorosamente: o mesmo ponto de vista e enquadramento, a forma e as proporções do volume, o número de pisos, a forma e a inclinação do telhado, e o número, a posição e o tamanho das portas e janelas. Não acrescentes pisos, varandas, janelas nem outros edifícios.',
+      (nPl ? nPl + ' árvores ou arbustos onde aparecem na vista. ' : '') + (nSup.length ? 'Estruturas de apoio onde aparecem: ' + nSup.join(', ') + '. ' : '') + (showCity && vmCityOn() ? 'Contexto urbano: uma rua de cidade — mantém as casas vizinhas, a rua e os passeios tal como desenhados (fachadas, cores e alturas podem ganhar o detalhe real da cidade), sem campo nem paisagem rural.' : 'Paisagem e vegetação próprias da região.'),
+      'Mantém rigorosamente: o mesmo ponto de vista e enquadramento, a forma e as proporções do volume, o número de pisos, a forma e a inclinação do telhado, e o número, a posição e o tamanho das portas e janelas. Não acrescentes pisos, varandas, janelas nem ' + (showCity && vmCityOn() ? 'edifícios além dos desenhados.' : 'outros edifícios.'),
       'Uma só imagem, com a mesma proporção da original.'
     ].join('\n') : [
       'Turn this schematic 3D view into a photorealistic photograph of the same building on its site.',
       'Site: ' + B.site.place + ' (' + B.site.nuts + ', Portugal), ' + B.site.alt + ' m above sea level, ' + B.site.koppen + ' climate.' + (typ ? ' Type: ' + typ + ', Portuguese vernacular architecture.' : ''),
       'Building: ' + B.model.floors + ' storey(s), about ' + B.model.length + ' × ' + B.model.depth + ' m, ' + roofW + (B.model.roof.pitch ? ' at ' + B.model.roof.pitch + '°' : '') + '. Walls: ' + wall + '. Roof: ' + roofM + '.' + (door ? ' Doors: ' + door + '.' : ''),
       'Light: 21 June, ' + B.sun.hour + ' h solar time, sun ' + B.sun.altitude + '° high — shadows consistent with that position.',
-      (nPl ? nPl + ' trees or bushes where the view shows them. ' : '') + (nSup.length ? 'Support structures where shown: ' + nSup.join(', ') + '. ' : '') + 'Landscape and planting of the region.',
-      'Keep strictly: the same viewpoint and framing, the shape and proportions of the volume, the number of storeys, the roof form and pitch, and the number, position and size of the doors and windows. Do not add storeys, balconies, windows or other buildings.',
+      (nPl ? nPl + ' trees or bushes where the view shows them. ' : '') + (nSup.length ? 'Support structures where shown: ' + nSup.join(', ') + '. ' : '') + (showCity && vmCityOn() ? 'Urban context: a town street — keep the neighbouring houses, the street and the pavements as drawn (their facades, colours and heights may take on the real detail of the town), no countryside and no rural landscape.' : 'Landscape and planting of the region.'),
+      'Keep strictly: the same viewpoint and framing, the shape and proportions of the volume, the number of storeys, the roof form and pitch, and the number, position and size of the doors and windows. Do not add storeys, balconies, windows or ' + (showCity && vmCityOn() ? 'buildings beyond those drawn.' : 'other buildings.'),
       'One image, in the same aspect ratio as the original.'
     ].join('\n');
   }
@@ -18519,16 +18596,32 @@ style === 'sketch' ? '#EFEBE0'
      the click, as Safari asks. Where the clipboard takes no image (older
      browsers, a refused permission), the view is downloaded and the prompt
      copied as text — the earlier two-step way. */
+  /** The view and, under it, the prompt as a white band of text, in one canvas. */
+  const viewWithPrompt = (cv, txt) => {
+    const W = cv.width, pad = Math.round(W * 0.025), fs = Math.max(13, Math.round(W / 70)), lh = Math.round(fs * 1.35), c0 = document.createElement('canvas'), g0 = c0.getContext('2d');
+    g0.font = fs + 'px system-ui, -apple-system, Segoe UI, Arial, sans-serif';
+    const lines = [];
+    txt.split('\n').forEach(par => { let ln = ''; par.split(' ').forEach(w => { const tr = ln ? ln + ' ' + w : w; if (g0.measureText(tr).width > W - 2 * pad && ln) { lines.push(ln); ln = w; } else ln = tr; }); lines.push(ln); });
+    const hT = pad * 2 + lh * (lines.length + 1);
+    c0.width = W; c0.height = cv.height + hT;
+    const g = c0.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, c0.height); g.drawImage(cv, 0, 0);
+    g.fillStyle = '#14171a'; g.font = 'bold ' + fs + 'px system-ui, -apple-system, Segoe UI, Arial, sans-serif';
+    g.fillText(LANG === 'pt' ? 'INSTRUÇÕES — transforma a imagem acima numa fotografia:' : 'INSTRUCTIONS — turn the image above into a photograph:', pad, cv.height + pad + fs);
+    g.font = fs + 'px system-ui, -apple-system, Segoe UI, Arial, sans-serif';
+    lines.forEach((l, i) => g.fillText(l, pad, cv.height + pad + fs + lh * (i + 1)));
+    return c0;
+  };
   const copyViewAndPrompt = (ok, fallback) => {
     refreshRender();
     const txt = geminiPrompt(), cv = renderPanel.canvas;
     const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const twoStep = () => { downloadView(); copyText(txt, fallback); };
+    const twoStep = () => { try { const a = document.createElement('a'); a.href = viewWithPrompt(cv, txt).toDataURL('image/png'); a.download = 'vista-e-prompt.png'; document.body.appendChild(a); a.click(); a.remove(); } catch (e) { downloadView(); } copyText(txt, fallback); };
     try {
       if (!(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write)) { twoStep(); return; }
-      const png = new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('png')), 'image/png'));
-      const html = '<img src="' + cv.toDataURL('image/png') + '" alt="view"><p>' + esc(txt).replace(/\n/g, '<br>') + '</p>';
-      const item = new ClipboardItem({ 'image/png':png, 'text/plain':new Blob([txt], { type:'text/plain' }), 'text/html':new Blob([html], { type:'text/html' }) });
+      /* one image, the view with the prompt written under it: a clipboard holding text beside an image pastes as text alone
+         in Gemini, so the prompt travels inside the picture — one paste always carries both */
+      const png = new Promise((res, rej) => viewWithPrompt(cv, txt).toBlob(b => b ? res(b) : rej(new Error('png')), 'image/png'));
+      const item = new ClipboardItem({ 'image/png':png });
       navigator.clipboard.write([item]).then(ok, twoStep);
     } catch (e) { twoStep(); }
   };
@@ -18542,7 +18635,7 @@ style === 'sketch' ? '#EFEBE0'
     () => toast(t('Image downloaded and prompt copied — attach the image in Gemini and paste the prompt'))) }));
   props.appendChild(gemNote); props.appendChild(gemWarn);
 
-  KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showPersp, showNb, embas, cant, cam:{ az:CAM.az, el:CAM.el } }; });
+  KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showPersp, showCity, showNb, embas, cant, cam:{ az:CAM.az, el:CAM.el } }; });
   host._refresh = () => { renderCam.sync(); refreshRender(); };
   const rcv = renderPanel.canvas;
   rcv.style.touchAction = 'none';
@@ -23656,6 +23749,36 @@ function vmVolFaces(v, opts) {
       push([p, b, [b[0], b[1], b[2] - tk], [p[0], p[1], p[2] - tk]], vmShade(rc, RM.turf ? 0.62 : 0.72), { roof:true, fascia:true }); })); }
   return F;
 }
+/** An outside stair along its wall, as treads in the wall's own frame (u along the face from its start, d out of it, h each
+    tread's top). It serves the gallery (or varanda) above it on the same face: it lands at the gallery's nearer end and runs
+    away from it, never under it. Where its run meets the end of the wall or a courtyard wall standing across it, it turns 90°
+    on a corner landing and goes on out from the wall — a corner stair, kept inside. */
+function vmStairRuns(vm, v, E, top) {
+  const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D, x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = v.x + v.L / 2, y1 = v.y + v.D / 2, z0 = v.raise || 0;
+  const w = E.w || 1.1, tr = 0.28, u0 = (E.pos || 0.1) * len, treads = [];
+  const gal = (vm.els || []).filter(G => G !== E && G.t === 'varanda' && (G.vol || 0) === (E.vol || 0) && (G.face || 'S') === f && (G.floor || 0) >= 1 && G.kind !== 'reentrante');
+  let start = u0 + (E.landing ? 1.2 : 0), dir = 1, ztop = top, onGal = false;
+  if (gal.length) { const gs = gal.map(G => { const gw = Math.min(G.w || 4, len - 0.4), a = (G.pos || 0.5) * len - gw / 2; return { a, b:a + gw, z:z0 + (G.floor || 1) * v.fh }; });
+    const g = gs.sort((p, q) => Math.min(Math.abs(u0 - p.a), Math.abs(u0 - p.b)) - Math.min(Math.abs(u0 - q.a), Math.abs(u0 - q.b)))[0];
+    const toA = Math.abs(u0 - g.a) <= Math.abs(u0 - g.b), roomA = g.a, roomB = len - g.b;
+    /* the nearer end, unless it has no room for the run and the other has more */
+    const useA = toA ? roomA >= 1.2 || roomA >= roomB : roomB < 1.2 && roomA > roomB;
+    start = useA ? g.a : g.b; dir = useA ? -1 : 1; ztop = g.z; onGal = true; }
+  /* how far the run may go: the end of the wall, or a courtyard wall across it */
+  let lim = dir > 0 ? len : 0; const c = vm.court;
+  if (c && c.on) { const front = f === 'S' ? c.y + c.D / 2 >= y0 - 0.6 && c.y - c.D / 2 < y0 : f === 'N' ? c.y - c.D / 2 <= y1 + 0.6 && c.y + c.D / 2 > y1 : f === 'E' ? c.x - c.L / 2 <= x1 + 0.6 && c.x + c.L / 2 > x1 : c.x + c.L / 2 >= x0 - 0.6 && c.x - c.L / 2 < x0;
+    if (front) (f === 'S' || f === 'N' ? [c.x - c.L / 2, c.x + c.L / 2].map(X => X - x0) : [c.y - c.D / 2, c.y + c.D / 2].map(Y => Y - y0))
+      .forEach(uw => { if ((uw - start) * dir > 0.3 && (uw - lim) * dir < 0) lim = uw - dir * 0.25; }); }
+  const nn = Math.max(4, Math.round(ztop / 0.19)), hs = i => ztop * (1 - (i + 1) / (nn + 1)), room = Math.abs(lim - start);
+  let k = Math.floor(room / tr); if (k < nn) k = Math.max(0, Math.floor((room - w) / tr));
+  for (let i = 0; i < Math.min(k, nn); i++) { const ua = start + dir * i * tr, ub = ua + dir * tr; treads.push({ ua:Math.min(ua, ub), ub:Math.max(ua, ub), da:0, db:w, h:hs(i) }); }
+  let turn = false;
+  if (k < nn) { turn = true;
+    const la = start + dir * k * tr, lb = la + dir * w;
+    treads.push({ ua:Math.min(la, lb), ub:Math.max(la, lb), da:0, db:w, h:ztop * (1 - (k + 0.5) / (nn + 1)), landing:true });
+    for (let j = k; j < nn; j++) { const dA = w + (j - k) * tr; treads.push({ ua:Math.min(la, lb), ub:Math.max(la, lb), da:dA, db:dA + tr, h:hs(j) }); } }
+  return { treads, onGal, turn, w };
+}
 /** The pieces the elements add: chimneys, stairs, varandas, ovens, porches, pergolas. */
 function vmElFaces(vm, vs) {
   const F = [], push = (P, fill, o) => F.push(Object.assign({ P, fill, n:vmNorm(P) }, o || {}));
@@ -23697,9 +23820,16 @@ function vmElFaces(vm, vs) {
       if (E.along === 'perp') { for (let i = 0; i < n; i++) { const [px, py] = at(u0, 0); const dd = (n - i) * tr;
           if (f === 'S') box(px, py - dd, 0, w, tr, (i + 1) * top / n, stone, o); else if (f === 'E') box(px + dd - tr, py, 0, tr, w, (i + 1) * top / n, stone, o);
           else if (f === 'N') box(px, py + dd - tr, 0, w, tr, (i + 1) * top / n, stone, o); else box(px - dd, py, 0, tr, w, (i + 1) * top / n, stone, o); }
-      } else { for (let i = 0; i < n; i++) { const [px, py] = at(u0 + (E.landing ? 1.2 : 0) + i * tr, 0);
-          if (f === 'S') box(px, py - w, 0, tr, w, top - i * top / n, stone, o); else if (f === 'N') box(px, py, 0, tr, w, top - i * top / n, stone, o);
-          else if (f === 'E') box(px, py, 0, w, tr, top - i * top / n, stone, o); else box(px - w, py, 0, w, tr, top - i * top / n, stone, o); } }
+      } else {
+        /* along the wall. A stair serves the gallery (or varanda) above it on the same face: it lands at the gallery's
+           nearer end and runs away from it, never under it. Where its run meets the end of the wall or a courtyard
+           wall, it turns 90° on a corner landing and goes on out from the wall — a corner stair, kept inside. */
+        const boxUD = (ua, ub, da, db, z, h) => { const p = at(ua, da), q = at(ub, db); box(Math.min(p[0], q[0]), Math.min(p[1], q[1]), z, Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1]), h, stone, o); };
+        const SR = vmStairRuns(vm, v, E, top);
+        SR.treads.forEach(r => boxUD(r.ua, r.ub, r.da, r.db, 0, r.h));
+        const onGal = SR.onGal;
+        if (onGal) return;
+      }
       if (E.landing) { const [px, py] = at(u0, 0); if (f === 'S') box(px, py - w, top - 0.18, 1.2, w, 0.18, stone, o); else if (f === 'E') box(px, py, top - 0.18, w, 1.2, 0.18, stone, o); else if (f === 'N') box(px, py, top - 0.18, 1.2, w, 0.18, stone, o); else box(px - w, py, top - 0.18, w, 1.2, 0.18, stone, o);
         if (E.porch && f === 'S') { [[px, py - w], [px + 1.1, py - w]].forEach(q => box(q[0], q[1], top, 0.1, 0.1, 2.0, '#6E4B2E', o));
           push([[px - 0.1, py - w - 0.2, top + 2.0], [px + 1.3, py - w - 0.2, top + 2.0], [px + 1.3, py, top + 2.4], [px - 0.1, py, top + 2.4]], (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c, o); } }
@@ -23899,7 +24029,11 @@ function vmPlanSVG(vm, w, opts) {
     const at = (u, d) => f === 'S' ? [x0 + u, y0 - d] : f === 'N' ? [x0 + u, y0 + v.D + d] : f === 'E' ? [x0 + v.L + d, y0 + u] : [x0 - d, y0 + u];
     if (E.t === 'chimney') { const p = P(x0 + (E.u === undefined ? 0.75 : E.u) * v.L - 0.35, y0 + (E.v === undefined ? 0.5 : E.v) * v.D + 0.3);
       chimTop.push('<rect data-chim="' + vm.els.indexOf(E) + '" x="' + p[0] + '" y="' + p[1] + '" width="' + (0.7 * s).toFixed(1) + '" height="' + (0.6 * s).toFixed(1) + '" fill="#6B645A" stroke="#3A342E" stroke-width="1" style="cursor:move"><title>' + VMT('Chimney — drag it where you want it', 'Chaminé — arraste-a para onde a quiser') + '</title></rect>'); }
-    if (E.t === 'stair') { const w = E.w || 1.1, n = 8, u0 = (E.pos || 0.1) * len;
+    if (E.t === 'stair' && E.along !== 'perp') {
+      /* the same treads the isometric draws: each its outline, so the run, its corner landing and its turn read on the plan */
+      vmStairRuns(vm, v, E, (v.raise || 0) + v.fh).treads.forEach(r => { const A = P(...at(r.ua, r.da)), B = P(...at(r.ub, r.db));
+        o.push('<rect x="' + Math.min(A[0], B[0]).toFixed(1) + '" y="' + Math.min(A[1], B[1]).toFixed(1) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="' + (r.landing ? '#E2DCCF' : 'none') + '" stroke="#6B645A" stroke-width="1"/>'); }); }
+    else if (E.t === 'stair') { const w = E.w || 1.1, n = 8, u0 = (E.pos || 0.1) * len;
       for (let i = 0; i <= n; i++) { const [ax, ay] = E.along === 'perp' ? at(u0, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, 0); const [bx, by] = E.along === 'perp' ? at(u0 + w, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, w);
         const A = P(ax, ay), B = P(bx, by); o.push('<line x1="' + A[0] + '" y1="' + A[1] + '" x2="' + B[0] + '" y2="' + B[1] + '" stroke="#6B645A" stroke-width="1"/>'); } }
     if (E.t === 'varanda' || E.t === 'alpendre' || E.t === 'latada') { const w = E.w || 4, d = E.t === 'varanda' ? (E.kind === 'reentrante' ? -1 : E.kind === 'sacada' ? 0.5 : 1.1) : (E.d || 2.4), u0 = (E.pos || 0.5) * len - w / 2;
@@ -24009,6 +24143,11 @@ function vmStyle() {
     + '.vmlist button.on{border-color:var(--c3);box-shadow:0 0 0 1px var(--c3);background:#EEF7F5}.vmbtns{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}'
     + '.vmbtns button.pri{background:var(--c3);border-color:var(--c3);color:#fff}'
     + '.vmel{border-top:1px dashed var(--line);padding-top:6px;margin-top:6px}.vmel .x{float:right;border:none;background:none;color:var(--c2);cursor:pointer;font-size:12px}'
+    + '.vmotab{display:grid;grid-template-columns:1.25fr 1.1fr .8fr .8fr .8fr 20px;gap:3px 4px;align-items:center;margin:4px 0}.vmotab .h{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}'
+    + '.vmotab input,.vmotab select{font:inherit;font-size:12px;padding:2px 3px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink);min-width:0;width:100%;box-sizing:border-box}'
+    + '.vmotab .x{border:none;background:none;color:var(--c2);cursor:pointer;font-size:12px;padding:0}.vmotab .none{grid-column:1/-1;font-size:12px;color:var(--muted)}'
+    + '.vmeld{border-top:1px dashed var(--line);padding:4px 0}.vmeld summary{cursor:pointer;font-size:12px;list-style:revert}.vmeld summary span{color:var(--muted)}.vmeld[open]{padding-bottom:8px}'
+    + '.vmeld .x{float:right;border:none;background:none;color:var(--c2);cursor:pointer;font-size:12px}'
     + '.vmview{border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px;margin-bottom:12px}.vmview svg{max-width:100%;height:auto;display:block;margin:0 auto}'
     + '.vmviews2{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:900px){.vmviews2{grid-template-columns:1fr}}'
     + '.vmplans{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}.vmplan1{border:1px solid transparent;border-radius:8px;padding:2px}.vmplan1.on{border-color:var(--c3)}.vmplan1 svg{width:100%;height:auto}'
@@ -24036,6 +24175,17 @@ function vmSel(label, opts, get, set, rebuild) {
   opts.forEach(([v, l]) => s.appendChild(el('option', { value:v, text:l, selected:String(get()) === String(v) ? 'selected' : null })));
   return el('label', null, [document.createTextNode(label), s]);
 }
+/** The compact forms, for a line of a table: no label, the header names the column. */
+function vmNumC(get, set, lo, hi, step) {
+  return el('input', { type:'number', min:lo, max:hi, step:step || 0.1, value:+(+get()).toFixed(2), onchange:e => { const v = clamp(+e.target.value, lo, hi); if (isFinite(v)) { set(v); vmChanged(); } } });
+}
+function vmSelC(opts, get, set, rebuild) {
+  const s = el('select', { onchange:e => { set(e.target.value); vmChanged(rebuild); } });
+  opts.forEach(([v, l]) => s.appendChild(el('option', { value:v, text:l, selected:String(get()) === String(v) ? 'selected' : null })));
+  return s;
+}
+/** The elements whose editor stands open (the rest show one line each). */
+const VM_ELOPEN = new WeakSet();
 function vmChk(label, get, set) {
   return el('label', { style:'flex-direction:row;align-items:center;gap:6px' }, [el('input', { type:'checkbox', checked:get() ? 'checked' : null, onchange:e => { set(e.target.checked); vmChanged(); } }), document.createTextNode(label)]);
 }
@@ -24284,14 +24434,18 @@ function buildModeller(host) {
       if (v.fl > 1) { const fb = ed.appendChild(el('div', { class:'seg', style:'display:flex;gap:4px;margin:0 0 6px' }));
         for (let k = 0; k < v.fl; k++) fb.appendChild(el('button', { type:'button', class:'btn small' + (k === flE ? ' solid' : ''), 'aria-pressed':String(k === flE), text:k ? VMT('Floor ', 'Piso ') + k : VMT('Ground', 'Térreo'),
           onclick:() => { VM_ROOMFL = k; drawEditor(); drawViews(); } })); }
-      VM_FACES.forEach(f => (v.open[f] || []).forEach((o, i) => { if ((o.fl || 0) !== flE) return; const row = ed.appendChild(el('div', { class:'vmrow vmel' }));
-        row.appendChild(vmSel(VMT('Face', 'Fachada'), vmFaceOpts(), () => f, x => { v.open[f].splice(i, 1); (v.open[x] = v.open[x] || []).push(o); }, true));
-        row.appendChild(vmSel(VMT('Kind', 'Tipo'), [['w', VMT('window', 'janela')], ['d', VMT('door', 'porta')]], () => o.t, x => { o.t = x; if (x === 'd') o.h = 2; }));
-        row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => o.pos, x => { o.pos = x; }, 0, 1, 0.05));
-        row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => o.w, x => { o.w = x; }, 0.2, 6, 0.1));
-        row.appendChild(vmNum(VMT('Height (m)', 'Altura (m)'), () => o.h, x => { o.h = x; }, 0.2, 3, 0.1));
-        row.appendChild(vmNum(VMT('Storey (0 = ground)', 'Piso (0 = térreo)'), () => o.fl, x => { o.fl = Math.round(x); }, 0, 3, 1));
-        row.appendChild(el('button', { type:'button', class:'x', text:'✕ ' + VMT('remove', 'remover'), onclick:() => { v.open[f].splice(i, 1); vmChanged(true); } })); }));
+      /* one line per opening — face, kind, position, width, height — under one header: the floor is the tab above */
+      const otab = ed.appendChild(el('div', { class:'vmotab' }));
+      [VMT('Face', 'Fachada'), VMT('Kind', 'Tipo'), VMT('Pos.', 'Pos.'), VMT('W (m)', 'L (m)'), VMT('H (m)', 'A (m)'), ''].forEach(h => otab.appendChild(el('span', { class:'h', text:h })));
+      let nOp = 0;
+      VM_FACES.forEach(f => (v.open[f] || []).forEach((o, i) => { if ((o.fl || 0) !== flE) return; nOp++;
+        otab.appendChild(vmSelC(vmFaceOpts(), () => f, x => { v.open[f].splice(i, 1); (v.open[x] = v.open[x] || []).push(o); }, true));
+        otab.appendChild(vmSelC([['w', VMT('window', 'janela')], ['d', VMT('door', 'porta')]], () => o.t, x => { o.t = x; if (x === 'd') o.h = 2; }));
+        otab.appendChild(vmNumC(() => o.pos, x => { o.pos = x; }, 0, 1, 0.05));
+        otab.appendChild(vmNumC(() => o.w, x => { o.w = x; }, 0.2, 6, 0.1));
+        otab.appendChild(vmNumC(() => o.h, x => { o.h = x; }, 0.2, 3, 0.1));
+        otab.appendChild(el('button', { type:'button', class:'x', title:VMT('remove', 'remover'), text:'✕', onclick:() => { v.open[f].splice(i, 1); vmChanged(true); } })); }));
+      if (!nOp) otab.appendChild(el('span', { class:'none', text:VMT('No openings on this floor.', 'Sem vãos neste piso.') }));
       const ob = ed.appendChild(el('div', { class:'vmbtns' }));
       ob.appendChild(el('button', { type:'button', text:'+ ' + VMT('window', 'janela'), onclick:() => { v.open.S.push(vmOp('w', 0.5, 0.8, 1.0, flE)); vmChanged(true); } }));
       ob.appendChild(el('button', { type:'button', text:'+ ' + VMT('door', 'porta'), onclick:() => { v.open.S.push(vmOp('d', 0.5, 0.9, 2.0, flE)); vmChanged(true); } }));
@@ -24301,9 +24455,13 @@ function buildModeller(host) {
     ed.appendChild(el('h4', { class:'vmparts', text:VMT('Parts of the house', 'Elementos da casa') }));
     const volOpts = M.vols.map((q, i) => [i, VL(q.name)]);
     (M.els || []).forEach((E, i) => {
-      const row = ed.appendChild(el('div', { class:'vmrow vmel' }));
       const title = E.t === 'chimney' ? VMT('Chimney', 'Chaminé') : E.t === 'stair' ? VMT('Outside stair', 'Escada exterior') : E.t === 'varanda' ? VMT('Varanda', 'Varanda') : E.t === 'oven' ? VMT('Projecting oven', 'Forno saliente') : E.t === 'latada' ? VMT('Vine pergola', 'Latada') : VMT('Porch', 'Alpendre');
-      row.appendChild(el('b', { text:title, style:'grid-column:1/-1;font-size:12px' }));
+      /* closed to one line — what, on which body and face — and opened by a click; the last one added opens by itself */
+      const fo = vmFaceOpts().find(q => q[0] === (E.face || 'S')), vo = volOpts.find(q => +q[0] === +E.vol);
+      const det = ed.appendChild(el('details', { class:'vmeld' })); if (VM_ELOPEN.has(E)) det.open = true;
+      det.addEventListener('toggle', () => { if (det.open) VM_ELOPEN.add(E); else VM_ELOPEN.delete(E); });
+      det.appendChild(el('summary', null, [el('b', { text:title }), el('span', { text:' · ' + (vo ? vo[1] : '') + (E.t !== 'chimney' && fo ? ' · ' + fo[1] : '') })]));
+      const row = det.appendChild(el('div', { class:'vmrow' }));
       row.appendChild(vmSel(VMT('Body', 'Corpo'), volOpts, () => E.vol, x => { E.vol = +x; }));
       if (E.t !== 'chimney') row.appendChild(vmSel(VMT('Face', 'Fachada'), vmFaceOpts(), () => E.face || 'S', x => { E.face = x; }));
       if (E.t === 'chimney') { row.appendChild(vmSel(VMT('Kind', 'Tipo'), Object.keys(VM_CHIM).map(k => [k, VL(VM_CHIM[k])]), () => E.kind, x => { E.kind = x; }, true));
@@ -24319,7 +24477,7 @@ function buildModeller(host) {
       row.appendChild(el('button', { type:'button', class:'x', text:'✕ ' + VMT('remove', 'remover'), onclick:() => { M.els.splice(i, 1); vmChanged(true); } }));
     });
     const eb = ed.appendChild(el('div', { class:'vmbtns' }));
-    const addEl = o => { (M.els = M.els || []).push(Object.assign({ vol:VM_SEL }, o)); vmChanged(true); };
+    const addEl = o => { const E = Object.assign({ vol:VM_SEL }, o); (M.els = M.els || []).push(E); VM_ELOPEN.add(E); vmChanged(true); };
     eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('chimney', 'chaminé'), onclick:() => addEl({ t:'chimney', kind:'box', u:0.75, v:0.55, h:1.2, face:'E' }) }));
     eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('stair', 'escada'), onclick:() => addEl({ t:'stair', face:'S', along:'par', pos:0.1, w:1.1, landing:true, porch:false }) }));
     eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('varanda', 'varanda'), onclick:() => addEl({ t:'varanda', face:'S', kind:'corrida', pos:0.5, w:4, floor:1 }) }));
@@ -25332,7 +25490,7 @@ Object.assign(VERN_SRC, {
     vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 });
     vm.rooms0 = along(b, 0, [[R.loja, 1], [R.esc, 0.4], [R.loja, 1]]).concat(...[1, 2, 3, 4].map(f => deep(b, f, [[R.sala, 1.2], [R.alc, 0.8], [R.coz, 1]]))); };
   VM_OVR['pt-gaioleiro'] = (vm, b) => { town(b); b.roof.ridge = 'x'; vm.row = { n:3 };
-    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 }, { t:'gallery', vol:0, face:'N', kind:'corrida', pos:0.5, w:b.L - 1, floor:1 },
+    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 }, { t:'varanda', vol:0, face:'N', kind:'corrida', pos:0.5, w:b.L - 1, floor:1 },
       { t:'stair', vol:0, face:'N', along:'par', pos:0.85, w:0.9, landing:false, porch:false });
     vm.rooms0 = deep(b, 0, [[R.loja, 1.4], [R.ent, 0.6], [R.loja, 1]]).concat(...[1, 2, 3, 4].map(f => deep(b, f, [[R.sala, 1], [R.q, 0.8], [R.q, 0.8], [R.coz, 0.8]]))); };
   VM_OVR['pt-casa-corrente'] = (vm, b) => { town(b); b.wall.cunhais = false; b.roof.ridge = 'x'; vm.row = { n:3 };
@@ -29005,6 +29163,7 @@ Object.assign(PT, {
   "Planting": "Plantação",
   "Terrain relief": "Relevo do terreno",
   "Perspective (off: axonometry)": "Perspetiva (desligada: axonometria)",
+  "The town around (urban types)": "A cidade em redor (tipos urbanos)",
   "Auto": "Prompt",
   "Photo": "Foto",
   "Watercolor": "Aquarela",
@@ -29037,7 +29196,7 @@ Object.assign(PT, {
   "Copy the view and the photoreal prompt": "Copiar a vista e o prompt fotorrealista",
   "View and prompt copied": "Vista e prompt copiados",
   "Image downloaded and prompt copied — attach the image in Gemini and paste the prompt": "Imagem descarregada e pedido copiado — anexe a imagem no Gemini e cole o pedido",
-  "Frame the view first — zoom and turn it: Gemini keeps the framing. One copy carries the view and the prompt together: Open in Gemini copies both and opens Gemini in a new tab — sign in there with your university Google account, paste (Ctrl/⌘ V) and send. Where the browser cannot copy an image, the view is downloaded instead: attach it, then paste the prompt.": "Enquadre primeiro a vista — aproxime e rode: o Gemini mantém o enquadramento. Uma só cópia leva a vista e o prompt juntos: Abrir no Gemini copia ambos e abre o Gemini num novo separador — entre aí com a sua conta Google da universidade, cole (Ctrl/⌘ V) e envie. Onde o navegador não consegue copiar uma imagem, a vista é descarregada: anexe-a e cole depois o prompt.",
+  "Frame the view first — zoom and turn it: Gemini keeps the framing. One copy carries the view and the prompt together, as one image with the prompt written under the view — so a single paste always takes both. Open in Gemini copies it and opens Gemini in a new tab — sign in there with your university Google account, paste (Ctrl/⌘ V) and send. Where the browser cannot copy an image, the image is downloaded instead: attach it and send.": "Enquadre primeiro a vista — aproxime e rode: o Gemini mantém o enquadramento. Uma só cópia leva a vista e o prompt juntos, numa única imagem com o prompt escrito por baixo da vista — assim, um só colar leva sempre os dois. Abrir no Gemini copia-a e abre o Gemini num novo separador — entre aí com a sua conta Google da universidade, cole (Ctrl/⌘ V) e envie. Onde o navegador não consegue copiar uma imagem, a imagem é descarregada: anexe-a e envie.",
   "What Gemini returns is an AI illustration, not the model: check that storeys, roof and openings were kept before using it.": "O que o Gemini devolve é uma ilustração gerada por IA, não o modelo: confirme que os pisos, o telhado e os vãos se mantiveram antes de a usar.",
   "Popular here": "Popular aqui",
   "Wall finishes": "Acabamentos de parede",
