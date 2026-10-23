@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.157.2',
+  version:     '1.157.3',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19209,11 +19209,11 @@ function vernMount(host, tabKey, openFirst) {
       row.appendChild(el('span', null, [el('label', { text:VL({ en:'Face of the island', pt:'Vertente' }) }), sf]));
     }
     const st = el('select', { onchange:e => { R.V.type = e.target.value; refreshAll(); } });
-    const g1 = st.appendChild(el('optgroup', { label:VL({ en:'Built here', pt:'Construída aqui' }) }));
+    const g1 = st.appendChild(el('optgroup', { label:VL({ en:'In this region', pt:'Nesta região' }) }));
     R.cand.forEach(k => g1.appendChild(el('option', { value:k, text:VL(VERN_TYPES[k].name) + (vDist(k).length ? ' — ' + vDist(k).join(', ') : ''), selected:k === R.type ? 'selected' : null })));
     const rest = Object.keys(VERN_TYPES).filter(k => R.cand.indexOf(k) < 0 && VERN_TYPES[k].region === R.reg.key);
     if (rest.length) {
-      const g2 = st.appendChild(el('optgroup', { label:VL({ en:'Elsewhere in the region', pt:'Noutros lugares da região' }) }));
+      const g2 = st.appendChild(el('optgroup', { label:VL({ en:'Other regions', pt:'Outras regiões' }) }));
       rest.forEach(k => g2.appendChild(el('option', { value:k, text:VL(VERN_TYPES[k].name) + (vDist(k).length ? ' — ' + vDist(k).join(', ') : ''), selected:k === R.type ? 'selected' : null })));
     }
     row.appendChild(el('span', null, [el('label', { text:VL({ en:'Model', pt:'Modelo' }) }), st]));
@@ -21788,7 +21788,7 @@ function buildArchetype(host) {
   R.cand.forEach((k, i) => {
     const T = VERN_TYPES[k], on = k === R.type;
     const card = grid.appendChild(el('div', { class:'archcard' + (on ? ' on' : '') }));
-    card.appendChild(el('div', { class:'archk', text:i === 0 ? VL({ en:'Built here', pt:'Construída aqui' }) : VL({ en:'Also here', pt:'Também aqui' }) }));
+    card.appendChild(el('div', { class:'archk', text:i === 0 ? VL({ en:'In this region', pt:'Nesta região' }) : VL({ en:'Also here', pt:'Também aqui' }) }));
     card.appendChild(el('div', { class:'archicon', html:vIcon(k, 120) }));
     card.appendChild(el('h4', { text:VL(T.name) }));
     card.appendChild(el('p', { class:'vdist', text:vDistTxt(k) }));
