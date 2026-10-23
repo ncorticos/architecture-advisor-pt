@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.155.0',
+  version:     '1.156.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5929,8 +5929,30 @@ function importNormalize(raw, unit, up) {
 /** The imported ghost into any building painter's face list (plan-local
     metres; map translates, as the Environmental view's world frame does). */
 function pushImportFaces(arr, map) {
+  pushGhostFaces(arr, map);
   if (!IMPORT.active || !IMPORT.show.length) return;
   for (const t of IMPORT.show) arr.push({ pts:map ? t.map(map) : t, fill:IMPFILL, import:true });
+}
+/** The other bodies of the popular model, around the one being worked on: glass volumes in its plan-local
+    frame, so the student sees how they sit together while each tab measures one body. */
+let GHOST_CACHE = { key:null, faces:[] };
+function ghostFaces() {
+  let R = null; try { R = STATE.vern && STATE.vern.type ? vernRead() : null; } catch (e) { R = null; }
+  const vm = R && R.V && R.V.vm; if (!vm || !vm.vols || vm.vols.length < 2) return [];
+  const wi = Math.min(R.V.work || 0, vm.vols.length - 1), w = vm.vols[wi];
+  const key = JSON.stringify(vm.vols) + '|' + wi + '|' + (MASS && MASS.rot);
+  if (GHOST_CACHE.key === key) return GHOST_CACHE.faces;
+  /* the modeller's frame faces south at 180°: the study turns its plan by the facade's azimuth */
+  const a = ((MASS && isFinite(MASS.rot) ? MASS.rot : 180) - 180) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
+  const tf = p => { const x = p[0] - w.x, y = p[1] - w.y; return [x * c + y * sn, -x * sn + y * c, p[2]]; };
+  const out = [];
+  vmAllVols(Object.assign({}, vm, { row:{ n:1 } })).forEach(v => { if (v._i === wi) return;
+    vmVolFaces(v).forEach(q => { if (q.thin) return; out.push(q.P.map(tf)); }); });
+  GHOST_CACHE = { key, faces:out };
+  return out;
+}
+function pushGhostFaces(arr, map) {
+  ghostFaces().forEach(P => arr.push({ pts:map ? P.map(map) : P, fill:'rgba(120,135,150,0.16)', import:true, ghost:true }));
 }
 /** A chimney's openings stand a hair proud of the faces they are cut in,
     yet a face's middle can lie nearer the eye than an opening low on it, and
@@ -7096,7 +7118,7 @@ function buildEnvironment(host) {
     SORT_AX = null; faces.sort((p1, q1) => roofWallOrder(p1, q1) || dE(q1) - dE(p1)).forEach(f2 => {
       if (f2.balc) { balcFace(ctx, f2.balc, P3e); return; }
       if (f2.chim || f2.par) { path3(f2.pts); ctx.fillStyle = f2.fill; ctx.fill(); stroke(ctx, CH.ink, 1.1); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
-      if (f2.import) { path3(f2.pts); ctx.fillStyle = f2.fill; ctx.fill(); return; }
+      if (f2.import) { path3(f2.pts); ctx.fillStyle = f2.fill; ctx.fill(); if (f2.ghost) { ctx.strokeStyle = 'rgba(60,70,80,.45)'; ctx.lineWidth = 0.8; ctx.stroke(); } return; }
       path3(f2.pts);
       if (!(f2.nb && f2.nb.ghost)) { ctx.fillStyle = f2.fill; ctx.fill(); }
       if (f2.nb) {
@@ -8368,7 +8390,7 @@ function buildSite(host) {
           const scr = fc.pts.map(q => at(q[0], q[1], beta, q[2]));
           if (fc.balc) { desk.path(scr, true); balcFace(ctx, fc.balc, P3s); return; }
           if (fc.stairGrp) { fc.stairGrp.forEach(f => { outline(f.pts.map(q => at(q[0], q[1], beta, q[2])), true); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); }); return; }
-          if (fc.import) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); return; }
+          if (fc.import) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); if (fc.ghost) { ctx.strokeStyle = 'rgba(60,70,80,.45)'; ctx.lineWidth = 0.8; ctx.stroke(); } return; }
           if (fc.chim || fc.par || fc.cano) { outline(scr, true); ctx.fillStyle = fc.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
           outline(scr, true);
           if (fc.pc) {
@@ -10075,7 +10097,7 @@ function buildRoof(host) {
       SORT_AX = A; faces.sort((p, q) => roofWallOrder(p, q) || depth(q) - depth(p)).forEach(F => {
         if (F.balc) { desk.path(F.pts.map(P3), true); balcFace(ctx, F.balc, P3); return; }
         if (F.stairGrp) { F.stairGrp.forEach(f => { const sp = pathOf(f.pts); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); desk.path(sp, true); }); return; }
-        if (F.import) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); return; }
+        if (F.import) { const p = pathOf(F.pts); ctx.fillStyle = F.fill; ctx.fill(); if (F.ghost) { ctx.strokeStyle = 'rgba(60,70,80,.45)'; ctx.lineWidth = 0.8; ctx.stroke(); } void p; return; }
 if (F.chim || F.par) {
           if (F.par && F.sg && F.kind) {
             const pn = F.kind === 'out' ? F.sg.n : F.kind === 'in' ? [-F.sg.n[0], -F.sg.n[1]] : null;
@@ -12044,7 +12066,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       SORT_AX = A; items.sort((p, q) => roofWallOrder(p, q) || ((q.d === undefined ? depth(q) : q.d) - (p.d === undefined ? depth(p) : p.d))).forEach(it => {
         if (it.balc) { balcFace(ctx, it.balc, P3); return; }
         if (it.stairGrp) { it.stairGrp.forEach(f => { pathOf(f.pts); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.3); ctx.stroke(); }); return; }
-        if (it.import) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); return; }
+        if (it.import) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); if (it.ghost) { ctx.strokeStyle = 'rgba(60,70,80,.45)'; ctx.lineWidth = 0.8; ctx.stroke(); } return; }
         if (it.chim || it.par) { pathOf(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
         if (it.dev) {
           const act = it.dev.f === curFace, ov = it.dev.kind === 'ov';
@@ -15149,7 +15171,7 @@ function buildVentilation(host) {
     chimOpeningsAfter(items, q1 => q1.d === undefined ? depthV(q1) : q1.d);
     SORT_AX = AX; items.sort((p1, q1) => roofWallOrder(p1, q1) || ((q1.d === undefined ? depthV(q1) : q1.d) - (p1.d === undefined ? depthV(p1) : p1.d))).forEach(it => {
       if (it.balc) { balcFace(ctx, it.balc, P3v); return; }
-      if (it.import) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); return; }
+      if (it.import) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); if (it.ghost) { ctx.strokeStyle = 'rgba(60,70,80,.45)'; ctx.lineWidth = 0.8; ctx.stroke(); } return; }
       if (it.chim || it.par) { pathV(it.pts); ctx.fillStyle = it.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.lineJoin = 'round'; ctx.stroke(); ctx.lineJoin = 'miter'; return; }
       if (it.dev) { poly(it.pts, it.dev.ov ? 'rgba(217,119,6,.22)' : 'rgba(220,38,38,.18)', it.dev.ov ? '#D97706' : '#DC2626', 1.2); return; }
       if (it.stairGrp) { it.stairGrp.forEach(f => { pathV(f.pts); ctx.fillStyle = f.fill; ctx.fill(); stroke(ctx, CH.ink, 1.2); ctx.stroke(); }); return; }
@@ -21741,6 +21763,7 @@ const popular = (key, build) => host => {
   const h = host.querySelector('.pagehead');
   if (h && POP_HEAD[key]) { h.querySelector('h2').textContent = VL(POP_HEAD[key].t); const p = h.querySelector('p'); if (p) p.textContent = VL(POP_HEAD[key].p); }
   try { vernMount(host, key, true); } catch (e) { console.error(e); }
+  if (['site', 'roof', 'openings', 'ventilation', 'visualization'].indexOf(key) >= 0) try { bodyBar(host); } catch (e) { console.error(e); }
 };
 
 /** The first tab of the popular study: the archetype and its alternatives. */
@@ -23707,6 +23730,8 @@ function vmFaces(vm) {
   F.forEach(q => { if (q.nocull && !seen(q)) q.n = q.n.map(x => -x); });
   F = F.filter(q => q.host ? seen(q.host) && (!q.solid || seen(q)) : (q.nocull || q.thin || q.cap || q.roof || q.top || q.court || q.el || seen(q)));
   /* the neighbours in a row only as glass volumes: the house studied is the one drawn whole */
+  /* a focused body (the chip of the body worked on): the others as glass */
+  if (vm._focus !== undefined) F.forEach(q => { const vi = q.el ? q.ev : q.vol; if (vi !== undefined && vi !== vm._focus) q.rr = 1; });
   F = F.filter(q => !(q.rr > 0 && (q.thin || q.host)));
   F.forEach(q => { if (q.rr > 0) { q.ghost = true; q.fill = 'rgba(150,160,170,.10)'; } });
   F.forEach((q, i) => { q.k = (q.host ? vmKey(q.host.P) + 0.02 : vmKey(q.P) + (q.thin ? 0.02 : 0)) + (q.el ? 0.03 : 0) + i * 1e-7; });
@@ -24043,15 +24068,36 @@ function vmRoomChecks(vm, rooms) {
   const kitchen = rooms.some(q => /cozinha|kitchen/i.test(VL(q.n)));
   return { kitchen, ok:rooms.filter(q => !q.bad).length, n:rooms.length, area:rooms.reduce((a, q) => a + q.w * q.d, 0) };
 }
-function vmPassToStudy(vm) {
-  const v = vm.vols[0];
+function vmPassToStudy(vm, wi) {
+  const v = vm.vols[wi || 0];
   if (!v) return;
   MASS.L = Math.round(v.L * 2) / 2; MASS.D = Math.round(v.D * 2) / 2; MASS.fl = v.fl; MASS.fh = Math.max(2.0, v.fh);
   const n = { flat:0, shed:1, gable:2, ground:2, hip:3, pyramid:3, tesoura:3, cone:3, dome:3 }[v.roof.type];
   ROOF.n = n; ROOF.th = n === 0 ? 0 : Math.min(60, v.roof.type === 'dome' ? 35 : v.roof.th); delete ROOF.zones; ROOF.roofSel = -1;
   try { migrateRoofGlobals(MASS, ROOF); } catch (e) { }
-  toast(VMT('The main body is now the study’s massing — the other tabs measure it.', 'O corpo principal passou a ser a volumetria do estudo — os outros separadores medem-no.'));
+  toast(wi ? VMT('Now working on: ', 'Agora a trabalhar: ') + VL(v.name) : VMT('The main body is now the study’s massing — the other tabs measure it.', 'O corpo principal passou a ser a volumetria do estudo — os outros separadores medem-no.'));
   refreshAll();
+}
+/** The body the other tabs work on: picked from the model's bodies, the rest staying as glass around it. */
+function vmWorkOn(i) {
+  const R = vernRead(); if (!R) return; const vm = R.V.vm || (R.V.vm = vmFromType(R.type));
+  R.V.work = Math.max(0, Math.min(i, vm.vols.length - 1)); vmPassToStudy(vm, R.V.work);
+}
+/** Above each tab of the popular study, when the model has several bodies: one chip per body, drawn with the others as glass. */
+function bodyBar(host) {
+  let R = null; try { R = vernRead(); } catch (e) { return; } if (!R) return;
+  const vm = R.V.vm || (R.V.vm = vmFromType(R.type)); if (!vm || vm.vols.length < 2) return;
+  const wi = Math.min(R.V.work || 0, vm.vols.length - 1);
+  const bar = el('div', { class:'bodybar' });
+  bar.appendChild(el('span', { class:'bbl', text:VMT('Body worked on here — the others stay as glass:', 'Corpo a trabalhar aqui — os outros ficam em transparência:') }));
+  vm.vols.forEach((v, i) => { const one = Object.assign({}, vm, { _focus:i, court:Object.assign({}, vm.court, { on:false }), row:{ n:1 } });
+    const b = bar.appendChild(el('button', { type:'button', class:'bbchip' + (i === wi ? ' on' : ''), title:VL(v.name), onclick:() => vmWorkOn(i) }));
+    b.innerHTML = vmIsoSVG(one, 96) + '<span>' + VL(v.name).replace(/&/g, '&amp;') + '</span>'; });
+  if (!$('#bodybarCSS')) document.head.appendChild(el('style', { id:'bodybarCSS', text:'.bodybar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;max-width:1380px;margin:0 auto 12px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--wash)}'
+    + '.bodybar .bbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-right:4px}'
+    + '.bbchip{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font:inherit;font-size:11px;color:var(--ink2)}'
+    + '.bbchip svg{width:96px;height:auto}.bbchip.on{border-color:var(--c3);box-shadow:0 0 0 1px var(--c3);color:var(--ink)}' }));
+  const head = host.querySelector('.pagehead'); host.insertBefore(bar, head ? head.nextSibling : host.firstChild);
 }
 
 /* ---------------------------------------------------------------- the finder */
@@ -24231,8 +24277,8 @@ function buildModeller(host) {
     isoBox.innerHTML = '';
     const ib = isoBox.appendChild(el('p', { class:'vmcap', html:VMT('Isometric — from the ', 'Isométrica — de ') + fromTxt() + (Math.abs(VM_EL - 35.26) > 0.5 ? VMT(', eye at ', ', olhar a ') + Math.round(VM_EL) + '°' : '') + ' · <small>' + VMT('drag: sideways turns, up/down tilts', 'arraste: para os lados roda, para cima/baixo inclina') + '</small> · ' }));
     const turn = d => { VM_AZ = ((VM_AZ + d) % 360 + 360) % 360; drawViews(); };
-    ib.appendChild(el('button', { type:'button', class:'btn small', text:'⟲', title:VMT('Turn the model', 'Rodar o modelo'), onclick:() => turn(-45) }));
-    ib.appendChild(el('button', { type:'button', class:'btn small', text:'⟳', title:VMT('Turn the model', 'Rodar o modelo'), onclick:() => turn(45) }));
+    ib.appendChild(el('button', { type:'button', class:'btn small', text:'⟲', title:VMT('Turn the model', 'Rodar o modelo'), onclick:() => turn(-15) }));
+    ib.appendChild(el('button', { type:'button', class:'btn small', text:'⟳', title:VMT('Turn the model', 'Rodar o modelo'), onclick:() => turn(15) }));
     /* the eye raised or lowered: from nearly level with the ground to straight down */
     const tilt = d => { VM_EL = Math.max(5, Math.min(90, Math.round(VM_EL + d))); vmSetView(); drawViews(); };
     ib.appendChild(el('button', { type:'button', class:'btn small', text:'⤒', title:VMT('Look from higher up', 'Ver de mais alto'), onclick:() => tilt(10) }));
@@ -24243,10 +24289,12 @@ function buildModeller(host) {
       let y0 = 0, e0 = VM_EL;
       sv.addEventListener('pointerdown', ev => { x0 = ev.clientX; a0 = VM_AZ; y0 = ev.clientY; e0 = VM_EL; try { sv.setPointerCapture(ev.pointerId); } catch (e) {} });
       /* sideways turns the model, up and down raises or lowers the eye */
-      sv.addEventListener('pointermove', ev => { if (x0 === null) return; const a = Math.round((a0 + (ev.clientX - x0) * 0.6) / 15) * 15, e = Math.max(5, Math.min(90, Math.round(e0 + (ev.clientY - y0) * 0.4)));
+      sv.addEventListener('pointermove', ev => { if (x0 === null) return; const a = Math.round(a0 + (ev.clientX - x0) * 0.5), e = Math.max(5, Math.min(90, Math.round(e0 + (ev.clientY - y0) * 0.4)));
         if (a !== VM_AZ || e !== Math.round(VM_EL)) { VM_AZ = ((a % 360) + 360) % 360; if (e !== Math.round(VM_EL)) { VM_EL = e; vmSetView(); }
-        const nw = vmIsoSVG(vm(), 760), vb = (nw.match(/viewBox="([^"]+)"/) || [])[1], hh = (nw.match(/height="([^"]+)"/) || [])[1];
-        if (vb) sv.setAttribute('viewBox', vb); if (hh) sv.setAttribute('height', hh); sv.innerHTML = nw.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } });
+        /* turned degree by degree; the frame only ever grows while dragging, so the model does not jump in size */
+        const nw = vmIsoSVG(vm(), 760), vb = (nw.match(/viewBox="([^"]+)"/) || [])[1];
+        if (vb) { const n = vb.split(' ').map(Number), o = (sv.getAttribute('viewBox') || vb).split(' ').map(Number), X0 = Math.min(n[0], o[0]), Y0 = Math.min(n[1], o[1]), X1 = Math.max(n[0] + n[2], o[0] + o[2]), Y1 = Math.max(n[1] + n[3], o[1] + o[3]);
+          sv.setAttribute('viewBox', [X0, Y0, X1 - X0, Y1 - Y0].map(v => +v.toFixed(2)).join(' ')); sv.setAttribute('height', Math.round(760 * (Y1 - Y0) / (X1 - X0))); } sv.innerHTML = nw.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } });
       const end = () => { if (x0 !== null) { x0 = null; drawViews(); } }; sv.addEventListener('pointerup', end); sv.addEventListener('pointercancel', end); } }
     const rooms = R.V.rooms; vmRoomChecks(M, rooms);
     /* one plan per floor, side by side: each with its openings and its rooms; a click picks the floor new rooms go to */
