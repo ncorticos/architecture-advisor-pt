@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.157.0',
+  version:     '1.157.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23955,7 +23955,7 @@ function vmStyle() {
   document.head.appendChild(el('style', { id:'vmCSS', text:
     '.vmwrap{display:grid;grid-template-columns:minmax(280px,360px) 1fr 200px;gap:18px;align-items:start;max-width:1520px}'
     + '.vmed label{min-width:0}.vmed input:not([type=checkbox]),.vmed select{width:100%;box-sizing:border-box;min-width:0}'
-    + '.vmside{position:sticky;top:8px}.vmside .vmbtns{flex-direction:column;align-items:stretch}.vmside .vmbtns button{text-align:left}'
+    + '.vmside{border:1px solid var(--c3);border-radius:8px;padding:8px 10px;background:#fff}.vmside .vmbtns{flex-direction:column;align-items:stretch}.vmside .vmbtns button{text-align:left}'
     + '@media (max-width:1200px){.vmwrap{grid-template-columns:minmax(280px,360px) 1fr}.vmside{grid-column:2;position:static}.vmside .vmbtns{flex-direction:row;flex-wrap:wrap}}'
     + '@media (max-width:900px){.vmwrap{grid-template-columns:1fr}.vmside{grid-column:auto}}'
     + '.vmed{border:1px solid var(--line);border-radius:8px;background:var(--wash);padding:10px 12px;font-size:12.5px}'
@@ -24336,6 +24336,7 @@ function buildModeller(host) {
     elevBox.insertAdjacentHTML('beforeend', vmElevSVG(M, VM_FACE, 520, { handles:true }));
     vmHeightDrag(elevBox);
     drawBelow();
+    alignSide();
   }
   /** Dragging a body's wall-top dot on the elevation: the wall shortens or grows by whole storeys, the roof as it was on top. */
   function vmHeightDrag(box) {
@@ -24476,6 +24477,11 @@ function buildModeller(host) {
     rb.appendChild(el('button', { type:'button', text:VMT('Remove the last room', 'Remover a última divisão'), onclick:() => { R.V.rooms.pop(); drawViews(); } }));
     rb.appendChild(el('button', { type:'button', text:VMT('Rooms of the type', 'Divisões do tipo'), onclick:() => { R.V.rooms = vmDefaultRooms(vm()); drawViews(); } }));
   }
+  /* the rooms column stands level with the plans it adds to, not up by the isometric */
+  function alignSide() { side.style.marginTop = '0px'; if (window.innerWidth <= 1200) return;
+    const d = planBox.getBoundingClientRect().top - side.getBoundingClientRect().top; side.style.marginTop = Math.max(0, d) + 'px'; }
+  if (window._vmSideResize) window.removeEventListener('resize', window._vmSideResize);
+  window._vmSideResize = () => { if (document.body.contains(side)) alignSide(); }; window.addEventListener('resize', window._vmSideResize);
   /* Delete (or Backspace) removes the room picked on a plan, unless a field is being typed in */
   if (window._vmRoomKey) document.removeEventListener('keydown', window._vmRoomKey);
   window._vmRoomKey = ev => { if (!VM_ROOMSEL || (ev.key !== 'Delete' && ev.key !== 'Backspace')) return; const tg = ev.target; if (tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA' || tg.tagName === 'SELECT' || tg.isContentEditable)) return;
