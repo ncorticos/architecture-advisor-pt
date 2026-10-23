@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.154.1',
+  version:     '1.155.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -15286,7 +15286,8 @@ function buildVentilation(host) {
       if (w.sup) {
         /* a support structure: its own walls and roof, far faces first; amber outline when selected */
         const fs = supFaces(w).map(f => Object.assign(f, { d:f.pts.reduce((a2, q) => a2 + camDepth(q[0], q[1], q[2]), 0) / f.pts.length }));
-        fs.sort((p, q) => q.d - p.d).forEach(f => poly(f.pts, f.roof ? f.fill : supShade(f.fill, 0.9), 'rgba(40,36,32,.55)', 0.8));
+        fs.forEach(f => { if (f.ground) f.d += 1e3; });
+        fs.sort((p, q) => q.d - p.d).forEach(f => poly(f.pts, f.lit ? f.fill : f.roof ? f.fill : supShade(f.fill, 0.9), f.thin ? 'rgba(40,36,32,.3)' : 'rgba(40,36,32,.55)', f.thin ? 0.4 : 0.8));
         if (sel && sel.kind === 'wall' && sel.index === i) fs.filter(f => f.roof || f.pts.length === 4).forEach(f => poly(f.pts, null, '#D97706', 1.6, [5, 4]));
         return;
       }
@@ -17806,8 +17807,8 @@ style === 'sketch' ? '#EFEBE0'
         supFaces(w).forEach(f => { const p0 = f.pts[0], p1 = f.pts[1], p2 = f.pts[2];
           const ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2], vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
           const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, nl = Math.hypot(nx, ny, nz) || 1;
-          const k = f.roof ? 0.95 : 0.7 + 0.3 * Math.abs(nx / nl * 0.6 - ny / nl * 0.8);
-          items.push({ pts:f.pts, fill:shadeHex(f.fill, night ? 0.3 : k), d:f.pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / f.pts.length }); });
+          const k = f.lit ? 1 : f.roof ? 0.95 : 0.7 + 0.3 * Math.abs(nx / nl * 0.6 - ny / nl * 0.8);
+          items.push({ pts:f.pts, fill:shadeHex(f.fill, night ? 0.3 : k), d:(f.ground ? 1e3 : 0) + f.pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / f.pts.length }); });
         return;
       }
       const hw = w.length / 2;
@@ -23307,6 +23308,8 @@ function vmFromType(k) {
   if (m.icon === 'windmill') { base.kind = 'round'; base.L = base.D = Math.max(m.L, m.D); base.roof.type = 'cone'; base.roof.th = 40; base.roof.mat = rm === 'thatch' ? 'thatch' : 'timber'; }
   const ov = VM_OVR[k];
   if (ov) ov(vm, base);
+  /* a support structure is drawn in its own form (supGeo), its main body only giving the size and the plan */
+  if (T.support) { vm.geo = k; vm.vols = vm.vols.slice(0, 1); vm.row = { n:1 }; vm.els = []; vm.court.on = false; }
   /* the chimney as the icon draws it — or, where the smoke left through the tiles, none and the smoke instead */
   vm.els = vm.els.filter(e => e.t !== 'chimney');
   const ch = vmChimOf(k, wm);
@@ -23688,7 +23691,11 @@ function vmFaces(vm) {
   /* a body on top of another (a mirante) stands on its roof */
   vs.forEach(v => { if (v.raise > 0.5 && !v.piers) v._onTop = true; });
   let F = vmCourtFaces(vm);
-  vs.forEach(v => vmVolFaces(v).forEach(q => F.push(Object.assign(q, { vol:v._i, rr:v._r || 0 }))));
+  vs.forEach(v => { if (vm.geo && v._i === 0 && VERN_TYPES[vm.geo] && typeof supGeo === 'function') {
+      /* a support structure keeps its own form, as its icon and the Ventilation scene draw it, sized by its main body */
+      supGeo(vm.geo, v.L, v.D).forEach(f => { const P = f.pts.map(p => [v.x + p[0], v.y + p[1], (v.raise || 0) + p[2]]); F.push({ P, fill:f.fill, n:vmNorm(P), vol:0, rr:v._r || 0, roof:!!f.roof, thin:!!f.thin, ground:!!f.ground, top:!!f.roof, nocull:true }); });
+      return; }
+    vmVolFaces(v).forEach(q => F.push(Object.assign(q, { vol:v._i, rr:v._r || 0 }))); });
   F = F.concat(vmElFaces(vm, vs));
   /* the model turned on the spot by VM_AZ, the view staying where it is */
   if (VM_AZ) { const R = vmTurn(vm); F.forEach(q => { q.P = q.P.map(R); q.n = vmNorm(q.P); if (q.solid) q.solid = R(q.solid); }); }
@@ -23696,7 +23703,9 @@ function vmFaces(vm) {
   F.forEach(q => { if (!q.solid) return; const c = q.P.reduce((a, p) => [a[0] + p[0] / q.P.length, a[1] + p[1] / q.P.length, a[2] + p[2] / q.P.length], [0, 0, 0]);
     if ((c[0] - q.solid[0]) * q.n[0] + (c[1] - q.solid[1]) * q.n[1] + (c[2] - q.solid[2]) * q.n[2] < 0) q.n = q.n.map(x => -x); });
   const seen = q => (q.n[0] * VM_VIEW[0] + q.n[1] * VM_VIEW[1] + q.n[2] * VM_VIEW[2]) > -1e-6;
-  F = F.filter(q => q.host ? seen(q.host) && (!q.solid || seen(q)) : (q.thin || q.cap || q.roof || q.top || q.court || q.el || seen(q)));
+  /* faces drawn from either side (a support structure's own form): lit on the side the eye sees */
+  F.forEach(q => { if (q.nocull && !seen(q)) q.n = q.n.map(x => -x); });
+  F = F.filter(q => q.host ? seen(q.host) && (!q.solid || seen(q)) : (q.nocull || q.thin || q.cap || q.roof || q.top || q.court || q.el || seen(q)));
   /* the neighbours in a row only as glass volumes: the house studied is the one drawn whole */
   F = F.filter(q => !(q.rr > 0 && (q.thin || q.host)));
   F.forEach(q => { if (q.rr > 0) { q.ghost = true; q.fill = 'rgba(150,160,170,.10)'; } });
@@ -23705,7 +23714,7 @@ function vmFaces(vm) {
      a face's own middle alone lets a near gable cover the roof's overhang, or a far roof slope the gable */
   const G = new Map(), gOf = q => q.el === 'chimney' ? 'v' + q.ev + '.' + q.rr : q.el ? 'e' + q.ei + '.' + q.rr : q.vol !== undefined && !q.court ? 'v' + q.vol + '.' + q.rr : 'f' + q.k;
   F.forEach(q => { const g = gOf(q); if (!G.has(g)) G.set(g, []); G.get(g).push(q); });
-  const rank = q => q.el === 'chimney' ? 2 : q.par ? 1.5 : q.roof || q.top ? 1 : 0, out = [];
+  const rank = q => q.ground ? -1 : q.nocull && q.thin ? 0.5 : q.el === 'chimney' ? 2 : q.par ? 1.5 : q.roof || q.top ? 1 : 0, out = [];
   [...G.values()].map(A => { const pts = A.filter(q => q.el !== 'chimney').flatMap(q => q.P), lo = [0, 1, 2].map(j => Math.min(...pts.map(p => p[j]))), hi = [0, 1, 2].map(j => Math.max(...pts.map(p => p[j])));
     return { A, k: A.length === 1 ? A[0].k : vmKey([lo, hi]) }; })
     .sort((a, b) => a.k - b.k).forEach(g => g.A.sort((a, b) => rank(a) - rank(b) || a.k - b.k).forEach(q => out.push(q)));
@@ -23907,8 +23916,11 @@ let VM_SEL = 0, VM_FACE = 'S', VM_ROOMFL = 0, VM_ARM = null;   // VM_ARM: 'w' or
 function vmStyle() {
   if ($('#vmCSS')) return;
   document.head.appendChild(el('style', { id:'vmCSS', text:
-    '.vmwrap{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:18px;align-items:start;max-width:1280px}'
-    + '@media (max-width:900px){.vmwrap{grid-template-columns:1fr}}'
+    '.vmwrap{display:grid;grid-template-columns:minmax(280px,360px) 1fr 200px;gap:18px;align-items:start;max-width:1520px}'
+    + '.vmed label{min-width:0}.vmed input:not([type=checkbox]),.vmed select{width:100%;box-sizing:border-box;min-width:0}'
+    + '.vmside{position:sticky;top:8px}.vmside .vmbtns{flex-direction:column;align-items:stretch}.vmside .vmbtns button{text-align:left}'
+    + '@media (max-width:1200px){.vmwrap{grid-template-columns:minmax(280px,360px) 1fr}.vmside{grid-column:2;position:static}.vmside .vmbtns{flex-direction:row;flex-wrap:wrap}}'
+    + '@media (max-width:900px){.vmwrap{grid-template-columns:1fr}.vmside{grid-column:auto}}'
     + '.vmed{border:1px solid var(--line);border-radius:8px;background:var(--wash);padding:10px 12px;font-size:12.5px}'
     + '.vmed h4{margin:10px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.vmed h4:first-child{margin-top:0}'
     + '.vmrow{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin:4px 0}.vmrow label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}'
@@ -24092,6 +24104,8 @@ function buildModeller(host) {
   const wrap = host.appendChild(el('div', { class:'vmwrap' }));
   const ed = wrap.appendChild(el('div', { class:'vmed' }));
   const views = wrap.appendChild(el('div'));
+  /* beside the model: the rooms to add, in a column, where the eye already is */
+  const side = wrap.appendChild(el('div', { class:'vmside' }));
   const below = host.appendChild(el('div', { style:'max-width:1280px' }));
   const vm = () => R.V.vm;
 
@@ -24393,7 +24407,8 @@ function buildModeller(host) {
     metBox.appendChild(el('p', { class:'hint', html:VMT('Rename a room in the table or by double-clicking it on the plan. <b>Casa de fora</b> is the Portuguese vernacular name of the entrance room — the room entered straight from outside, the house’s parlour and passage, with chests and cupboards and no fixed use, giving on the kitchen and the bedrooms (Inquérito à Arquitectura Popular). <b>Room</b> is a room of free use.',
       'Mude o nome de uma divisão na tabela ou com duplo clique sobre ela na planta. <b>Casa de fora</b> é o nome popular da sala de entrada — a divisão onde se entra directamente da rua, sala e passagem da casa, de arcas e armários e sem uso fixo, que dá para a cozinha e para os quartos (Inquérito à Arquitectura Popular). <b>Divisão</b> é uma divisão de uso livre.') }));
     if (!rc.kitchen) metBox.appendChild(el('p', { class:'hint', html:'<b>' + VMT('No kitchen yet', 'Ainda sem cozinha') + '</b> — ' + VMT('the hearth was the heart of the popular house.', 'a lareira era o centro da casa popular.') }));
-    const rb = metBox.appendChild(el('div', { class:'vmbtns' }));
+    side.innerHTML = ''; side.appendChild(el('p', { class:'vmcap', text:VMT('Rooms — add to the plan', 'Divisões — juntar à planta') }));
+    const rb = side.appendChild(el('div', { class:'vmbtns' }));
     const addRoom = (en, pt) => { const v = vm().vols[0]; R.V.rooms.push({ n:{ en, pt }, x:v.x, y:v.y, w:3, d:3, fl:VM_ROOMFL }); drawViews(); };
     [['Kitchen', 'Cozinha'], ['Bedroom', 'Quarto'], ['Casa de fora (entrance room)', 'Casa de fora (sala de entrada)'], ['Hall (sala)', 'Sala'], ['Store (loja)', 'Loja'], ['Byre (corte)', 'Corte'], ['Wine cellar', 'Adega'], ['Alcove', 'Alcova']].forEach(([en, pt]) => rb.appendChild(el('button', { type:'button', text:'+ ' + VMT(en, pt), onclick:() => addRoom(en, pt) })));
     rb.appendChild(el('button', { type:'button', text:VMT('Remove the last room', 'Remover a última divisão'), onclick:() => { R.V.rooms.pop(); drawViews(); } }));
@@ -24941,47 +24956,135 @@ function supItem(key, x, y, along) {
   const m = VERN_TYPES[key].model, d = supDims(key), r = d.round;
   return { sup:key, x:+x.toFixed(1), y:+y.toFixed(1), along:along || 'x', length:+(r ? m.L : Math.max(m.L, m.D)).toFixed(1), depth:+(r ? m.L : Math.min(m.L, m.D)).toFixed(1), height:+(d.body + d.rise).toFixed(1) };
 }
+/** Each support structure as its icon draws it, in 3D: local metres, x along its length L, y across its depth D, z up,
+    centred on the plot. Faces { pts, fill, roof }. The Ventilation and Visualization scenes and the modeller all draw this. */
+const SUPG_C = { stone:'#A39C8F', granite:'#9E978A', slate:'#4A4D52', tile:'#A9573A', lime:'#F1EEE6', timber:'#6B4E36', dark:'#3E3B38', basalt:'#55524E',
+  door:'#6E4B2E', glass:'#3E4A55', blue:'#3F6FA8', green:'#2F6B3E', thatch:'#B08A4A', earth:'#C9B58E', water:'#7FA6C4', straw:'#C9A24A', sand:'#D9C7A1' };
+function supGeo(key, L, D) {
+  const T = VERN_TYPES[key]; if (!T) return [];
+  const m = T.model, C = SUPG_C, F = [];
+  L = L || m.L; D = D || m.D;
+  const q = (pts, fill, o) => F.push(Object.assign({ pts, fill }, o || {}));
+  const box = (x0, y0, z0, x1, y1, z1, c, o) => {
+    q([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], c, o); q([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], c, o);
+    q([[x1, y1, z0], [x0, y1, z0], [x0, y1, z1], [x1, y1, z1]], c, o); q([[x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1]], c, o);
+    if (!(o && o.noTop)) q([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], o && o.topC || c, Object.assign({}, o, { roof:!!(o && o.topRoof) }));
+  };
+  const ring = (cx, cy, r, z, N) => Array.from({ length:N }, (_, i) => { const a = i / N * 2 * Math.PI; return [cx + r * Math.cos(a), cy + r * Math.sin(a), z]; });
+  const drum = (cx, cy, r, z0, z1, c, top, N) => { N = N || 20; const lo = ring(cx, cy, r, z0, N), hi = ring(cx, cy, r, z1, N);
+    for (let i = 0; i < N; i++) q([lo[i], lo[(i + 1) % N], hi[(i + 1) % N], hi[i]], c); if (top) q(hi, top, { roof:true }); };
+  const cone = (cx, cy, r, z0, h, c, N) => { N = N || 20; const b = ring(cx, cy, r, z0, N), a = [cx, cy, z0 + h]; for (let i = 0; i < N; i++) q([b[i], b[(i + 1) % N], a], c, { roof:true }); };
+  const dome = (cx, cy, r, z0, rz, c) => { const NM = 16, NL = 5, pt = (i, j) => { const a = i / NM * 2 * Math.PI, b = j / NL * Math.PI / 2; return [cx + r * Math.cos(b) * Math.cos(a), cy + r * Math.cos(b) * Math.sin(a), z0 + rz * Math.sin(b)]; };
+    for (let j = 0; j < NL; j++) for (let i = 0; i < NM; i++) q(j === NL - 1 ? [pt(i, j), pt(i + 1, j), [cx, cy, z0 + rz]] : [pt(i, j), pt(i + 1, j), pt(i + 1, j + 1), pt(i, j + 1)], c, { roof:true }); };
+  /* an opening on the south (y = −D/2) or east (x = L/2) wall: a dark or coloured panel just proud of it */
+  const opS = (u, w, z0, h, c, y) => q([[u - w / 2, (y === undefined ? -D / 2 : y) - 0.03, z0], [u + w / 2, (y === undefined ? -D / 2 : y) - 0.03, z0], [u + w / 2, (y === undefined ? -D / 2 : y) - 0.03, z0 + h], [u - w / 2, (y === undefined ? -D / 2 : y) - 0.03, z0 + h]], c, { thin:true });
+  const opE = (v, w, z0, h, c, x) => q([[(x === undefined ? L / 2 : x) + 0.03, v - w / 2, z0], [(x === undefined ? L / 2 : x) + 0.03, v + w / 2, z0], [(x === undefined ? L / 2 : x) + 0.03, v + w / 2, z0 + h], [(x === undefined ? L / 2 : x) + 0.03, v - w / 2, z0 + h]], c, { thin:true });
+  /* a house-like body: walls to h, a roof (gable along x, gable along y, hip, pyramid, flat with parapet), eaves e */
+  const house = (o) => {
+    const x0 = -L / 2, x1 = L / 2, y0 = -D / 2, y1 = D / 2, z0 = o.z0 || 0, h = z0 + o.h, wc = o.wall, rc = o.roofC || C.tile, e = o.eave === undefined ? 0.3 : o.eave;
+    box(x0, y0, z0, x1, y1, h, wc, { noTop:o.roof !== 'flat' });
+    if (o.barra) { q([[x0, y0 - 0.02, z0], [x1, y0 - 0.02, z0], [x1, y0 - 0.02, z0 + 0.45], [x0, y0 - 0.02, z0 + 0.45]], o.barra, { thin:true }); q([[x1 + 0.02, y0, z0], [x1 + 0.02, y1, z0], [x1 + 0.02, y1, z0 + 0.45], [x1 + 0.02, y0, z0 + 0.45]], o.barra, { thin:true });
+      [[x0, y0], [x1, y0]].forEach(([cx]) => q([[cx - (cx > 0 ? 0.25 : 0), y0 - 0.02, z0], [cx + (cx > 0 ? 0 : 0.25), y0 - 0.02, z0], [cx + (cx > 0 ? 0 : 0.25), y0 - 0.02, h], [cx - (cx > 0 ? 0.25 : 0), y0 - 0.02, h]], o.barra, { thin:true })); }
+    const th = (o.pitch || 25) * Math.PI / 180;
+    if (o.roof === 'flat') { const p = o.par || 0;
+      if (p) { box(x0, y0, h, x1, y0 + 0.15, h + p, wc); box(x0, y1 - 0.15, h, x1, y1, h + p, wc); box(x0, y0, h, x0 + 0.15, y1, h + p, wc); box(x1 - 0.15, y0, h, x1, y1, h + p, wc);
+        if (o.barra) q([[x0, y0 - 0.02, h + p - 0.12], [x1, y0 - 0.02, h + p - 0.12], [x1, y0 - 0.02, h + p], [x0, y0 - 0.02, h + p]], o.barra, { thin:true }); }
+      return h + p; }
+    if (o.roof === 'gableY') { const r = L / 2 * Math.tan(th), X0 = x0 - e, X1 = x1 + e, Y0 = y0 - e, Y1 = y1 + e;
+      q([[X0, Y0, h - e * Math.tan(th)], [0, Y0, h + r], [0, Y1, h + r], [X0, Y1, h - e * Math.tan(th)]], rc, { roof:true }); q([[X1, Y1, h - e * Math.tan(th)], [0, Y1, h + r], [0, Y0, h + r], [X1, Y0, h - e * Math.tan(th)]], rc, { roof:true });
+      q([[x0, y0, h], [x1, y0, h], [0, y0, h + r]], wc); q([[x1, y1, h], [x0, y1, h], [0, y1, h + r]], wc); return h + r; }
+    if (o.roof === 'hip' || o.roof === 'pyramid') { const s = Math.min(L, D) / 2, r = s * Math.tan(th), X0 = x0 - e, X1 = x1 + e, Y0 = y0 - e, Y1 = y1 + e, zl = h - e * Math.tan(th);
+      const a = o.roof === 'pyramid' || L <= D ? [0, 0, h + r] : [x0 + s, 0, h + r], b = o.roof === 'pyramid' || L <= D ? [0, 0, h + r] : [x1 - s, 0, h + r];
+      q([[X0, Y0, zl], [X1, Y0, zl], b, a], rc, { roof:true }); q([[X1, Y1, zl], [X0, Y1, zl], a, b], rc, { roof:true });
+      q([[X1, Y0, zl], [X1, Y1, zl], b], rc, { roof:true }); q([[X0, Y1, zl], [X0, Y0, zl], a], rc, { roof:true }); return h + r; }
+    if (o.roof === 'shed') { const r = D * Math.tan(th); q([[x0 - e, y0 - e, h], [x1 + e, y0 - e, h], [x1 + e, y1 + e, h + r], [x0 - e, y1 + e, h + r]], rc, { roof:true });
+      q([[x0, y0, h], [x0, y1, h], [x0, y1, h + r]], wc); q([[x1, y0, h], [x1, y1, h], [x1, y1, h + r]], wc); q([[x0, y1, h], [x1, y1, h], [x1, y1, h + r], [x0, y1, h + r]], wc); return h + r; }
+    /* gable, ridge along x */
+    const r = D / 2 * Math.tan(th), X0 = x0 - e, X1 = x1 + e, Y0 = y0 - e, Y1 = y1 + e, zl = h - e * Math.tan(th);
+    q([[X0, Y0, zl], [X1, Y0, zl], [X1, 0, h + r], [X0, 0, h + r]], rc, { roof:true }); q([[X1, Y1, zl], [X0, Y1, zl], [X0, 0, h + r], [X1, 0, h + r]], rc, { roof:true });
+    q([[x0, y0, h], [x0, y1, h], [x0, 0, h + r]], wc); q([[x1, y0, h], [x1, y1, h], [x1, 0, h + r]], wc); return h + r;
+  };
+  switch (key) {
+    case 'pt-nora': {
+      /* the tank, the white well-head, the wheel of pots over the well, the gear and the mule's ring */
+      const s = L / 7;
+      box(-3.3 * s, -1.6 * s, 0, -1.2 * s, 0.4 * s, 0.7, C.lime, { topC:C.water, topRoof:true });
+      box(-1.1 * s, -0.9 * s, 0, 1.0 * s, 1.0 * s, 1.1, C.lime);
+      box(-0.2 * s, -0.9 * s, 1.1, 0.5 * s, 1.0 * s, 1.9, C.lime);
+      const wx = 0.15 * s, wy = 0.05 * s, wz = 2.9, R = 1.5;
+      for (let i = 0; i < 16; i++) { const a0 = i / 16 * 2 * Math.PI, a1 = (i + 1) / 16 * 2 * Math.PI, P0 = [wx, wy + R * Math.cos(a0), wz + R * Math.sin(a0)], P1 = [wx, wy + R * Math.cos(a1), wz + R * Math.sin(a1)];
+        q([[P0[0] - 0.06, P0[1], P0[2]], [P1[0] - 0.06, P1[1], P1[2]], [P1[0] + 0.06, P1[1], P1[2]], [P0[0] + 0.06, P0[1], P0[2]]], C.timber, { thin:true });
+        if (i % 2 === 0) box(wx - 0.12, P0[1] - 0.12, P0[2] - 0.12, wx + 0.12, P0[1] + 0.12, P0[2] + 0.12, '#9C5A3C');
+        if (i % 4 === 0) q([[wx - 0.03, wy, wz], [wx + 0.03, wy, wz], [P0[0] + 0.03, P0[1], P0[2]], [P0[0] - 0.03, P0[1], P0[2]]], C.timber, { thin:true }); }
+      /* the horizontal gear and the sweep the animal turns */
+      const gx = 2.2 * s, gy = -0.6 * s; box(gx - 0.08, gy - 0.08, 0, gx + 0.08, gy + 0.08, 2.0, C.timber);
+      const gr = ring(gx, gy, 0.8, 1.6, 12); for (let i = 0; i < 12; i++) q([gr[i], gr[(i + 1) % 12], [gr[(i + 1) % 12][0], gr[(i + 1) % 12][1], 1.72], [gr[i][0], gr[i][1], 1.72]], C.timber, { thin:true });
+      q([[gx, gy, 1.2], [gx, gy, 1.3], [gx - 0.5, gy - 2.0, 1.0], [gx - 0.5, gy - 2.0, 0.9]], C.timber, { thin:true });
+      const o1 = ring(gx, gy, 2.4, 0.02, 24), i1 = ring(gx, gy, 1.7, 0.02, 24); for (let i = 0; i < 24; i++) q([o1[i], o1[(i + 1) % 24], i1[(i + 1) % 24], i1[i]], C.sand, { roof:true, ground:true });
+      break; }
+    case 'pt-eira': {
+      /* a round threshing floor of slabs, its low rim wall and the stacks of straw */
+      const r = L / 2; drum(0, 0, r, 0, 0.25, C.granite, '#CFC8BA', 28);
+      const N = 28, o = ring(0, 0, r, 0.25, N), i2 = ring(0, 0, r - 0.4, 0.25, N);
+      for (let k = 2; k < N - 1; k++) { const k1 = k + 1, oz = p => [p[0], p[1], 0.85];
+        q([o[k], o[k1], oz(o[k1]), oz(o[k])], '#B9573A'); q([i2[k1], i2[k], oz(i2[k]), oz(i2[k1])], '#C5BBAA'); q([oz(o[k]), oz(o[k1]), oz(i2[k1]), oz(i2[k])], '#A44F35', { roof:true }); }
+      [[-0.15 * r, 0.25 * r], [0.15 * r, 0.3 * r], [0.25 * r, -0.2 * r]].forEach(([x, y]) => cone(x, y, 0.55, 0.25, 1.1, C.straw, 12));
+      break; }
+    case 'pt-choca': { const r = L / 2; drum(0, 0, r, 0, 1.4, '#7D6A58'); opS(0.3, 0.8, 0, 1.3, C.door, -r * 0.98); cone(0, 0, r + 0.35, 1.4, 1.9, C.thatch, 24); break; }
+    case 'pt-forno-sul': { const r = L / 2 * 0.85; drum(0, 0, r, 0, 0.55, C.lime); dome(0, 0, r, 0.55, r * 0.9, C.lime); opS(-0.2, 0.5, 0.35, 0.45, '#2B2826', -r * 0.97); box(r * 0.35, r * 0.2, 0.55 + r * 0.75, r * 0.35 + 0.3, r * 0.2 + 0.3, 0.55 + r * 0.75 + 0.4, C.lime); break; }
+    case 'pt-forno-cal': {
+      /* the kiln: a stone drum, its mouth dark at the top, set against a bank of earth with its stoke arch */
+      const r = Math.min(L, D) * 0.42; box(-0.2 * L, 0, 0, L / 2, D / 2, 2.6, C.earth, { topRoof:true });
+      drum(-0.12 * L, -0.08 * D, r, 0, 3.0, '#9E9586', null, 24); q(ring(-0.12 * L, -0.08 * D, r * 0.82, 3.02, 24), '#3A332C', { roof:true });
+      const rim = ring(-0.12 * L, -0.08 * D, r, 3.0, 24), rin = ring(-0.12 * L, -0.08 * D, r * 0.82, 3.0, 24); for (let i = 0; i < 24; i++) q([rim[i], rim[(i + 1) % 24], rin[(i + 1) % 24], rin[i]], '#B7AE9E', { roof:true });
+      opS(-0.12 * L - 0.35, 0.7, 0, 1.1, '#2B2826', -0.08 * D - r * 0.99); break; }
+    case 'pt-moinho-guadiana': {
+      /* the watermill: a stone base pierced by arches where the races run, a body over it, flat-roofed */
+      box(-L / 2, -D / 2, 0, L / 2, D / 2, 1.2, '#8E877A');
+      [-0.3, 0, 0.3].forEach(f => { opS(f * L, 0.7, 0, 0.8, '#2B2826'); q([[f * L - 0.4, -D / 2 - 0.1, 0.01], [f * L + 0.4, -D / 2 - 0.1, 0.01], [f * L + 0.7, -D / 2 - 2.2, 0.01], [f * L - 0.1, -D / 2 - 2.2, 0.01]], C.water, { roof:true, ground:true }); });
+      box(-L / 2, -D / 2, 1.2, L / 2, D / 2, 3.4, '#5E5040', { topC:'#4B4036', topRoof:true }); opS(0, 0.9, 1.2, 1.9, C.door); break; }
+    case 'pt-espigueiro': {
+      /* the granary on its feet: piers with mushroom caps, a slatted stone-and-timber chest, a gable of tile */
+      const n = Math.max(3, Math.round(L / 1.2)); for (let i = 0; i < n; i++) { const x = -L / 2 + 0.3 + i * (L - 0.6) / (n - 1);
+        [-D / 2 + 0.2, D / 2 - 0.2].forEach(y => { box(x - 0.12, y - 0.12, 0, x + 0.12, y + 0.12, 0.8, C.granite); box(x - 0.25, y - 0.25, 0.8, x + 0.25, y + 0.25, 0.92, '#8C857A'); }); }
+      const hz = house({ z0:0.92, h:2.0, wall:'#BDB5A6', roof:'gable', pitch:30, eave:0.25 });
+      for (let x = -L / 2 + 0.6; x < L / 2 - 0.3; x += 0.45) q([[x, -D / 2 - 0.03, 1.2], [x + 0.06, -D / 2 - 0.03, 1.2], [x + 0.06, -D / 2 - 0.03, 2.7], [x, -D / 2 - 0.03, 2.7]], '#7C756A', { thin:true });
+      opE(0, 0.6, 1.1, 1.4, C.door); void hz; break; }
+    default: {
+      const o = {
+        'pt-chafurdao':{ wall:C.stone, roof:'pyramid', pitch:30, h:2.3, door:'S' },
+        'pt-malhada':{ wall:'#8D8678', roof:'gable', pitch:22, h:1.8, door:'S', n:4 },
+        'az-imperio':{ wall:C.lime, roof:'gableY', pitch:32, h:3.2, door:'W', doorC:C.blue, win:true, barra:'#9A9A9A' },
+        'pt-forno-comum':{ wall:C.stone, roof:'gable', pitch:28, h:2.2, door:'S' },
+        'pt-cardenha':{ wall:C.stone, roof:'gable', pitch:30, h:2.0, door:'S', roofC:C.slate },
+        'pt-pombal':{ wall:'#5C4A3A', roof:'shed', pitch:20, h:2.8, win:true },
+        'pt-lagar':{ wall:C.stone, roof:'gable', pitch:25, h:3.0, door:'S', win:true },
+        'pt-alfarroba':{ wall:C.lime, roof:'flat', par:0.5, h:3.0, door:'S', doorC:C.green, win:true, barra:C.blue },
+        'pt-cortelho':{ wall:C.stone, roof:'gable', pitch:30, h:1.7, door:'S' },
+        'pt-salina':{ wall:'#8A5A3A', roof:'gable', pitch:22, h:2.4, door:'S', boards:true },
+        'az-cisterna':{ wall:C.basalt, roof:'flat', par:0.15, h:1.8, door:'S', top:'#3A3836' },
+        'az-atafona':{ wall:C.basalt, roof:'hip', pitch:28, h:2.4, door:'S' }
+      }[key] || { wall:C.stone, roof:'gable', pitch:25, h:Math.max(2, (m.fl || 1) * (m.fh || 2.4)), door:'S' };
+      house(o);
+      if (o.boards) for (let x = -L / 2 + 0.5; x < L / 2; x += 0.5) q([[x, -D / 2 - 0.03, 0], [x + 0.04, -D / 2 - 0.03, 0], [x + 0.04, -D / 2 - 0.03, o.h], [x, -D / 2 - 0.03, o.h]], '#5E3C26', { thin:true });
+      if (o.door === 'S') { const n = o.n || 1; for (let i = 0; i < n; i++) opS(n === 1 ? -L * 0.12 : -L / 2 + (i + 0.5) * L / n, 0.9, 0, 1.9, o.doorC || C.door); }
+      if (o.door === 'W') { q([[-L / 2 - 0.03, 0.45, 0], [-L / 2 - 0.03, -0.45, 0], [-L / 2 - 0.03, -0.45, 2.0], [-L / 2 - 0.03, 0.45, 2.0]], o.doorC || C.door, { thin:true }); }
+      if (o.win) { opS(L * 0.25, 0.7, 1.0, 0.9, C.glass); opE(0, 0.6, 1.0, 0.8, C.glass); if (o.door === 'W') opS(-L * 0.25, 0.7, 1.0, 0.9, C.glass); }
+    }
+  }
+  return F;
+}
 /** The drawn faces of a placed structure, in world metres: [{ pts, fill, roof }]. */
 function supFaces(w) {
   const T = VERN_TYPES[w.sup];
   if (!T) return [];
-  const m = T.model, d = supDims(w.sup), rp = typeof m.render === 'function' ? m.render({ nuts:'' }) : m.render, pr = parseRenderPrompt(rp.en);
-  const wc = m.icon === 'eira' ? '#B9B2A4' : pr.wall ? pr.wall.c : '#E8E4DC', rc = pr.roof ? pr.roof.c : '#A45E41';
-  const out = [], hb = d.body, a = w.along === 'y';
-  const W2 = (a ? w.depth : w.length) / 2, D2 = (a ? w.length : w.depth) / 2, cx = w.x, cy = w.y;
-  if (d.round) {
-    const r = w.length / 2, N = 16, ring = z => Array.from({ length:N }, (_, i) => { const t = i / N * 2 * Math.PI; return [cx + r * Math.cos(t), cy + r * Math.sin(t), z]; });
-    const lo = ring(0), hi = ring(hb);
-    for (let i = 0; i < N; i++) out.push({ pts:[lo[i], lo[(i + 1) % N], hi[(i + 1) % N], hi[i]], fill:wc });
-    if (d.round === 'flat') out.push({ pts:hi, fill:m.icon === 'eira' ? '#C9C3B6' : supShade(wc, 0.9), roof:true });
-    else { const tip = [cx, cy, hb + d.rise], cc = d.round === 'cone' ? (m.icon === 'roundhut' ? '#B5965A' : '#3A2E26') : wc;
-      for (let i = 0; i < N; i++) out.push({ pts:[hi[i], hi[(i + 1) % N], tip], fill:cc, roof:true }); }
-    return out;
-  }
-  const c = [[cx - W2, cy - D2], [cx + W2, cy - D2], [cx + W2, cy + D2], [cx - W2, cy + D2]];
-  for (let i = 0; i < 4; i++) { const p = c[i], q = c[(i + 1) % 4]; out.push({ pts:[[p[0], p[1], 0], [q[0], q[1], 0], [q[0], q[1], hb], [p[0], p[1], hb]], fill:wc }); }
-  const n = (m.roof || {}).n || 0, top = hb + d.rise;
-  if (n === 0 || d.rise < 0.05) { out.push({ pts:c.map(p => [p[0], p[1], hb]), fill:supShade(wc, 0.92), roof:true }); return out; }
-  /* the ridge runs along the long side */
-  const alongX = W2 >= D2;
-  if (n === 2) {
-    const r0 = alongX ? [cx - W2, cy, top] : [cx, cy - D2, top], r1 = alongX ? [cx + W2, cy, top] : [cx, cy + D2, top];
-    if (alongX) { out.push({ pts:[[cx - W2, cy - D2, hb], [cx + W2, cy - D2, hb], r1, r0], fill:rc, roof:true }); out.push({ pts:[[cx + W2, cy + D2, hb], [cx - W2, cy + D2, hb], r0, r1], fill:rc, roof:true });
-      out.push({ pts:[[cx - W2, cy - D2, hb], [cx - W2, cy + D2, hb], r0], fill:wc }); out.push({ pts:[[cx + W2, cy - D2, hb], [cx + W2, cy + D2, hb], r1], fill:wc }); }
-    else { out.push({ pts:[[cx - W2, cy - D2, hb], [cx - W2, cy + D2, hb], r1, r0], fill:rc, roof:true }); out.push({ pts:[[cx + W2, cy + D2, hb], [cx + W2, cy - D2, hb], r0, r1], fill:rc, roof:true });
-      out.push({ pts:[[cx - W2, cy - D2, hb], [cx + W2, cy - D2, hb], r0], fill:wc }); out.push({ pts:[[cx - W2, cy + D2, hb], [cx + W2, cy + D2, hb], r1], fill:wc }); }
-  } else if (n === 3) {
-    const s = Math.min(W2, D2), r0 = alongX ? [cx - W2 + s, cy, top] : [cx, cy - D2 + s, top], r1 = alongX ? [cx + W2 - s, cy, top] : [cx, cy + D2 - s, top];
-    const C = c.map(p => [p[0], p[1], hb]);
-    if (alongX) { out.push({ pts:[C[0], C[1], r1, r0], fill:rc, roof:true }); out.push({ pts:[C[2], C[3], r0, r1], fill:rc, roof:true }); out.push({ pts:[C[1], C[2], r1], fill:rc, roof:true }); out.push({ pts:[C[3], C[0], r0], fill:rc, roof:true }); }
-    else { out.push({ pts:[C[1], C[2], r1, r0], fill:rc, roof:true }); out.push({ pts:[C[3], C[0], r0, r1], fill:rc, roof:true }); out.push({ pts:[C[0], C[1], r0], fill:rc, roof:true }); out.push({ pts:[C[2], C[3], r1], fill:rc, roof:true }); }
-  } else {
-    /* one slope, rising to the north */
-    out.push({ pts:[[cx - W2, cy - D2, hb], [cx + W2, cy - D2, hb], [cx + W2, cy + D2, top], [cx - W2, cy + D2, top]], fill:rc, roof:true });
-    out.push({ pts:[[cx - W2, cy - D2, hb], [cx - W2, cy + D2, hb], [cx - W2, cy + D2, top]], fill:wc }); out.push({ pts:[[cx + W2, cy - D2, hb], [cx + W2, cy + D2, hb], [cx + W2, cy + D2, top]], fill:wc });
-    out.push({ pts:[[cx - W2, cy + D2, hb], [cx + W2, cy + D2, hb], [cx + W2, cy + D2, top], [cx - W2, cy + D2, top]], fill:wc });
-  }
-  return out;
+  /* the structure's own geometry, its length along x or y, set on its spot and lit by its facing */
+  const a = w.along === 'y', d = supDims(w.sup), Lw = w.length, Dw = d.round ? w.length : w.depth;
+  return supGeo(w.sup, Lw, Dw).map(f => { const pts = f.pts.map(p => a ? [w.x - p[1], w.y + p[0], p[2]] : [w.x + p[0], w.y + p[1], p[2]]);
+    const p0 = pts[0], p1 = pts[1], p2 = pts[2], ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2], vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+    const k = Math.abs(nz) > 0.9 ? 1.02 : 0.74 + 0.26 * Math.max(Math.abs(nx * 0.6 - ny * 0.8), nz > 0 ? nz : 0);
+    return { pts, fill:f.fill.charAt(0) === '#' ? supShade(f.fill, k) : f.fill, roof:!!f.roof, lit:true, thin:!!f.thin, ground:!!f.ground }; });
 }
 const TABS_OLGYAY = [
   { key:'environment', label:'Environmental', build:buildEnvironment },
