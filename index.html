@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.159.0',
+  version:     '1.160.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -25158,6 +25158,217 @@ Object.assign(VERN_SRC, {
   if (ge) { ge.types.push('pt-casal-saloio'); ge.refs.push('Câmara Municipal de Cascais. (n.d.). <i>Casal Saloio de Outeiro de Polima</i>. https://cultura.cascais.pt/list/patrimonio/casal-saloio-de-outeiro-de-polima',
     'Câmara Municipal de Cascais. (n.d.). <i>A arquitetura popular</i> [Ficha de conteúdos]. https://www.cascais.pt/sites/default/files/anexos/gerais/new/arquitetura_popular.pdf'); }
   if (VICON_URBAN.indexOf('pt-vila-operaria') < 0) VICON_URBAN.push('pt-vila-operaria');
+  vernNames();
+})();
+
+/* --- the town houses of the whole country --------------------------------------
+   The cities' own houses beside the rural ones, from the academic studies of each:
+   the Pombaline building of the Baixa and of Vila Real de Santo António, the
+   «gaioleiro» of Lisbon's expansion, the late-medieval «casa corrente» of the old
+   towns, the Estado Novo «casa económica», the town house of Angra and the Funchal
+   house with its look-out tower. A site in one of these towns is offered them first. */
+(function ptTownHouses() {
+  Object.assign(VERN_SRC, {
+    FRA:{ tag:'França 1965', cite:'França, J.-A. (1965). <i>Lisboa pombalina e o Iluminismo</i>. Lisboa: Livros Horizonte (3.ª ed. Bertrand, 1987).', url:null },
+    GAG:{ tag:'Gago 2007', cite:'Gago, C. W. (2007). <i>Habitação na Baixa Pombalina: análise de tipos e estudo de intervenções</i>. Dissertação de mestrado em Arquitectura, Instituto Superior Técnico.', url:null },
+    MIR:{ tag:'Miranda 2011', cite:'Miranda, F. (2011). <i>Caracterização dos edifícios pombalinos da Baixa de Lisboa</i>. Dissertação de mestrado em Engenharia Civil, FCT — Universidade Nova de Lisboa.', url:'https://run.unl.pt/server/api/core/bitstreams/46e1c94c-e6d6-4838-8e7d-23b61f73c202/content' },
+    HCO:{ tag:'Horta Correia 1997', cite:'Correia, J. E. H. (1997). <i>Vila Real de Santo António: urbanismo e poder na política pombalina</i>. Vila Real de Santo António: Câmara Municipal (tese de doutoramento, FCSH-UNL, 1985).', url:null },
+    AND:{ tag:'Andrade 2011', cite:'Andrade, H. (2011). <i>Caracterização de edifícios antigos. Edifícios «gaioleiros»</i>. Dissertação de mestrado em Engenharia Civil, FCT — Universidade Nova de Lisboa.', url:'https://run.unl.pt/bitstreams/87662c5e-ed56-41a0-a6c4-eb9fdfa9eaeb/download' },
+    CPE:{ tag:'Pereira 2013', cite:'Pereira, C. (2013). <i>Reabilitação de edifícios «gaioleiros»</i>. Dissertação de mestrado em Engenharia Civil, ISEL — Instituto Politécnico de Lisboa.', url:null },
+    MAM:{ tag:'Mamede 2012', cite:'Mamede, M. (2012). <i>Caracterização experimental e numérica do desempenho térmico de um edifício «gaioleiro»</i>. Dissertação de mestrado, ISEL / LNEC.', url:null },
+    TRI:{ tag:'Trindade 2002', cite:'Trindade, L. (2002). <i>A casa corrente em Coimbra: dos finais da Idade Média aos inícios da Época Moderna</i>. Coimbra: Câmara Municipal de Coimbra.', url:'https://estudogeral.uc.pt/handle/10316/79527' },
+    TR2:{ tag:'Trindade 2013', cite:'Trindade, L. (2013). <i>Urbanismo na composição de Portugal</i>. Coimbra: Imprensa da Universidade de Coimbra (tese de doutoramento, 2009).', url:null },
+    GMR:{ tag:'FEUP 2014 — Guimarães', cite:'<i>Caracterização dos edifícios do Centro Histórico de Guimarães</i> (2014). Dissertação de mestrado, Universidade do Porto: rés-do-chão em alvenaria de granito, pisos superiores em estrutura de madeira.', url:'https://repositorio-aberto.up.pt/handle/10216/77224' },
+    ICO:{ tag:'ICOMOS 2001 — Guimarães', cite:'ICOMOS (2001). <i>Historic Centre of Guimarães (Portugal), No 1031</i>. Advisory body evaluation — the timber-framed upper storeys (taipa de rodízio, taipa de fasquio).', url:'https://webarchive.unesco.org/web/20160804071604/http://whc.unesco.org/archive/advisory_body_evaluation/1031.pdf' },
+    BAP:{ tag:'Baptista 1999', cite:'Baptista, L. V. (1999). <i>Cidade e habitação social: o Estado Novo e o Programa das Casas Económicas em Lisboa</i>. Oeiras: Celta.', url:null },
+    CMM:{ tag:'Cabrita & Marat-Mendes 2018', cite:'Cabrita, M. A., &amp; Marat-Mendes, T. (2018). Encarnação e Olivais Norte: dois bairros, duas tipologias. <i>PNUM 2018</i>, ISCTE-IUL.', url:'https://repositorio-iul.iscte.pt/bitstream/10071/17352/1/CAMA_PNUM2018.pdf' },
+    MPH:{ tag:'Mapping Public Housing — Alvito', cite:'Mapping Public Housing (FAUP / FCT) (2019). <i>Bairro do Alvito</i> (Paulino Montez, 1937). Cadernos de Habitação 001.', url:'https://mappingpublichousing.up.pt/images/pdfs/2019_CdH001_Alvito_EdicaoDigital.pdf' },
+    JAR:{ tag:'Jarroca 2020', cite:'Jarroca, M. D. (2020). <i>O sismo de 1980: transformações na tipologia habitacional de Angra do Heroísmo</i>. Dissertação de mestrado em Arquitectura, Instituto Superior Técnico.', url:'https://fenix.tecnico.ulisboa.pt/downloadFile/1689244997261152/O%20Sismo%20de%201980.%20Transformacoes%20na%20Tipologia%20Habitacional%20de%20Angra%20do%20Heroismo.pdf' },
+    ANG:{ tag:'UNESCO 1983 — Angra', cite:'UNESCO World Heritage Centre. <i>Central Zone of the Town of Angra do Heroismo in the Azores</i> (inscribed 1983), no. 206.', url:'https://whc.unesco.org/en/list/206' },
+    AVN:{ tag:'UBI — torres avista-navios', cite:'<i>Inventário do património arquitectónico da cidade do Funchal: as torres «avista-navios»</i>. Dissertação de mestrado em Arquitectura, Universidade da Beira Interior (orient. A. L. Virtudes).', url:'https://ubibliorum.ubi.pt/bitstreams/81301ce0-8a8e-4bb0-914f-b906f0e4b6b3/download' }
+  });
+
+  const T = (region, o) => Object.assign({ region }, o), up = n => [{ door:true }].concat(Array.from({ length:n - 1 }, () => ({ on:true }))),
+    hi = n => [{ on:false }].concat(Array.from({ length:n - 1 }, () => ({ on:true })));
+  Object.assign(VERN_TYPES, {
+  'pt-pombalino':T('mainland', {
+    name:{ en:'Pombaline building of the Baixa (prédio pombalino)', pt:'Prédio pombalino da Baixa' },
+    where:{ en:'Lisbon — the Baixa rebuilt after 1755 (Rua Augusta, Prata, Fanqueiros, Ouro); Vila Real de Santo António (1774), the Pombaline town on the Guadiana', pt:'Lisboa — a Baixa reconstruída depois de 1755 (Rua Augusta, da Prata, dos Fanqueiros, do Ouro); Vila Real de Santo António (1774), a vila pombalina do Guadiana' },
+    summary:{ en:'The rental building of the rebuilt Baixa, standardised by Eugénio dos Santos and Carlos Mardel: shops on a vaulted masonry ground floor, four storeys of dwellings above held by the gaiola — a timber cage of braced walls (frontais, St Andrew’s crosses) filled with masonry — against the earthquake; a repeated façade of stone-framed windows, varandas de sacada on the first floor, two-slope roofs with dormers (águas-furtadas) and party walls carried above the roof against fire. In Vila Real de Santo António the same system in two storeys.',
+      pt:'O prédio de rendimento da Baixa reconstruída, normalizado por Eugénio dos Santos e Carlos Mardel: lojas num rés-do-chão abobadado em alvenaria, quatro andares de habitação sobre ele, travados pela gaiola — uma estrutura de madeira de paredes de frontal (cruzes de Santo André) preenchida de alvenaria — contra o sismo; uma fachada repetida de vãos de cantaria, varandas de sacada no primeiro andar, telhados de duas águas com águas-furtadas e empenas levantadas acima do telhado contra o fogo. Em Vila Real de Santo António, o mesmo sistema em dois pisos.' },
+    model:{ L:12, D:12, fl:5, fh:3.1, rot:180, form:'rect', roof:{ n:2, th:30, bei:0.25 },
+      open:{ S:vOpen([D(0.13, 0.12, up(5)), D(0.38, 0.12, up(5)), D(0.62, 0.12, up(5)), D(0.87, 0.12, up(5))], 0.35),
+        N:vOpen([W(0.2, 0.1, hi(5)), W(0.5, 0.1), W(0.8, 0.1, hi(5))], 0.2), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'plaster walls, tile roof, green door', pt:'parede rebocada, telha, porta verde' },
+      walls:{ en:'masonry ground floor; the gaiola above — timber frontais filled with rubble — rendered and painted; limestone frames', pt:'rés-do-chão em alvenaria; gaiola nos andares — frontais de madeira cheios de alvenaria — rebocada e pintada; cantarias de lioz' } },
+    feats:[
+      vFloors({ en:'4 over the ground floor (with the dormers, 5)', pt:'4 sobre o rés-do-chão (com as águas-furtadas, 5)' }, 4, 6, 'GAG'),
+      vRoofN(null, { en:'two slopes with dormers (águas-furtadas)', pt:'duas águas com águas-furtadas' }, [2], 'FRA'),
+      vPitch({ en:'≈ 30°, channel tile', pt:'≈ 30°, telha' }, 25, 38, 'INF'),
+      vWall({ en:'rendered and painted', pt:'rebocada e pintada' }, ['plaster', 'whitewash'], 'MIR'),
+      vI('site', { en:'The gaiola: a three-dimensional timber cage inside the masonry, the first building system designed against earthquakes — its walls of frontais tie the floors together.', pt:'A gaiola: uma estrutura tridimensional de madeira dentro da alvenaria, o primeiro sistema construtivo pensado contra o sismo — as paredes de frontal amarram os pisos entre si.' }, 'MIR'),
+      vI('ventilation', { en:'Built round the block, the buildings are lit and aired from the street and from the inner yards (saguões) behind; the dwellings run through from one to the other.', pt:'Construídos à volta do quarteirão, os prédios são iluminados e ventilados pela rua e pelos saguões interiores; as habitações atravessam de um lado ao outro.' }, 'GAG'),
+      vI('site', { en:'Vila Real de Santo António (1774): the Pombaline plan and building system carried whole to the Guadiana — the town as a statement of royal power.', pt:'Vila Real de Santo António (1774): o plano e o sistema construtivo pombalinos levados inteiros ao Guadiana — a vila como afirmação do poder régio.' }, 'HCO')
+    ] }),
+
+  'pt-gaioleiro':T('mainland', {
+    name:{ en:'Lisbon «gaioleiro» rental building (1880–1930)', pt:'Prédio «gaioleiro» de Lisboa (1880–1930)' },
+    where:{ en:'Lisbon’s expansion to the north under Ressano Garcia — Avenidas Novas, Estefânia, Campo de Ourique, Almirante Reis, Graça', pt:'A expansão de Lisboa para norte com Ressano Garcia — Avenidas Novas, Estefânia, Campo de Ourique, Almirante Reis, Graça' },
+    summary:{ en:'The speculative rental building of the late 19th-century city: a deep lot, four to six storeys of one or two dwellings per floor (esquerdo/direito), masonry front and back walls, the Pombaline cage reduced to light tabique partitions, timber floors; the rooms in a line from the street to the back off a corridor, the kitchen and the WC at the back over the light well, the back façade of iron balconies, glazed marquises and the service stair.',
+      pt:'O prédio de rendimento especulativo da cidade do fim do século XIX: lote fundo, quatro a seis pisos de um ou dois fogos por piso (esquerdo/direito), fachadas de alvenaria à frente e atrás, a gaiola pombalina reduzida a tabiques leves, pavimentos de madeira; as divisões em fila da rua para o tardoz ao longo de um corredor, a cozinha e a retrete atrás sobre o saguão, a fachada de tardoz de varandas de ferro, marquises envidraçadas e a escada de serviço.' },
+    model:{ L:9, D:18, fl:5, fh:3.1, rot:180, form:'rect', roof:{ n:2, th:25, bei:0.3 },
+      open:{ S:vOpen([W(0.2, 0.15, hi(5)), D(0.5, 0.15, up(5)), W(0.8, 0.15, hi(5))], 0.3),
+        N:vOpen([W(0.25, 0.15), W(0.75, 0.15)], 0.3), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'plaster walls, tile roof, timber door', pt:'parede rebocada, telha, porta de madeira' },
+      walls:{ en:'rubble masonry fronts, tabique partitions, rendered; tiles (azulejo) on some fronts', pt:'fachadas de alvenaria ordinária, tabiques, rebocadas; azulejo em algumas fachadas' } },
+    feats:[
+      vFloors({ en:'4–6', pt:'4–6' }, 4, 6, 'AND'),
+      vN('site', { en:'Lot depth', pt:'Fundo do lote' }, { en:'deep, 15–20 m', pt:'fundo, 15–20 m' }, () => MASS.D, 14, 22, 'm', 'AND'),
+      vWall({ en:'rendered, some tiled', pt:'rebocada, algumas azulejadas' }, ['plaster', 'whitewash'], 'CPE'),
+      vI('site', { en:'Speculation hurried the building: poorer materials and joints than the Pombaline, and the cage left out — the weak point the rehabilitation studies find.', pt:'A especulação apressou a construção: materiais e ligações piores do que no pombalino, e a gaiola abandonada — o ponto fraco que os estudos de reabilitação encontram.' }, 'AND'),
+      vI('environment', { en:'Measured and simulated, the gaioleiro’s heavy masonry keeps summer temperatures steady; the losses are through the single-glazed sashes and the roof.', pt:'Medido e simulado, a alvenaria pesada do gaioleiro estabiliza as temperaturas de verão; as perdas fazem-se pelos vãos de vidro simples e pela cobertura.' }, 'MAM'),
+      vI('ventilation', { en:'The light well (saguão) between back-to-back buildings lights and airs the kitchen and the inner rooms — and draws the air across the dwelling.', pt:'O saguão entre prédios encostados ilumina e ventila a cozinha e as divisões interiores — e puxa o ar através da habitação.' }, 'CPE')
+    ] }),
+
+  'pt-casa-corrente':T('mainland', {
+    name:{ en:'Late-medieval town house (casa corrente)', pt:'Casa corrente medieval (casa de sobrado urbana)' },
+    where:{ en:'The old towns — Coimbra (Baixa and Alta), Guimarães, Porto (Ribeira, Barredo), Braga, Viseu, Lamego, Tomar, Óbidos, Ponte de Lima', pt:'Os centros antigos — Coimbra (Baixa e Alta), Guimarães, Porto (Ribeira, Barredo), Braga, Viseu, Lamego, Tomar, Óbidos, Ponte de Lima' },
+    summary:{ en:'The common house of the Portuguese town from the late Middle Ages: a narrow, deep lot of one or two bays, the front to the street; the ground floor of stone with the shop or workshop and a door to the stair, one or two sobrados above for the family, built light in a timber frame filled with tabique or taipa (de rodízio, de fasquio), sometimes jettied over the street, wooden balconies; the tile roof, the yard or quintal behind. In Guimarães the granite ground floor and the timber upper storeys are the mark of the historic centre.',
+      pt:'A casa comum da cidade portuguesa desde o fim da Idade Média: lote estreito e fundo, de uma ou duas aberturas, a frente para a rua; o rés-do-chão em pedra com a loja ou a oficina e uma porta para a escada, um ou dois sobrados por cima para a família, construídos leves em estrutura de madeira cheia de tabique ou taipa (de rodízio, de fasquio), por vezes em balanço sobre a rua, balcões de madeira; telhado de telha, o pátio ou quintal atrás. Em Guimarães, o rés-do-chão de granito e os andares de madeira são a marca do centro histórico.' },
+    model:{ L:5.5, D:11, fl:3, fh:2.7, rot:180, form:'rect', roof:{ n:2, th:28, bei:0.5 },
+      open:{ S:vOpen([D(0.28, 0.25, up(3)), D(0.75, 0.2, [{ door:true }, { on:true }, { on:false }])], 0.3), N:vOpen([W(0.5, 0.2)], 0.12), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'plaster walls, tile roof, timber door', pt:'parede rebocada, telha, porta de madeira' },
+      walls:{ en:'granite or rubble ground floor; timber-framed upper floors with tabique or taipa, rendered', pt:'rés-do-chão de granito ou alvenaria; andares em estrutura de madeira com tabique ou taipa, rebocados' } },
+    feats:[
+      vN('site', { en:'Street front (the lot)', pt:'Frente de rua (o lote)' }, { en:'narrow — 1 or 2 bays, ≈ 4–7 m', pt:'estreita — 1 ou 2 vãos, ≈ 4–7 m' }, () => MASS.L, 3.5, 7.5, 'm', 'TRI'),
+      vFloors({ en:'2–3 (the ground floor and one or two sobrados)', pt:'2–3 (o térreo e um ou dois sobrados)' }, 2, 4, 'TRI'),
+      vRoofN(null, { en:'two slopes, eaves to the street', pt:'duas águas, beirado para a rua' }, [2], 'TR2'),
+      vWall({ en:'rendered timber frame over stone', pt:'estrutura de madeira rebocada sobre pedra' }, ['plaster', 'whitewash', 'granite'], 'GMR'),
+      vI('site', { en:'Narrow fronts on deep lots: as many houses on the street as possible — the street is where trade happens.', pt:'Frentes estreitas em lotes fundos: o maior número possível de casas na rua — é na rua que se faz o comércio.' }, 'TRI'),
+      vI('visualization', { en:'Guimarães: taipa de rodízio and taipa de fasquio — timber frames filled with clay brick or lath and plaster — carried later to the colonies.', pt:'Guimarães: taipa de rodízio e taipa de fasquio — estruturas de madeira cheias de tijolo de barro ou de fasquio e reboco — levadas depois para as colónias.' }, 'ICO')
+    ] }),
+
+  'pt-casa-economica':T('mainland', {
+    name:{ en:'Estado Novo «casa económica» (bairro de casas económicas)', pt:'Casa económica do Estado Novo' },
+    where:{ en:'Lisbon (Encarnação, Alvito, Ajuda, Alto da Serafina, Madre de Deus), Porto (twelve bairros from 1935), Coimbra (Marechal Carmona) and other towns', pt:'Lisboa (Encarnação, Alvito, Ajuda, Alto da Serafina, Madre de Deus), Porto (doze bairros desde 1935), Coimbra (Marechal Carmona) e outras cidades' },
+    summary:{ en:'The single-family house of the State programme of 1933 (Decreto-Lei 23 052): a small house of one or two storeys, in pairs or short rows, with a front garden and a back quintal, in classes by the family’s income; the «Portuguese house» image — tile roof, rendered walls, stone frames, a small porch — the kitchen and sala below, two or three bedrooms above, the house owned by the family at the end of the rents.',
+      pt:'A moradia unifamiliar do programa do Estado de 1933 (Decreto-Lei 23 052): uma casa pequena de um ou dois pisos, geminada ou em pequenas bandas, com jardim à frente e quintal atrás, em classes segundo o rendimento da família; a imagem da «casa portuguesa» — telhado de telha, paredes rebocadas, cantarias, um pequeno alpendre — a cozinha e a sala em baixo, dois ou três quartos em cima, a casa propriedade da família no fim das rendas.' },
+    model:{ L:7, D:8, fl:2, fh:2.7, rot:180, form:'rect', roof:{ n:2, th:30, bei:0.4 },
+      open:{ S:vOpen([D(0.3, 0.12, up(2)), W(0.72, 0.15)], 0.16), N:vOpen([D(0.3, 0.1, up(2)), W(0.72, 0.12)], 0.12), E:{ wwr:0, units:vOff() }, W:vOpen([W(0.5, 0.15)], 0.06) },
+      render:{ en:'plaster walls, tile roof, green door', pt:'parede rebocada, telha, porta verde' },
+      walls:{ en:'rendered brick or block, stone frames', pt:'tijolo ou bloco rebocado, cantarias' } },
+    feats:[
+      vFloors({ en:'1–2', pt:'1–2' }, 1, 2, 'BAP'),
+      vRoofN(null, { en:'two or four slopes, tile', pt:'duas ou quatro águas, telha' }, [2, 4], 'MPH'),
+      vWall({ en:'rendered', pt:'rebocada' }, ['plaster', 'whitewash'], 'BAP'),
+      vI('site', { en:'Each bairro grouped the houses by class, each class its own streets; Encarnação keeps the single-family type the decree imposed.', pt:'Cada bairro agrupava as casas por classes, cada classe nas suas ruas; a Encarnação conserva a moradia unifamiliar que o decreto impunha.' }, 'CMM'),
+      vI('ventilation', { en:'Detached on two or three sides and with the garden and quintal, the small house is aired through and gets sun on both fronts.', pt:'Livre em dois ou três lados e com jardim e quintal, a pequena casa ventila de lado a lado e recebe sol nas duas frentes.' }, 'INF')
+    ] }),
+
+  'az-angra':T('azores', {
+    name:{ en:'Town house of Angra (casa de sobrado)', pt:'Casa urbana de Angra (sobrado)' },
+    where:{ en:'Angra do Heroísmo (Terceira) — the 16th-century grid of the port town; also Ponta Delgada and Horta', pt:'Angra do Heroísmo (Terceira) — a malha quinhentista da cidade portuária; também Ponta Delgada e Horta' },
+    summary:{ en:'The house of the regular streets of the Atlantic port: two or three storeys of rendered basalt masonry between party walls, the corners, sills and frames of dark basalt against colour-washed walls, sash windows, iron balconies on the upper floor, timber floors and partitions, the tile roof; the shop or store below, the dwelling above, the kitchen and the quintal behind. After the earthquake of 1980 the centre was rebuilt keeping the façades — but the insides and the construction changed.',
+      pt:'A casa das ruas regulares do porto atlântico: dois ou três pisos de alvenaria de basalto rebocada entre empenas, cunhais, peitoris e molduras de basalto escuro contra paredes pintadas, janelas de guilhotina, varandas de ferro no andar, pavimentos e tabiques de madeira, telhado de telha; a loja ou armazém em baixo, a habitação em cima, a cozinha e o quintal atrás. Depois do sismo de 1980 o centro foi reconstruído mantendo as fachadas — mas o interior e a construção mudaram.' },
+    model:{ L:9, D:12, fl:2, fh:3.2, rot:180, form:'rect', roof:{ n:4, th:30, bei:0.3 },
+      open:{ S:vOpen([W(0.18, 0.14, [{ door:true }, { on:true }]), D(0.5, 0.14, up(2)), W(0.82, 0.14, [{ door:true }, { on:true }])], 0.3),
+        N:vOpen([W(0.3, 0.12), W(0.7, 0.12)], 0.15), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'plaster walls, tile roof, green door', pt:'parede rebocada, telha, porta verde' },
+      walls:{ en:'volcanic-stone masonry, rendered and colour-washed; dark stone quoins and frames', pt:'alvenaria de basalto rebocada e pintada; cunhais e molduras de basalto' } },
+    feats:[
+      vFloors({ en:'2–3', pt:'2–3' }, 2, 3, 'JAR'),
+      vRoofN(null, { en:'tile, two or four slopes', pt:'telha, duas ou quatro águas' }, [2, 4], 'JAR'),
+      vWall({ en:'rendered with basalt dressings', pt:'rebocada com cantaria de basalto' }, ['plaster', 'whitewash'], 'JAR'),
+      vI('site', { en:'The orthogonal plan of the port town kept through the rebuilding after 1980 — World Heritage since 1983.', pt:'A malha ortogonal da cidade portuária mantida na reconstrução depois de 1980 — Património Mundial desde 1983.' }, 'ANG'),
+      vI('visualization', { en:'Compare the façade, the construction and the plan before and after 1980: the façade kept, the inside rebuilt in concrete.', pt:'Compare fachada, construção e organização do espaço antes e depois de 1980: a fachada mantida, o interior refeito em betão.' }, 'JAR')
+    ] }),
+
+  'md-funchal':T('madeira', {
+    name:{ en:'Funchal town house with a look-out tower (torre avista-navios)', pt:'Casa urbana do Funchal com torre avista-navios' },
+    where:{ en:'Funchal — the old town and the merchants’ streets of the sugar and wine trade', pt:'Funchal — a cidade velha e as ruas dos mercadores do açúcar e do vinho' },
+    summary:{ en:'The merchant’s house of the port: two storeys of rendered masonry with dark basalt frames, the store and the counting-house below, the dwelling above, the hipped tile roof — and over it a small tower, the torre avista-navios, from which the merchant watched the bay for the ships. Most of the towers are of the 18th century.',
+      pt:'A casa do mercador do porto: dois pisos de alvenaria rebocada com molduras de basalto, o armazém e o escritório em baixo, a habitação em cima, o telhado de quatro águas — e sobre ele uma pequena torre, a torre avista-navios, de onde o mercador vigiava a baía à espera dos navios. A maior parte das torres é do século XVIII.' },
+    model:{ L:11, D:10, fl:2, fh:3.4, rot:180, form:'rect', roof:{ n:4, th:28, bei:0.3 },
+      open:{ S:vOpen([D(0.2, 0.12, up(2)), D(0.5, 0.12, up(2)), W(0.8, 0.12, [{ door:true }, { on:true }])], 0.28),
+        N:vOpen([W(0.5, 0.12)], 0.1), E:vOpen([W(0.5, 0.15)], 0.08), W:{ wwr:0, units:vOff() } },
+      render:{ en:'plaster walls, tile roof, green door', pt:'parede rebocada, telha, porta verde' },
+      walls:{ en:'rendered masonry with dark volcanic-stone (cantaria) frames', pt:'alvenaria rebocada com cantarias de basalto' } },
+    feats:[
+      vFloors({ en:'2 and the tower', pt:'2 e a torre' }, 2, 3, 'AVN'),
+      vRoofN(null, { en:'four slopes, tile', pt:'quatro águas, telha' }, [4, 2], 'AVN'),
+      vI('site', { en:'The tower over the roof: the look-out to the bay — and a lantern of light and air for the stair below.', pt:'A torre sobre o telhado: o mirante para a baía — e uma lanterna de luz e de ar para a escada por baixo.' }, 'AVN'),
+      vI('ventilation', { en:'Open at the top, the tower works as a stack: warm air leaves through it and draws the sea breeze through the house.', pt:'Aberta no alto, a torre funciona como chaminé: o ar quente sai por ela e puxa a brisa do mar através da casa.' }, 'INF')
+    ] })
+  });
+  Object.assign(VERN_DIST, { 'pt-pombalino':['Lisboa', 'Faro'], 'pt-gaioleiro':['Lisboa'], 'pt-casa-corrente':['Coimbra', 'Braga', 'Porto', 'Viseu', 'Santarém', 'Leiria', 'Viana do Castelo'],
+    'pt-casa-economica':['Lisboa', 'Porto', 'Coimbra'] });
+  ['pt-pombalino', 'pt-gaioleiro', 'pt-casa-corrente', 'az-angra', 'md-funchal'].forEach(k => { if (VICON_URBAN.indexOf(k) < 0) VICON_URBAN.push(k); });
+
+  /* the rooms, as the studies give the type (the sizes are inference) */
+  const along = (b, fl, list) => { const x0 = (b.x || 0) - b.L / 2, y = b.y || 0, d = Math.max(1.5, b.D - 0.9), tot = list.reduce((s, q) => s + q[1], 0); let a = 0;
+    return list.map(([n, w]) => { const ww = b.L * w / tot, r = { n, x:x0 + a + ww / 2, y, w:ww - 0.4, d, fl }; a += ww; return r; }); };
+  const deep = (b, fl, list) => { const y0 = (b.y || 0) - b.D / 2, x = b.x || 0, w = Math.max(1.5, b.L - 0.9), tot = list.reduce((s, q) => s + q[1], 0); let a = 0;
+    return list.map(([n, d]) => { const dd = b.D * d / tot, r = { n, x, y:y0 + a + dd / 2, w, d:dd - 0.4, fl }; a += dd; return r; }); };
+  const R = { loja:{ en:'Shop (loja)', pt:'Loja' }, sala:{ en:'Hall (sala)', pt:'Sala' }, q:{ en:'Bedroom', pt:'Quarto' }, coz:{ en:'Kitchen', pt:'Cozinha' }, alc:{ en:'Alcove', pt:'Alcova' },
+    esc:{ en:'Stair', pt:'Escada' }, corr:{ en:'Corridor', pt:'Corredor' }, arm:{ en:'Store', pt:'Armazém' }, ent:{ en:'Entrance', pt:'Entrada' } };
+  const town = b => { if (b.wall.mat === 'basalt') b.wall.mat = 'whitewash'; b.wall.barra = null; b.wall.frames = 'cantaria'; b.wall.cunhais = true; };
+  VM_OVR['pt-pombalino'] = (vm, b) => { town(b); vm.row = { n:3 };
+    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 });
+    vm.rooms0 = along(b, 0, [[R.loja, 1], [R.esc, 0.4], [R.loja, 1]]).concat(...[1, 2, 3, 4].map(f => deep(b, f, [[R.sala, 1.2], [R.alc, 0.8], [R.coz, 1]]))); };
+  VM_OVR['pt-gaioleiro'] = (vm, b) => { town(b); b.roof.ridge = 'x'; vm.row = { n:3 };
+    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 }, { t:'gallery', vol:0, face:'N', kind:'corrida', pos:0.5, w:b.L - 1, floor:1 },
+      { t:'stair', vol:0, face:'N', along:'par', pos:0.85, w:0.9, landing:false, porch:false });
+    vm.rooms0 = deep(b, 0, [[R.loja, 1.4], [R.ent, 0.6], [R.loja, 1]]).concat(...[1, 2, 3, 4].map(f => deep(b, f, [[R.sala, 1], [R.q, 0.8], [R.q, 0.8], [R.coz, 0.8]]))); };
+  VM_OVR['pt-casa-corrente'] = (vm, b) => { town(b); b.wall.cunhais = false; b.roof.ridge = 'x'; vm.row = { n:3 };
+    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:Math.min(3, b.L - 1), floor:2 });
+    vm.rooms0 = deep(b, 0, [[R.loja, 1.4], [R.esc, 0.6]]).concat(deep(b, 1, [[R.sala, 1], [R.coz, 1]]), deep(b, 2, [[R.q, 1], [R.q, 1]])); };
+  VM_OVR['pt-casa-economica'] = (vm, b) => { b.wall.barra = null; b.wall.frames = 'cantaria'; vm.row = { n:2 };
+    vm.court = { on:true, x:0, y:b.D / 2 + 4, L:b.L, D:7, h:1.6, open:'S', gate:{ face:'N', pos:0.3, w:1.2 } };
+    vm.els.push({ t:'alpendre', vol:0, face:'S', pos:0.3, w:2.4, d:1.4 });
+    vm.rooms0 = along(b, 0, [[R.coz, 1], [R.sala, 1.2]]).concat(along(b, 1, [[R.q, 1], [R.q, 1]])); };
+  VM_OVR['az-angra'] = (vm, b) => { town(b); vm.row = { n:3 };
+    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 3, floor:1 });
+    vm.rooms0 = along(b, 0, [[R.loja, 1], [R.ent, 0.6], [R.arm, 1]]).concat(along(b, 1, [[R.sala, 1.2], [R.q, 1], [R.coz, 0.8]])); };
+  VM_OVR['md-funchal'] = (vm, b) => { town(b);
+    vm.vols.push(vmVol({ name:{ en:'Look-out tower', pt:'Torre avista-navios' }, x:(b.x || 0) + b.L / 2 - 1.6, y:(b.y || 0) + b.D / 2 - 1.6, L:3.2, D:3.2, fl:3, fh:b.fh,
+      roof:{ type:'hip', th:30, bei:0.3, mat:'tile', ridge:'auto', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall),
+      open:{ S:[vmOp('w', 0.5, 0.9, 1.2, 2)], E:[vmOp('w', 0.5, 0.9, 1.2, 2)], N:[vmOp('w', 0.5, 0.9, 1.2, 2)], W:[vmOp('w', 0.5, 0.9, 1.2, 2)] } }));
+    vm.rooms0 = along(b, 0, [[R.arm, 1.2], [R.ent, 0.6], [R.loja, 1]]).concat(along(b, 1, [[R.sala, 1.2], [R.q, 1], [R.coz, 0.8]])); };
+  Object.assign(VM_CHIM_OWN, { 'pt-pombalino':{ kind:'box', u:0.5, v:0.75, h:1.2 }, 'pt-gaioleiro':{ kind:'box', u:0.5, v:0.7, h:1.2 }, 'pt-casa-corrente':{ kind:'box', u:0.5, v:0.7, h:1.0 },
+    'pt-casa-economica':{ kind:'box', u:0.2, v:0.6, h:1.0 }, 'az-angra':{ kind:'az', u:0.8, v:0.7, h:1.0 }, 'md-funchal':{ kind:'mad', u:0.2, v:0.7, h:1.0 } });
+
+  /* the towns: their houses first, the region's after */
+  const km = (a, b, c, d) => { const r = Math.PI / 180; return 6371 * Math.hypot((d - b) * r * Math.cos((a + c) / 2 * r), (c - a) * r); };
+  const concOf = S => { try { return S.place ? CONC_BY_PLAIN[plainName(S.place)] || null : null; } catch (e) { return null; } };
+  const TOWNS = [
+    ['Vila Real de Santo António', 37.194, -7.416, 2.5, ['pt-pombalino']],
+    ['Porto', 41.150, -8.611, 6, ['pt-porto-esguia', 'pt-porto-ilha', 'pt-casa-corrente', 'pt-casa-economica']],
+    ['Coimbra', 40.209, -8.426, 5, ['pt-casa-corrente', 'pt-casa-economica']], ['Guimarães', 41.443, -8.295, 3, ['pt-casa-corrente']], ['Braga', 41.550, -8.426, 4, ['pt-casa-corrente']],
+    ['Viseu', 40.657, -7.913, 3, ['pt-casa-corrente']], ['Lamego', 41.097, -7.810, 2, ['pt-casa-corrente']], ['Tomar', 39.603, -8.410, 2.5, ['pt-casa-corrente']],
+    ['Óbidos', 39.361, -9.157, 1.5, ['pt-casa-corrente']], ['Ponte de Lima', 41.767, -8.583, 2, ['pt-casa-corrente']], ['Santarém', 39.236, -8.686, 2.5, ['pt-casa-corrente']],
+    ['Leiria', 39.744, -8.807, 2.5, ['pt-casa-corrente']], ['Viana do Castelo', 41.693, -8.832, 2.5, ['pt-casa-corrente']]];
+  const lisbon = S => { const c = concOf(S); return c ? c === 'Lisboa' : S.lat > 38.69 && S.lat < 38.795 && S.lon > -9.215 && S.lon < -9.09; };
+  const front = (o, ks, name) => { o.cand = ks.concat(o.cand.filter(x => ks.indexOf(x) < 0)).slice(0, Math.max(ks.length + 1, 3)); if (name) o.faceName = name; return o; };
+  const mn = VERN_REGIONS.find(r => r.key === 'mainland'), P0 = mn.place;
+  mn.place = (S, V) => { const o = P0(S, V); if (!o) return o;
+    if (lisbon(S)) { const baixa = S.lat > 38.704 && S.lat < 38.716 && S.lon > -9.143 && S.lon < -9.131, north = S.lat > 38.748;
+      const ks = baixa ? ['pt-pombalino', 'pt-gaioleiro', 'pt-lisboa-patio', 'pt-vila-operaria'] : north ? ['pt-casa-economica', 'pt-gaioleiro', 'pt-vila-operaria', 'pt-lisboa-patio'] : ['pt-gaioleiro', 'pt-lisboa-patio', 'pt-vila-operaria', 'pt-pombalino'];
+      return front(o, ks.concat('pt-casa-economica').filter((k, i, a) => a.indexOf(k) === i), { en:'Lisbon — the city: Pombaline, gaioleiros, pátios and vilas', pt:'Lisboa — a cidade: pombalinos, gaioleiros, pátios e vilas' }); }
+    const c = concOf(S); let t = c ? TOWNS.find(x => x[0] === c && km(S.lat, S.lon, x[1], x[2]) <= x[3] * 2.5) : null;
+    if (!t) t = TOWNS.find(x => km(S.lat, S.lon, x[1], x[2]) <= x[3]);
+    return t ? front(o, t[4], { en:t[0] + ' — the town and its houses', pt:t[0] + ' — a cidade e as suas casas' }) : o; };
+  const az = VERN_REGIONS.find(r => r.key === 'azores'), A0 = az.place;
+  az.place = function (S, V) { const o = A0.call(this, S, V);
+    if (o && [[38.655, -27.218, 3], [37.741, -25.668, 4], [38.535, -28.630, 2]].some(p => km(S.lat, S.lon, p[0], p[1]) <= p[2])) o.cand = ['az-angra'].concat(o.cand.filter(x => x !== 'az-angra'));
+    return o; };
+  const md = VERN_REGIONS.find(r => r.key === 'madeira'), M0 = md.place;
+  md.place = function (S, V) { const o = M0.call(this, S, V);
+    if (o && km(S.lat, S.lon, 32.650, -16.910) <= 4) o.cand = ['md-funchal'].concat(o.cand.filter(x => x !== 'md-funchal'));
+    return o; };
+
+  ARCH_BIB.push({ r:{ en:'The towns — urban house types', pt:'A cidade — tipos de casa urbana' },
+    types:['pt-pombalino', 'pt-gaioleiro', 'pt-casa-corrente', 'pt-casa-economica', 'az-angra', 'md-funchal'],
+    refs:['FRA', 'GAG', 'MIR', 'HCO', 'AND', 'CPE', 'MAM', 'TRI', 'TR2', 'GMR', 'ICO', 'BAP', 'CMM', 'MPH', 'JAR', 'ANG', 'AVN'].map(k => VERN_SRC[k].cite + (VERN_SRC[k].url ? ' ' + VERN_SRC[k].url : '')) });
   vernNames();
 })();
 
