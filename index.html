@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.156.0',
+  version:     '1.157.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23206,10 +23206,11 @@ const VM_WALL = {
   timber:{ c:'#9B6B43', t:0.05, rho:500, en:'timber boards', pt:'tabuado de madeira' }
 };
 const VM_ROOFMAT = {
-  tile:{ c:'#A9573B', en:'channel tile', pt:'telha de canudo' }, marseille:{ c:'#B5603D', en:'Marseille tile', pt:'telha marselha' },
-  thatch:{ c:'#B89A5E', en:'thatch', pt:'colmo' }, slate:{ c:'#4B5058', en:'slate or schist slabs', pt:'lousa ou lajes de xisto' },
-  stone:{ c:'#8E8A80', en:'stone slabs', pt:'lajes de pedra' }, earth:{ c:'#7C6B4E', en:'earth and turf', pt:'terra e erva' },
-  timber:{ c:'#5E4632', en:'tarred boards', pt:'tabuado alcatroado' }, lime:{ c:'#ECE8DE', en:'lime screed (açoteia)', pt:'betonilha de cal (açoteia)' }
+  /* t: the covering's thickness at its edges (m); course: rows along the eave (m apart); down: lines down the slope (m apart), as the covering is laid */
+  tile:{ c:'#A9573B', en:'channel tile', pt:'telha de canudo', t:0.12, course:0.38, down:0.24, dw:0.04 }, marseille:{ c:'#B5603D', en:'Marseille tile', pt:'telha marselha', t:0.07, course:0.34, down:0.21, dw:0.015 },
+  thatch:{ c:'#B89A5E', en:'thatch', pt:'colmo', t:0.45, down:0.09, dw:0.012, minTh:45 }, slate:{ c:'#4B5058', en:'slate or schist slabs', pt:'lousa ou lajes de xisto', t:0.06, course:0.22, down:0.35, dw:0.012 },
+  stone:{ c:'#8E8A80', en:'stone slabs', pt:'lajes de pedra', t:0.16, course:0.6, down:0.75, dw:0.02 }, earth:{ c:'#7C6B4E', en:'earth and turf', pt:'terra e erva', t:0.35, course:0.5, dw:0.03, turf:true },
+  timber:{ c:'#5E4632', en:'tarred boards', pt:'tabuado alcatroado', t:0.05, down:0.22, dw:0.015 }, lime:{ c:'#ECE8DE', en:'lime screed (açoteia)', pt:'betonilha de cal (açoteia)', t:0.1 }
 };
 const VM_ROOFS = {
   flat:{ en:'flat (açoteia, terrace)', pt:'plana (açoteia, terraço)' }, shed:{ en:'one slope', pt:'uma água' },
@@ -23562,7 +23563,7 @@ function vmVolFaces(v, opts) {
   }
   /* roofs */
   host = null;
-  const rf = (P, o) => push(P, rc, Object.assign({ roof:true }, o || {}));
+  const rf = (P, o) => push(P, rc, Object.assign({ roof:true, mat:r.mat }, o || {}));
   if (r.type === 'flat') {
     const top = vmRing(v, 0, H);
     push(top, VM_ROOFMAT[r.mat] ? VM_ROOFMAT[r.mat].c : '#ECE8DE', { roof:true, top:true });
@@ -23610,6 +23611,12 @@ function vmVolFaces(v, opts) {
       else { const r0 = [(cx0 + cx1) / 2, y0 - e + rr, hz], r1 = [(cx0 + cx1) / 2, y1 + e - rr, hz]; rf([a, b, r0]); rf([b, cc, r1, r0]); rf([cc, d, r1]); rf([d, a, r0, r1]); }
     }
   }
+  /* the covering's own thickness along its free edges (eaves and verges, not ridges or hips): thin for slate and boards, thick for thatch and turf */
+  const RM = VM_ROOFMAT[r.mat] || VM_ROOFMAT.tile, tk = r.type === 'flat' ? 0 : RM.t || 0.08;
+  if (tk > 0.02) { const roofs = F.filter(q => q.roof && !q.top), kk = p => p.map(x => x.toFixed(2)).join(','), cnt = {};
+    roofs.forEach(q => q.P.forEach((p, i) => { const k2 = [kk(p), kk(q.P[(i + 1) % q.P.length])].sort().join('|'); cnt[k2] = (cnt[k2] || 0) + 1; }));
+    roofs.forEach(q => q.P.forEach((p, i) => { const b = q.P[(i + 1) % q.P.length], k2 = [kk(p), kk(b)].sort().join('|'); if (cnt[k2] > 1) return;
+      push([p, b, [b[0], b[1], b[2] - tk], [p[0], p[1], p[2] - tk]], vmShade(rc, RM.turf ? 0.62 : 0.72), { roof:true, fascia:true }); })); }
   return F;
 }
 /** The pieces the elements add: chimneys, stairs, varandas, ovens, porches, pergolas. */
@@ -23747,6 +23754,8 @@ function vmFaces(vm) {
 }
 
 /* ---------------------------------------------------------------- drawings */
+/** The room picked on a plan: Delete or Backspace removes it. */
+let VM_ROOMSEL = null;
 /** The turn of the isometric, in degrees: 0 from the south-east, as the icons. */
 let VM_AZ = 0;
 /** Where a body's buttresses stand along a long side (m from its start): the corners, then the half, thirds or quarters. */
@@ -23783,10 +23792,13 @@ function vmIsoSVG(vm, w, opts) {
   F.forEach(q => { const P = q.P.map(vmIso); P.forEach(p => all.push(p));
     const fill = q.fill.indexOf('rgba') === 0 ? q.fill : (q.thin || q.el ? q.fill : vmLit(q.fill, q.n));
     out.push('<polygon points="' + vmPts(P) + '" fill="' + fill + '" stroke="' + (q.ghost ? 'rgba(60,70,80,.3)' : 'rgba(0,0,0,.35)') + '" stroke-width="' + (q.thin ? 0.015 : q.ghost ? 0.025 : 0.035) + '" stroke-linejoin="round"/>');
-    if (q.roof && !q.top && !q.ghost && q.P.length >= 3) { /* courses of the covering */
-      const a = q.P[0], b = q.P[1], c = q.P[q.P.length - 1], n = Math.max(2, Math.round(Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]) / 0.35));
-      for (let k = 1; k < n; k++) { const t = k / n, A = vmIso([a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t]), B = vmIso(q.P.length === 3 ? [b[0] + (c[0] - b[0]) * t, b[1] + (c[1] - b[1]) * t, b[2] + (c[2] - b[2]) * t] : [b[0] + (q.P[2][0] - b[0]) * t, b[1] + (q.P[2][1] - b[1]) * t, b[2] + (q.P[2][2] - b[2]) * t]);
-        out.push('<line x1="' + A[0].toFixed(2) + '" y1="' + A[1].toFixed(2) + '" x2="' + B[0].toFixed(2) + '" y2="' + B[1].toFixed(2) + '" stroke="rgba(0,0,0,.18)" stroke-width="0.025"/>'); }
+    if (q.roof && !q.top && !q.ghost && !q.fascia && q.P.length >= 3) { /* the covering as it is laid: courses along the eave, lines down the slope */
+      const M = VM_ROOFMAT[q.mat] || (q.mat ? {} : { course:0.35 }), a = q.P[0], b = q.P[1], c = q.P[q.P.length - 1], d = q.P.length === 3 ? c : q.P[2];
+      const L3 = (u, w) => Math.hypot(w[0] - u[0], w[1] - u[1], w[2] - u[2]), lp = (u, w, t) => [u[0] + (w[0] - u[0]) * t, u[1] + (w[1] - u[1]) * t, u[2] + (w[2] - u[2]) * t];
+      const line = (A, B, col, sw) => { const p = vmIso(A), r2 = vmIso(B); out.push('<line x1="' + p[0].toFixed(2) + '" y1="' + p[1].toFixed(2) + '" x2="' + r2[0].toFixed(2) + '" y2="' + r2[1].toFixed(2) + '" stroke="' + col + '" stroke-width="' + sw + '"/>'); };
+      if (M.course) { const n = Math.max(2, Math.round(L3(a, c) / M.course)); for (let k = 1; k < n; k++) { const t = k / n; line(lp(a, c, t), lp(b, d, t), M.turf ? 'rgba(80,120,50,.55)' : 'rgba(0,0,0,.2)', M.turf ? 0.05 : 0.025); } }
+      if (M.down) { const n = Math.max(2, Math.round(L3(a, b) / M.down)); for (let k = 1; k < n; k++) { const t = k / n; line(lp(a, b, t), lp(c, d, t), q.mat === 'thatch' ? (k % 2 ? 'rgba(90,70,30,.35)' : 'rgba(255,240,200,.35)') : 'rgba(0,0,0,.16)', M.dw || 0.02); } }
+      if (M.turf) for (let k = 0; k < 14; k++) { const u = (k * 0.618) % 1, w = (k * 0.381 + 0.2) % 1, P0 = lp(lp(a, b, u), lp(c, d, u), w), p = vmIso(P0); out.push('<circle cx="' + p[0].toFixed(2) + '" cy="' + p[1].toFixed(2) + '" r="0.12" fill="rgba(96,140,60,.7)"/>'); }
     }
   });
   /* the smoke through the tiles, where the house has no chimney: three wisps over the main body's ridge */
@@ -23856,7 +23868,7 @@ function vmPlanSVG(vm, w, opts) {
   }));
   /* rooms */
   (opts.rooms || []).forEach((q, i) => { const a = P(q.x - q.w / 2, q.y + q.d / 2);
-    o.push('<rect data-room="' + i + '" x="' + a[0] + '" y="' + a[1] + '" width="' + (q.w * s).toFixed(1) + '" height="' + (q.d * s).toFixed(1) + '" fill="' + (q.bad ? 'rgba(217,140,140,.35)' : 'rgba(127,179,163,.28)') + '" stroke="' + (q.bad ? '#B55' : '#4E8A78') + '" stroke-width="1" style="cursor:move"/>');
+    o.push('<rect data-room="' + i + '" x="' + a[0] + '" y="' + a[1] + '" width="' + (q.w * s).toFixed(1) + '" height="' + (q.d * s).toFixed(1) + '" fill="' + (q.bad ? 'rgba(217,140,140,.35)' : 'rgba(127,179,163,.28)') + '" stroke="' + (q === VM_ROOMSEL ? '#B5772A' : q.bad ? '#B55' : '#4E8A78') + '" stroke-width="' + (q === VM_ROOMSEL ? 3 : 1) + '"' + (q === VM_ROOMSEL ? ' stroke-dasharray="6 3"' : '') + ' style="cursor:move"/>');
     /* name and area kept inside their room: the type shrinks to the room's width and height */
     const c = P(q.x, q.y), nm = VL(q.n), fs = Math.max(6, Math.min(10, q.w * s / Math.max(4, nm.length * 0.6), q.d * s / 2.6));
     o.push('<text x="' + c[0] + '" y="' + (+c[1] - fs * 0.15).toFixed(1) + '" font-size="' + fs.toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + nm.replace(/&/g, '&amp;') + '</text>');
@@ -24193,7 +24205,7 @@ function buildModeller(host) {
       ed.appendChild(el('h4', { text:VMT('Roof', 'Cobertura') }));
       const r2 = ed.appendChild(el('div', { class:'vmrow' }));
       r2.appendChild(vmSel(VMT('Form', 'Forma'), Object.keys(VM_ROOFS).map(k => [k, VL(VM_ROOFS[k])]), () => v.roof.type, x => { v.roof.type = x; if (x === 'flat') v.roof.mat = 'lime'; if (x === 'dome' && v.roof.mat === 'tile') v.roof.mat = 'earth'; }, true));
-      r2.appendChild(vmSel(VMT('Covering', 'Revestimento'), Object.keys(VM_ROOFMAT).map(k => [k, VL(VM_ROOFMAT[k])]), () => v.roof.mat, x => { v.roof.mat = x; }));
+      r2.appendChild(vmSel(VMT('Covering', 'Revestimento'), Object.keys(VM_ROOFMAT).map(k => [k, VL(VM_ROOFMAT[k])]), () => v.roof.mat, x => { v.roof.mat = x; const m = VM_ROOFMAT[x]; if (m && m.minTh && v.roof.type !== 'flat' && (v.roof.th || 0) < m.minTh) v.roof.th = m.minTh; }, true));
       if (['flat', 'dome'].indexOf(v.roof.type) < 0) r2.appendChild(vmNum(VMT('Pitch (°)', 'Inclinação (°)'), () => v.roof.th, x => { v.roof.th = x; }, 3, 70, 1));
       if (['flat', 'dome', 'ground'].indexOf(v.roof.type) < 0) r2.appendChild(vmNum(VMT('Eave (m)', 'Beiral (m)'), () => v.roof.bei, x => { v.roof.bei = x; }, 0, 1.5, 0.05));
       if (v.roof.type === 'gable' || v.roof.type === 'ground') r2.appendChild(vmSel(VMT('Ridge', 'Cumeeira'), [['auto', VMT('along the long side', 'pelo lado maior')], ['x', VMT('east–west', 'nascente–poente')], ['y', VMT('north–south', 'norte–sul')]], () => v.roof.ridge || 'auto', x => { v.roof.ridge = x; }));
@@ -24383,7 +24395,8 @@ function buildModeller(host) {
       if (t.dataset.court !== undefined) { const c = M.court, ci = +t.dataset.court, sx = ci === 1 || ci === 2 ? 1 : -1, sy = ci >= 2 ? 1 : -1;
         drag = { kind:'court', c, p, fx:c.x - sx * c.L / 2, fy:c.y - sy * c.D / 2, cx:c.x + sx * c.L / 2, cy:c.y + sy * c.D / 2 }; }
       else if (t.dataset.roomsize !== undefined) drag = { kind:'size', q:rooms[+t.dataset.roomsize], p, w0:rooms[+t.dataset.roomsize].w, d0:rooms[+t.dataset.roomsize].d };
-      else if (t.dataset.room !== undefined) { const q = rooms[+t.dataset.room]; drag = { kind:'room', q, p, x0:q.x, y0:q.y }; }
+      else if (t.dataset.room !== undefined) { const q = rooms[+t.dataset.room]; VM_ROOMSEL = q; drag = { kind:'room', q, p, x0:q.x, y0:q.y };
+        if (!drag.moved) { const PLs = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:R.V.rooms.filter(r => r.fl === fl) }); svg.innerHTML = PLs.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } }
       else if (t.dataset.vol !== undefined) { const i = +t.dataset.vol, v = M.vols[i]; VM_SEL = i; drag = { kind:'vol', v, p, x0:v.x, y0:v.y }; }
       if (drag) { svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
     });
@@ -24450,10 +24463,11 @@ function buildModeller(host) {
     /* each room's name editable in the table, as on the plan (double-click a room there) */
     rt.querySelectorAll('tbody tr').forEach((tr, i) => { const q = R.V.rooms[i], td = tr.firstChild; if (!q || !td) return; td.textContent = '';
       td.appendChild(el('input', { type:'text', value:VL(q.n), class:'vmroomname', title:VMT('Rename the room', 'Mudar o nome da divisão'), style:'width:100%; min-width:9em; font:inherit; border:1px solid var(--line); border-radius:6px; padding:2px 6px',
-        onchange:e => { const v = e.target.value.trim(); if (v) { q.n = { en:v, pt:v }; drawViews(); } } })); });
+        onchange:e => { const v = e.target.value.trim(); if (v) { q.n = { en:v, pt:v }; drawViews(); } } }));
+      const last = tr.lastChild; if (last) last.appendChild(el('button', { type:'button', class:'vmdel', text:'✕', title:VMT('Remove this room', 'Apagar esta divisão'), style:'margin-left:6px;border:0;background:none;color:#9f2420;cursor:pointer;font:inherit', onclick:() => { R.V.rooms.splice(R.V.rooms.indexOf(q), 1); if (VM_ROOMSEL === q) VM_ROOMSEL = null; drawViews(); } })); });
     metBox.appendChild(rt);
-    metBox.appendChild(el('p', { class:'hint', html:VMT('Rename a room in the table or by double-clicking it on the plan. <b>Casa de fora</b> is the Portuguese vernacular name of the entrance room — the room entered straight from outside, the house’s parlour and passage, with chests and cupboards and no fixed use, giving on the kitchen and the bedrooms (Inquérito à Arquitectura Popular). <b>Room</b> is a room of free use.',
-      'Mude o nome de uma divisão na tabela ou com duplo clique sobre ela na planta. <b>Casa de fora</b> é o nome popular da sala de entrada — a divisão onde se entra directamente da rua, sala e passagem da casa, de arcas e armários e sem uso fixo, que dá para a cozinha e para os quartos (Inquérito à Arquitectura Popular). <b>Divisão</b> é uma divisão de uso livre.') }));
+    metBox.appendChild(el('p', { class:'hint', html:VMT('Click a room on the plan and press Delete to remove it, or use ✕ in the table. Rename a room in the table or by double-clicking it on the plan. <b>Casa de fora</b> is the Portuguese vernacular name of the entrance room — the room entered straight from outside, the house’s parlour and passage, with chests and cupboards and no fixed use, giving on the kitchen and the bedrooms (Inquérito à Arquitectura Popular). <b>Room</b> is a room of free use.',
+      'Clique numa divisão na planta e carregue em Delete para a apagar, ou use ✕ na tabela. Mude o nome de uma divisão na tabela ou com duplo clique sobre ela na planta. <b>Casa de fora</b> é o nome popular da sala de entrada — a divisão onde se entra directamente da rua, sala e passagem da casa, de arcas e armários e sem uso fixo, que dá para a cozinha e para os quartos (Inquérito à Arquitectura Popular). <b>Divisão</b> é uma divisão de uso livre.') }));
     if (!rc.kitchen) metBox.appendChild(el('p', { class:'hint', html:'<b>' + VMT('No kitchen yet', 'Ainda sem cozinha') + '</b> — ' + VMT('the hearth was the heart of the popular house.', 'a lareira era o centro da casa popular.') }));
     side.innerHTML = ''; side.appendChild(el('p', { class:'vmcap', text:VMT('Rooms — add to the plan', 'Divisões — juntar à planta') }));
     const rb = side.appendChild(el('div', { class:'vmbtns' }));
@@ -24462,6 +24476,11 @@ function buildModeller(host) {
     rb.appendChild(el('button', { type:'button', text:VMT('Remove the last room', 'Remover a última divisão'), onclick:() => { R.V.rooms.pop(); drawViews(); } }));
     rb.appendChild(el('button', { type:'button', text:VMT('Rooms of the type', 'Divisões do tipo'), onclick:() => { R.V.rooms = vmDefaultRooms(vm()); drawViews(); } }));
   }
+  /* Delete (or Backspace) removes the room picked on a plan, unless a field is being typed in */
+  if (window._vmRoomKey) document.removeEventListener('keydown', window._vmRoomKey);
+  window._vmRoomKey = ev => { if (!VM_ROOMSEL || (ev.key !== 'Delete' && ev.key !== 'Backspace')) return; const tg = ev.target; if (tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA' || tg.tagName === 'SELECT' || tg.isContentEditable)) return;
+    if (!document.body.contains(isoBox)) return; const i = R.V.rooms.indexOf(VM_ROOMSEL); if (i < 0) return; ev.preventDefault(); R.V.rooms.splice(i, 1); VM_ROOMSEL = null; drawViews(); toast(VMT('Room removed', 'Divisão apagada')); };
+  document.addEventListener('keydown', window._vmRoomKey);
   VM_REDRAW = () => { drawViews(); };
   VM_REBUILD = () => { drawEditor(); drawViews(); };
   drawEditor(); drawViews();
