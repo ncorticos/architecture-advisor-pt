@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.161.0',
+  version:     '1.162.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5945,9 +5945,9 @@ function vmCompanion() {
   const wi = Math.min(R.V.work || 0, vm.vols.length - 1), w = vm.vols[wi];
   const key = JSON.stringify([vm.vols, vm.els, vm.court, vm.row]) + '|' + wi + '|' + (MASS && MASS.rot);
   if (GHOST_CACHE.key === key) return GHOST_CACHE;
-  /* the modeller's frame faces south at 180°: the study turns its plan by the facade's azimuth */
-  const a = ((MASS && isFinite(MASS.rot) ? MASS.rot : 180) - 180) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
-  const tf = p => { const x = p[0] - w.x, y = p[1] - w.y; return [x * c + y * sn, -x * sn + y * c, p[2]]; };
+  /* the modeller's frame and the study's plan are both the house's own (its main facade toward −y): the study turns the
+     whole plan by the facade's azimuth itself, so the rest of the model only moves to the body worked on */
+  const tf = p => [p[0] - w.x, p[1] - w.y, p[2]];
   const vs = vmAllVols(vm), mine = v => v._i === wi && !v._r, faces = [], blocks = [];
   const add = (q, o) => faces.push(Object.assign({ P:q.P.map(tf), fill:q.fill, roof:!!(q.roof || q.top), thin:!!q.thin, host:!!q.host }, o || {}));
   vmCourtFaces(vm).forEach(q => add(q, { court:true }));
@@ -5964,6 +5964,19 @@ function vmCompanion() {
   return GHOST_CACHE = { key, faces, blocks, city:vmCityFaces(R, vm, tf) };
 }
 function ghostFaces() { return vmCompanion().faces.filter(q => !q.host).map(q => q.P); }
+/** Does the ray from (px, py, pz) along (dx, dy, dz) — toward the sun, dz > 0 — meet one of the prisms (poly in plan, h tall)
+    before it climbs over them? Its run in plan is followed as far as the tallest can still stop it. */
+function prismBlocks(blocks, px, py, pz, dx, dy, dz) {
+  if (dz <= 1e-6) return false;
+  const inP = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; return c; };
+  for (const b of blocks) {
+    if (pz >= b.h) continue;
+    const s = (b.h - pz) / dz, qx = px + dx * s, qy = py + dy * s, P = b.poly;
+    if (inP(qx, qy, P)) return true;
+    for (let i = 0, j = P.length - 1; i < P.length; j = i++) if (segCross(px, py, qx, qy, P[j][0], P[j][1], P[i][0], P[i][1])) return true;
+  }
+  return false;
+}
 /** A town house is drawn in its town: for an urban type, the street in front of its main facade with its pavements,
     the houses across it, the neighbours to each side and the block behind — invented, of the type's own scale and the
     place's colours, seeded by the type so they stay put. An illustration of the context, not a survey: only the image
@@ -6182,7 +6195,31 @@ function camAxes(cam, elMin) {
   return { c, r:[-c[1], c[0]], d:[-c[0], -c[1]], se:Math.sin(e), ce:Math.cos(e), te:Math.tan(e) };
 }
 /** A plan point on the screen before scaling: u to the right, v up. */
-const camUV = (A, x, y, z) => [CAM_K * (x * A.r[0] + y * A.r[1]), CAM_K * ((x * A.d[0] + y * A.d[1]) * A.se + (z || 0) * A.ce)];
+const camUV = (A, x, y, z) => { const h = x * A.d[0] + y * A.d[1], u = CAM_K * (x * A.r[0] + y * A.r[1]), v = CAM_K * (h * A.se + (z || 0) * A.ce);
+  if (!A.P) return [u, v];
+  const f = perspF(A.P, h * A.ce); return [A.P.pu + (u - A.P.pu) * f, A.P.pv + (v - A.P.pv) * f]; };
+/* ---- perspective, every 3D view: a two-point perspective as the architect draws it (a shift lens) — each point drawn
+   toward the pivot (the house's centre at mid-height) by the camera distance over its depth in plan, so the near grows,
+   the far shrinks, the horizontals run to two far vanishing points and the verticals stay vertical. The camera stands
+   PERSP_K times the scene's radius away; one switch for all the tabs, kept in this browser. */
+let VIEW_PERSP = (() => { try { return localStorage.getItem('arca-persp') !== '0'; } catch (e) { return true; } })();
+const PERSP_K = 4;
+function perspSet(on) { VIEW_PERSP = !!on; try { localStorage.setItem('arca-persp', on ? '1' : '0'); } catch (e) { } }
+/** The scale at plan depth h (metres, larger farther), held where a point would come nearer than the camera allows. */
+const perspF = (P, h) => P.D / Math.max(P.D + h - P.d0, 0.12 * P.D);
+/** Puts the camera A in perspective about the pivot (x, y, z), for a scene of radius R — or back to the axonometry. */
+function camPersp(A, R, x, y, z) {
+  if (!VIEW_PERSP) { A.P = null; return A; }
+  const h = x * A.d[0] + y * A.d[1];
+  A.P = { D:PERSP_K * Math.max(4, R), d0:h * A.ce, pu:CAM_K * (x * A.r[0] + y * A.r[1]), pv:CAM_K * (h * A.se + (z || 0) * A.ce) };
+  return A;
+}
+/** The perspective switch for a view bar. */
+function perspCtl(redraw) {
+  const b = el('button', { class:'btn small', 'aria-pressed':String(VIEW_PERSP), title:t('Perspective (off: axonometry)'), text:t('Perspective') });
+  b.onclick = () => { perspSet(!VIEW_PERSP); b.setAttribute('aria-pressed', String(VIEW_PERSP)); redraw(); };
+  return b;
+}
 /** How far from the camera: larger is farther, for painting back to front. */
 const camDepth = (A, x, y, z) => (x * A.d[0] + y * A.d[1]) * A.ce - (z || 0) * A.se; /** A roof plane ends where its walls begin — they only ever touch —
       so with the camera above them the plane always covers the wall.
@@ -6264,11 +6301,17 @@ const camSees = (A, nx, ny, nz) => (nx * A.c[0] + ny * A.c[1]) * A.ce + (nz || 0
     read through the page's own projection — null where the plane is seen
     too nearly edge-on to follow the pointer. */
 function camPick(proj, O, U, V, px, py) {
-  const p0 = proj(O[0], O[1], O[2]), pu = proj(O[0] + U[0], O[1] + U[1], O[2] + U[2]), pv = proj(O[0] + V[0], O[1] + V[1], O[2] + V[2]);
-  const ux = pu[0] - p0[0], uy = pu[1] - p0[1], vx = pv[0] - p0[0], vy = pv[1] - p0[1], det = ux * vy - uy * vx;
-  if (Math.abs(det) < 0.08 * Math.hypot(ux, uy) * Math.hypot(vx, vy)) return null;
-  const dx = px - p0[0], dy = py - p0[1];
-  return [(dx * vy - dy * vx) / det, (ux * dy - uy * dx) / det];
+  /* solved on the plane's local linearisation and refined there: exact in the axonometry at once, and in a few steps in perspective */
+  let a = 0, b = 0;
+  for (let it = 0; it < 8; it++) {
+    const C = [O[0] + a * U[0] + b * V[0], O[1] + a * U[1] + b * V[1], O[2] + a * U[2] + b * V[2]];
+    const p0 = proj(C[0], C[1], C[2]), pu = proj(C[0] + U[0], C[1] + U[1], C[2] + U[2]), pv = proj(C[0] + V[0], C[1] + V[1], C[2] + V[2]);
+    const ux = pu[0] - p0[0], uy = pu[1] - p0[1], vx = pv[0] - p0[0], vy = pv[1] - p0[1], det = ux * vy - uy * vx;
+    if (Math.abs(det) < 0.08 * Math.hypot(ux, uy) * Math.hypot(vx, vy)) return it ? [a, b] : null;
+    const dx = px - p0[0], dy = py - p0[1], da = (dx * vy - dy * vx) / det, db = (ux * dy - uy * dx) / det;
+    a += da; b += db; if (Math.abs(da) + Math.abs(db) < 1e-5) break;
+  }
+  return [a, b];
 }
 /** A compass direction (clockwise from north) in the frame of a plan turned
     by rot on Site, whose main facade faces rot along −y. */
@@ -6310,6 +6353,7 @@ function camBar(stage, cam, rotFn, redraw, zoomKey, views, elMin) {
    ['Top', 'Straight down, as a plan', () => set(cam.az, 89.5)]].concat(views(set))
     .forEach(([txt, tip, fn]) => bar.appendChild(el('button', { class:'btn small', text:txt, title:t(tip), 'aria-label':t(tip), onclick:fn })));
   if (zoomKey) bar.appendChild(zoomCtl(zoomKey, redraw));
+  bar.appendChild(perspCtl(redraw));
   bar.appendChild(line);
   stage.insertBefore(bar, stage.firstChild);
   sync();
@@ -6920,10 +6964,14 @@ function buildEnvironment(host) {
     const vUp = plan ? Rg : Math.max(Rs, Rg * se), vDown = Rg * se;
     const s = Math.min((right - left) / (2 * Rg + 4), (bottom - top) / (vUp + vDown + 3));
     const cx = (left + right) / 2, cy = top + (vUp + 1.5) * s + Math.max(0, (bottom - top) - (vUp + vDown + 3) * s) / 2;
-    return { M, Rs, Rg, half, plan, se, ce, ca:Math.cos(al), sa:Math.sin(al), s, cx, cy, camH:[Math.sin(envAz() * RAD), Math.cos(envAz() * RAD)] };
+    const F = { M, Rs, Rg, half, plan, se, ce, ca:Math.cos(al), sa:Math.sin(al), s, cx, cy, camH:[Math.sin(envAz() * RAD), Math.cos(envAz() * RAD)] };
+    /* in perspective (see camPersp) about the building's centre at mid-height, the camera PERSP_K ground radii away */
+    if (VIEW_PERSP && !plan) F.P = { D:PERSP_K * Rg, d0:0, sx:cx, sy:cy - M.ridge / 2 * ce * s };
+    return F;
   };
   /** World metres (x east, y north, z up) to the screen, and depth from the camera. */
-  const P3 = (FR, x, y, z) => { const xp = x * FR.ca - y * FR.sa, yp = x * FR.sa + y * FR.ca; return [FR.cx + xp * FR.s, FR.cy - (yp * FR.se + (z || 0) * FR.ce) * FR.s]; };
+  const P3 = (FR, x, y, z) => { const xp = x * FR.ca - y * FR.sa, yp = x * FR.sa + y * FR.ca, p = [FR.cx + xp * FR.s, FR.cy - (yp * FR.se + (z || 0) * FR.ce) * FR.s];
+    if (!FR.P) return p; const k = perspF(FR.P, yp * FR.ce); return [FR.P.sx + (p[0] - FR.P.sx) * k, FR.P.sy + (p[1] - FR.P.sy) * k]; };
   const depthOf = (FR, x, y, z) => (x * FR.sa + y * FR.ca) * FR.ce - (z || 0) * FR.se;
   /** A sun position on the dome. */
   const domePt = (FR, sp) => { const a = sp.azi * RAD, h = Math.max(0, sp.alt) * RAD; return [FR.Rs * Math.sin(a) * Math.cos(h), FR.Rs * Math.cos(a) * Math.cos(h), FR.Rs * Math.sin(h)]; };
@@ -7431,7 +7479,7 @@ function buildEnvironment(host) {
   const plotLine = el('div', { class:'hint' });
   const resetBtn = el('button', { class:'btn small', text:'Back to the coordinates set up', onclick:() => resiteHome() });
   const cNb = checkCtl('Neighbouring buildings (OpenStreetMap)', ENV.nb, v => { ENV.nb = v; if (v && NB.status === 'failed') { NB.at = NB.want = null; NB.tries = 0; } refreshEnv(); });
-  rail.appendChild(controls([cMap, cView, cWide, cNb]));
+  rail.appendChild(controls([cMap, cView, cWide, cNb, perspCtl(() => refreshEnv())]));
   const nbFacts = rail.appendChild(el('div', { class:'facts' }));   // the neighbours, read beside their switch
   rail.appendChild(el('div', { class:'rgroup' }, [plotLine, resetBtn]));
 
@@ -7950,7 +7998,11 @@ function buildSite(host) {
   const PL = CAMS.site;
   const plateXY = (x, y) => { const a = PL.az * RAD, c = Math.cos(a), q = Math.sin(a); return [x * c - y * q, x * q + y * c]; };
   /** A world point (x east, y north, z up) on the canvas of frame F. */
-  const isoAt = (F, x, y, z) => { const q = plateXY(x, y); return [F.cx + (q[0] - q[1]) * ISO_C * F.s, F.cy - (q[0] + q[1]) * ISO_S * F.s - (z || 0) * F.s]; };
+  const isoAt0 = (F, x, y, z) => { const q = plateXY(x, y); return [F.cx + (q[0] - q[1]) * ISO_C * F.s, F.cy - (q[0] + q[1]) * ISO_S * F.s - (z || 0) * F.s]; };
+  /* in perspective (see camPersp): drawn toward the pivot by the camera distance over the depth in plan — on the plate,
+     q₀ + q₁ runs away from the eye — the verticals kept vertical */
+  const isoK = (F, x, y) => { if (!F.P) return 1; const q = plateXY(x, y); return perspF(F.P, (q[0] + q[1]) * Math.SQRT1_2 * Math.cos(ISO_EL * RAD)); };
+  const isoAt = (F, x, y, z) => { const p = isoAt0(F, x, y, z); if (!F.P) return p; const k = isoK(F, x, y); return [F.P.sx + (p[0] - F.P.sx) * k, F.P.sy + (p[1] - F.P.sy) * k]; };
   /** Toward the camera, in world metres: the south-west on an unturned plate. */
   const camToward = () => { const a = PL.az * RAD, c = Math.cos(a), q = Math.sin(a); return { x:-c - q, y:q - c }; };
   /** Farther from the camera is larger, for painting back to front. */
@@ -8032,7 +8084,9 @@ function buildSite(host) {
     // when the width sets the scale, centre the drawing in the height left over
     const ringV = need * ISO_S * Math.SQRT2 * s, slack = Math.max(0, availV - (2 * ringV + Hgt * s));
     const cy = bottom - slack / 2 - ringV;
-    return { cx, cy, s, R:need };
+    const F = { cx, cy, s, R:need };
+    if (VIEW_PERSP) { const p = isoAt0(F, 0, 0, Hgt / 2); F.P = { D:PERSP_K * need, d0:0, sx:p[0], sy:p[1] }; }
+    return F;
   };
 
   const pillOri = el('span', { class:'pill ok' });
@@ -8761,7 +8815,7 @@ function buildSite(host) {
     fixBtn.setAttribute('aria-pressed', PL.fixed ? 'true' : 'false');
     fixBtn.classList.toggle('solid', PL.fixed);
   }
-  plateBtns.concat([fixBtn, zoomCtl('site', () => labDraw()), plateLine]).forEach(k => plateBar.appendChild(k));
+  plateBtns.concat([fixBtn, zoomCtl('site', () => labDraw()), perspCtl(() => labDraw()), plateLine]).forEach(k => plateBar.appendChild(k));
   stage.insertBefore(plateBar, stage.firstChild);
   syncPlate();
 
@@ -8982,10 +9036,13 @@ function buildSite(host) {
       height so a click anywhere on its visible walls still registers. */
   const toPlanZ = (px, py, z) => {
     const F = labFrame(labPanel.W, labPanel.H);
-    const U = (px - F.cx) / (ISO_C * F.s);
-    const V = (F.cy - py - (z || 0) * F.s) / (ISO_S * F.s);
-    const x = (U + V) / 2, y = (V - U) / 2, a = PL.az * RAD, c = Math.cos(a), q = Math.sin(a);   // back off the turned plate
-    return { x:x * c + y * q, y:-x * q + y * c };
+    const back = (sx, sy) => { const U = (sx - F.cx) / (ISO_C * F.s), V = (F.cy - sy - (z || 0) * F.s) / (ISO_S * F.s);
+      const x = (U + V) / 2, y = (V - U) / 2, a = PL.az * RAD, c = Math.cos(a), q = Math.sin(a);   // back off the turned plate
+      return { x:x * c + y * q, y:-x * q + y * c }; };
+    let p = back(px, py);
+    /* in perspective, the scale at the point found taken off and the point found again */
+    if (F.P) for (let it = 0; it < 8; it++) { const k = isoK(F, p.x, p.y); p = back(F.P.sx + (px - F.P.sx) / k, F.P.sy + (py - F.P.sy) / k); }
+    return p;
   };
   const toPlan = (px, py) => toPlanZ(px, py, 0);
   const toLocal = (x, y) => {
@@ -10062,6 +10119,7 @@ function buildRoof(host) {
     const uMin = -CAM_K * R, uMax = CAM_K * R, vMin = -CAM_K * R * A.se, vMax = CAM_K * (R * A.se + zTop * A.ce);
     const availW = right - left, availV = Math.max(40, bottom - top);
     const s = Math.max(3, Math.min(availW / (uMax - uMin), availV / Math.max(1e-6, vMax - vMin))) * zoomOf('roof');
+    camPersp(A, R, (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2, M.ridge / 2);
     return { cx:left + (availW - (uMax - uMin) * s) / 2 - uMin * s, cy:bottom - (availV - (vMax - vMin) * s) / 2 + vMin * s,
       s, H0:M.H0, M, gg, A };
   };
@@ -10671,7 +10729,9 @@ if (F.chim || F.par) {
     const r = rcv.getBoundingClientRect(), A = FR.A;
     if (A.ce < 0.2) return;
     // the pointer's height over the point's own spot on the plan, whichever way the camera looks
-    const z = ((FR.cy - (clientY - r.top)) / (FR.s * CAM_K) - (gg.x * A.d[0] + gg.y * A.d[1]) * A.se) / A.ce;
+    /* in perspective the point's own depth in plan sets its scale: taken back off first */
+    let qv = (FR.cy - (clientY - r.top)) / FR.s; if (A.P) qv = A.P.pv + (qv - A.P.pv) / perspF(A.P, (gg.x * A.d[0] + gg.y * A.d[1]) * A.ce);
+    const z = (qv / CAM_K - (gg.x * A.d[0] + gg.y * A.d[1]) * A.se) / A.ce;
     const M0 = roofModel(G, RF), zi = zoneIndexAt(M0, gg.x, gg.y), rz = RF.zones[zi];
     if (!rz || rz.n === 0) return;   // a flat part has no pitch to drag — give it slopes in the list first
     const np = Math.atan2(z - FR.H0, Math.max(0.5, gg.run)) / RAD, rgz = rz.n === 2 ? ridgeFrac(rz) : 0.5;
@@ -11870,7 +11930,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
        reveal deepens each device by the same 0.20, as built */
     plates.forEach(q => q.d += WIN_REVEAL);
     fins.forEach(q => q.d += WIN_REVEAL);
-    return { plates, fins };
+    /* and the popular model's other bodies, the row's houses and the courtyard wall, as prisms in the plan */
+    return { plates, fins, sg, blocks:vmCompanion().blocks };
   }
   /** Does a point of the glass (t, z) see the sun along (dt, dn, dz), or
       does a device stop the ray first? */
@@ -11890,6 +11951,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       const n = s * dn, zz = z + s * dz;
       if (n <= F.d + 1e-9 && zz >= F.z0 - 1e-9 && zz <= F.z1 + 1e-9) return 0;
     }
+    if (els.blocks && els.blocks.length && els.sg) { const sg = els.sg, tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len;
+      if (prismBlocks(els.blocks, sg.a[0] + tx * t + sg.n[0] * 0.02, sg.a[1] + ty * t + sg.n[1] * 0.02, z, tx * dt + sg.n[0] * dn, ty * dt + sg.n[1] * dn, dz)) return 0; }
     return tr;
   };
   /** The share of a season's beam on this side's glass its devices stop,
@@ -11977,8 +12040,10 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     /* the clerestory carries no devices in v1 — its shade comes only from the
        upper roof, reported with the roof, not scored here */
     if (f === 'C') return null;
-    if ((o.ovD === 0 && o.finD === 0 && !balcOnFace(f) && !eaveOnFace(f) && !canopyOnFace(f)) || !faceUnits(f).some(u => u.on)) return null;
-    const key = [f, heating, lat, lon, tz, h0(), JSON.stringify(o), JSON.stringify(RF), JSON.stringify(G)].join('|');
+    /* the popular model's other bodies, the row and the courtyard wall shade it too, devices or none */
+    const CB = vmCompanion();
+    if ((o.ovD === 0 && o.finD === 0 && !balcOnFace(f) && !eaveOnFace(f) && !canopyOnFace(f) && !CB.blocks.length) || !faceUnits(f).some(u => u.on)) return null;
+    const key = [f, heating, lat, lon, tz, h0(), JSON.stringify(o), JSON.stringify(RF), JSON.stringify(G), CB.key].join('|');
     if (SHADE_MEMO.has(key)) return SHADE_MEMO.get(key);
     const summer = shadeEffectiveness(f, SHADE_SUMMER).pct;
     const winter = shadeEffectiveness(f, SHADE_WINTER).pct;
@@ -12036,6 +12101,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     const uMin = -CAM_K * Rf, uMax = CAM_K * Rf, vMin = -CAM_K * Rf * A.se, vMax = CAM_K * (Rf * A.se + Mm.ridge * A.ce);
     const availW = right - left, availV = Math.max(40, bottom - top);
     const s = Math.max(3, Math.min(availW / (uMax - uMin), availV / Math.max(1e-6, vMax - vMin))) * zoomOf('openings');
+    camPersp(A, Rf, (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2, Mm.ridge / 2);
     return { cx:left + (availW - (uMax - uMin) * s) / 2 - uMin * s, cy:bottom - (availV - (vMax - vMin) * s) / 2 + vMin * s, s, R, A };
   };
 
@@ -14028,10 +14094,7 @@ function buildVentilation(host) {
      view is theirs exactly). Drag the ground to turn and tilt it. ---- */
   const CAM = { az:K0 && K0.cam ? K0.cam.az : 225, el:K0 && K0.cam ? K0.cam.el : ISO_EL };
   const camAx = () => camAxes(CAM);   // the shared camera's axes (see camAxes)
-  const projF = (FR, x, y, z) => {
-    const A = FR.ax, k = CAM_K * FR.s;
-    return [FR.cx + k * (x * A.r[0] + y * A.r[1]), FR.cy - k * ((x * A.d[0] + y * A.d[1]) * A.se + (z || 0) * A.ce)];
-  };
+  const projF = (FR, x, y, z) => { const q = camUV(FR.ax, x, y, z); return [FR.cx + q[0] * FR.s, FR.cy - q[1] * FR.s]; };
   /** How far from the camera: larger is farther, for back-to-front painting. */
   const depthF = (A, x, y, z) => (x * A.d[0] + y * A.d[1]) * A.ce - (z || 0) * A.se;
 
@@ -14057,6 +14120,7 @@ function buildVentilation(host) {
     const sByH = availV / (CAM_K * ((vMax - vMin) + maxH * ax.ce));
     const s = Math.max(3, Math.min(sByW, sByH)) * zoomOf('vent');
     const cy = bottom + CAM_K * s * vMin;
+    camPersp(ax, Math.hypot(gx, gy), 0, 0, ridge / 2);
     return { cx, cy, s, H0, ridge, garden, M, ax };
   };
 
@@ -14299,6 +14363,7 @@ function buildVentilation(host) {
    ['Reset', 'Back to the south-west corner', () => setCam(225, ISO_EL)]]
     .forEach(([txt, tip, fn]) => viewBar.appendChild(el('button', { class:'btn small', text:txt, title:t(tip), 'aria-label':t(tip), onclick:fn })));
   viewBar.appendChild(zoomCtl('vent', () => draw()));
+  viewBar.appendChild(perspCtl(() => draw()));
   viewBar.appendChild(camLine);
   camLine.textContent = camText();
   host.appendChild(section('Turn the model',
@@ -15937,8 +16002,8 @@ function buildVentilation(host) {
     const [sx, sy] = toBacking(clientX, clientY);
     // back onto the ground plane z = 0: along the screen's right axis, and
     // into the screen by the height on screen over the sine of the elevation
-    const A = FR.ax, k = CAM_K * FR.s, X = (sx - FR.cx) / k, Y = (FR.cy - sy) / k / A.se;
-    return { x: X * A.r[0] + Y * A.d[0], y: X * A.r[1] + Y * A.d[1] };
+    const q = camPick((x, y, z) => projF(FR, x, y, z), [0, 0, 0], [1, 0, 0], [0, 1, 0], sx, sy);
+    return q ? { x:q[0], y:q[1] } : { x:0, y:0 };
   };
   const onBuilding = (x, y) => planModel(G).boxes.some(r => x >= r[0] - 0.3 && x <= r[2] + 0.3 && y >= r[1] - 0.3 && y <= r[3] + 0.3);
   const distSeg = (px, py, ax, ay, bx, by) => {
@@ -17229,7 +17294,6 @@ function buildRender(host) {
   let showShadow = !K0 || K0.showShadow !== false, showTrees = !K0 || K0.showTrees !== false;
   let showGround = !K0 || K0.showGround !== false;
   /* a two-point perspective, its vanishing points far off (a camera ≈ five times the house's size away), or the parallel axonometry */
-  let showPersp = !K0 || K0.showPersp !== false;
   /* an urban type in its town: the street, the houses across it, the neighbours and the block behind */
   let showCity = !K0 || K0.showCity !== false;
   /* Surrounding buildings as a transparent tip: the Environment tab's
@@ -17513,7 +17577,6 @@ function buildRender(host) {
   viewBox.appendChild(checkCtl('Sun shadows', showShadow, v => { showShadow = v; refreshRender(); }));
   viewBox.appendChild(checkCtl('Planting', showTrees, v => { showTrees = v; refreshRender(); }));
   viewBox.appendChild(checkCtl('Terrain relief', showGround, v => { showGround = v; refreshRender(); }));
-  viewBox.appendChild(checkCtl('Perspective (off: axonometry)', showPersp, v => { showPersp = v; refreshRender(); }));
   viewBox.appendChild(checkCtl('The town around (urban types)', showCity, v => { showCity = v; refreshRender(); }));
   viewBox.appendChild(checkCtl('Surrounding buildings', showNb, v => {
     showNb = v;
@@ -17582,7 +17645,7 @@ function buildRender(host) {
     const sByW = (W / 2 - 16) / (CAM_K * uMax);
     const sByH = availV / (CAM_K * ((vMax - vMin) + maxH * ax.ce));
     const s0 = Math.max(3, Math.min(sByW, sByH)) * zoomOf('visualization');
-    if (!showPersp) return { cx, cy:bottom + CAM_K * s0 * vMin, s:s0, H0, ridge, M, ax };
+    if (!VIEW_PERSP) return { cx, cy:bottom + CAM_K * s0 * vMin, s:s0, H0, ridge, M, ax };
     /* the camera five house-sizes from the pivot at mid-height of the house's centre; the frame a little smaller so the near corner still fits */
     const bx = (bb[0] + bb[2]) / 2, by = (bb[1] + bb[3]) / 2, zc = Math.max(H0, ridge) / 2, R = Math.max(6, Math.hypot(bb[2] - bb[0], bb[3] - bb[1], ridge) / 2);
     const D = 5 * R, s = s0 * (showCity && vmCityOn() ? 0.72 : 0.9), hc = bx * ax.d[0] + by * ax.d[1], pu = bx * ax.r[0] + by * ax.r[1], pv = hc * ax.se + zc * ax.ce, dk = CAM_K * (s0 - s);
@@ -18635,7 +18698,7 @@ style === 'sketch' ? '#EFEBE0'
     () => toast(t('Image downloaded and prompt copied — attach the image in Gemini and paste the prompt'))) }));
   props.appendChild(gemNote); props.appendChild(gemWarn);
 
-  KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showPersp, showCity, showNb, embas, cant, cam:{ az:CAM.az, el:CAM.el } }; });
+  KEEPERS.push(() => { KEEP.visualization = { prompt, promptTouched, hour, hourTouched, styleLock, styleTouched, showShadow, showTrees, showGround, showCity, showNb, embas, cant, cam:{ az:CAM.az, el:CAM.el } }; });
   host._refresh = () => { renderCam.sync(); refreshRender(); };
   const rcv = renderPanel.canvas;
   rcv.style.touchAction = 'none';
@@ -23528,7 +23591,9 @@ function vmAllVols(vm) {
   const n = Math.max(1, Math.min(8, (vm.row && vm.row.n) | 0 || 1));
   if (n === 1) return vm.vols.map((v, i) => Object.assign({}, v, { _i:i, _r:0 }));
   const bb = vmBBox({ vols:vm.vols, row:{ n:1 } }), w = bb[2] - bb[0], out = [];
-  for (let r = 0; r < n; r++) vm.vols.forEach((v, i) => out.push(Object.assign({}, v, { x:v.x + (r - (n - 1) / 2) * w, _i:i, _r:r, _party:{ W:r > 0, E:r < n - 1 } })));
+  /* the house studied (r = 0) stays where it is, in the middle of the row; the others alternate west and east of it */
+  const off = r => r === 0 ? 0 : r % 2 ? -(r + 1) / 2 : r / 2, offs = Array.from({ length:n }, (_, r) => off(r));
+  for (let r = 0; r < n; r++) vm.vols.forEach((v, i) => out.push(Object.assign({}, v, { x:v.x + off(r) * w, _i:i, _r:r, _party:{ W:offs.indexOf(off(r) - 1) >= 0, E:offs.indexOf(off(r) + 1) >= 0 } })));
   return out;
 }
 function vmBBox(vm) {
@@ -29163,6 +29228,7 @@ Object.assign(PT, {
   "Planting": "Plantação",
   "Terrain relief": "Relevo do terreno",
   "Perspective (off: axonometry)": "Perspetiva (desligada: axonometria)",
+  "Perspective": "Perspetiva",
   "The town around (urban types)": "A cidade em redor (tipos urbanos)",
   "Auto": "Prompt",
   "Photo": "Foto",
