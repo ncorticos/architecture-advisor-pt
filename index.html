@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.158.5',
+  version:     '1.159.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24074,6 +24074,8 @@ function vmOlgyay(R, vm) {
 }
 /** The rooms a house of this kind usually holds, laid out in its main body. */
 function vmDefaultRooms(vm) {
+  /* a type that divides itself otherwise (the vila's houses, the casal) gives its own rooms */
+  if (vm.rooms0) return vm.rooms0.map(q => Object.assign({}, q, { n:Object.assign({}, q.n) }));
   /* the main body as the popular house divides it — stores and byre below, kitchen, sala and bedroom above — and the
      other bodies a room on each of their floors; a third floor and above under the roof as bedrooms and the loft */
   const R = [];
@@ -25064,6 +25066,98 @@ Object.assign(VERN_SRC, {
   if (g) g.refs.push('Pereira, N. T. (1994). Pátios e vilas de Lisboa, 1870–1930: A promoção privada do alojamento operário. <i>Análise Social</i>, <i>29</i>(127), 509–524. https://revistas.rcaap.pt/analisesocial/article/view/40380',
     'Vieira, C. (2020). As habitações operárias em Lisboa, na segunda metade do século dezanove. <i>Cadernos do Arquivo Municipal</i>, 2.ª série, <i>13</i>.',
     'SIPA / DGPC. (n.d.). <i>Pátio da Bagatela / Pátio do Monteiro</i> (IPA.00004032). http://www.monumentos.gov.pt/Site/APP_PagesUser/SIPA.aspx?id=4032');
+  vernNames();
+})();
+
+/* Lisbon apart from its saloio country: the city proposes its pátios and vilas, the periphery (Cascais, Oeiras,
+   Sintra, Loures, Amadora, Odivelas, Mafra) its saloio houses and the casal. The vila after Pereira (1994),
+   Vieira (2020), the SIPA record of Vila Berta and Ferreira & Marat-Mendes's reading of the type; the casal
+   after the Câmara de Cascais (Outeiro de Polima and the popular-architecture sheet) and Anastácio (2008). */
+Object.assign(VERN_SRC, {
+  VBE:{ tag:'SIPA — Vila Berta', cite:'SIPA / DGPC. «Vila Berta», Lisboa — two bands across a private street, two storeys and cellar, cast-iron stairs and balconies; completed 1908.', url:'http://www.monumentos.gov.pt/Site/APP_PagesUser/SIPA.aspx?id=5964' },
+  PHS:{ tag:'Proto-habitação social 2019', cite:'«A proto-habitação social na cidade de Lisboa: Uma leitura integrada da vila operária no contexto urbano atual». <i>urbe — Revista Brasileira de Gestão Urbana</i> (2019) — after Pereira &amp; Buarque, <i>Prédios e vilas de Lisboa</i> (1995).', url:'https://www.scielo.br/j/urbe/a/fLbBh336FQ3bcZpnjwJk8rB/?lang=pt' },
+  OPO:{ tag:'CM Cascais — Casal de Outeiro de Polima', cite:'Câmara Municipal de Cascais. «Casal Saloio de Outeiro de Polima» (São Domingos de Rana) — house, kitchen and oven; Centro de Interpretação do Espaço Rural, 2023.', url:'https://cultura.cascais.pt/list/patrimonio/casal-saloio-de-outeiro-de-polima' },
+  CAP:{ tag:'CM Cascais — Arquitetura popular', cite:'Câmara Municipal de Cascais. «A arquitetura popular» [ficha de conteúdos] — the single-storey, tower and two-storey houses, and the saloio casais.', url:'https://www.cascais.pt/sites/default/files/anexos/gerais/new/arquitetura_popular.pdf' }
+});
+(() => {
+  VERN_TYPES['pt-vila-operaria'] = { region:'mainland',
+    name:{ en:'Vila operária of Lisbon — a row of houses on a private street', pt:'Vila operária de Lisboa — correnteza de casas numa rua privada' },
+    where:{ en:'Lisbon, at the industrial edges and inside the blocks — Graça (Vila Berta, Vila Sousa), Xabregas (Vila Dias), Marvila and Beato, Alcântara, Campo de Ourique', pt:'Lisboa, nas margens industriais e no interior dos quarteirões — Graça (Vila Berta, Vila Sousa), Xabregas (Vila Dias), Marvila e Beato, Alcântara, Campo de Ourique' },
+    summary:{ en:'From the 1880s, workers’ housing built as a whole by one promoter — an industrialist or a small investor — rather than occupied: rows (correntezas) of small two-storey houses, sometimes over a cellar, along a private street or yard closed to the city by a gate or a passage through a street building. Each house has its own door and its own two fronts, the street and a small yard behind; the upper floors are reached by outside stairs and balconies of cast iron. More than two hundred by 1902 and 416 at the turn of the century, mostly at the industrial edges; Pereira & Buarque name five forms of layout, the row along a street among them. Vila Berta (1908), two bands across its street, is the best known.',
+      pt:'A partir da década de 1880, habitação operária construída de uma vez por um só promotor — um industrial ou um pequeno investidor — em vez de ocupada: correntezas de pequenas casas de dois pisos, por vezes sobre cave, ao longo de uma rua ou pátio privados, fechados à cidade por um portão ou por uma passagem sob um prédio da rua. Cada casa tem a sua porta e as suas duas frentes, a rua e um pequeno quintal atrás; os pisos de cima servem-se por escadas e varandas exteriores de ferro fundido. Mais de duzentas em 1902 e 416 na viragem do século, sobretudo nas margens industriais; Pereira & Buarque distinguem cinco formas de implantação, entre elas a correnteza ao longo de uma via. A Vila Berta (1908), duas bandas frente a frente na sua rua, é a mais conhecida.' },
+    model:{ L:30, D:7, fl:2, fh:3.0, rot:180, form:'rect', roof:{ n:2, th:20, bei:0.3 },
+      open:{ S:vOpen([0, 1, 2, 3, 4].flatMap(i => [D(+(0.06 + i * 0.2).toFixed(3), 0.03, [{ door:true }, { door:true }]), W(+(0.14 + i * 0.2).toFixed(3), 0.035, [{ on:true }, { on:true }])]), 0.2, 0.9, 2.0),
+        N:vOpen([0, 1, 2, 3, 4].map(i => W(+(0.1 + i * 0.2).toFixed(3), 0.03, [{ on:true }, { on:true }])), 0.08), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+      render:{ en:'plaster walls, tile roof, green door', pt:'parede rebocada, telha, porta verde' },
+      walls:{ en:'rubble and brick, rendered and painted; cast-iron stairs and balconies', pt:'alvenaria e tijolo, rebocados e pintados; escadas e varandas de ferro fundido' } },
+    feats:[
+      vFloors({ en:'two, sometimes over a cellar', pt:'dois, por vezes sobre cave' }, 2, 2, 'VBE'),
+      vI('site', { en:'A private street or yard, closed by a gate or reached through a passage under a street building; the houses in rows (correntezas) along it — at Vila Berta two bands face each other across the street.', pt:'Uma rua ou pátio privados, fechados por um portão ou servidos por uma passagem sob um prédio da rua; as casas em correntezas ao longo dela — na Vila Berta duas bandas olham-se de um lado e do outro da rua.' }, 'VBE'),
+      vI('site', { en:'Built as a whole by one promoter, from the 1880s: more than two hundred vilas by 1902, 416 at the turn of the century, mostly at the industrial edges where the pátios were in the old centre.', pt:'Construída de uma vez por um só promotor, a partir da década de 1880: mais de duzentas vilas em 1902, 416 na viragem do século, sobretudo nas margens industriais, onde os pátios ficavam no centro antigo.' }, 'PER'),
+      vI('site', { en:'Five forms of layout (Pereira & Buarque 1995): among them the row along a street; the later vilas open more to the city, some reaching the scale of a neighbourhood.', pt:'Cinco formas de implantação (Pereira & Buarque 1995): entre elas a correnteza ao longo de uma via; as vilas mais tardias abrem-se mais à cidade, algumas chegando à escala de bairro.' }, 'PHS'),
+      vI('openings', { en:'Each house its own door, a window beside it, and the upper floor reached by an outside cast-iron stair and balcony.', pt:'Cada casa com a sua porta, uma janela ao lado, e o piso de cima servido por uma escada e uma varanda exteriores de ferro fundido.' }, 'VBE'),
+      vI('ventilation', { en:'Two fronts, the street and the back yard: unlike the pátio, each house can draw air through — the hygienists’ answer to the single-front dwellings of the 1881 Industrial Inquiry.', pt:'Duas frentes, a rua e o quintal: ao contrário do pátio, cada casa pode ventilar de lado a lado — a resposta higienista às habitações de uma só frente denunciadas pelo Inquérito Industrial de 1881.' }, 'VIE'),
+      vI('roof', { en:'The roof form and the sizes of each house are teaching inferences: the sources describe the type, not its dimensions.', pt:'A forma do telhado e as dimensões de cada casa são inferências didáticas: as fontes descrevem o tipo, não as suas medidas.' }, 'INF'),
+      vWall({ en:'rendered and painted', pt:'rebocada e pintada' }, ['plaster', 'whitewash'], 'VBE')
+    ] };
+  VERN_DIST['pt-vila-operaria'] = ['Lisboa'];
+  VM_OVR['pt-vila-operaria'] = (vm, b) => { vm.court = { on:true, x:0, y:-b.D / 2 - 3.5, L:b.L + 2, D:7, h:2.6, open:'N', gate:{ face:'W', pos:0.5, w:3 } };
+    vm.els = vm.els.filter(e => e.t !== 'chimney');
+    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 }, { t:'stair', vol:0, face:'S', along:'par', pos:0.92, w:0.9, landing:false, porch:false });
+    /* five houses side by side, each a kitchen and a sala below, two bedrooms above (an inference: the sources give the type, not the plan) */
+    const x0 = (b.x || 0) - b.L / 2, y = b.y || 0, hw = b.L / 5, d = Math.max(1.5, b.D - 0.9), R = [];
+    for (let i = 0; i < 5; i++) { const xa = x0 + i * hw, q = (n, k, fl) => R.push({ n, x:xa + (k + 0.5) * hw / 2, y, w:hw / 2 - 0.3, d, fl });
+      q({ en:'Kitchen', pt:'Cozinha' }, 0, 0); q({ en:'Hall (sala)', pt:'Sala' }, 1, 0); q({ en:'Bedroom', pt:'Quarto' }, 0, 1); q({ en:'Bedroom', pt:'Quarto' }, 1, 1); }
+    vm.rooms0 = R; };
+
+  VERN_TYPES['pt-casal-saloio'] = { region:'mainland',
+    name:{ en:'Saloio casal — the farmstead of the landholding family', pt:'Casal saloio — a casa de lavoura da família com terra' },
+    where:{ en:'The saloio country of the interior of Cascais, Oeiras, Sintra and Loures — Outeiro de Polima (São Domingos de Rana)', pt:'A região saloia do interior de Cascais, Oeiras, Sintra e Loures — Outeiro de Polima (São Domingos de Rana)' },
+    summary:{ en:'The saloio casal joins the land worked to a house of one or two floors and its farm buildings: the families that worked their own land had pens, haylofts and tool stores beside the dwelling, the day labourers only the rooms to live in. At Outeiro de Polima the house grew from a single room — an annex, a side wing, a stone oven, the corral, then a second floor reached by a limestone stair on the main front, two buttresses added later. The kitchen with its oven is the heart of the house; the oven stands in the north-west corner with its chimney. Walls of stone masonry in lime and sand, whitewashed; the upper windows with stone seats (namoradeiras); the arribanas against the house, the animal byres set apart.',
+      pt:'O casal saloio junta a terra trabalhada a uma casa de um ou dois pisos e às suas dependências agrícolas: as famílias que trabalhavam terra própria tinham currais, palheiros e arrumos de alfaias junto à habitação, os jornaleiros apenas as divisões de morar. Em Outeiro de Polima a casa cresceu a partir de uma só divisão — um anexo, uma ala lateral, um forno de pedra, o curral, depois um segundo piso servido por uma escada de calcário na fachada principal, dois contrafortes acrescentados mais tarde. A cozinha com o forno é o coração da casa; o forno fica no canto noroeste, com a sua chaminé. Paredes de alvenaria de pedra com cal e areia, caiadas; as janelas de cima com namoradeiras; as arribanas encostadas à casa, as cortes dos animais afastadas.' },
+    model:{ L:12, D:6, fl:2, fh:2.7, rot:180, form:'rect', roof:{ n:3, th:24, bei:0.3 }, annex:{ side:'E', L:6, h:2.0 },
+      open:{ S:vOpen([D(0.2, 0.08, [{ door:true }, { door:false }]), W(0.45, 0.07, [{ on:true }, { on:true }]), D(0.72, 0.09, [{ door:false }, { door:true }]), W(0.88, 0.07, [{ on:false }, { on:true }])], 0.08, 0.9, 1.8),
+        N:vOpen([W(0.5, 0.06, [{ on:false }, { on:true }])], 0.02), E:{ wwr:0.02, units:vOff() }, W:vOpen([W(0.5, 0.12, [{ on:true }, { on:false }])], 0.02) },
+      render:{ en:'whitewash walls, tile roof, green door', pt:'parede caiada, telha, porta verde' },
+      walls:{ en:'stone masonry in lime and sand mortar, whitewashed', pt:'alvenaria de pedra com argamassa de cal e areia, caiada' } },
+    feats:[
+      vFloors({ en:'two — the upper floor added as the house grew', pt:'dois — o piso de cima acrescentado à medida que a casa cresceu' }, 1, 2, 'OPO'),
+      vI('site', { en:'House and farm buildings together: the arribanas against the house as haylofts, pens and tool stores; the byres set apart — the casal of a family that worked its own land.', pt:'Casa e dependências agrícolas juntas: as arribanas encostadas à casa como palheiros, currais e arrumos de alfaias; as cortes afastadas — o casal de uma família que trabalhava terra própria.' }, 'OPO'),
+      vI('site', { en:'Grown, not designed: from one room to an annex, a side wing, a stone oven, the corral and a second floor (16th century onward); draw the annex and the second floor as the house would have taken them.', pt:'Crescida, não desenhada: de uma divisão a um anexo, uma ala lateral, um forno de pedra, o curral e um segundo piso (a partir do século XVI); desenhe o anexo e o segundo piso como a casa os foi ganhando.' }, 'OPO'),
+      vI('openings', { en:'The upper floor reached by a limestone stair on the main front; the upper windows with stone seats (namoradeiras).', pt:'O piso de cima servido por uma escada de calcário na fachada principal; as janelas de cima com namoradeiras.' }, 'OPO'),
+      vI('ventilation', { en:'The kitchen with its oven is the heart of the house; the oven, in the north-west corner, has its chimney, its mouth and its hearth, with long stone benches for baking in quantity.', pt:'A cozinha com o forno é o coração da casa; o forno, no canto noroeste, tem chaminé, boca e lar, com extensas bancadas de laje para uma grande produção de pão.' }, 'OPO'),
+      vI('site', { en:'The saloio forms: single-storey, tower and two-storey houses, and the casais that join cultivated land to a dwelling of one or two floors.', pt:'As formas saloias: casas térreas, torreadas e de dois pisos, e os casais que juntam a terra cultivada a uma habitação de um ou dois pisos.' }, 'CAP'),
+      vRoofN(null, { en:'four slopes over the house (inference from the saloio type)', pt:'quatro águas sobre a casa (inferência do tipo saloio)' }, [3, 2], 'INF'),
+      vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster'], 'OPO')
+    ] };
+  VERN_DIST['pt-casal-saloio'] = ['Lisboa'];
+  VM_CHIM_OWN['pt-casal-saloio'] = { kind:'sal', u:0.08, v:0.85, h:1.2 };
+  VM_OVR['pt-casal-saloio'] = (vm, b) => {
+    vm.els.push({ t:'stair', vol:0, face:'S', along:'par', pos:0.62, w:1.0, landing:true, porch:false }, { t:'oven', vol:0, face:'W', pos:0.75, r:0.9 });
+    /* the kitchen with its oven at the west end and the store below; the living rooms above, reached by the outside stair */
+    const x0 = (b.x || 0) - b.L / 2, y = b.y || 0, d = Math.max(1.5, b.D - 0.9), q = (n, xa, w, fl) => ({ n, x:x0 + xa + w / 2, y, w:w - 0.6, d, fl });
+    vm.rooms0 = [q({ en:'Kitchen', pt:'Cozinha' }, 0, b.L * 0.45, 0), q({ en:'Store (loja)', pt:'Loja' }, b.L * 0.45, b.L * 0.55, 0),
+      q({ en:'Hall (sala)', pt:'Sala' }, 0, b.L * 0.5, 1), q({ en:'Bedroom', pt:'Quarto' }, b.L * 0.5, b.L * 0.5, 1)];
+    vm.court = { on:true, x:2, y:-b.D / 2 - 5, L:b.L + 8, D:10, h:1.6, open:'N', gate:{ face:'S', pos:0.3, w:3 } }; };
+
+  /* the city and its saloio country */
+  const LX_CITY = ['Lisboa'], LX_SALOIO = ['Cascais', 'Oeiras', 'Sintra', 'Loures', 'Amadora', 'Odivelas', 'Mafra'];
+  const concOfSite = S => { try { return S.place ? CONC_BY_PLAIN[plainName(S.place)] || null : null; } catch (e) { return null; } };
+  const inLisbonCity = S => { const c = concOfSite(S); if (c) return LX_CITY.indexOf(c) >= 0; return S.lat > 38.69 && S.lat < 38.795 && S.lon > -9.215 && S.lon < -9.09; };
+  const mn = VERN_REGIONS.find(r => r.key === 'mainland'), P0 = mn.place;
+  mn.place = (S, V) => { const o = P0(S, V); if (!o) return o;
+    if (MN_GROUP[S.nuts] !== 'estremadura') return o;
+    if (inLisbonCity(S)) { o.cand = ['pt-lisboa-patio', 'pt-vila-operaria', 'pt-saloia']; o.faceName = { en:'Lisbon — the city: pátios and vilas', pt:'Lisboa — a cidade: pátios e vilas' }; }
+    else { const c = concOfSite(S), sal = !c || LX_SALOIO.indexOf(c) >= 0;
+      if (sal) o.cand = ['pt-saloia', 'pt-casal-saloio', 'pt-torreada', 'pt-saloia-corrida', 'pt-saloia-elementar']; }
+    return o; };
+  const g = ARCH_BIB.find(x => x.r.pt === 'Portugal — inquéritos e sínteses');
+  if (g) { g.types.push('pt-vila-operaria'); g.refs.push('SIPA / DGPC. (n.d.). <i>Vila Berta</i>, Lisboa. http://www.monumentos.gov.pt/Site/APP_PagesUser/SIPA.aspx?id=5964',
+    'A proto-habitação social na cidade de Lisboa: Uma leitura integrada da vila operária no contexto urbano atual. (2019). <i>urbe — Revista Brasileira de Gestão Urbana</i>. https://www.scielo.br/j/urbe/a/fLbBh336FQ3bcZpnjwJk8rB/?lang=pt'); }
+  const ge = ARCH_BIB.find(x => x.r.en && /^Estremadura/.test(x.r.en));
+  if (ge) { ge.types.push('pt-casal-saloio'); ge.refs.push('Câmara Municipal de Cascais. (n.d.). <i>Casal Saloio de Outeiro de Polima</i>. https://cultura.cascais.pt/list/patrimonio/casal-saloio-de-outeiro-de-polima',
+    'Câmara Municipal de Cascais. (n.d.). <i>A arquitetura popular</i> [Ficha de conteúdos]. https://www.cascais.pt/sites/default/files/anexos/gerais/new/arquitetura_popular.pdf'); }
+  if (VICON_URBAN.indexOf('pt-vila-operaria') < 0) VICON_URBAN.push('pt-vila-operaria');
   vernNames();
 })();
 
@@ -28709,6 +28803,7 @@ Object.assign(PT, {
   "Download the view, copy the prompt and open Gemini": "Descarregar a vista, copiar o pedido e abrir o Gemini",
   "Copy the photoreal render prompt": "Copiar o prompt de renderização fotorrealista",
   "Prompt copied": "Prompt copiado",
+  "The houses built at this place": "As casas construídas neste lugar",
   "Copy the view and the prompt together and open Gemini": "Copiar a vista e o prompt juntos e abrir o Gemini",
   "View and prompt copied — paste them in Gemini (Ctrl/⌘ V) and send": "Vista e prompt copiados — cole-os no Gemini (Ctrl/⌘ V) e envie",
   "Copy the view and the photoreal prompt": "Copiar a vista e o prompt fotorrealista",
