@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.153.0',
+  version:     '1.154.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6468,11 +6468,16 @@ function facadeSun(lat, lon) {
   const tz = lon / 15;
   const monthly = [];
   for (let m = 0; m < 12; m++) monthly.push([0,0,0,0,0,0,0,0]);
+  /* the horizontal plane — the roof, the açoteia, the ground: its hours of sun and its clear-sky irradiation, beam
+     through an air mass (Meinel: 1361 · 0.7^(AM^0.678) W/m²) plus a tenth of it diffuse, in kWh/m² */
+  const hH = new Array(12).fill(0), hE = new Array(12).fill(0);
   for (let doy = 1; doy <= 365; doy++) {
     const mo = DOY_MON[doy - 1];
     for (let h = 0; h < 24; h += 0.5) {
       const sp = sunPos(doy, h, lat, lon, tz);
       if (sp.alt <= 0) continue;
+      { const sa = Math.sin(sp.alt * RAD), am = 1 / (sa + 0.50572 * Math.pow(sp.alt + 6.07995, -1.6364)), Ib = 1361 * Math.pow(0.7, Math.pow(am, 0.678));
+        hH[mo] += 0.5; hE[mo] += Ib * sa * 1.1 * 0.5 / 1000; }
       for (let f = 0; f < 8; f++) {
         let d = (sp.azi - f * 45) % 360;
         if (d > 180) d -= 360; if (d < -180) d += 360;
@@ -6486,7 +6491,9 @@ function facadeSun(lat, lon) {
     annual[f] += v;
     (sumIdx.indexOf(m) >= 0 ? summer : winter)[f] += v;
   }));
-  return { monthly, winter, summer, annual };
+  const hz = { winter:0, summer:0, kwhW:0, kwhS:0, hours:hH, kwh:hE };
+  hH.forEach((v, m) => { const sm = sumIdx.indexOf(m) >= 0; hz[sm ? 'summer' : 'winter'] += v; hz[sm ? 'kwhS' : 'kwhW'] += hE[m]; });
+  return { monthly, winter, summer, annual, hz };
 }
 /** The plan-level recommendation for a Köppen code. Returns a PT_HINT id. */
 function orientationLead(code, main) {
@@ -7462,13 +7469,22 @@ function buildEnvironment(host) {
   const winLbl = lat < 0 ? 'Winter half-year (Apr–Sep)' : 'Winter half-year (Oct–Mar)';
   makePanel(lower, {
     title: 'Direct-sun hours on each facade',
-    note: 'Unobstructed vertical facades over the whole year, split by half-year',
+    note: 'Unobstructed vertical facades and the horizontal plane over the whole year, split by half-year; inside the horizontal bars, its clear-sky irradiation in kWh/m²',
     aspect: 1.9,
     render(ctx, W, H) {
-      const yMaxB = niceDomain(0, Math.max.apply(null, FS.annual) * 1.02, 5, 0)[1];
-      const P = plotRect(48, 12, W - 48 - 10, H - 12 - 44, -0.6, 7.6, 0, yMaxB);
-      drawAxes(ctx, P, { xTicks:[0,1,2,3,4,5,6,7], xFmt:i => COMPASS8[i], yLabel:'Hours per year', yCount:4 });
-      const gw = P.w / 8, bw = Math.min(26, gw * 0.26);
+      const yMaxB = niceDomain(0, Math.max.apply(null, FS.annual.concat([FS.hz.winter + FS.hz.summer])) * 1.02, 5, 0)[1];
+      const P = plotRect(48, 12, W - 48 - 10, H - 12 - 44, -0.6, 8.6, 0, yMaxB);
+      drawAxes(ctx, P, { xTicks:[0,1,2,3,4,5,6,7,8], xFmt:i => i < 8 ? COMPASS8[i] : t('Horiz.'), yLabel:'Hours per year', yCount:4 });
+      const gw = P.w / 9, bw = Math.min(26, gw * 0.26);
+      /* the horizontal plane, set apart from the eight facades, with its irradiation per half-year */
+      ctx.save(); ctx.strokeStyle = 'rgba(0,0,0,.15)'; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(P.sx(7.5), P.y); ctx.lineTo(P.sx(7.5), P.y + P.h); ctx.stroke(); ctx.restore();
+      { const cx = P.sx(8), wv = FS.hz.winter, sv = FS.hz.summer;
+        ctx.fillStyle = '#2563EB'; const y1 = P.sy(wv); ctx.fillRect(cx - bw - 1.5, y1, bw, P.y + P.h - y1);
+        ctx.fillStyle = '#D97706'; const y2 = P.sy(sv); ctx.fillRect(cx + 1.5, y2, bw, P.y + P.h - y2);
+        label(ctx, fmt(wv + sv, 0), cx, Math.min(y1, y2) - 5, CH.ink2, FM(9), 'center', 'middle');
+        label(ctx, fmt(FS.hz.kwhW, 0), cx - bw / 2 - 1.5, y1 + 10, '#fff', FM(8), 'center', 'middle');
+        label(ctx, fmt(FS.hz.kwhS, 0), cx + bw / 2 + 1.5, y2 + 10, '#fff', FM(8), 'center', 'middle');
+        label(ctx, 'kWh/m²', cx, P.y + P.h - 8, '#fff', FM(7), 'center', 'middle'); }
       for (let f = 0; f < 8; f++) {
         const cx = P.sx(f), wv = FS.winter[f], sv = FS.summer[f];
         ctx.fillStyle = '#2563EB'; const y1 = P.sy(wv); ctx.fillRect(cx - bw - 1.5, y1, bw, P.y + P.h - y1);
@@ -7477,7 +7493,7 @@ function buildEnvironment(host) {
       }
       swatchKey(ctx, P.x, P.y + P.h + 34, [{ color:'#2563EB', label:winLbl }, { color:'#D97706', label:sumLbl }], { cols:2, colWidth:Math.min(230, P.w / 2) });
     },
-    csv: () => csvRows([['Month'].concat(ORI_KEYS)].concat(FS.monthly.map((row, m) => [MONTHS_EN[m]].concat(row.map(v => +v.toFixed(1))))))
+    csv: () => csvRows([['Month'].concat(ORI_KEYS, ['Horizontal (h)', 'Horizontal clear-sky (kWh/m2)'])].concat(FS.monthly.map((row, m) => [MONTHS_EN[m]].concat(row.map(v => +v.toFixed(1)), [+FS.hz.hours[m].toFixed(1), +FS.hz.kwh[m].toFixed(1)]))))
   });
   const rec = lower.appendChild(el('div'));
   rec.appendChild(section('The recommendation for this site', K.code + ' · ' + fmt(Math.abs(lat), 1) + '° ' + (lat < 0 ? 'S' : 'N')));
@@ -7538,8 +7554,8 @@ function buildEnvironment(host) {
   };
   const RI = REC_ICONS[K.code] || { B:['gain', 'shade'], S:['sun', 'breeze'] };
   const strip = kinds => { const d = el('div', { class:'sce-ics rec-ics' }); d.innerHTML = kinds.map(k => sceFig(k[0], k[1])).join(''); return d; };
-  rec.appendChild(strip(RI.B.map(k => [k, 'B'])));
-  rec.appendChild(strip(RI.S.map(k => [k, 'S'])));
+  /* the strategy icons stay on the first page only: shown once, not again here */
+  void strip; void RI;
 
   /* the rest, folded: open what the design needs */
   const fold = (title, kids) => host.appendChild(el('details', { class:'more' }, [el('summary', { text:title })].concat(kids)));
@@ -19040,7 +19056,14 @@ function vernApply(scope) {
 /* --- the panel, on every tab ----------------------------------------------- */
 const VERN_TABS = { archetype:null, environment:null, site:'site', roof:'roof', openings:'openings', ventilation:'ventilation', visualization:'visualization' };
 const VERN_TABNAME = { site:'Site', roof:'Roof', openings:'Openings and Shadowing', ventilation:'Ventilation', visualization:'Visualization' };
-const vVal = (f, v) => v == null || v === '' ? '—' : f.fmtv ? f.fmtv(v) : typeof v === 'number' ? fmt(v, Math.abs(v) < 10 && v % 1 ? (f.unit === '' ? 2 : 1) : 0) + (f.unit ? ' ' + VL(f.unit) : '') : String(v);
+/** The model's own words for the values read off the study — roof forms, finishes, colours — in the page's language. */
+const VVAL_WORD = { flat:['flat', 'plana'], shed:['one slope', 'uma água'], gable:['two slopes', 'duas águas'], hip:['four slopes', 'quatro águas'],
+  whitewash:['whitewash', 'caiada'], plaster:['plaster', 'reboco'], basalt:['basalt', 'basalto'], timber:['timber', 'madeira'], logs:['logs', 'troncos'], limestone:['limestone', 'calcário'],
+  stone:['stone', 'pedra'], granite:['granite', 'granito'], schist:['schist', 'xisto'], brick:['brick', 'tijolo'], earth:['rammed earth', 'taipa'], rammed:['rammed earth', 'taipa'], cork:['cork', 'cortiça'], concrete:['concrete', 'betão'],
+  tile:['tile', 'telha'], canudo:['channel tile', 'telha de canudo'], thatch:['thatch', 'colmo'], slate:['slate', 'ardósia'], rect:['rectangle', 'rectângulo'], L:['L', 'L'],
+  dred:['dark red', 'vermelho-escuro'], dgreen:['dark green', 'verde-escuro'], dtimber:['dark timber', 'madeira escura'], dblue:['dark blue', 'azul-escuro'] };
+const vWord = v => { const w = VVAL_WORD[v]; return w ? VL({ en:w[0], pt:w[1] }) : String(v); };
+const vVal = (f, v) => v == null || v === '' ? '—' : f.fmtv ? vWord(f.fmtv(v)) : typeof v === 'number' ? fmt(v, Math.abs(v) < 10 && v % 1 ? (f.unit === '' ? 2 : 1) : 0) + (f.unit ? ' ' + VL(f.unit) : '') : vWord(v);
 const vOk = f => {
   let v; try { v = f.get(); } catch (e) { return { v:null, ok:null }; }
   if (f.set) return { v, ok:f.set.indexOf(v) >= 0 };
@@ -19051,7 +19074,12 @@ const vScore = (T, tab) => { const fs = T.feats.filter(f => f.get && (!tab || f.
 function vernStyle() {
   if ($('#vernCSS')) return;
   document.head.appendChild(el('style', { id:'vernCSS', text:
-    '.vern{border:1px solid var(--line);border-left:3px solid var(--c3);border-radius:8px;background:var(--wash);margin:0 0 16px;max-width:1100px}'
+    '.vern{border:1px solid var(--line);border-left:3px solid var(--c3);border-radius:8px;background:var(--wash);margin:0 auto 16px;max-width:1100px}.vern.wide{max-width:1380px}'
+    + '.vern .vlay{display:grid;grid-template-columns:150px minmax(0,1fr) 110px;gap:18px;align-items:start}'
+    + '.vern .vrail{display:flex;flex-direction:column;align-items:center;gap:10px;position:sticky;top:8px}'
+    + '.vern .vrail .sce-ic{width:96px}.vern .vhouse{margin:0;text-align:center}.vern .vhouse svg{display:block;width:150px;height:auto}.vern .vhouse figcaption{font-size:10.5px;color:var(--ink2);margin-top:2px}'
+    + '.vern .vhouse svg{max-width:100%;height:auto}.vern .vrail .vhouse:not(:first-child) svg{width:110px}.vern .vchim svg{width:90px}.vern .vrefsfold{margin-top:10px}.vern .vrefsfold>summary{cursor:pointer;font-size:11.5px;font-weight:600;color:var(--ink2);padding:4px 0}'
+    + '@media (max-width:900px){.vern .vlay{grid-template-columns:1fr}.vern .vrail{position:static;flex-direction:row;flex-wrap:wrap;justify-content:center}}'
     + '.vern>summary{cursor:pointer;padding:9px 14px;font-size:13px;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}'
     + '.vern>summary::-webkit-details-marker{display:none}'
     + '.vern>summary:before{content:"▸";color:var(--muted);font-size:11px}.vern[open]>summary:before{content:"▾"}'
@@ -19074,7 +19102,7 @@ function vernStyle() {
     + '.vern h4{font-size:12px;margin:12px 0 2px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink2)}'
     + '.vern .vsum{color:var(--ink2);max-width:900px}'
     + '.vern .vrefs{font-size:11px;color:var(--muted)}.vern .vrefs li{margin:2px 0}'
-    + '.archcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin:8px 0 18px;max-width:1100px}'
+    + '.archcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin:8px auto 18px;max-width:1100px}'
     + '.archcard{border:1px solid var(--line);border-radius:8px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:4px}'
     + '.archcard.on{border-color:var(--c3);box-shadow:0 0 0 1px var(--c3)}'
     + '.archcard .archk{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}'
@@ -19111,6 +19139,23 @@ function vCSV(R) {
   download(new Blob(['﻿' + lines.join('\n')], { type:'text/csv;charset=utf-8' }), slugify(sitePrefix() + R.reg.key + '-' + R.type) + '.csv');
 }
 
+/** The strategies an archetype's own text speaks of, as the setup page's icons: building (B) and site (S). */
+function vernIcons(T) {
+  const tx = [T.summary && T.summary.en || '', (T.feats || []).map(f => (f.info && f.info.en) || (f.label && f.label.en) || '').join(' '), T.model && T.model.walls ? T.model.walls.en : '', T.model && T.model.render ? (T.model.render.en || '') : ''].join(' ').toLowerCase();
+  const has = re => re.test(tx), B = [], S = [];
+  if (has(/stone|granite|schist|taipa|rammed|adobe|thick|vault|mass|masonry/)) B.push('mass');
+  if (has(/porch|alpendre|latada|pergola|varanda|balcon|eave|shade|shutter|loggia/)) B.push('shade');
+  if (has(/south|sun|winter/)) B.push('gain');
+  if (has(/breeze|ventil|draught|air|wind|opposite/)) B.push('xvent');
+  if (has(/night|cool|summer|heat/)) B.push('night');
+  if (has(/whitewash|lime|white|cal\b/)) S.push('surface');
+  if (has(/north|blind|shelter|wind|gable/)) S.push('shelter');
+  if (has(/vine|tree|fig|orchard|garden|latada/)) S.push('canopy');
+  if (has(/well|cistern|water|patio|courtyard|fountain|tank/)) S.push('water');
+  if (has(/slope|hill|terrace|serra|mountain/)) S.push('slope');
+  if (has(/south/)) S.push('sun');
+  return { B:B.slice(0, 3), S:S.slice(0, 4) };
+}
 /** Mounts the panel at the head of a page; keeps it in step with the model. */
 function vernMount(host, tabKey, openFirst) {
   if (!vernRegion(STATE.site)) return;
@@ -19178,8 +19223,26 @@ function vernMount(host, tabKey, openFirst) {
     btns.appendChild(el('button', { type:'button', class:tab ? '' : 'pri', text:VL({ en:'Apply the whole model', pt:'Aplicar o modelo inteiro' }), onclick:() => vernApply('all') }));
     btns.appendChild(el('button', { type:'button', text:VL({ en:'Checklist CSV', pt:'Lista de verificação CSV' }), onclick:() => vCSV(R) }));
     const refs = Array.from(new Set(T.feats.map(f => f.src).concat(R.lines.map(l => l[1])))).filter(k => k !== 'INF' && VERN_SRC[k]);
-    b.appendChild(el('ul', { class:'vrefs', html:refs.map(k => '<li>' + VERN_SRC[k].cite + (VERN_SRC[k].url ? ' <a href="' + VERN_SRC[k].url + '" target="_blank" rel="noopener noreferrer">link</a>' : '') + '</li>').join('')
+    /* the references folded: opened only by who wants them */
+    const rf = b.appendChild(el('details', { class:'vrefsfold' }));
+    rf.appendChild(el('summary', { text:VL({ en:'References', pt:'Referências' }) + ' (' + refs.length + ')' }));
+    rf.appendChild(el('ul', { class:'vrefs', html:refs.map(k => '<li>' + VERN_SRC[k].cite + (VERN_SRC[k].url ? ' <a href="' + VERN_SRC[k].url + '" target="_blank" rel="noopener noreferrer">link</a>' : '') + '</li>').join('')
       + '<li>' + VMT(VERN_SRC.INF.cite, 'Inferência didáctica: as fontes descrevem o elemento mas não dão um valor; o número torna o modelo desenhável e não é uma medição.') + '</li>' }));
+    /* on the archetype's own sheet, icons either side of the text: the house as drawn, and what it does with the climate */
+    if (!tab) {
+      const main = el('div', { class:'vmain' }); while (b.firstChild) main.appendChild(b.firstChild);
+      /* the house itself beside its text — as drawn, in plan with its rooms, and its chimney — not the strategy icons of the first page */
+      const L = el('div', { class:'vrail' }), Rr = el('div', { class:'vrail' });
+      L.appendChild(el('figure', { class:'vhouse', html:vIcon(R.type, 150) + '<figcaption>' + VL(T.name).replace(/ \(.*\)$/, '') + '</figcaption>' }));
+      try { const vm0 = vmFromType(R.type); vm0.row = { n:1 }; const pl = vmPlanSVG(vm0, 300, { noLabels:true });
+        Rr.appendChild(el('figure', { class:'vhouse', html:pl.svg + '<figcaption>' + VL({ en:'Plan, ground floor', pt:'Planta do piso térreo' }) + '</figcaption>' }));
+        const ch = vmChimOf(R.type); const fam = ch && { alg:'rendilhada', ale:'alentejana', rib:'arca', sal:'saloia', az:'maos', mad:'arca', esp:'granito', talha:'arca', box:'arca', gran:'granito' }[ch.kind];
+        if (fam && SCE_SVG.C && SCE_SVG.C[fam]) Rr.appendChild(el('figure', { class:'vhouse vchim', html:SCE_SVG.svg(SCE_SVG.C[fam]()) + '<figcaption>' + VL({ en:'Its chimney', pt:'A sua chaminé' }) + ' — ' + t(chimFam(fam).name) + '</figcaption>' }));
+        else if (!ch) Rr.appendChild(el('figure', { class:'vhouse', html:'<figcaption>' + VL({ en:'No chimney: the smoke left through the tiles', pt:'Sem chaminé: o fumo saía pelas telhas' }) + '</figcaption>' }));
+      } catch (e) {}
+      b.appendChild(el('div', { class:'vlay' }, [L, main, Rr]));
+      box.classList.add('wide');
+    }
   };
   box._draw = draw;
   draw();
@@ -23278,7 +23341,7 @@ const VM_OVR = {
     vm.vols.push(vmVol({ name:{ en:'South range of sties', pt:'Fiada sul de furdas' }, x:0, y:-3.2, L:b.L, D:3, fl:1, fh:1.8, roof:{ type:'shed', th:15, bei:0.2, mat:'tile' }, wall:vmClone(b.wall), open:{ S:[], E:[], N:Array.from({ length:6 }, (_, i) => vmOp('d', (i + 0.5) / 6, 0.8, 1.2)), W:[] } }));
     vm.court = { on:true, x:0, y:0, L:b.L, D:3.4, h:1.2, gate:{ face:'W', pos:0.5, w:2 } }; },
   'pt-espigueiro':(vm, b) => { b.piers = true; b.raise = 1.0; b.open.S = [vmOp('w', 0.5, 4.5, 1.4)]; b.open.N = [vmOp('w', 0.5, 4.5, 1.4)]; b.slits = true; b.roof.mat = 'stone'; },
-  'pt-sado-taipa':(vm, b) => { b.wall.buttress = 4; },
+  'pt-sado-taipa':(vm, b) => { b.wall.butt = 'thirds'; b.wall.buttress = 1; },
   'pt-mondego-alpendre':(vm, b) => { vm.els = vm.els.filter(e => e.t !== 'stair'); vm.els.push({ t:'stair', vol:0, face:'S', along:'par', pos:0.1, w:1.2, landing:true, porch:true }); },
   'pt-beira-alta':(vm, b) => { vm.els.push({ t:'stair', vol:0, face:'S', along:'perp', pos:0.2, w:1.1, landing:true, porch:false }, { t:'varanda', vol:0, face:'S', kind:'envidracada', pos:0.6, w:4, floor:1 }); },
   'pt-beira':(vm, b) => { vm.els.push({ t:'stair', vol:0, face:'S', along:'perp', pos:0.2, w:1.0, landing:true, porch:true }); },
@@ -23443,9 +23506,12 @@ function vmVolFaces(v, opts) {
       if (v.wall.barra && lime) push([at(0, z0), at(len, z0), at(len, z0 + bh), at(0, z0 + bh)], v.wall.barra, { thin:true });
       else if (lime && !z0) push([at(0, 0), at(len, 0), at(len, 0.3), at(0, 0.3)], vmShade(wc, 0.72), { thin:true });
       if (v.wall.cunhais) [[0, 0.3], [len - 0.3, len]].forEach(([p, q]) => push([at(p, z0 + bh), at(q, z0 + bh), at(q, H), at(p, H)], v.wall.barra && lime ? vmShade(v.wall.barra, 1.1) : vmShade(wc, lime ? 0.88 : 1.15), { thin:true }));
-      if (v.wall.buttress && (f === 'S' || f === 'N')) for (let i = 1; i <= v.wall.buttress; i++) { const u = i * len / (v.wall.buttress + 1), hb = vmH(v) * 0.75;
-        push([at(u - 0.3, z0, 0.6), at(u + 0.3, z0, 0.6), at(u + 0.3, z0 + hb * 0.55, 0.6), at(u - 0.3, z0 + hb, 0.02)], vmShade(wc, 0.95), { thin:true });
-        push([at(u + 0.3, z0, 0.6), at(u + 0.3, z0, 0.02), at(u + 0.3, z0 + hb, 0.02), at(u + 0.3, z0 + hb * 0.55, 0.6)], vmShade(wc, 0.78), { thin:true }); }
+      /* buttresses as solids: at the corners (the cunhais), with others at the half, the thirds or the quarters, the same on both long sides */
+      if (f === 'S' || f === 'N') vmButtAt(v, len).forEach(u => { const hb = vmH(v) * 0.75, w = 0.3, sc = at(u, z0 + hb * 0.3, 0.3);
+        const sides = [[at(u - w, z0, 0.02), at(u - w, z0, 0.6), at(u - w, z0 + hb * 0.55, 0.6), at(u - w, z0 + hb, 0.02)], [at(u + w, z0, 0.6), at(u + w, z0, 0.02), at(u + w, z0 + hb, 0.02), at(u + w, z0 + hb * 0.55, 0.6)]];
+        sides.forEach(P2 => push(P2, vmShade(wc, 0.8), { thin:true, solid:sc }));
+        push([at(u - w, z0, 0.6), at(u + w, z0, 0.6), at(u + w, z0 + hb * 0.55, 0.6), at(u - w, z0 + hb * 0.55, 0.6)], vmShade(wc, 0.92), { thin:true, solid:sc });
+        push([at(u - w, z0 + hb * 0.55, 0.6), at(u + w, z0 + hb * 0.55, 0.6), at(u + w, z0 + hb, 0.02), at(u - w, z0 + hb, 0.02)], vmShade(wc, 1.04), { thin:true, solid:sc }); });
       (v.open[f] || []).filter(o => o.fl < v.fl).forEach(o => {
         const cu = o.pos * len, z = z0 + o.fl * v.fh + (o.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
         const fr = v.wall.frames ? 0.13 : 0;
@@ -23625,9 +23691,12 @@ function vmFaces(vm) {
   vs.forEach(v => vmVolFaces(v).forEach(q => F.push(Object.assign(q, { vol:v._i, rr:v._r || 0 }))));
   F = F.concat(vmElFaces(vm, vs));
   /* the model turned on the spot by VM_AZ, the view staying where it is */
-  if (VM_AZ) { const R = vmTurn(vm); F.forEach(q => { q.P = q.P.map(R); q.n = vmNorm(q.P); }); }
+  if (VM_AZ) { const R = vmTurn(vm); F.forEach(q => { q.P = q.P.map(R); q.n = vmNorm(q.P); if (q.solid) q.solid = R(q.solid); }); }
+  /* a small solid (a buttress): each face's normal turned out of it, so only its near faces are drawn */
+  F.forEach(q => { if (!q.solid) return; const c = q.P.reduce((a, p) => [a[0] + p[0] / q.P.length, a[1] + p[1] / q.P.length, a[2] + p[2] / q.P.length], [0, 0, 0]);
+    if ((c[0] - q.solid[0]) * q.n[0] + (c[1] - q.solid[1]) * q.n[1] + (c[2] - q.solid[2]) * q.n[2] < 0) q.n = q.n.map(x => -x); });
   const seen = q => (q.n[0] * VM_VIEW[0] + q.n[1] * VM_VIEW[1] + q.n[2] * VM_VIEW[2]) > -1e-6;
-  F = F.filter(q => q.host ? seen(q.host) : (q.thin || q.cap || q.roof || q.top || q.court || q.el || seen(q)));
+  F = F.filter(q => q.host ? seen(q.host) && (!q.solid || seen(q)) : (q.thin || q.cap || q.roof || q.top || q.court || q.el || seen(q)));
   /* the neighbours in a row only as glass volumes: the house studied is the one drawn whole */
   F = F.filter(q => !(q.rr > 0 && (q.thin || q.host)));
   F.forEach(q => { if (q.rr > 0) { q.ghost = true; q.fill = 'rgba(150,160,170,.10)'; } });
@@ -23646,6 +23715,18 @@ function vmFaces(vm) {
 /* ---------------------------------------------------------------- drawings */
 /** The turn of the isometric, in degrees: 0 from the south-east, as the icons. */
 let VM_AZ = 0;
+/** Where a body's buttresses stand along a long side (m from its start): the corners, then the half, thirds or quarters. */
+function vmButtAt(v, len) {
+  const m = vmButtMode(v); if (m === 'none') return [];
+  const out = [0.35, len - 0.35], n = { half:2, thirds:3, quarters:4 }[m] || 0;
+  for (let i = 1; i < n; i++) out.push(i * len / n);
+  return out;
+}
+/** The buttress setting, reading the old count (1 → the half, 2 → thirds, 3 or more → quarters). */
+function vmButtMode(v) {
+  const w = v.wall || {}; if (w.butt) return w.butt;
+  const n = +w.buttress || 0; return !n ? 'none' : n === 1 ? 'half' : n === 2 ? 'thirds' : 'quarters';
+}
 /** Turning a point about the model's centre by VM_AZ. */
 function vmTurn(vm, back) {
   const bb = vmBBox(vm), cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, a = (back ? -VM_AZ : VM_AZ) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a);
@@ -23700,6 +23781,8 @@ function vmPlanSVG(vm, w, opts) {
   vs.forEach(v => {
     const Wt = (VM_WALL[v.wall.mat] || VM_WALL.whitewash).t, sel = opts.sel === v._i;
     const fillC = sel ? '#F4E3C2' : '#EFEAE0', st = sel ? '#B5772A' : '#3A3530';
+    if (v.kind === 'rect') vmButtAt(v, v.L).forEach(u => [[-1, v.y - v.D / 2 - 0.6], [1, v.y + v.D / 2]].forEach(([sg, yb]) => { const a = P(v.x - v.L / 2 + u - 0.3, yb + 0.6);
+      o.push('<rect x="' + a[0] + '" y="' + a[1] + '" width="' + (0.6 * s).toFixed(1) + '" height="' + (0.6 * s).toFixed(1) + '" fill="#D8D1C4" stroke="#3A3530" stroke-width="1"/>'); }));
     if (v.kind === 'rect') { const a = P(v.x - v.L / 2, v.y + v.D / 2); o.push('<rect data-vol="' + v._i + '" x="' + a[0] + '" y="' + a[1] + '" width="' + (v.L * s).toFixed(1) + '" height="' + (v.D * s).toFixed(1) + '" fill="' + fillC + '" stroke="' + st + '" stroke-width="' + Math.max(1.5, Wt * s).toFixed(1) + '" style="cursor:move"/>'); }
     else { const a = P(v.x, v.y); o.push('<ellipse data-vol="' + v._i + '" cx="' + a[0] + '" cy="' + a[1] + '" rx="' + (v.L / 2 * s).toFixed(1) + '" ry="' + (v.D / 2 * s).toFixed(1) + '" fill="' + fillC + '" stroke="' + st + '" stroke-width="' + Math.max(1.5, Wt * s).toFixed(1) + '" style="cursor:move"/>'); }
     /* openings: a gap in the wall line, a door's swing */
@@ -24058,7 +24141,7 @@ function buildModeller(host) {
       r3.appendChild(vmSel(VMT('Material', 'Material'), Object.keys(VM_WALL).map(k => [k, VL(VM_WALL[k])]), () => v.wall.mat, x => { v.wall.mat = x; }));
       r3.appendChild(vmSel(VMT('Barra', 'Barra'), [['', VMT('none', 'sem')], ['#3F6FA8', VMT('blue', 'azul')], ['#C9A040', VMT('ochre', 'ocre')], ['#8E3B2E', VMT('ox-blood', 'sangue de boi')], ['#4F7A4A', VMT('green', 'verde')], ['#6B6B6B', VMT('grey', 'cinzenta')]], () => v.wall.barra || '', x => { v.wall.barra = x || null; }));
       r3.appendChild(vmSel(VMT('Frames of the openings', 'Molduras dos vãos'), [['', VMT('none', 'sem')], ['cal', VMT('lime band', 'faixa caiada')], ['cantaria', VMT('cut stone', 'cantaria')], ['cor', VMT('coloured', 'pintadas')]], () => v.wall.frames || '', x => { v.wall.frames = x || null; }));
-      r3.appendChild(vmNum(VMT('Buttresses (per long side)', 'Contrafortes (por lado maior)'), () => v.wall.buttress || 0, x => { v.wall.buttress = Math.round(x); }, 0, 8, 1));
+      r3.appendChild(vmSel(VMT('Buttresses (both long sides)', 'Contrafortes (nos dois lados maiores)'), [['none', VMT('none', 'nenhum')], ['corners', VMT('at the corners', 'nos cunhais')], ['half', VMT('corners + half', 'cunhais + a meio')], ['thirds', VMT('corners + thirds', 'cunhais + terços')], ['quarters', VMT('corners + quarters', 'cunhais + quartos')]], () => vmButtMode(v), x => { v.wall.butt = x; v.wall.buttress = x === 'none' ? 0 : 1; }));
       r3.appendChild(vmChk(VMT('coloured corners (cunhais)', 'cunhais marcados'), () => !!v.wall.cunhais, x => { v.wall.cunhais = x; }));
       ed.appendChild(el('h4', { text:VMT('Openings of this body', 'Vãos deste corpo') }));
       VM_FACES.forEach(f => (v.open[f] || []).forEach((o, i) => { const row = ed.appendChild(el('div', { class:'vmrow vmel' }));
@@ -28204,8 +28287,9 @@ Object.assign(PT, {
   "Altitude against azimuth at the solstices and the equinox; dots mark solar noon":
     "Altura contra azimute nos solstícios e no equinócio; os pontos marcam o meio-dia solar",
   "Direct-sun hours on each facade": "Horas de sol directo em cada fachada",
-  "Unobstructed vertical facades over the whole year, split by half-year":
-    "Fachadas verticais sem obstruções ao longo de todo o ano, por semestre",
+  "Unobstructed vertical facades and the horizontal plane over the whole year, split by half-year; inside the horizontal bars, its clear-sky irradiation in kWh/m²":
+    "Fachadas verticais sem obstruções e o plano horizontal ao longo de todo o ano, por semestre; dentro das barras do plano horizontal, a sua radiação de céu limpo em kWh/m²",
+  "Horiz.": "Horiz.",
   "Summer half-year (Oct–Mar)": "Semestre de Verão (Out–Mar)",
   "Summer half-year (Apr–Sep)": "Semestre de Verão (Abr–Set)",
   "Winter half-year (Apr–Sep)": "Semestre de Inverno (Abr–Set)",
