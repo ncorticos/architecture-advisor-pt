@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.162.6',
+  version:     '1.163.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5350,7 +5350,9 @@ function unitFloor(u, k) {
     sl: F && ('sl' in F) ? F.sl : u && u.sl,
     on: F && ('on' in F) ? !!F.on : !(u && u.on === false),
     door,
-    gel: F && ('gel' in F) ? (!!F.gel && !door) : (!!(u && u.gel) && !door)
+    gel: F && ('gel' in F) ? (!!F.gel && !door) : (!!(u && u.gel) && !door),
+    /* a varandim: glass from the floor to the head with a railing before it, the upper-floor opening of a door column */
+    rail: !!(F && F.rail) && !door
   };
 }
 /** The storey-k values for writing: materialize this floor's own copy first. */
@@ -5415,6 +5417,12 @@ function shiftRow(v0, v1, k, fh, up) {
   const zR = raiseH(MASS), lo = zR + k * fh, hi = Math.max(lo + h, zR + (k + 1) * fh - 0.05);
   const a0 = Math.min(Math.max(v0 + uu, lo), Math.max(lo, hi - h));
   return [a0, a0 + h];
+}
+/** A varandim's railing: a top rail and its bars a hand before the glass, 0.95 m high, in the rect(a, b, v0, v1, d) of a wall. */
+function railBars(rect, a, b, v0) {
+  const out = [{ pts:rect(a - 0.05, b + 0.05, v0 + 0.9, v0 + 0.97, 0.12), fill:'#2F3236' }], n = Math.max(3, Math.round((b - a) / 0.12));
+  for (let i = 0; i <= n; i++) { const u = a + (b - a) * i / n; out.push({ pts:rect(u - 0.012, u + 0.012, v0, v0 + 0.92, 0.12), fill:'#3A3D42' }); }
+  return out;
 }
 /** A window's vertical span on storey k with its own size: the band's
     sill-to-head slid by the unit's lift like shiftRow, except a window
@@ -8394,19 +8402,21 @@ function buildSite(host) {
       const wins = winList();
       /** One wall's window: solid with its panes on a wall the camera sees,
           dashed at its true place on one behind the volume. */
-      const drawWindow = (sg, w, hid) => w.rows.forEach(r => {   // one per storey
-        const u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2;
-        const q = [onSeg(sg, u0, r.sill), onSeg(sg, u1, r.sill), onSeg(sg, u1, r.head), onSeg(sg, u0, r.head)];
-        outline(q, true);
-        ctx.fillStyle = hid ? 'rgba(37,99,235,.05)' : 'rgba(219,234,254,.92)'; ctx.fill();
-        stroke(ctx, hid ? 'rgba(37,99,235,.6)' : BLUE, hid ? 1.1 : 1.4, hid ? [5, 4] : null); ctx.stroke();
-        if (hid) return;
-        const n = Math.max(1, Math.round(w.w / 1.2));   // one pane to about every 1.2 m
-        stroke(ctx, BLUE, 1);
-        for (let k = 1; k < n; k++) {
-          const u = u0 + k * w.w / n, a = onSeg(sg, u, r.sill), b = onSeg(sg, u, r.head);
-          seg(ctx, a[0], a[1], b[0], b[1]); desk.line(a[0], a[1], b[0], b[1]);
-        }
+      /* each window, door and varandim on its own, sized and placed as on Openings — not one band per wall */
+      const drawWindow = (sg, w, hid) => w.rows.forEach((r, k) => {
+        const u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2, us = faceUnits(w.f);
+        glassSpans(w.f, u0, u1, sg.len, k).forEach(sp => {
+          const u = us[sp.ui], e = unitFloor(u, k);
+          if (!sp.on || !u || sp.b - sp.a < 0.05) return;
+          const vv = e.door ? doorSpanV(u, r.head, k, G.fh) : unitSpanV(u, r.sill, r.head, k, G.fh), a0 = sp.a, a1 = sp.b;
+          const q = [onSeg(sg, a0, vv[0]), onSeg(sg, a1, vv[0]), onSeg(sg, a1, vv[1]), onSeg(sg, a0, vv[1])];
+          outline(q, true);
+          ctx.fillStyle = hid ? 'rgba(37,99,235,.05)' : e.door ? 'rgba(90,70,50,.55)' : 'rgba(219,234,254,.92)'; ctx.fill();
+          stroke(ctx, hid ? 'rgba(37,99,235,.6)' : BLUE, hid ? 1.1 : 1.4, hid ? [5, 4] : null); ctx.stroke();
+          if (hid) return;
+          if (e.rail) { const h0 = vv[0] + 0.95, p = onSeg(sg, a0, h0), p2 = onSeg(sg, a1, h0); stroke(ctx, '#2F3236', 1.6); seg(ctx, p[0], p[1], p2[0], p2[1]);
+            for (let i = 0; i <= 4; i++) { const uu = a0 + (a1 - a0) * i / 4, b0 = onSeg(sg, uu, vv[0]), b1 = onSeg(sg, uu, h0); stroke(ctx, '#2F3236', 0.8); seg(ctx, b0[0], b0[1], b1[0], b1[1]); } }
+        });
       });
       /** The shade the other pieces cast on a sunlit wall now: per column,
           the height the shadow climbs to, found by halving; drawn as one
@@ -8675,10 +8685,8 @@ function buildSite(host) {
         const sg = pool.reduce((p, q) => q.len > p.len ? q : p);
         const ws = wins.filter(o => o.w.f === f);
         const nFl = ws.length ? ws[0].w.n : 1, perFl = nFl > 1 ? ' ' + t('per floor') : '';
-        const what = !ws.length ? t('no window')
-          : ws.length === 1 ? (nFl > 1 ? nFl + ' ' + t('windows') : t('window')) + ' ' + fmt(ws[0].w.w, 1) + ' × ' + fmt(ws[0].w.h, 1) + ' m' + (nFl > 1 ? ', ' + t('one per floor') : '')
-          : ws.length <= 3 ? ws.length + ' ' + t('windows') + ' ' + ws.map(o => fmt(o.w.w, 1)).join(' + ') + ' × ' + fmt(ws[0].w.h, 1) + ' m' + perFl
-          : ws.length * nFl + ' ' + t('windows') + ' · ' + fmt(ws.reduce((acc, o) => acc + o.w.area, 0), 1) + ' m²';
+        const nOpen = ws.reduce((acc, o) => acc + o.w.rows.reduce((a2, r, k) => a2 + glassSpans(f, o.w.uc - o.w.w / 2, o.w.uc + o.w.w / 2, o.sg.len, k).filter(sp => sp.on && sp.b - sp.a >= 0.05).length, 0), 0);
+        const what = !ws.length || !nOpen ? t('no window') : nOpen + ' ' + (nOpen > 1 ? t('openings') : t('opening')) + (nFl > 1 ? ' · ' + nFl + ' ' + t('floors') : '');
         const txt = faceDir(f) + ' · ' + what + (ws.length ? ' · ' + fmt(OPEN[f].wwr * 100, 0) + ' %' : '');
         const font = F(10, '600'), col = ws.length ? BLUE : CH.muted;
         const hid = !segSeen(sg), zt = hid ? Hgt : 0;
@@ -17881,6 +17889,7 @@ style === 'sketch' ? '#EFEBE0'
                 fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(), glass:true, d:cdep(q) }));
             }
             if (cant || RENDER_DRESS.frames) frameRing(sg, a2, b2, v0, v1, cant ? 'limestone' : 'site', cant ? LIME_C : RENDER_DRESS.frames, !!eu.door).forEach(q2 => items.push(onWallLayer(sg, 2, q2)));
+            if (eu.rail) railBars(rect, a2, b2, v0).forEach(q2 => items.push(onWallLayer(sg, 4, { pts:q2.pts, fill:night ? '#1E2024' : q2.fill, d:cdep(q2.pts) - 0.02 })));
           });
         });
       });
@@ -19247,6 +19256,9 @@ function vernApply(scope) {
           (u.floors || []).forEach(F => { if (F && typeof F === 'object' && isFinite(+F.pos)) F.off = +((isFinite(+F.off) ? +F.off : 0) + adj(F.pos)).toFixed(2); });
         }
       });
+      /* a door column's upper floors: not doors into the air but varandins — glass from the floor with a railing before it */
+      us.forEach(u => { if (!u.door && !(u.floors && u.floors[0] && u.floors[0].door)) return;
+        for (let k = 1; k < m.fl; k++) { const F = unitFloorW(u, k); if (F.on === false) continue; F.door = false; F.gel = false; F.sl = 0; F.ht = Math.min(2.2, m.fh - 0.3); F.rail = true; } });
     });
   }
   /* a model may pick its materials by place (a function of the site) */
@@ -21939,7 +21951,7 @@ Object.assign(PT, { 'Draw the model':'Desenhar o modelo', 'Archetype':'Arquétip
 
 /** A page as before, retitled for the popular study, its checklist open at the head. */
 const popular = (key, build) => host => {
-  try { vmSyncRidge(); } catch (e) { console.error(e); }
+  try { vmSyncRidge(); vmSyncVarandins(); } catch (e) { console.error(e); }
   build(host);
   const h = host.querySelector('.pagehead');
   if (h && POP_HEAD[key]) { h.querySelector('h2').textContent = VL(POP_HEAD[key].t); const p = h.querySelector('p'); if (p) p.textContent = VL(POP_HEAD[key].p); }
@@ -23477,7 +23489,8 @@ function vmOpenOf(m, L, D) {
       const F = u.floors && u.floors[k] ? u.floors[k] : {}, on = 'on' in F ? F.on : u.on !== false, door = 'door' in F ? F.door : !!u.door;
       if (!on) continue;
       const len = f === 'S' || f === 'N' ? L : D;
-      out.push(vmOp(door ? 'd' : 'w', u.pos === undefined ? 0.5 : u.pos, door ? 0.9 : Math.max(0.5, Math.min(1.2, (u.frac || 0.15) * len * 0.6)), door ? 2.0 : 1.0, k));
+      /* a door column's upper floors are varandins — glass from the floor with a railing — not doors into the air */
+      out.push(vmOp(door ? (k ? 'v' : 'd') : 'w', u.pos === undefined ? 0.5 : u.pos, door ? 0.9 : Math.max(0.5, Math.min(1.2, (u.frac || 0.15) * len * 0.6)), door ? (k ? Math.min(2.2, m.fh - 0.3) : 2.0) : 1.0, k));
     } });
   });
   return o;
@@ -23723,11 +23736,14 @@ function vmVolFaces(v, opts) {
         push([at(u - w, z0, 0.6), at(u + w, z0, 0.6), at(u + w, z0 + hb * 0.55, 0.6), at(u - w, z0 + hb * 0.55, 0.6)], vmShade(wc, 0.92), { thin:true, solid:sc });
         push([at(u - w, z0 + hb * 0.55, 0.6), at(u + w, z0 + hb * 0.55, 0.6), at(u + w, z0 + hb, 0.02), at(u - w, z0 + hb, 0.02)], vmShade(wc, 1.04), { thin:true, solid:sc }); });
       (v.open[f] || []).filter(o => o.fl < v.fl).forEach(o => {
-        const cu = o.pos * len, z = z0 + o.fl * v.fh + (o.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
+        const cu = o.pos * len, z = z0 + o.fl * v.fh + (o.t !== 'w' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
         const fr = v.wall.frames ? 0.13 : 0;
-        if (fr) push([at(cu - o.w / 2 - fr, z - (o.t === 'd' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, z - (o.t === 'd' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, zz + fr, 0.03), at(cu - o.w / 2 - fr, zz + fr, 0.03)],
+        if (fr) push([at(cu - o.w / 2 - fr, z - (o.t !== 'w' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, z - (o.t !== 'w' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, zz + fr, 0.03), at(cu - o.w / 2 - fr, zz + fr, 0.03)],
           v.wall.frames === 'cantaria' ? '#CFC6B4' : v.wall.frames === 'cor' ? (v.wall.barra || '#3F6FA8') : vmShade(wc, lime ? 0.84 : 1.2), { thin:true });
         push([at(cu - o.w / 2, z, 0.04), at(cu + o.w / 2, z, 0.04), at(cu + o.w / 2, zz, 0.04), at(cu - o.w / 2, zz, 0.04)], o.t === 'd' ? '#5A4632' : (v.slits ? '#2E2A26' : '#3E4C57'), { thin:true, open:o.t });
+        /* a varandim: glass from the floor, its railing a hand before it */
+        if (o.t === 'v') { push([at(cu - o.w / 2 - 0.05, z + 0.9, 0.16), at(cu + o.w / 2 + 0.05, z + 0.9, 0.16), at(cu + o.w / 2 + 0.05, z + 0.97, 0.16), at(cu - o.w / 2 - 0.05, z + 0.97, 0.16)], '#2F3236', { thin:true, rail:true });
+          for (let s = 0; s <= 6; s++) { const uu = cu - o.w / 2 + s * o.w / 6; push([at(uu - 0.015, z, 0.15), at(uu + 0.015, z, 0.15), at(uu + 0.015, z + 0.9, 0.15), at(uu - 0.015, z + 0.9, 0.15)], '#3A3D42', { thin:true, rail:true }); } }
         if (v.slits && o.t === 'w') for (let s = 1; s < 8; s++) push([at(cu - o.w / 2 + s * o.w / 8 - 0.04, z, 0.05), at(cu - o.w / 2 + s * o.w / 8 + 0.04, z, 0.05), at(cu - o.w / 2 + s * o.w / 8 + 0.04, zz, 0.05), at(cu - o.w / 2 + s * o.w / 8 - 0.04, zz, 0.05)], '#B8B2A6', { thin:true });
       });
     });
@@ -23740,7 +23756,7 @@ function vmVolFaces(v, opts) {
     VM_FACES.forEach(f => (v.open[f] || []).filter(o => o.fl < v.fl).forEach(o => {
       const ang = { S:-Math.PI / 2, E:0, N:Math.PI / 2, W:Math.PI }[f] + (o.pos - 0.5) * 1.2, a = v.L / 2 + 0.03, b = v.D / 2 + 0.03;
       const c = [v.x + a * Math.cos(ang), v.y + b * Math.sin(ang)], t = [-Math.sin(ang), Math.cos(ang)];
-      const z = z0 + o.fl * v.fh + (o.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
+      const z = z0 + o.fl * v.fh + (o.t !== 'w' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
       push([[c[0] - t[0] * o.w / 2, c[1] - t[1] * o.w / 2, z], [c[0] + t[0] * o.w / 2, c[1] + t[1] * o.w / 2, z], [c[0] + t[0] * o.w / 2, c[1] + t[1] * o.w / 2, zz], [c[0] - t[0] * o.w / 2, c[1] - t[1] * o.w / 2, zz]], o.t === 'd' ? '#5A4632' : '#3E4C57', { thin:true, open:o.t });
     }));
   }
@@ -24155,7 +24171,7 @@ function vmElevSVG(vm, face, w, opts) {
     else if (r.type === 'gable' || r.type === 'ground') poly([[c - hw - e, H - e * Math.tan(th)], [c + hw + e, H - e * Math.tan(th)], [c, H + rise]], rc);
     else { const run = Math.min(v.L, v.D) / 2, top = Math.max(0, hw - run), y = H - e * Math.tan(th);
       poly(top > 0.05 ? [[c - hw - e, y], [c + hw + e, y], [c + top, H + rise], [c - top, H + rise]] : [[c - hw - e, y], [c + hw + e, y], [c, H + rise]], rc); }
-    (v.open[face] || []).filter(q => q.fl < v.fl).forEach(q => { const len = across ? v.L : v.D, uu = (face === 'S' || face === 'E' ? -hw + q.pos * len : hw - q.pos * len) + c, z = z0 + q.fl * v.fh + (q.t === 'd' ? 0.02 : 0.9), zz = Math.min(z + q.h, z0 + (q.fl + 1) * v.fh - 0.1);
+    (v.open[face] || []).filter(q => q.fl < v.fl).forEach(q => { const len = across ? v.L : v.D, uu = (face === 'S' || face === 'E' ? -hw + q.pos * len : hw - q.pos * len) + c, z = z0 + q.fl * v.fh + (q.t !== 'w' ? 0.02 : 0.9), zz = Math.min(z + q.h, z0 + (q.fl + 1) * v.fh - 0.1);
       poly([[uu - q.w / 2, z], [uu + q.w / 2, z], [uu + q.w / 2, zz], [uu - q.w / 2, zz]], q.t === 'd' ? '#5A4632' : '#3E4C57'); });
   });
   /* a black dot on top of each body's wall: drag it down or up to take a storey off or put one back, the roof riding on top */
@@ -24183,7 +24199,7 @@ function vmDXF(vm) {
     poly([[x0, dy + z0], [x1, dy + z0], [x1, dy + H], [x0, dy + H]], 'ELEV_S_WALL');
     if (v.roof.type !== 'flat') { if (['cone', 'pyramid', 'dome'].indexOf(v.roof.type) >= 0 || (v.roof.type === 'gable' && v.L < v.D)) { line([x0, dy + H], [v.x, dy + H + rise], 'ELEV_S_ROOF'); line([v.x, dy + H + rise], [x1, dy + H], 'ELEV_S_ROOF'); }
       else { line([x0, dy + H], [x0, dy + H + rise], 'ELEV_S_ROOF'); line([x0, dy + H + rise], [x1, dy + H + rise], 'ELEV_S_ROOF'); line([x1, dy + H + rise], [x1, dy + H], 'ELEV_S_ROOF'); } }
-    (v.open.S || []).forEach(q => { const u = x0 + q.pos * v.L, z = z0 + q.fl * v.fh + (q.t === 'd' ? 0 : 0.9); poly([[u - q.w / 2, dy + z], [u + q.w / 2, dy + z], [u + q.w / 2, dy + z + q.h], [u - q.w / 2, dy + z + q.h]], 'ELEV_S_OPEN'); }); });
+    (v.open.S || []).forEach(q => { const u = x0 + q.pos * v.L, z = z0 + q.fl * v.fh + (q.t !== 'w' ? 0 : 0.9); poly([[u - q.w / 2, dy + z], [u + q.w / 2, dy + z], [u + q.w / 2, dy + z + q.h], [u - q.w / 2, dy + z + q.h]], 'ELEV_S_OPEN'); }); });
   return ['0', 'SECTION', '2', 'ENTITIES'].concat(L, ['0', 'ENDSEC', '0', 'EOF']).join('\n');
 }
 
@@ -24371,6 +24387,18 @@ function vmRidgeToRoof(v, force) {
 }
 /** Every tab of the popular study reads the ridge as the model has it — a study opened or saved before the model set it
     included — unless the student has turned the roof's divisions on Roof, or the study's plan is no longer the body's. */
+/** A study saved before the varandins: a door column's upper floors that only inherit the door become varandins; a door the
+    student set on that floor stays a door. */
+function vmSyncVarandins() {
+  if (!STATE.vern || !STATE.vern.type || !OPEN) return;
+  const fl = MASS.fl || 1, fh = MASS.fh || 3;
+  ['S', 'N', 'E', 'W'].forEach(f => ((OPEN[f] && OPEN[f].units) || []).forEach(u => {
+    if (!u.door) return;
+    for (let k = 1; k < fl; k++) { const F0 = u.floors && u.floors[k];
+      if (F0 && typeof F0 === 'object' && ('door' in F0 || F0.rail || F0.on === false)) continue;
+      const F = unitFloorW(u, k); F.door = false; F.gel = false; F.sl = 0; F.ht = Math.min(2.2, fh - 0.3); F.rail = true; }
+  }));
+}
 function vmSyncRidge() {
   if (!STATE.vern || !STATE.vern.type || ROOF.divUser) return;
   const R = vernRead(); if (!R) return;
@@ -24534,7 +24562,7 @@ function buildModeller(host) {
       let nOp = 0;
       VM_FACES.forEach(f => (v.open[f] || []).forEach((o, i) => { if ((o.fl || 0) !== flE) return; nOp++;
         otab.appendChild(vmSelC(vmFaceOpts(), () => f, x => { v.open[f].splice(i, 1); (v.open[x] = v.open[x] || []).push(o); }, true));
-        otab.appendChild(vmSelC([['w', VMT('window', 'janela')], ['d', VMT('door', 'porta')]], () => o.t, x => { o.t = x; if (x === 'd') o.h = 2; }));
+        otab.appendChild(vmSelC([['w', VMT('window', 'janela')], ['d', VMT('door', 'porta')], ['v', VMT('varandim', 'varandim')]], () => o.t, x => { o.t = x; if (x === 'd') o.h = 2; if (x === 'v') o.h = Math.min(2.2, v.fh - 0.3); }));
         otab.appendChild(vmNumC(() => o.pos, x => { o.pos = x; }, 0, 1, 0.05));
         otab.appendChild(vmNumC(() => o.w, x => { o.w = x; }, 0.2, 6, 0.1));
         otab.appendChild(vmNumC(() => o.h, x => { o.h = x; }, 0.2, 3, 0.1));
@@ -26998,6 +27026,7 @@ function applyStudy(o) {
               if (isFinite(+F.up)) e.up = Math.max(-30, Math.min(30, +F.up));
               if ('on' in F) e.on = !!F.on;
               if ('door' in F) e.door = !!F.door;
+              if (F.rail) e.rail = true;
               if ('gel' in F) e.gel = !!F.gel;
               if (isFinite(+F.ht) && +F.ht >= 0.1) e.ht = +F.ht;
               if (isFinite(+F.sl)) e.sl = Math.max(-0.5, Math.min(2.5, +F.sl));
@@ -28658,6 +28687,8 @@ Object.assign(PT, {
   "Take this balcony away": "Retirar esta varanda",
   "every floor": "todos os pisos",
   "floors": "pisos",
+  "openings": "vãos",
+  "opening": "vão",
   "floor": "piso",
   "round the corner": "a dobrar a esquina",
   "open on two faces": "aberta para duas fachadas",
