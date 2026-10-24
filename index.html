@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.163.0',
+  version:     '1.164.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20517,6 +20517,7 @@ Object.assign(MN_TYPES, {
       vN('openings', { en:'Openings in the gables', pt:'Vãos nas empenas' }, { en:'none — blind gables', pt:'nenhum — empenas cegas' }, () => vCount(['E', 'W']).all, 0, 0, '', 'NER'),
       vN('openings', { en:'Outside doors', pt:'Portas exteriores' }, { en:'usually one to each dwelling — rows of labourers’ dwellings repeat it', pt:'em geral uma por fogo — as fiadas de fogos de assalariados repetem-na' }, () => vCount().doors, 1, 3, '', 'NER'),
       vI('site', { en:'At one gable end a lower annex under one slope — the oven house, the oven’s vault bulging from its wall — continues the line of the house (the oven «attached», as in the Alentejo).', pt:'Num dos topos, um anexo mais baixo de uma água — a casa do forno, com a abóbada do forno saliente da parede — prolonga a linha da casa (o forno «anexo», como no Alentejo).' }, 'NER'),
+      vI('site', { en:'On the farm the annexes are volumes joined to the house for the work of the family — store and stable beside the dwelling, the adega, the cooking house with its ovens, a porch for the carts round a yard (Oliveira 2016, Casa Constâncio, Vila Moreira). Often one of them, lower, stands at right angles against a gable, its own gable to the front, making an L with the house — a field observation the theses do not measure: the popular model draws it on the west gable — move it, turn it 90° or add one on the other gable under Bodies.', pt:'No casal, os anexos são volumes agregados à casa para o trabalho da família — arrumos e estábulo junto à habitação, a adega, a cozinha dos fornos, um alpendre para os carros em torno de um pátio (Oliveira 2016, Casa Constâncio, Vila Moreira). Muitas vezes um deles, mais baixo, encosta em ângulo reto a uma empena, com a sua empena para a frente, fazendo L com a casa — observação de campo que as teses não medem: o modelo popular desenha-o na empena poente — desloque-o, rode-o 90° ou acrescente outro na outra empena em Corpos.' }, 'OLI'),
       vGlaze(6, 'NER'),
       vI('ventilation', { en:'The oven outside the house — attached or in its own building — keeps its heat out of the rooms; the hearth alone stays in the kitchen.', pt:'O forno fora da casa — anexo ou numa dependência — mantém o seu calor fora dos compartimentos; só a lareira fica na cozinha.' }, 'NER'),
       vWall({ en:'whitewash', pt:'caiada' }, ['whitewash', 'plaster', 'earth'], 'NER')
@@ -23536,6 +23537,13 @@ function vmFromType(k) {
 }
 /* what the sources add to the archetypes the one-bar model could not draw */
 const vmOven = (vol, face, pos) => ({ t:'oven', vol, face, pos, r:0.9 });
+/** A lower body at right angles against a gable of b (side 'W' or 'E'): its ridge across b's, its back flush with b's, standing out in front, a door in its front gable. */
+function vmAnnex90(b, side, o) {
+  const w = (o && o.L) || 4, d = (o && o.D) || b.D + 2.5, sg = side === 'E' ? 1 : -1;
+  return vmVol(Object.assign({ name:{ en:'Annex (at 90°)', pt:'Anexo (a 90°)' }, x:b.x + sg * (b.L / 2 + w / 2), y:b.y + b.D / 2 - d / 2, L:w, D:d, fl:1, fh:Math.max(1.8, +(b.fh - 0.2).toFixed(2)),
+    roof:{ type:'gable', th:b.roof.th || 20, bei:b.roof.bei || 0.2, mat:b.roof.mat || 'tile', ridge:'y', par:0, cells:2, beirado:b.roof.beirado == null ? 1 : b.roof.beirado },
+    wall:vmClone(b.wall), open:{ S:[vmOp('d', 0.5, 1.6, 2.1)], E:[], N:[], W:[] } }, o || {}));
+}
 const VM_OVR = {
   'pt-chafurdao':(vm, b) => { Object.assign(b, { kind:'round', L:5, D:5 }); Object.assign(b.roof, { type:'dome', mat:'earth', bei:0, th:0 }); b.wall = { mat:'granite', barra:null, cunhais:false, frames:null, buttress:0 }; },
   'pt-choca':(vm, b) => { Object.assign(b, { kind:'round', L:4.5, D:4.5 }); Object.assign(b.roof, { type:'cone', th:50, mat:'thatch', bei:0.4 }); },
@@ -23548,6 +23556,8 @@ const VM_OVR = {
   'pt-alg-taipa':(vm, b) => { vm.els.push(vmOven(0, 'E', 0.5)); },
   'pt-alg-monchique':(vm, b) => { vm.els.push(vmOven(0, 'E', 0.4)); },
   'pt-saloia':(vm, b) => { vm.els.push(vmOven(0, 'E', 0.5)); },
+  /* on the farm the long house gets a lower annex at right angles against one gable — the stores, the stable, the adega or the cart shed — its own gable to the front */
+  'pt-ribatejo':(vm, b) => { vm.vols.push(vmAnnex90(b, 'W', { name:{ en:'Farm annex (at 90°)', pt:'Anexo agrícola (a 90°)' }, L:4, D:b.D + 2.5, fh:+(b.fh - 0.2).toFixed(2) })); vm.els.push(vmOven(0, 'E', 0.5)); },
   'pt-saloia-elementar':(vm, b) => { vm.els.push(vmOven(0, 'W', 0.5)); },
   'pt-torreada':(vm, b) => { vm.vols.push(vmVol({ name:{ en:'Tower', pt:'Torre' }, x:b.L / 2 - 2, y:b.D / 2 + 2, L:4, D:4, fl:2, fh:2.6, roof:{ type:'hip', th:25, bei:0.3, mat:'tile' }, wall:vmClone(b.wall), open:{ S:[vmOp('w', 0.5, 0.8, 1, 1)], E:[vmOp('w', 0.5, 0.8, 1, 1)], N:[], W:[] } })); },
   'pt-alentejo':(vm, b) => { vm.court = { on:true, x:0, y:-b.D / 2 - 5, L:b.L + 6, D:10, h:1.8, open:'N', gate:{ face:'S', pos:0.3, w:3 } }; },
@@ -24517,6 +24527,9 @@ function buildModeller(host) {
     const add = (o) => { const b = M.vols[VM_SEL] || M.vols[0]; const v = vmVol(Object.assign({ x:b ? b.x + b.L / 2 + 3 : 0, y:b ? b.y : 0, wall:vmClone(b ? b.wall : vmVol().wall) }, o)); M.vols.push(v); VM_SEL = M.vols.length - 1; vmChanged(true); };
     const ab = ed.appendChild(el('div', { class:'vmbtns' }));
     ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('long body', 'corpo comprido'), onclick:() => add({ name:{ en:'Annex', pt:'Anexo' }, L:5, D:4, fh:2.4, roof:{ type:'shed', th:18, bei:0.2, mat:'tile', par:0, cells:2, beirado:1, ridge:'auto' } }) }));
+    const b90 = side => { const b = M.vols[VM_SEL] || M.vols[0]; if (!b || b.kind !== 'rect') return; M.vols.push(vmAnnex90(b, side)); VM_SEL = M.vols.length - 1; vmChanged(true); };
+    ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('annex at 90°, west gable', 'anexo a 90°, empena poente'), title:VMT('A lower body at right angles against the west gable of the body selected, its gable to the front — the Ribatejo farm annex.', 'Um corpo mais baixo em ângulo reto contra a empena poente do corpo selecionado, com a empena para a frente — o anexo dos casais ribatejanos.'), onclick:() => b90('W') }));
+    ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('annex at 90°, east gable', 'anexo a 90°, empena nascente'), title:VMT('The same against the east gable.', 'O mesmo contra a empena nascente.'), onclick:() => b90('E') }));
     ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('round body', 'corpo redondo'), onclick:() => add({ name:{ en:'Round body', pt:'Corpo redondo' }, kind:'round', L:4.5, D:4.5, fh:2.2, roof:{ type:'cone', th:45, bei:0.3, mat:'thatch', par:0, cells:2, beirado:1, ridge:'auto' } }) }));
     ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('tower', 'torre'), onclick:() => add({ name:{ en:'Tower', pt:'Torre' }, L:4, D:4, fl:2, fh:2.6, roof:{ type:'hip', th:25, bei:0.3, mat:'tile', par:0, cells:2, beirado:1, ridge:'auto' } }) }));
     ab.appendChild(el('button', { type:'button', text:'+ ' + VMT('separate kitchen', 'cozinha separada'), onclick:() => add({ name:{ en:'Kitchen', pt:'Cozinha' }, L:4, D:4, fh:2.4, roof:{ type:'gable', th:28, bei:0.25, mat:'tile', par:0, cells:2, beirado:1, ridge:'auto' } }) }));
@@ -24533,6 +24546,10 @@ function buildModeller(host) {
       r1.appendChild(vmNum(VMT('y (m, north)', 'y (m, norte)'), () => v.y, x => { v.y = x; }, -80, 80, 0.5));
       r1.appendChild(vmNum(VMT('Raised floor / on top (m)', 'Sobrelevado / em cima (m)'), () => v.raise || 0, x => { v.raise = x; }, 0, 12, 0.1));
       r1.appendChild(vmChk(VMT('on piers', 'sobre pés'), () => !!v.piers, x => { v.piers = x; }));
+      /* turn the body a quarter: length and depth swap, the ridge turns with it, the openings move to the faces they now look on */
+      if (v.kind !== 'round') r1.appendChild(el('button', { type:'button', text:'↻ ' + VMT('Turn 90°', 'Rodar 90°'), onclick:() => { const t = v.L; v.L = v.D; v.D = t;
+        const rg = v.roof.ridge || 'auto'; v.roof.ridge = rg === 'x' ? 'y' : rg === 'y' ? 'x' : (v.D > v.L ? 'x' : 'y');
+        const o = v.open; v.open = { S:o.W || [], E:o.S || [], N:o.E || [], W:o.N || [] }; vmChanged(true); } }));
       ed.appendChild(el('h4', { text:VMT('Roof', 'Cobertura') }));
       const r2 = ed.appendChild(el('div', { class:'vmrow' }));
       r2.appendChild(vmSel(VMT('Form', 'Forma'), Object.keys(VM_ROOFS).map(k => [k, VL(VM_ROOFS[k])]), () => v.roof.type, x => { v.roof.type = x; if (x === 'flat') v.roof.mat = 'lime'; if (x === 'dome' && v.roof.mat === 'tile') v.roof.mat = 'earth'; }, true));
