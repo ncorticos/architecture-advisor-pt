@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.162.0',
+  version:     '1.162.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6014,7 +6014,7 @@ function vmCityFaces(R, vm, tf) {
   row(bb[0] - 30, bb[2] + 30, yF - 2 * walk - street, 'N', depth);          // across the street, facing the house
   row(bb[0] - 30, bb[0] - 0.3, yF, 'S', depth);                             // the neighbours to the west, on the same front
   row(bb[2] + 0.3, bb[2] + 30, yF, 'S', depth);                             // and to the east
-  row(bb[0] - 8, bb[2] + 8, yB + 0.6, 'S', depth);                          // the block behind
+  row(bb[0] - 8, bb[2] + 8, yB + 6, 'S', depth);                            // the block behind, across the back yards (logradouros)
   return F;
 }
 /** The model's other bodies and its courtyard wall as prisms in the world frame round the plot (x east, y north,
@@ -23821,6 +23821,19 @@ function vmVolFaces(v, opts) {
 function vmStairRuns(vm, v, E, top) {
   const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D, x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = v.x + v.L / 2, y1 = v.y + v.D / 2, z0 = v.raise || 0;
   const w = E.w || 1.1, tr = 0.28, u0 = (E.pos || 0.1) * len, treads = [];
+  if ((E.flights || 1) > 1) {
+    /* the service stair of a town building: from the yard to every floor in flights against the wall that turn back on
+       themselves — up one way in the outer lane, back the other in the inner one, a landing at each floor before its door */
+    const nf = Math.min(E.flights, Math.max(1, v.fl - 1)), nn = Math.max(4, Math.round(v.fh / 0.19)), Lr = nn * tr, lands = [];
+    for (let k = 0; k < nf; k++) {
+      const up = k % 2 === 0, a = up ? u0 - Lr / 2 : u0 + Lr / 2, dir = up ? 1 : -1, da = up ? w : 0, db = up ? 2 * w : w, zb = z0 + k * v.fh;
+      for (let i = 0; i < nn; i++) { const ua = a + dir * i * tr, ub = ua + dir * tr, h = zb + (i + 1) * v.fh / nn; treads.push({ ua:Math.min(ua, ub), ub:Math.max(ua, ub), da, db, h, z0:h - 0.12 }); }
+      const ue = a + dir * Lr, la = up ? ue : ue - w, lb = up ? ue + w : ue, hz = zb + v.fh;
+      treads.push({ ua:Math.min(la, lb), ub:Math.max(la, lb), da:0, db:2 * w, h:hz, z0:hz - 0.12, landing:true });
+      lands.push({ u:(la + lb) / 2, fl:k + 1 });
+    }
+    return { treads, onGal:true, turn:false, w, lands, iron:!!E.iron };
+  }
   const gal = (vm.els || []).filter(G => G !== E && G.t === 'varanda' && (G.vol || 0) === (E.vol || 0) && (G.face || 'S') === f && (G.floor || 0) >= 1 && G.kind !== 'reentrante');
   let start = u0 + (E.landing ? 1.2 : 0), dir = 1, ztop = top, onGal = false;
   if (gal.length) { const gs = gal.map(G => { const gw = Math.min(G.w || 4, len - 0.4), a = (G.pos || 0.5) * len - gw / 2; return { a, b:a + gw, z:z0 + (G.floor || 1) * v.fh }; });
@@ -23891,7 +23904,11 @@ function vmElFaces(vm, vs) {
            wall, it turns 90° on a corner landing and goes on out from the wall — a corner stair, kept inside. */
         const boxUD = (ua, ub, da, db, z, h) => { const p = at(ua, da), q = at(ub, db); box(Math.min(p[0], q[0]), Math.min(p[1], q[1]), z, Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1]), h, stone, o); };
         const SR = vmStairRuns(vm, v, E, top);
-        SR.treads.forEach(r => boxUD(r.ua, r.ub, r.da, r.db, 0, r.h));
+        if (SR.iron) { const iron = '#45484C'; SR.treads.forEach(r => { const p = at(r.ua, r.da), q = at(r.ub, r.db), z = r.z0 || 0;
+            box(Math.min(p[0], q[0]), Math.min(p[1], q[1]), z, Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1]), r.h - z, iron, o); });
+          /* the railing along the outer edge of each flight and landing */
+          SR.treads.filter(r => r.landing).forEach(r => { const p = at(r.ua, r.db), q = at(r.ub, r.db); push([[p[0], p[1], r.h], [q[0], q[1], r.h], [q[0], q[1], r.h + 0.95], [p[0], p[1], r.h + 0.95]], 'rgba(40,42,46,.35)', o); }); }
+        else SR.treads.forEach(r => boxUD(r.ua, r.ub, r.da, r.db, r.z0 || 0, r.h - (r.z0 || 0)));
         const onGal = SR.onGal;
         if (onGal) return;
       }
@@ -24533,6 +24550,7 @@ function buildModeller(host) {
         { row.appendChild(vmNum(VMT('Along (0–1)', 'Ao longo (0–1)'), () => E.u, x => { E.u = x; }, 0, 0.95, 0.05)); row.appendChild(vmNum(VMT('Across (0–1)', 'Na profundidade (0–1)'), () => E.v, x => { E.v = x; }, 0, 0.95, 0.05)); row.appendChild(vmNum(VMT('Height (m)', 'Altura (m)'), () => E.h || 1.2, x => { E.h = x; }, 0.3, 4, 0.1)); } }
       if (E.t === 'stair') { row.appendChild(vmSel(VMT('Run', 'Lanço'), [['par', VMT('along the wall', 'encostado à parede')], ['perp', VMT('out from the wall', 'perpendicular à parede')]], () => E.along, x => { E.along = x; }));
         row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 0.9, 0.05)); row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 0.7, 2, 0.1));
+        row.appendChild(vmNum(VMT('Floors served', 'Pisos servidos'), () => E.flights || 1, x => { E.flights = Math.round(x); }, 1, 6, 1));
         row.appendChild(vmChk(VMT('landing', 'patamar'), () => !!E.landing, x => { E.landing = x; })); row.appendChild(vmChk(VMT('porch over the landing', 'alpendre no patamar'), () => !!E.porch, x => { E.porch = x; })); }
       if (E.t === 'varanda') { row.appendChild(vmSel(VMT('Kind', 'Tipo'), Object.keys(VM_VAR).map(k => [k, VL(VM_VAR[k])]), () => E.kind, x => { E.kind = x; }));
         row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 1, 0.05)); row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 0.8, 20, 0.1));
@@ -25555,8 +25573,13 @@ Object.assign(VERN_SRC, {
     vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 });
     vm.rooms0 = along(b, 0, [[R.loja, 1], [R.esc, 0.4], [R.loja, 1]]).concat(...[1, 2, 3, 4].map(f => deep(b, f, [[R.sala, 1.2], [R.alc, 0.8], [R.coz, 1]]))); };
   VM_OVR['pt-gaioleiro'] = (vm, b) => { town(b); b.roof.ridge = 'x'; vm.row = { n:3 };
-    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 }, { t:'varanda', vol:0, face:'N', kind:'corrida', pos:0.5, w:b.L - 1, floor:1 },
-      { t:'stair', vol:0, face:'N', along:'par', pos:0.85, w:0.9, landing:false, porch:false });
+    const st = { t:'stair', vol:0, face:'N', along:'par', pos:0.5, w:0.9, landing:false, porch:false, flights:b.fl - 1, iron:true };
+    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 }, st);
+    /* the back: the door to the yard in the middle of the ground floor, under the stair; on each floor the kitchen door
+       onto its landing and a window on the other side */
+    const SR = vmStairRuns(vm, b, st, b.fh), N = [vmOp('d', 0.5, 0.9, 2.1, 0), vmOp('w', 0.15, 0.9, 1.2, 0), vmOp('w', 0.85, 0.9, 1.2, 0)];
+    SR.lands.forEach(l => { const pu = Math.max(0.08, Math.min(0.92, l.u / b.L)); N.push(vmOp('d', pu, 0.8, 2.1, l.fl), vmOp('w', pu < 0.5 ? 0.82 : 0.18, 1.0, 1.3, l.fl)); });
+    b.open.N = N;
     vm.rooms0 = deep(b, 0, [[R.loja, 1.4], [R.ent, 0.6], [R.loja, 1]]).concat(...[1, 2, 3, 4].map(f => deep(b, f, [[R.sala, 1], [R.q, 0.8], [R.q, 0.8], [R.coz, 0.8]]))); };
   VM_OVR['pt-casa-corrente'] = (vm, b) => { town(b); b.wall.cunhais = false; b.roof.ridge = 'x'; vm.row = { n:3 };
     vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:Math.min(3, b.L - 1), floor:2 });
