@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.162.4',
+  version:     '1.162.5',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -9582,7 +9582,7 @@ function buildRoof(host) {
       return side === 'cross' ? S : L;
     };
     const splitSide = side => {
-      RF.divAxis = side === 'cross' ? 'cross' : 'long';
+      RF.divAxis = side === 'cross' ? 'cross' : 'long'; RF.divUser = true;   // the student's own choice: the model no longer sets it
       RF.divSel = -1;
       const M2 = roofModel(G, RF);
       let bi = 0;
@@ -21938,6 +21938,7 @@ Object.assign(PT, { 'Draw the model':'Desenhar o modelo', 'Archetype':'Arquétip
 
 /** A page as before, retitled for the popular study, its checklist open at the head. */
 const popular = (key, build) => host => {
+  try { vmSyncRidge(); } catch (e) { console.error(e); }
   build(host);
   const h = host.querySelector('.pagehead');
   if (h && POP_HEAD[key]) { h.querySelector('h2').textContent = VL(POP_HEAD[key].t); const p = h.querySelector('p'); if (p) p.textContent = VL(POP_HEAD[key].p); }
@@ -24361,6 +24362,15 @@ function vmRidgeDiv(v, L, D, fallback) {
   const rg = v && v.roof && v.roof.ridge;
   if (rg !== 'x' && rg !== 'y') return fallback === 'cross' ? 'cross' : 'long';
   return rg === (L >= D ? 'x' : 'y') ? 'long' : 'cross';
+}
+/** Every tab of the popular study reads the ridge as the model has it — a study opened or saved before the model set it
+    included — unless the student has turned the roof's divisions on Roof, or the study's plan is no longer the body's. */
+function vmSyncRidge() {
+  if (!STATE.vern || !STATE.vern.type || ROOF.divUser) return;
+  const R = vernRead(); if (!R) return;
+  const vm = R.V.vm || vmFromType(R.type), v = vm && vm.vols[Math.min(R.V.work || 0, vm.vols.length - 1)];
+  if (!v || Math.abs(v.L - MASS.L) > 0.6 || Math.abs(v.D - MASS.D) > 0.6) return;
+  ROOF.divAxis = vmRidgeDiv(v, MASS.L, MASS.D, ROOF.divAxis);
 }
 /** The Roof tab's family for a modeller chimney: the kind it is drawn as, else the place's own. */
 const vmChimFamOf = (E, R) => ({ alg:'rendilhada', ale:'alentejana', rib:'arca', sal:'saloia', az:'maos', mad:'arca', esp:'granito', talha:'arca', box:'arca',
@@ -26949,7 +26959,7 @@ function applyStudy(o) {
         'lock' in z.chim ? { lock:z.chim.lock !== false } : {}) } : {})) : undefined;
   } else delete ROOF.zones;
   if (isFinite(+R0.roofSel)) ROOF.roofSel = Math.max(-1, Math.min(2, Math.round(+R0.roofSel)));
-  ROOF.divAxis = R0.divAxis === 'cross' ? 'cross' : 'long';
+  ROOF.divAxis = R0.divAxis === 'cross' ? 'cross' : 'long'; ROOF.divUser = !!R0.divUser;
   ROOF.divSel = isFinite(+R0.divSel) ? Math.round(+R0.divSel) : -1;
   ['S', 'N', 'E', 'W', 'C'].forEach(f => {
     const s = o.open && o.open[f];
