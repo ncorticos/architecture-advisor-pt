@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.162.5',
+  version:     '1.162.6',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -9544,7 +9544,7 @@ function buildRoof(host) {
       if (rz.n === 1 || rz.n === 2) {
         zoneBox.appendChild(el('button', { class:'btn small', text:'\u27f3 ' + t('Rotate 90°') + ' ' + t('Part') + ' ' + ('ABC'[i] || String(i + 1)),
           title:t('Turn this part a quarter turn, to face another solar orientation'), onclick:() => {
-            rz.rot = ((((rz.rot | 0) + 1) % 4) + 4) % 4;
+            rz.rot = ((((rz.rot | 0) + 1) % 4) + 4) % 4; rz.rotUser = true;   // the student's turn: the model no longer sets it
             syncRoofTop(); buildRoofUI(); roofDraw();
           } }));
       }
@@ -19193,8 +19193,7 @@ function vernApply(scope) {
   if (all || scope === 'roof' || scope === 'ventilation') {
     const r = m.roof;
     ROOF.n = r.n; ROOF.th = r.th; delete ROOF.zones; ROOF.roofSel = -1;
-    /* the ridge where the type has it: along the street (eaves to it) or across it (the gable to it) — not merely the longer side */
-    ROOF.divAxis = vmRidgeDiv(vmFromType(R.type).vols[0], MASS.L, MASS.D, r.divAxis === 'cross' ? 'cross' : 'long');
+    ROOF.divAxis = r.divAxis === 'cross' ? 'cross' : 'long'; ROOF.divUser = false;
     ROOF.par = { on:false, h:0.6 };
     ROOF.bei = { on:r.bei > 0, d:r.bei, ends:true };
     /* a latada is a vine pergola; a porch (alpendre, varanda, gallery) a roofed canopy */
@@ -19204,6 +19203,8 @@ function vernApply(scope) {
        a model that sets its own zones keeps their eaves */
     const keep = r.zones ? ROOF.zones.map(z => z.bei) : null;
     migrateRoofGlobals(MASS, ROOF);
+    /* the ridge where the type has it: along the street (eaves to it) or across it (the gable to it) — not merely the longer side */
+    if (!r.zones) vmRidgeToRoof(vmFromType(R.type).vols[0], true);
     if (keep) ROOF.zones.forEach((z, i) => { if (keep[i] === undefined) delete z.bei; else z.bei = keep[i]; });
     /* the chimney the icon raises, as the place's own chimney, where the icon stands it */
     const CH = vmChimOf(R.type);
@@ -24350,18 +24351,23 @@ function vmPassToStudy(vm, wi) {
   MASS.L = Math.round(v.L * 2) / 2; MASS.D = Math.round(v.D * 2) / 2; MASS.fl = v.fl; MASS.fh = Math.max(2.0, v.fh);
   const n = { flat:0, shed:1, gable:2, ground:2, hip:3, pyramid:3, tesoura:3, cone:3, dome:3 }[v.roof.type];
   ROOF.n = n; ROOF.th = n === 0 ? 0 : Math.min(60, v.roof.type === 'dome' ? 35 : v.roof.th); delete ROOF.zones; ROOF.roofSel = -1;
-  ROOF.divAxis = vmRidgeDiv(v, MASS.L, MASS.D, ROOF.divAxis);
+  ROOF.divAxis = 'long';
   try { migrateRoofGlobals(MASS, ROOF); } catch (e) { }
+  vmRidgeToRoof(v, true);
   vmChimToRoof(vm, wi);
   toast(wi ? VMT('Now working on: ', 'Agora a trabalhar: ') + VL(v.name) : VMT('The main body is now the study’s massing — the other tabs measure it.', 'O corpo principal passou a ser a volumetria do estudo — os outros separadores medem-no.'));
   refreshAll();
 }
-/** The study's ridge setting for a modeller body: its ridge set east–west ('x') or north–south ('y') against the study's
-    longer side — 'long' when they agree, 'cross' turned 90° — or, left to the long side ('auto'), the fallback. */
-function vmRidgeDiv(v, L, D, fallback) {
+/** The study's roof takes the ridge of a modeller body: a gable part's ridge runs along its longer side unless the part is
+    turned a quarter (rot odd), so a body whose ridge is set east–west ('x') or north–south ('y') against that turns its
+    part. Only on a roof of one part the student has not turned or divided (force: on choosing the type or handing the body). */
+function vmRidgeToRoof(v, force) {
   const rg = v && v.roof && v.roof.ridge;
-  if (rg !== 'x' && rg !== 'y') return fallback === 'cross' ? 'cross' : 'long';
-  return rg === (L >= D ? 'x' : 'y') ? 'long' : 'cross';
+  if ((rg !== 'x' && rg !== 'y') || !ROOF.zones || ROOF.zones.length !== 1) return;
+  const z = ROOF.zones[0];
+  if (z.n !== 2 || (!force && (ROOF.divUser || z.rotUser))) return;
+  if (force) { delete z.rotUser; ROOF.divUser = false; }
+  z.rot = (rg === 'x') !== (MASS.L >= MASS.D) ? 1 : 0;
 }
 /** Every tab of the popular study reads the ridge as the model has it — a study opened or saved before the model set it
     included — unless the student has turned the roof's divisions on Roof, or the study's plan is no longer the body's. */
@@ -24370,7 +24376,9 @@ function vmSyncRidge() {
   const R = vernRead(); if (!R) return;
   const vm = R.V.vm || vmFromType(R.type), v = vm && vm.vols[Math.min(R.V.work || 0, vm.vols.length - 1)];
   if (!v || Math.abs(v.L - MASS.L) > 0.6 || Math.abs(v.D - MASS.D) > 0.6) return;
-  ROOF.divAxis = vmRidgeDiv(v, MASS.L, MASS.D, ROOF.divAxis);
+  /* a study saved by the earlier fix turned the divisions instead of the ridge: back to the long side */
+  if (ROOF.divAxis === 'cross' && ROOF.zones && ROOF.zones.length === 1) ROOF.divAxis = 'long';
+  vmRidgeToRoof(v, false);
 }
 /** The Roof tab's family for a modeller chimney: the kind it is drawn as, else the place's own. */
 const vmChimFamOf = (E, R) => ({ alg:'rendilhada', ale:'alentejana', rib:'arca', sal:'saloia', az:'maos', mad:'arca', esp:'granito', talha:'arca', box:'arca',
@@ -26941,7 +26949,7 @@ function applyStudy(o) {
        height and re-pitches the slopes finer than whole degrees */
     ROOF.zones = zs.length ? zs.map(z => Object.assign({ f0:+z.f0, f1:+z.f1, n:z.n, th:z.n === 0 ? 0 : clamp(Math.round(fin(z.th, 30) * 10) / 10, 5, 75) },
       z.n === 2 && isFinite(+z.rg) && +z.rg > 0 ? { rg:clamp(+z.rg, 0.2, 0.8) } : {},
-      isFinite(+z.rot) ? { rot:((Math.round(+z.rot) % 4) + 4) % 4 } : {},
+      isFinite(+z.rot) ? { rot:((Math.round(+z.rot) % 4) + 4) % 4 } : {}, z.rotUser ? { rotUser:true } : {},
       typeof z.colA === 'string' ? { colA:z.colA } : {},
       typeof z.colB === 'string' ? { colB:z.colB } : {},
       z.par && typeof z.par === 'object' ? { par:{ on:!!z.par.on, h:clamp(fin(z.par.h, 0.6), 0.2, 1.5) } } : {},
