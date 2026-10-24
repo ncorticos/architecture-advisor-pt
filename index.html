@@ -972,7 +972,7 @@ details.more[open] > summary{color:var(--ink)}
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.162.3',
+  version:     '1.162.4',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19193,6 +19193,8 @@ function vernApply(scope) {
   if (all || scope === 'roof' || scope === 'ventilation') {
     const r = m.roof;
     ROOF.n = r.n; ROOF.th = r.th; delete ROOF.zones; ROOF.roofSel = -1;
+    /* the ridge where the type has it: along the street (eaves to it) or across it (the gable to it) — not merely the longer side */
+    ROOF.divAxis = vmRidgeDiv(vmFromType(R.type).vols[0], MASS.L, MASS.D, r.divAxis === 'cross' ? 'cross' : 'long');
     ROOF.par = { on:false, h:0.6 };
     ROOF.bei = { on:r.bei > 0, d:r.bei, ends:true };
     /* a latada is a vine pergola; a porch (alpendre, varanda, gallery) a roofed canopy */
@@ -24347,10 +24349,18 @@ function vmPassToStudy(vm, wi) {
   MASS.L = Math.round(v.L * 2) / 2; MASS.D = Math.round(v.D * 2) / 2; MASS.fl = v.fl; MASS.fh = Math.max(2.0, v.fh);
   const n = { flat:0, shed:1, gable:2, ground:2, hip:3, pyramid:3, tesoura:3, cone:3, dome:3 }[v.roof.type];
   ROOF.n = n; ROOF.th = n === 0 ? 0 : Math.min(60, v.roof.type === 'dome' ? 35 : v.roof.th); delete ROOF.zones; ROOF.roofSel = -1;
+  ROOF.divAxis = vmRidgeDiv(v, MASS.L, MASS.D, ROOF.divAxis);
   try { migrateRoofGlobals(MASS, ROOF); } catch (e) { }
   vmChimToRoof(vm, wi);
   toast(wi ? VMT('Now working on: ', 'Agora a trabalhar: ') + VL(v.name) : VMT('The main body is now the study’s massing — the other tabs measure it.', 'O corpo principal passou a ser a volumetria do estudo — os outros separadores medem-no.'));
   refreshAll();
+}
+/** The study's ridge setting for a modeller body: its ridge set east–west ('x') or north–south ('y') against the study's
+    longer side — 'long' when they agree, 'cross' turned 90° — or, left to the long side ('auto'), the fallback. */
+function vmRidgeDiv(v, L, D, fallback) {
+  const rg = v && v.roof && v.roof.ridge;
+  if (rg !== 'x' && rg !== 'y') return fallback === 'cross' ? 'cross' : 'long';
+  return rg === (L >= D ? 'x' : 'y') ? 'long' : 'cross';
 }
 /** The Roof tab's family for a modeller chimney: the kind it is drawn as, else the place's own. */
 const vmChimFamOf = (E, R) => ({ alg:'rendilhada', ale:'alentejana', rib:'arca', sal:'saloia', az:'maos', mad:'arca', esp:'granito', talha:'arca', box:'arca',
