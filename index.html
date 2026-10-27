@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.165.0',
+  version:     '1.166.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23454,6 +23454,8 @@ const VM_VAR = {
 };
 const VM_FACES = ['S', 'E', 'N', 'W'];
 const vmClone = o => JSON.parse(JSON.stringify(o));
+/* a body may carry its own wall colour (a pigmented render) and thickness (a wall the study measured) over its material's */
+const vmWallC = v => v.wall.c || (VM_WALL[v.wall.mat] || VM_WALL.whitewash).c, vmWallT = v => +v.wall.t || (VM_WALL[v.wall.mat] || VM_WALL.whitewash).t;
 
 /* ---------------------------------------------------------------- the model */
 let VM_ID = 0;
@@ -23657,7 +23659,7 @@ function vmMetrics(vm) {
     wall += wa;
     VM_FACES.forEach(f => (v.open[f] || []).filter(o => o.fl < v.fl).forEach(o => { if (o.t === 'w') glaze += o.w * o.h; else door += o.w * o.h; }));
     vol += A * H + (v.roof.type === 'flat' ? 0 : A * vmRoofRise(v) / (['cone', 'pyramid'].indexOf(v.roof.type) >= 0 ? 3 : v.roof.type === 'dome' ? 1.5 : 2));
-    const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash; massW += wa * W.t * W.rho;
+    const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash; massW += wa * vmWallT(v) * W.rho;
   });
   const env = wall + roof + foot, main = vm.vols[0] || vmVol(), bb = vmBBox(vm);
   const earthRoof = vm.vols.some(v => v.roof.mat === 'earth' || v.roof.type === 'dome');
@@ -23711,7 +23713,7 @@ function vmVolFaces(v, opts) {
   /* a thin face (barra, quoin, frame, opening) belongs to the wall it is laid on: it is drawn with that wall, never before it */
   let host = null;
   const F = [], push = (P, fill, o) => F.push(Object.assign({ P, fill, n:vmNorm(P) }, o || {}, o && o.thin && host ? { host } : {}));
-  const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash, wc = W.c, z0 = v.raise || 0, H = z0 + vmH(v), r = v.roof, rc = (VM_ROOFMAT[r.mat] || VM_ROOFMAT.tile).c;
+  const wc = vmWallC(v), z0 = v.raise || 0, H = z0 + vmH(v), r = v.roof, rc = (VM_ROOFMAT[r.mat] || VM_ROOFMAT.tile).c;
   const th = (r.th || 0) * Math.PI / 180, e = r.type === 'flat' ? 0 : r.bei || 0, alongX = r.ridge === 'x' || (r.ridge !== 'y' && v.L >= v.D);
   const x0 = v.x - v.L / 2, x1 = v.x + v.L / 2, y0 = v.y - v.D / 2, y1 = v.y + v.D / 2;
   const lime = v.wall.mat === 'whitewash';
@@ -23883,7 +23885,7 @@ function vmElFaces(vm, vs) {
     push([[X, Y, z], [x, Y, z], [x, Y, Z], [X, Y, Z]], vmShade(c, 0.7), o); push([[x, Y, z], [x, y, z], [x, y, Z], [x, Y, Z]], vmShade(c, 0.9), o);
     push([[x, y, Z], [X, y, Z], [X, Y, Z], [x, Y, Z]], vmShade(c, 1.06), o); };
   (vm.els || []).forEach((E, ei) => vs.filter(v => v._i === E.vol).forEach(v => {
-    const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash, wc = W.c, z0 = v.raise || 0, H = z0 + vmH(v), x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = v.x + v.L / 2, y1 = v.y + v.D / 2;
+    const wc = vmWallC(v), z0 = v.raise || 0, H = z0 + vmH(v), x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = v.x + v.L / 2, y1 = v.y + v.D / 2;
     const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
     /* a point on a face: u along it (west→east, south→north), d out of it */
     const at = (u, d) => f === 'S' ? [x0 + u, y0 - d] : f === 'N' ? [x0 + u, y1 + d] : f === 'E' ? [x1 + d, y0 + u] : [x0 - d, y0 + u];
@@ -24097,7 +24099,7 @@ function vmPlanSVG(vm, w, opts) {
   /* openings go on top of every body, so a wall a neighbour body touches still shows and takes its openings */
   const ops = [];
   vs.forEach(v => {
-    const Wt = (VM_WALL[v.wall.mat] || VM_WALL.whitewash).t, sel = opts.sel === v._i;
+    const Wt = vmWallT(v), sel = opts.sel === v._i;
     const fillC = sel ? '#F4E3C2' : '#EFEAE0', st = sel ? '#B5772A' : '#3A3530';
     if (v.kind === 'rect') vmButtAt(v, v.L).forEach(u => [[-1, v.y - v.D / 2 - 0.6], [1, v.y + v.D / 2]].forEach(([sg, yb]) => { const a = P(v.x - v.L / 2 + u - 0.3, yb + 0.6);
       o.push('<rect x="' + a[0] + '" y="' + a[1] + '" width="' + (0.6 * s).toFixed(1) + '" height="' + (0.6 * s).toFixed(1) + '" fill="#D8D1C4" stroke="#3A3530" stroke-width="1"/>'); }));
@@ -24171,7 +24173,7 @@ function vmElevSVG(vm, face, w, opts) {
   o.push('<line x1="0" y1="' + P(0, 0)[1] + '" x2="' + w + '" y2="' + P(0, 0)[1] + '" stroke="#3A3530" stroke-width="1.5"/>');
   vs.slice().sort((a, b) => depth(b) - depth(a)).forEach(v => {
     const c = u(v), hw = half(v), z0 = v.raise || 0, H = z0 + vmH(v), r = v.roof, th = (r.th || 0) * Math.PI / 180, e = r.type === 'flat' ? 0 : r.bei || 0;
-    const wc = (VM_WALL[v.wall.mat] || VM_WALL.whitewash).c, rc = (VM_ROOFMAT[r.mat] || VM_ROOFMAT.tile).c;
+    const wc = vmWallC(v), rc = (VM_ROOFMAT[r.mat] || VM_ROOFMAT.tile).c;
     const poly = (pts, f, st) => o.push('<polygon points="' + pts.map(p => P(p[0], p[1]).join(',')).join(' ') + '" fill="' + f + '" stroke="' + (st || '#3A3530') + '" stroke-width="1"/>');
     poly([[c - hw, z0], [c + hw, z0], [c + hw, H], [c - hw, H]], wc);
     if (v.wall.barra && v.wall.mat === 'whitewash') poly([[c - hw, z0], [c + hw, z0], [c + hw, z0 + 0.45], [c - hw, z0 + 0.45]], v.wall.barra, 'none');
@@ -24203,7 +24205,7 @@ function vmDXF(vm) {
   const L = [], line = (a, b, layer) => L.push('0', 'LINE', '8', layer, '10', a[0].toFixed(3), '20', a[1].toFixed(3), '30', '0', '11', b[0].toFixed(3), '21', b[1].toFixed(3), '31', '0');
   const poly = (pts, layer) => pts.forEach((p, i) => line(p, pts[(i + 1) % pts.length], layer));
   const vs = vmAllVols(vm);
-  vs.forEach(v => { const ring = vmRing(v, 0, 0).map(p => [p[0], p[1]]), Wt = (VM_WALL[v.wall.mat] || VM_WALL.whitewash).t;
+  vs.forEach(v => { const ring = vmRing(v, 0, 0).map(p => [p[0], p[1]]), Wt = vmWallT(v);
     poly(ring, 'PLAN_WALL_OUT'); poly(vmRing(v, -Wt, 0).map(p => [p[0], p[1]]), 'PLAN_WALL_IN'); });
   if (vm.court && vm.court.on) poly(vmRing(Object.assign({ kind:'rect' }, vm.court), 0, 0).map(p => [p[0], p[1]]), 'PLAN_COURT');
   ((STATE.vern && STATE.vern.rooms) || []).forEach(q => poly([[q.x - q.w / 2, q.y - q.d / 2], [q.x + q.w / 2, q.y - q.d / 2], [q.x + q.w / 2, q.y + q.d / 2], [q.x - q.w / 2, q.y + q.d / 2]], 'PLAN_ROOMS'));
@@ -24566,7 +24568,7 @@ function buildModeller(host) {
       if (['flat', 'dome', 'cone'].indexOf(v.roof.type) < 0) r2.appendChild(vmSel(VMT('Beirado', 'Beirado'), [['1', VMT('single', 'simples')], ['2', VMT('double', 'duplo')], ['0', VMT('none', 'sem')]], () => v.roof.beirado == null ? 1 : v.roof.beirado, x => { v.roof.beirado = +x; }));
       ed.appendChild(el('h4', { text:VMT('Walls', 'Paredes') }));
       const r3 = ed.appendChild(el('div', { class:'vmrow' }));
-      r3.appendChild(vmSel(VMT('Material', 'Material'), Object.keys(VM_WALL).map(k => [k, VL(VM_WALL[k])]), () => v.wall.mat, x => { v.wall.mat = x; }));
+      r3.appendChild(vmSel(VMT('Material', 'Material'), Object.keys(VM_WALL).map(k => [k, VL(VM_WALL[k])]), () => v.wall.mat, x => { v.wall.mat = x; delete v.wall.c; delete v.wall.t; }));
       r3.appendChild(vmSel(VMT('Barra', 'Barra'), [['', VMT('none', 'sem')], ['#3F6FA8', VMT('blue', 'azul')], ['#C9A040', VMT('ochre', 'ocre')], ['#8E3B2E', VMT('ox-blood', 'sangue de boi')], ['#4F7A4A', VMT('green', 'verde')], ['#6B6B6B', VMT('grey', 'cinzenta')]], () => v.wall.barra || '', x => { v.wall.barra = x || null; }));
       r3.appendChild(vmSel(VMT('Frames of the openings', 'Molduras dos vãos'), [['', VMT('none', 'sem')], ['cal', VMT('lime band', 'faixa caiada')], ['cantaria', VMT('cut stone', 'cantaria')], ['cor', VMT('coloured', 'pintadas')]], () => v.wall.frames || '', x => { v.wall.frames = x || null; }));
       r3.appendChild(vmSel(VMT('Buttresses (both long sides)', 'Contrafortes (nos dois lados maiores)'), [['none', VMT('none', 'nenhum')], ['corners', VMT('at the corners', 'nos cunhais')], ['half', VMT('corners + half', 'cunhais + a meio')], ['thirds', VMT('corners + thirds', 'cunhais + terços')], ['quarters', VMT('corners + quarters', 'cunhais + quartos')]], () => vmButtMode(v), x => { v.wall.butt = x; v.wall.buttress = x === 'none' ? 0 : 1; }));
@@ -25490,6 +25492,7 @@ Object.assign(VERN_SRC, {
     FRA:{ tag:'França 1965', cite:'França, J.-A. (1965). <i>Lisboa pombalina e o Iluminismo</i>. Lisboa: Livros Horizonte (3.ª ed. Bertrand, 1987).', url:null },
     GAG:{ tag:'Gago 2007', cite:'Gago, C. W. (2007). <i>Habitação na Baixa Pombalina: análise de tipos e estudo de intervenções</i>. Dissertação de mestrado em Arquitectura, Instituto Superior Técnico.', url:null },
     MIR:{ tag:'Miranda 2011', cite:'Miranda, F. (2011). <i>Caracterização dos edifícios pombalinos da Baixa de Lisboa</i>. Dissertação de mestrado em Engenharia Civil, FCT — Universidade Nova de Lisboa.', url:'https://run.unl.pt/server/api/core/bitstreams/46e1c94c-e6d6-4838-8e7d-23b61f73c202/content' },
+    TFA:{ tag:'Tese FA-ULisboa, cap. IV', cite:'Tese de doutoramento em Arquitetura, Faculdade de Arquitetura da Universidade de Lisboa — Parte 2, Capítulo IV, «O Sistema Construtivo Pombalino»: as secções construtivas e os coeficientes de transmissão térmica (Cypetherm EPlus, 2018), a partir de Lopes dos Santos (1994), Mascarenhas (1996, 2009, 2014), Appleton (2011), Pinho (2000), Silva (2005, 2007) e do LNEC (ITE 50, ITE 54).', url:null },
     HCO:{ tag:'Horta Correia 1997', cite:'Correia, J. E. H. (1997). <i>Vila Real de Santo António: urbanismo e poder na política pombalina</i>. Vila Real de Santo António: Câmara Municipal (tese de doutoramento, FCSH-UNL, 1985).', url:null },
     AND:{ tag:'Andrade 2011', cite:'Andrade, H. (2011). <i>Caracterização de edifícios antigos. Edifícios «gaioleiros»</i>. Dissertação de mestrado em Engenharia Civil, FCT — Universidade Nova de Lisboa.', url:'https://run.unl.pt/bitstreams/87662c5e-ed56-41a0-a6c4-eb9fdfa9eaeb/download' },
     CPE:{ tag:'Pereira 2013', cite:'Pereira, C. (2013). <i>Reabilitação de edifícios «gaioleiros»</i>. Dissertação de mestrado em Engenharia Civil, ISEL — Instituto Politécnico de Lisboa.', url:null },
@@ -25512,20 +25515,53 @@ Object.assign(VERN_SRC, {
   'pt-pombalino':T('mainland', {
     name:{ en:'Pombaline building of the Baixa (prédio pombalino)', pt:'Prédio pombalino da Baixa' },
     where:{ en:'Lisbon — the Baixa rebuilt after 1755 (Rua Augusta, Prata, Fanqueiros, Ouro); Vila Real de Santo António (1774), the Pombaline town on the Guadiana', pt:'Lisboa — a Baixa reconstruída depois de 1755 (Rua Augusta, da Prata, dos Fanqueiros, do Ouro); Vila Real de Santo António (1774), a vila pombalina do Guadiana' },
-    summary:{ en:'The rental building of the rebuilt Baixa, standardised by Eugénio dos Santos and Carlos Mardel: shops on a vaulted masonry ground floor, four storeys of dwellings above held by the gaiola — a timber cage of braced walls (frontais, St Andrew’s crosses) filled with masonry — against the earthquake; a repeated façade of stone-framed windows, varandas de sacada on the first floor, two-slope roofs with dormers (águas-furtadas) and party walls carried above the roof against fire. In Vila Real de Santo António the same system in two storeys.',
-      pt:'O prédio de rendimento da Baixa reconstruída, normalizado por Eugénio dos Santos e Carlos Mardel: lojas num rés-do-chão abobadado em alvenaria, quatro andares de habitação sobre ele, travados pela gaiola — uma estrutura de madeira de paredes de frontal (cruzes de Santo André) preenchida de alvenaria — contra o sismo; uma fachada repetida de vãos de cantaria, varandas de sacada no primeiro andar, telhados de duas águas com águas-furtadas e empenas levantadas acima do telhado contra o fogo. Em Vila Real de Santo António, o mesmo sistema em dois pisos.' },
-    model:{ L:12, D:12, fl:5, fh:3.1, rot:180, form:'rect', roof:{ n:2, th:30, bei:0.25 },
-      open:{ S:vOpen([D(0.13, 0.12, up(5)), D(0.38, 0.12, up(5)), D(0.62, 0.12, up(5)), D(0.87, 0.12, up(5))], 0.35),
-        N:vOpen([W(0.2, 0.1, hi(5)), W(0.5, 0.1), W(0.8, 0.1, hi(5))], 0.2), E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
+    summary:{ en:'The rental building of the rebuilt Baixa, standardised by Eugénio dos Santos and Carlos Mardel. A stone podium on piles and timber grids — the ground floor of dressed limestone 1.00 m thick under brick vaults, the shops — and above it the gaiola, a timber cage against the earthquake: braced frontal walls (St Andrew’s crosses) filled with light masonry, floor joists from the front to the back, the cage embedded in the inner face of outer walls that thin from 0.92 to 0.76 m as they rise. Two dwellings to a floor round a central stair under a skylight, the kitchen and its chimney at the back. A repeated front of stone-framed openings — sacadas with casement windows on the first floor, sash windows above — in lime render painted ochre; two slopes of channel tile on level trusses with dormers (trapeiras), the party walls carried 0.8 m above the roof against fire. In Vila Real de Santo António the same system in two storeys.',
+      pt:'O prédio de rendimento da Baixa reconstruída, normalizado por Eugénio dos Santos e Carlos Mardel. Um embasamento de pedra sobre estacas e grelhas de madeira — o rés-do-chão em alvenaria de calcário aparelhada com 1,00 m, sob abóbadas de tijolo, as lojas — e sobre ele a gaiola, uma estrutura de madeira contra o sismo: paredes de frontal escoradas (cruzes de Santo André) cheias de alvenaria ligeira, vigas de pavimento da frente para o tardoz, a gaiola embebida na face interior das paredes exteriores, que emagrecem de 0,92 para 0,76 m à medida que sobem. Dois fogos por piso em torno de uma escada central sob clarabóia, a cozinha e a sua chaminé no tardoz. Uma fachada repetida de vãos de cantaria — sacadas com janelas de bater no 1.º piso, guilhotinas acima — em reboco de cal pintado a ocre; telhados de duas águas de telha de canudo sobre asnas de nível com trapeiras, as empenas levantadas 0,8 m acima do telhado contra o fogo. Em Vila Real de Santo António, o mesmo sistema em dois pisos.' },
+    /* the thesis's section: ground floor and three floors over it, the walls from 1.00 to 0.76 m; the floor height inferred from the stone frames */
+    model:{ L:12, D:12, fl:4, fh:3.6, rot:180, form:'rect', roof:{ n:2, th:30, bei:0.25 },
+      open:{ S:vOpen([0.13, 0.38, 0.62, 0.87].map(p => D(p, 0.12, [{ door:true }, { door:true }, { on:true, door:false }, { on:true, door:false }])), 0.22, 0.9, 2.8),
+        N:vOpen([W(0.15, 0.08, hi(4)), W(0.35, 0.08, hi(4)), D(0.5, 0.1, [{ door:true }, { on:false }, { on:false }, { on:false }]), W(0.65, 0.08, hi(4)), W(0.85, 0.08, hi(4))], 0.15, 0.9, 2.5),
+        E:{ wwr:0, units:vOff() }, W:{ wwr:0, units:vOff() } },
       render:{ en:'plaster walls, tile roof, green door', pt:'parede rebocada, telha, porta verde' },
-      walls:{ en:'masonry ground floor; the gaiola above — timber frontais filled with rubble — rendered and painted; limestone frames', pt:'rés-do-chão em alvenaria; gaiola nos andares — frontais de madeira cheios de alvenaria — rebocada e pintada; cantarias de lioz' } },
+      walls:{ en:'ground floor of large, carefully bedded limestone, 0.90 m plus 5 cm of lime render each side (1.00 m); above it limestone 0.82, 0.74 and 0.66 m with the gaiola embedded in the inner face (0.92, 0.84, 0.76 m rendered); lime render painted with lime and earth pigments, ochre; lioz dados, pilasters and quoins at the foot, limestone frames — U from 1.21 W/(m²·K) on the ground floor to 1.49 on the 3rd',
+        pt:'rés-do-chão em alvenaria de calcário de grande dimensão cuidadosamente emparelhada, 0,90 m mais 5 cm de reboco de cal de cada lado (1,00 m); acima, calcário de 0,82, 0,74 e 0,66 m com a gaiola embebida na face interior (0,92, 0,84, 0,76 m rebocadas); reboco de cal pintado a cal com terras, ocre; lambrins, pilastras e cunhais de lioz na base, cantarias de calcário — U de 1,21 W/(m²·K) no rés-do-chão a 1,49 no 3.º piso' } },
     feats:[
-      vFloors({ en:'4 over the ground floor (with the dormers, 5)', pt:'4 sobre o rés-do-chão (com as águas-furtadas, 5)' }, 4, 6, 'GAG'),
-      vRoofN(null, { en:'two slopes with dormers (águas-furtadas)', pt:'duas águas com águas-furtadas' }, [2], 'FRA'),
-      vPitch({ en:'≈ 30°, channel tile', pt:'≈ 30°, telha' }, 25, 38, 'INF'),
-      vWall({ en:'rendered and painted', pt:'rebocada e pintada' }, ['plaster', 'whitewash'], 'MIR'),
+      vFloors({ en:'3 over the ground floor, and the attic with its dormers (the thesis’s section: walls from the ground to the 3rd floor)', pt:'3 sobre o rés-do-chão e o desvão com trapeiras (a secção da tese: paredes do térreo ao 3.º piso)' }, 4, 6, 'TFA'),
+      vN('site', { en:'Floor-to-floor height', pt:'Altura piso a piso' }, { en:'≈ 3.6 m — the sacada’s stone frame alone is 15 palmos (≈ 3.3 m)', pt:'≈ 3,6 m — só a moldura de cantaria da sacada tem 15 palmos (≈ 3,3 m)' }, () => MASS.fh, 3.4, 4.2, 'm', 'TFA',
+        { en:'inferred from the frames; the thesis gives no floor height', pt:'inferida das molduras; a tese não dá o pé-direito' }),
+      vRoofN(null, { en:'two slopes with dormers (trapeiras)', pt:'duas águas com trapeiras' }, [2], 'FRA'),
+      vPitch({ en:'≈ 30°, channel tile', pt:'≈ 30°, telha de canudo' }, 25, 38, 'INF'),
+      vWall({ en:'lime render, lime paint with earth pigments — ochre', pt:'reboco de cal, pintura a cal com terras — ocre' }, ['plaster', 'whitewash'], 'TFA'),
+      vI('site', { en:'Many buildings of the Baixa stand four storeys over the ground floor — five with the attic.', pt:'Muitos prédios da Baixa têm quatro andares sobre o rés-do-chão — cinco com as águas-furtadas.' }, 'GAG'),
       vI('site', { en:'The gaiola: a three-dimensional timber cage inside the masonry, the first building system designed against earthquakes — its walls of frontais tie the floors together.', pt:'A gaiola: uma estrutura tridimensional de madeira dentro da alvenaria, o primeiro sistema construtivo pensado contra o sismo — as paredes de frontal amarram os pisos entre si.' }, 'MIR'),
+      vI('site', { en:'Foundations: piles of green, unbled pine in four parallel rows, at least 1.5 m deep, ≈ 15 cm thick and ≈ 40 cm apart; on them a grid (grelha) of three crossed layers of pine logs ≈ 20 cm thick, 15 cm apart; then a foundation wall of dressed stone 80 cm thick and arches of solid brick.',
+        pt:'Fundações: estacas de pinho verde não sangrado em quatro fiadas paralelas, com pelo menos 1,5 m de profundidade, ≈ 15 cm de secção e ≈ 40 cm de afastamento; sobre elas uma grelha de três camadas cruzadas de toros de pinho de ≈ 20 cm, a 15 cm; depois a parede de fundação de cantaria com 80 cm e arcos de tijolo maciço.' }, 'TFA'),
+      vI('site', { en:'The ground floor is the stone podium: inner walls of dressed limestone 0.35 m; a floor of lioz slabs (60 × 40 or 80 × 60 cm) on compacted sand and rubble; a ceiling of solid-brick vaults 0.22 m thick — barrel, basket-handle, segmental or groined (barrete de clérigo) — on transverse arches.',
+        pt:'O rés-do-chão é o embasamento de pedra: paredes interiores de calcário aparelhado com 0,35 m; pavimento de lajes de lioz (60 × 40 ou 80 × 60 cm) sobre areia compactada e enrocamento; teto de abóbadas de tijolo maciço com 0,22 m — de berço, asa de cesto, abatida ou barrete de clérigo — sobre arcos torais.' }, 'TFA'),
+      vI('site', { en:'The outer walls thin by ≈ 8 cm a floor, where the cage’s beams bear on them: 1.00 m on the ground floor, then 0.92, 0.84 and 0.76 m. U ≈ 1.21, 1.31, 1.40 and 1.49 W/(m²·K) — none meets Table I.05B of Portaria 379-A/2015, the rule for new and deeply renovated dwellings when the thesis was written (since 2021, Portaria 138-I/2021).',
+        pt:'As paredes exteriores emagrecem ≈ 8 cm por piso, onde as vigas da gaiola nelas apoiam: 1,00 m no rés-do-chão, depois 0,92, 0,84 e 0,76 m. U ≈ 1,21, 1,31, 1,40 e 1,49 W/(m²·K) — nenhuma cumpre a Tabela I.05B da Portaria 379-A/2015, a regra para habitação nova e grandes intervenções à data da tese (desde 2021, Portaria 138-I/2021).' }, 'TFA'),
+      vI('site', { en:'The cage’s timbers: posts 15 × 13 cm at 70 cm (90 cm where there is an opening); rails 15 × 12 cm at each third of the height on the lower floors, 13 × 10 cm at half-height on the upper; braces 10 × 10 cm below, 7 × 10 cm above; wall plates (frechais) 14 × 10 cm; floor joists 18 × 13 cm at 40 cm. Pedunculate oak, chestnut, cork oak and holm oak; larch and Scots pine less often. The cage in the outer walls has no diagonals; the frontais and the party walls are braced.',
+        pt:'As peças da gaiola: prumos de 15 × 13 cm a 70 cm (90 cm onde há vão); travessas de 15 × 12 cm a cada terço da altura nos pisos inferiores, 13 × 10 cm a meia altura nos superiores; escoras de 10 × 10 cm em baixo, 7 × 10 cm em cima; frechais de 14 × 10 cm; vigas de pavimento de 18 × 13 cm a 40 cm. Carvalho-alvarinho, castanho, sobro e azinho; menos o larício e o pinho-silvestre. A gaiola das paredes exteriores não tem diagonais; os frontais e as empenas são escorados.' }, 'TFA'),
+      vI('site', { en:'Inside: frontal walls of 0.15 m light masonry in the braced cage, U ≈ 1.42; tabique partitions of boards and lath, U ≈ 1.67; timber floors (boards 2.8 cm, joists, tarugos) under a board or lath-and-plaster ceiling, U ≈ 1.39 upward / 1.16 downward; the 1st floor over the vaults 0.97 / 0.85 W/(m²·K).',
+        pt:'No interior: paredes de frontal com 0,15 m de alvenaria ligeira na gaiola escorada, U ≈ 1,42; tabiques de tábua e fasquio, U ≈ 1,67; pavimentos de madeira (soalho de 2,8 cm, vigas, tarugos) com teto de saia e camisa ou estuque sobre fasquiado, U ≈ 1,39 ascendente / 1,16 descendente; o 1.º piso sobre as abóbadas, 0,97 / 0,85 W/(m²·K).' }, 'TFA'),
+      vI('site', { en:'Two dwellings to a floor round a central stair: a rectangular box of frontal walls that also braces the building, most often two flights and one landing a floor round a central wall cut as a balustrade at its top, lit by a skylight where it touches no façade. In corner buildings and those of one dwelling to a floor the stair stands to the side, against the party wall.',
+        pt:'Dois fogos por piso em torno de uma escada central: uma caixa retangular de paredes de frontal que também trava o edifício, mais frequentemente de dois lanços e um patamar por piso em torno de uma parede central recortada em balaustrada no topo, iluminada por uma clarabóia quando não toca nenhuma fachada. Nos prédios de gaveto e nos de um fogo por piso a escada fica de lado, encostada à empena.' }, 'TFA'),
+      vI('openings', { en:'Casement windows of two leaves «à francesa» in the sacadas of the first floor, toward the main streets — glazing bars, a fixed or opening fanlight, a 60 cm panel at the foot; sash windows of two vertical leaves, single glass in three panes each, in the sill windows of the floors above, never on the ground floor. Inside, panelled timber shutters of two leaves. Glass was scarce at the start of the rebuilding.',
+        pt:'Janelas de bater de duas folhas «à francesa» nas sacadas do 1.º piso, voltadas às ruas principais — pinázios, bandeira fixa ou móvel, almofada de 60 cm na base; janelas de guilhotina de duas folhas, vidro simples tripartido, nos vãos de peito dos pisos de cima, nunca no rés-do-chão. Por dentro, portadas de madeira almofadadas de duas folhas. O vidro escasseou no início da reconstrução.' }, 'TFA'),
+      vI('openings', { en:'The stone frames, height × width in palmos (≈ 0.22 m): sacada 15 × 8 (≈ 3.3 × 1.8 m), sill window 12 × 8 (≈ 2.6 × 1.8 m), top-floor window with an arched head 11½ × 8, dormer 8½ × 7 (≈ 1.9 × 1.5 m). The limestone lintels, jambs and sills are fixed to the cage with iron, over relieving arches of brick.',
+        pt:'As molduras de cantaria, altura × largura em palmos (≈ 0,22 m): sacada 15 × 8 (≈ 3,3 × 1,8 m), janela de peito 12 × 8 (≈ 2,6 × 1,8 m), janela do último piso de verga em arco 11½ × 8, trapeira 8½ × 7 (≈ 1,9 × 1,5 m). Vergas, ombreiras e peitos de calcário fixos à gaiola com ferragens, sobre arcos de descarga de tijolo.' }, 'TFA'),
+      vI('openings', { en:'Glazing as built: single clear glass 4 mm, U 5.8 W/(m²·K), g 0.88; solid timber frame U 3.0; the frame 33 % of a sill window, 41 % of a sacada; no air-tightness class (the worst, class 1, assumed). Doors of solid timber: building and dwelling doors U 4.00, room doors 2.85.',
+        pt:'Os envidraçados como construídos: vidro simples incolor de 4 mm, U 5,8 W/(m²·K), g 0,88; caixilho de madeira maciça U 3,0; o caixilho é 33 % de uma janela de peito e 41 % de uma sacada; sem classe de permeabilidade ao ar (assumida a pior, classe 1). Portas de madeira maciça: do edifício e do fogo U 4,00, dos compartimentos 2,85.' }, 'TFA'),
+      vI('roof', { en:'Level trusses (asna de nível): tie beams, rafters and common rafters 15 × 10 cm at 40 or 60 cm, ridge 18 × 8 cm, tied into the cage. Mansard roofs only by the main squares and streets.',
+        pt:'Asnas de nível: linhas, pernas e varas de 15 × 10 cm a 40 ou 60 cm, fileira de 18 × 8 cm, solidarizadas com a gaiola. Telhados de mansarda só junto das praças e ruas principais.' }, 'TFA'),
+      vI('roof', { en:'Channel tiles set on dabs of mortar make a ventilated roof — air moves between the tiles and the attic — over a plank ceiling (esteira) 3 cm thick: U ≈ 2.69 upward / 2.27 downward W/(m²·K). Dormers framed in timber, their cheeks frontal or tabique; a cornice of rendered brick or of stone; a skylight over the stair, lead-framed single glass.',
+        pt:'A telha de canudo assente em pontos de argamassa faz uma cobertura ventilada — o ar circula entre as telhas e o desvão — sobre uma esteira de prancha de 3 cm: U ≈ 2,69 ascendente / 2,27 descendente W/(m²·K). Trapeiras de estrutura de madeira, as ilhargas de frontal ou de tabique; cornija de tijolo rebocado ou de cantaria; clarabóia sobre a escada, caixilho de chumbo e vidro simples.' }, 'TFA'),
+      vI('roof', { en:'The party walls (empenas) rise ≈ 80 cm above the roof slope as fire breaks: frontal walls of 0.30 m, doubled between neighbours, U ≈ 1.02 W/(m²·K).',
+        pt:'As empenas sobem ≈ 80 cm acima do plano da cobertura como corta-fogos: paredes de frontal de 0,30 m, duplicadas entre vizinhos, U ≈ 1,02 W/(m²·K).' }, 'TFA'),
       vI('ventilation', { en:'Built round the block, the buildings are lit and aired from the street and from the inner yards (saguões) behind; the dwellings run through from one to the other.', pt:'Construídos à volta do quarteirão, os prédios são iluminados e ventilados pela rua e pelos saguões interiores; as habitações atravessam de um lado ao outro.' }, 'GAG'),
+      vI('ventilation', { en:'The kitchen at the back: the hearth a stone slab on a brick arch between two plain frontal walls, the firewood kept beneath; one straight flue per dwelling through the roof slope, capped with tiles. Beside it the slop sink (pia de despejo), a stone slab in a niche of the back wall over the yard, with a water-sealed trap and a fall pipe vented at the roof.',
+        pt:'A cozinha no tardoz: a lareira, uma pedra sobre arco de tijolo entre duas paredes de frontal sem escoras, a lenha guardada por baixo; uma conduta reta por fogo através da vertente, rematada com telhas. Ao lado a pia de despejo, uma laje de pedra num nicho da parede de tardoz sobre o logradouro, com sifão de fecho hídrico e tubo de queda ventilado na cobertura.' }, 'TFA'),
+      vI('visualization', { en:'At the foot of the front, lioz: dados, the bases of pilasters and quoins, sawn or polished, fixed with iron; inside, azulejo dados.', pt:'Na base da fachada, lioz: lambrins e arranques de pilastras e cunhais, serrados ou brunidos, fixos com ferrolhos; no interior, lambrins de azulejo.' }, 'TFA'),
       vI('site', { en:'Vila Real de Santo António (1774): the Pombaline plan and building system carried whole to the Guadiana — the town as a statement of royal power.', pt:'Vila Real de Santo António (1774): o plano e o sistema construtivo pombalinos levados inteiros ao Guadiana — a vila como afirmação do poder régio.' }, 'HCO')
     ] }),
 
@@ -25631,8 +25667,19 @@ Object.assign(VERN_SRC, {
     esc:{ en:'Stair', pt:'Escada' }, corr:{ en:'Corridor', pt:'Corredor' }, arm:{ en:'Store', pt:'Armazém' }, ent:{ en:'Entrance', pt:'Entrada' } };
   const town = b => { if (b.wall.mat === 'basalt') b.wall.mat = 'whitewash'; b.wall.barra = null; b.wall.frames = 'cantaria'; b.wall.cunhais = true; };
   VM_OVR['pt-pombalino'] = (vm, b) => { town(b); vm.row = { n:3 };
-    vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 });
-    vm.rooms0 = along(b, 0, [[R.loja, 1], [R.esc, 0.4], [R.loja, 1]]).concat(...[1, 2, 3, 4].map(f => deep(b, f, [[R.sala, 1.2], [R.alc, 0.8], [R.coz, 1]]))); };
+    /* the walls' mean thickness in the thesis's section (1.00 to 0.76 m), the render painted with lime and earth pigments */
+    b.wall.c = '#D9BC80'; b.wall.t = 0.88;
+    /* the openings at their stone frames' size: the shop doors, the first floor's sacadas, sill windows above, the top floor's lower */
+    const cols = [0.13, 0.38, 0.62, 0.87];
+    b.open.S = [].concat(...cols.map(p => [vmOp('d', p, 1.3, 2.9, 0), vmOp('v', p, 1.2, 2.8, 1)]
+      .concat(Array.from({ length:Math.max(0, b.fl - 2) }, (_, i) => vmOp('w', p, 1.2, i + 2 === b.fl - 1 ? 1.6 : 1.9, i + 2)))));
+    b.open.N = [vmOp('d', 0.5, 1.1, 2.4, 0)].concat(...Array.from({ length:b.fl - 1 }, (_, i) => [0.15, 0.35, 0.65, 0.85].map(p => vmOp('w', p, 1.0, 1.6, i + 1))));
+    cols.forEach(p => vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:p, w:1.8, floor:1 }));
+    /* two dwellings to a floor either side of the central stair box, each from the hall at the front to the kitchen at the back */
+    const S = 2.6, h = (b.L - S) / 2, x0 = (b.x || 0) - b.L / 2, col = (f, xa, w, list) => deep(Object.assign({}, b, { x:xa + w / 2, L:w }), f, list),
+      fogo = [[R.sala, 1.2], [R.q, 0.8], [R.coz, 1]];
+    vm.rooms0 = along(b, 0, [[R.loja, h], [R.esc, S], [R.loja, h]]).concat(...Array.from({ length:b.fl - 1 }, (_, i) => i + 1)
+      .map(f => col(f, x0, h, fogo).concat(col(f, x0 + h, S, [[R.alc, 1], [R.esc, 1.2], [R.alc, 1]]), col(f, x0 + h + S, h, fogo)))); };
   VM_OVR['pt-gaioleiro'] = (vm, b) => { town(b); b.roof.ridge = 'x'; vm.row = { n:3 };
     const st = { t:'stair', vol:0, face:'N', along:'par', pos:0.5, w:0.9, landing:false, porch:false, flights:b.fl - 1, iron:true };
     vm.els.push({ t:'varanda', vol:0, face:'S', kind:'sacada', pos:0.5, w:b.L - 2, floor:1 }, st);
@@ -25657,7 +25704,7 @@ Object.assign(VERN_SRC, {
       roof:{ type:'hip', th:30, bei:0.3, mat:'tile', ridge:'auto', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall),
       open:{ S:[vmOp('w', 0.5, 0.9, 1.2, 2)], E:[vmOp('w', 0.5, 0.9, 1.2, 2)], N:[vmOp('w', 0.5, 0.9, 1.2, 2)], W:[vmOp('w', 0.5, 0.9, 1.2, 2)] } }));
     vm.rooms0 = along(b, 0, [[R.arm, 1.2], [R.ent, 0.6], [R.loja, 1]]).concat(along(b, 1, [[R.sala, 1.2], [R.q, 1], [R.coz, 0.8]])); };
-  Object.assign(VM_CHIM_OWN, { 'pt-pombalino':{ kind:'box', u:0.5, v:0.75, h:1.2 }, 'pt-gaioleiro':{ kind:'box', u:0.5, v:0.7, h:1.2 }, 'pt-casa-corrente':{ kind:'box', u:0.5, v:0.7, h:1.0 },
+  Object.assign(VM_CHIM_OWN, { 'pt-pombalino':{ kind:'box', u:0.2, v:0.85, h:1.2 }, 'pt-gaioleiro':{ kind:'box', u:0.5, v:0.7, h:1.2 }, 'pt-casa-corrente':{ kind:'box', u:0.5, v:0.7, h:1.0 },
     'pt-casa-economica':{ kind:'box', u:0.2, v:0.6, h:1.0 }, 'az-angra':{ kind:'az', u:0.8, v:0.7, h:1.0 }, 'md-funchal':{ kind:'mad', u:0.2, v:0.7, h:1.0 } });
 
   /* the towns: their houses first, the region's after */
