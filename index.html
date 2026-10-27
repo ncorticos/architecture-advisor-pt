@@ -969,10 +969,14 @@ details.more[open] > summary{color:var(--ink)}
    ========================================================================== */
 
 /* ------------------------------------------------------------ 0. IDENTITY -- */
+/* The longest bar the plan takes along its main facade, in metres: long
+   enough for the terraced rows of the Algarve fishing towns — Fuseta's
+   run well past the 24 m the plan used to stop at. */
+const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.164.0',
+  version:     '1.165.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5946,10 +5950,10 @@ function pushImportFaces(arr, map) {
     the courtyard wall — as faces in that body's plan-local frame, with their own colours: every tab draws
     them (glass in the measuring tabs, dressed in the image), and the sun and the wind feel their bulk
     (vmCompanionBlocks). The chimney of the body worked on is the Roof tab's own, so it is left to it. */
-let GHOST_CACHE = { key:null, faces:[], blocks:[] };
+let GHOST_CACHE = { key:null, faces:[], blocks:[], city:[] };
 function vmCompanion() {
   let R = null; try { R = STATE.vern && STATE.vern.type ? vernRead() : null; } catch (e) { R = null; }
-  const vm = R && R.V && R.V.vm; if (!vm || !vm.vols || !vm.vols.length) return GHOST_CACHE = { key:null, faces:[], blocks:[] };
+  const vm = R && R.V && R.V.vm; if (!vm || !vm.vols || !vm.vols.length) return GHOST_CACHE = { key:null, faces:[], blocks:[], city:[] };   // no model: nothing around it either
   const wi = Math.min(R.V.work || 0, vm.vols.length - 1), w = vm.vols[wi];
   const key = JSON.stringify([vm.vols, vm.els, vm.court, vm.row]) + '|' + wi + '|' + (MASS && MASS.rot);
   if (GHOST_CACHE.key === key) return GHOST_CACHE;
@@ -8148,7 +8152,7 @@ function buildSite(host) {
   let labPanel = null;
   const labDraw = () => { balcEavesSync(G); if (labPanel) labPanel.draw(); refreshLab(); };
   const syncCtl = (c, v, f) => { c.range.value = v; c.out.textContent = f(v); };
-  const cL = rangeCtl('Length along main facade', 6, 24, 0.5, G.L, v => { G.L = v; labDraw(); }, v => fmt(v, 1) + ' m');
+  const cL = rangeCtl('Length along main facade', 6, L_MAX, 0.5, G.L, v => { G.L = v; labDraw(); }, v => fmt(v, 1) + ' m');
   const cD = rangeCtl('Depth', 4, 16, 0.5, G.D, v => { G.D = v; labDraw(); }, v => fmt(v, 1) + ' m');
   const cR = rangeCtl('Main facade faces', 0, 360, 1, G.rot, v => { G.rot = v; labDraw(); }, v => fmt(v, 0) + '°');
   const cF = numCtl('Floors above ground', 1, 3, 1, G.fl, v => { G.fl = v; renderBalc(); labDraw(); }, null);   // the balconies' floors follow
@@ -8193,7 +8197,7 @@ function buildSite(host) {
   }});
   const snap = el('button', { class:'btn solid', text:OI.pt ? 'Snap to the optimum for Portugal' : 'Snap to the Olgyay optimum', onclick: () => {
     const ob = optBox();                       // the same floor area, re-cut
-    G.L = clamp(Math.round(ob.Li * 2) / 2, 6, 24);
+    G.L = clamp(Math.round(ob.Li * 2) / 2, 6, L_MAX);
     G.D = clamp(Math.round(ob.Di * 2) / 2, 4, 16);
     if (OI.fl) { G.fl = OI.fl; cF.input.value = G.fl; renderBalc(); }
     G.rot = Math.round(OI.az);
@@ -9146,12 +9150,12 @@ function buildSite(host) {
       const q = toPlanZ(ev.clientX - r.left, ev.clientY - r.top, G.fl * G.fh), l = toLocal(q.x, q.y);
       const half = v => Math.round(v * 2) / 2;
       if (drag.id === 'bar') {
-        G.L = half(clamp(2 * Math.abs(l.u), 6, 24));
+        G.L = half(clamp(2 * Math.abs(l.u), 6, L_MAX));
         G.D = half(clamp(2 * Math.abs(l.v), 4, 16));
         syncCtl(cL, G.L, v => fmt(v, 1) + ' m');
         syncCtl(cD, G.D, v => fmt(v, 1) + ' m');
       } else if (drag.id === 'barH') {
-        G.L = half(clamp(2 * Math.abs(l.u), 6, 24));
+        G.L = half(clamp(2 * Math.abs(l.u), 6, L_MAX));
         G.wing.e = Math.max(0.5, Math.abs(l.v) - G.D / 2);
         syncCtl(cL, G.L, v => fmt(v, 1) + ' m');
       } else if (drag.id === 'patio') {
@@ -9226,7 +9230,7 @@ function buildSite(host) {
       balcSays();
     } else {
       const l = toLocal(p.x, p.y);
-      G.L = Math.round(clamp(drag.L0 + (2 * Math.abs(l.u) - drag.e0), 6, 24) * 2) / 2;
+      G.L = Math.round(clamp(drag.L0 + (2 * Math.abs(l.u) - drag.e0), 6, L_MAX) * 2) / 2;
       G.D = Math.round(clamp(drag.D0 + (2 * Math.abs(l.v) - drag.f0), 4, 16) * 2) / 2;
       syncCtl(cL, G.L, v => fmt(v, 1) + ' m');
       syncCtl(cD, G.D, v => fmt(v, 1) + ' m');
@@ -26958,7 +26962,7 @@ function continueToConstruction() {
 function applyStudy(o) {
   const fin = (v, d) => isFinite(+v) ? +v : d;
   const M0 = o.mass || {};
-  MASS.L = clamp(Math.round(fin(M0.L, 12) * 2) / 2, 6, 24);
+  MASS.L = clamp(Math.round(fin(M0.L, 12) * 2) / 2, 6, L_MAX);
   MASS.D = clamp(Math.round(fin(M0.D, 8) * 2) / 2, 4, 16);
   MASS.rot = ((fin(M0.rot, 180) % 360) + 360) % 360;
   MASS.fl = clamp(Math.round(fin(M0.fl, 1)), 1, 3);
@@ -28201,7 +28205,7 @@ function initSetup() {
   if (btnAdopt) btnAdopt.addEventListener('click', () => {
     if (!IMPORT.tris.length && !IMPORT.flat) return;
     IMPORT.active = true;
-    const L = clamp(Math.round(IMPORT.L * 2) / 2, 6, 24), D = clamp(Math.round(IMPORT.D * 2) / 2, 4, 16);
+    const L = clamp(Math.round(IMPORT.L * 2) / 2, 6, L_MAX), D = clamp(Math.round(IMPORT.D * 2) / 2, 4, 16);
     const fl = clamp(Math.max(1, Math.round(IMPORT.H / 3)), 1, 3);
     const cl = L !== Math.round(IMPORT.L * 2) / 2 || D !== Math.round(IMPORT.D * 2) / 2;
     IMPORT.note = t('Adopted — the plan takes {} × {} m, {} floors on Work through the design; the mesh shows in the 3D views.')
@@ -28331,7 +28335,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
   SCENE.veg.length = 0; SCENE.walls.length = 0;
   MASS = { L:12, D:8, rot:180, fl:1, fh:3.0, col:null, form:'rect', wing:null, patio:{ on:false, w:4, d:3, cx:0, cy:0 }, balc:[] };
   if (IMPORT.active && IMPORT.L > 0 && IMPORT.D > 0) {
-    MASS.L = clamp(Math.round(IMPORT.L * 2) / 2, 6, 24);
+    MASS.L = clamp(Math.round(IMPORT.L * 2) / 2, 6, L_MAX);
     MASS.D = clamp(Math.round(IMPORT.D * 2) / 2, 4, 16);
     MASS.fl = clamp(Math.max(1, Math.round(IMPORT.H / 3)), 1, 3);
     MASS.form = 'rect'; MASS.wing = null; MASS.patio.on = false;   // the import sizes the bar; breaks stay parametric
