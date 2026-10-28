@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.168.0',
+  version:     '1.168.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21404,11 +21404,11 @@ function vIcon(key, size) {
   if (yd) {
     const yW = yd.W || L, yD = yd.D || 0, E = yd.eira, G = yd.espig;
     const xmin = Math.min(0, (L - yW) / 2, E ? E.x : 0, G ? G.x - 0.8 : 0), xmax = Math.max(L, (L + yW) / 2, E ? E.x + E.w : 0);
-    const ymin = Math.min(0, E ? -(E.d + 0.8) : 0, G ? -(G.L + 0.8) : 0), ymax = Dd + yD;
+    const ymin = yd.front ? -yD - 0.4 : Math.min(0, E ? -(E.d + 0.8) : 0, G ? -(G.L + 0.8) : 0), ymax = yd.front ? Dd : Dd + yD;
     ground((xmin + xmax) / 2, (ymin + ymax) / 2, Math.hypot(xmax - xmin, ymax - ymin) / 2 + 0.8);
     /* the eira: the granite threshing floor, flat on the ground */
-    if (E) face([P(E.x, -0.8, 0.02), P(E.x + E.w, -0.8, 0.02), P(E.x + E.w, -(E.d + 0.8), 0.02), P(E.x, -(E.d + 0.8), 0.02)], '#D3CDBF', 0.04);
-    if (yD > 0) {
+    if (E && !yd.front) face([P(E.x, -0.8, 0.02), P(E.x + E.w, -0.8, 0.02), P(E.x + E.w, -(E.d + 0.8), 0.02), P(E.x, -(E.d + 0.8), 0.02)], '#D3CDBF', 0.04);
+    if (yD > 0 && !yd.front) {
       /* the ranges and the walls, the farthest first: the back range, then the west, then the east */
       const x0 = (L - yW) / 2, x1 = x0 + yW, y0 = Dd, y1 = Dd + yD, rg = {}; (yd.ranges || []).forEach(r => { rg[r.side] = r; });
       const wN = rg.N ? rg.N.w : 0.35, wW = rg.W ? rg.W.w : 0.35, wE = rg.E ? rg.E.w : 0.35, wh = yd.wall || 2.2, parts = [];
@@ -21523,7 +21523,8 @@ function vIcon(key, size) {
       line(q[3], q[2], 'rgba(255,255,255,.7)', 0.07);
     } });
   };
-  openings('S', L, (u, z) => P(u, -0.02, z));
+  /* a house seen from its pátio shows the doors it opens onto the pátio */
+  openings(yd && yd.front ? 'N' : 'S', L, (u, z) => P(u, -0.02, z));
   openings('E', Dd, (u, z) => P(L + 0.02, u, z));
   /* the loggia: its floor, side and back wall seen through the mouth, a timber guard across it above the ground floor */
   if (lg) {
@@ -21939,7 +21940,27 @@ function vIcon(key, size) {
       face([P(x - w / 2 - 0.2, -1.6, -rz), P(x + w / 2 + 0.2, -1.6, -rz), P(x + w / 2, -0.03, -rz), P(x - w / 2, -0.03, -rz)], 'rgba(90,140,180,.55)', 0.02); }
   }
   /* the espigueiro before the house: the granary of slats raised on its pillars and rat-stones */
-  if (yd && yd.espig) { const G = yd.espig, gx = G.x, gl = G.L || 5, gy0 = -(gl + 0.8), gy1 = -0.8, z0 = 1.0, gh = 1.5;
+  /* the pátio before the house, as seen from inside the farmyard: a range down each side, the wall and its portal across the front */
+  if (yd && yd.front && yd.D > 0) {
+    const yW = yd.W || L, ya = -yd.D, x0 = (L - yW) / 2, x1 = x0 + yW, rg = {}; (yd.ranges || []).forEach(r => { rg[r.side] = r; });
+    const wW = rg.W ? rg.W.w : 0.35, wE = rg.E ? rg.E.w : 0.35, wh = yd.wall || 2.2, tw = 0.35;
+    face([P(x0, ya, 0.01), P(x1, ya, 0.01), P(x1, 0, 0.01), P(x0, 0, 0.01)], '#E7E3D9', 0.02);
+    const wallSeg = (ax, ay, bx, by, h) => { yBox(ax, ay, bx, by, h); face([P(ax, ay, h), P(bx, ay, h), P(bx, by, h), P(ax, by, h)], vShade(wc, 1.1), 0.03); };
+    const range = (r, ax, bx) => { const h = r.h || 2.6;
+      yBox(ax, ya, bx, 0, h, r.open ? '#4A4038' : null);
+      /* the doors of the cortes onto the pátio; the open front of the alpendre between its posts */
+      if (!r.open) for (let k = 0; k < (r.doors || 0); k++) { const c = ya + (k + 0.5) * -ya / r.doors;
+        face([P(bx + 0.01, c - 0.5, 0.02), P(bx + 0.01, c + 0.5, 0.02), P(bx + 0.01, c + 0.5, Math.min(2.0, h - 0.3)), P(bx + 0.01, c - 0.5, Math.min(2.0, h - 0.3))], dc, 0.04); }
+      else for (let t = ax + 0.2; t < bx; t += Math.max(1.2, (bx - ax) / 2)) face([P(t, ya - 0.01, 0), P(t + 0.3, ya - 0.01, 0), P(t + 0.3, ya - 0.01, h), P(t, ya - 0.01, h)], '#B8B0A2', 0.02);
+      yRoof(ax, ya, bx, 0, h, true, r.marseille ? '#B5603D' : null); };
+    if (rg.W) range(rg.W, x0, x0 + wW); else wallSeg(x0, ya, x0 + tw, 0, wh);
+    const g = yd.gate || {}, a0 = x0 + wW, a1 = x1 - wE, gx = a0 + (a1 - a0) * (g.at === undefined ? 0.5 : g.at), gw = (g.w || 3) / 2;
+    if (gx - gw - a0 > 0.05) wallSeg(a0, ya, gx - gw, ya + tw, wh);
+    [gx - gw - 0.4, gx + gw].forEach(px => wallSeg(px, ya - 0.02, px + 0.4, ya + tw + 0.02, wh + 0.35));
+    if (a1 - gx - gw > 0.05) wallSeg(gx + gw, ya, a1, ya + tw, wh);
+    if (rg.E) range(rg.E, x1 - wE, x1); else wallSeg(x1 - tw, ya, x1, 0, wh);
+  }
+  if (yd && yd.espig && !yd.front) { const G = yd.espig, gx = G.x, gl = G.L || 5, gy0 = -(gl + 0.8), gy1 = -0.8, z0 = 1.0, gh = 1.5;
     [[gx + 0.15, gy0 + 0.3], [gx + 0.15, gy1 - 0.5], [gx + 0.15, (gy0 + gy1) / 2]].forEach(([px, py]) => {
       face([P(px, py, 0), P(px + 0.3, py, 0), P(px + 0.3, py, z0), P(px, py, z0)], '#9A958B', 0.02); face([P(px + 0.3, py, 0), P(px + 0.3, py + 0.3, 0), P(px + 0.3, py + 0.3, z0), P(px + 0.3, py, z0)], '#86817A', 0.02); });
     face([P(gx + 1.2, gy0, z0), P(gx + 1.2, gy1, z0), P(gx + 1.2, gy1, z0 + gh), P(gx + 1.2, gy0, z0 + gh)], '#8F887C', 0.04);
@@ -25840,7 +25861,7 @@ Object.assign(VERN_SRC, {
       pt:'Mais lavoura do que casa: da área coberta dos dois pisos só ≈ 15 % é habitação. As cortes e a cozinha abrem para um pátio fechado pela casa, por muros altos e por partes cobertas — abrigo da chuva, do vento e do sol, os animais vigiados da cozinha, as alfaias guardadas ao abrigo — com portais para os campos e para a estrada. A grande loja a noroeste conserva os produtos atrás de pequenas aberturas; a adega fica por trás de alpendres que lhe cortam o sol; a sudoeste o sequeiro, a eira e o espigueiro tomam o sol. Em baixo, a cozinha e uma pequena sala; no sobrado, quatro quartos e a outra sala, que abre para o sequeiro. Granito irregular à vista, tabiques, telha marselha sobre madeira, a cozinha sem forro e sem chaminé.' },
     /* the dwelling block (Site, Roof, Openings) and the farmyard round the pátio behind it, as Couto's plans draw it (Fig. 39) */
     model:{ L:12, D:8, fl:2, fh:2.7, rot:135, form:'rect', roof:{ n:2, th:24, bei:0.4 },
-      yard:{ W:20, D:15, wall:2.4, ranges:[{ side:'W', w:5, h:2.8, marseille:true }, { side:'N', w:4.5, h:2.6, marseille:true }, { side:'E', w:4, h:2.6, open:true }], eira:{ x:-4, w:8, d:7 }, espig:{ x:-6.6, L:5 } },
+      yard:{ front:true, W:20, D:12, wall:2.4, gate:{ at:0.55, w:3 }, ranges:[{ side:'W', w:5, h:2.8, marseille:true, doors:3 }, { side:'E', w:4, h:2.6, open:true }] },
       open:{ S:vOpen([W(0.2, 0.06, up2), W(0.45, 0.06, up2), W(0.7, 0.06, up2), D(0.88, 0.1, dn2)], 0.05),
         N:vOpen([D(0.15, 0.12, dn2), D(0.35, 0.12, dn2), D(0.6, 0.1, dn2), W(0.8, 0.06, [{ on:true }, { on:true }])], 0.08), E:vOpen([W(0.5, 0.1, up2)], 0.02), W:vOpen([W(0.3, 0.04, [{ on:true }, { on:false }]), W(0.7, 0.04, [{ on:true }, { on:false }])], 0.01) },
       render:{ en:'granite stone walls, tile roof, green door', pt:'paredes de granito, telhado de telha, porta verde' },
