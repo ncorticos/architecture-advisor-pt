@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.180.0',
+  version:     '1.181.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -28927,11 +28927,13 @@ function initSetup() {
     const xt = (cLo + 180) / 360 * n2;
     const lr = cLa * RAD;
     const yt = (1 - Math.log(Math.tan(lr) + 1 / Math.cos(lr)) / Math.PI) / 2 * n2;
-    const span = across / 2 / (256 * mpp);
+    // tiles over the whole frame, not only the square `across` names: a
+    // wide or tall view fills to its edges at the same scale
+    const spanX = W / 2 / k / (256 * mpp), spanY = H / 2 / k / (256 * mpp);
     const cx = W / 2, cy = H / 2;
     let shown = 0;
-    for (let tx = Math.floor(xt - span); tx <= Math.floor(xt + span); tx++) {
-      for (let ty = Math.floor(yt - span); ty <= Math.floor(yt + span); ty++) {
+    for (let tx = Math.floor(xt - spanX); tx <= Math.floor(xt + spanX); tx++) {
+      for (let ty = Math.floor(yt - spanY); ty <= Math.floor(yt + spanY); ty++) {
         const tile = tileImg(src.url(zl, tx, ty), onTile);
         if (!tile.ok || tile.blank) continue;
         const side = 256 * mpp * k;
