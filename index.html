@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.168.1',
+  version:     '1.169.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -11404,9 +11404,11 @@ function buildOpenings(host) {
       const sill0 = rF ? rF.sill : 0, head0 = rF ? Math.min(rF.head, h0()) : 0;
       rows.forEach((r, i) => {
         const q = fn.per[i], eu = EV(us[i]);
+        /* the row names one floor, so it reads that floor's own opening — a door below and a window above are not averaged */
+        const qw = isFinite(q.fw[FL]) ? q.fw[FL] : q.w, qa = isFinite(q.fa[FL]) ? q.fa[FL] : q.area;
         const sillEff = eu.door ? 0.05 : unitSpanV(us[i], sill0, head0, FL, G.fh)[0];
-        r.m.textContent = fmt(q.w, 2) + ' m · ' + fmt(q.area, 2) + ' m² · '
-          + (!eu.on ? '–' : String(Math.round(100 * (clamp(2 * H / Math.max(1, depth), 0, 1) + clamp(q.w / 2.4, 0, 1)) / 2)))
+        r.m.textContent = fmt(qw, 2) + ' m · ' + fmt(qa, 2) + ' m² · '
+          + (!eu.on ? '–' : String(Math.round(100 * (clamp(2 * H / Math.max(1, depth), 0, 1) + clamp(qw / 2.4, 0, 1)) / 2)))
           + (eu.on && eu.door ? ' · ' + t('door') : eu.on && eu.gel ? ' · ' + t('brick ventilation') : '')
           + (eu.on ? ' · ' + t('sill') + ' ' + fmt(sillEff, 2) + ' m' : '');
       });
@@ -11838,18 +11840,19 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
   function facadeNumbers(f) {
     const ws = winsOf(f), o = OPEN[f], us = faceUnits(f);
     const wall = ws.reduce((a, x) => a + x.w.glass / (o.wwr || 1), 0);
-    const per = us.map(u => ({ area:0, w:0, on:!!u.on, frac:u.frac, door:!!u.door, up:u.up || 0, gel:!!u.gel, ht:u.ht, sl:u.sl }));
+    const per = us.map(u => ({ area:0, w:0, fw:[], fa:[], on:!!u.on, frac:u.frac, door:!!u.door, up:u.up || 0, gel:!!u.gel, ht:u.ht, sl:u.sl }));
     let builtUnion = 0;
     ws.forEach(x => {
       const u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2, nF = x.w.rows.length;
-      for (let sk = 0; sk < nF; sk++) glassSpans(f, u0, u1, x.sg.len, sk).forEach(sp => { per[sp.ui].w += Math.max(0, sp.b - sp.a) / Math.max(1, ws.length * nF); });
+      for (let sk = 0; sk < nF; sk++) glassSpans(f, u0, u1, x.sg.len, sk).forEach(sp => { const d = Math.max(0, sp.b - sp.a);
+        per[sp.ui].w += d / Math.max(1, ws.length * nF); if (sp.on) per[sp.ui].fw[sk] = (per[sp.ui].fw[sk] || 0) + d / Math.max(1, ws.length); });
       x.w.rows.forEach((r, k) => {
         const hTop = x.w.ceil !== undefined ? Math.min(r.head, x.w.ceil) : Math.min(r.head, h0()), ivs = [];
         glassSpans(f, u0, u1, x.sg.len, k).forEach(sp => {
           const u = us[sp.ui];
           if (!sp.on) return;
           const vvH = x.w.ceil !== undefined ? spanVC(u, r.sill, hTop, x.w.base, x.w.ceil) : (unitDoor(u, k) ? doorSpanV(u, hTop, k, G.fh) : unitSpanV(u, r.sill, hTop, k, G.fh)); const h = vvH[1] - vvH[0];
-          per[sp.ui].area += Math.max(0, sp.b - sp.a) * Math.max(0, h);
+          per[sp.ui].area += Math.max(0, sp.b - sp.a) * Math.max(0, h); per[sp.ui].fa[k] = (per[sp.ui].fa[k] || 0) + Math.max(0, sp.b - sp.a) * Math.max(0, h);
           if (!u.gel && h > 0 && sp.b > sp.a) ivs.push([sp.a, sp.b, h]);
         });
         /* overlaps count once, at the tallest glass covering them */
@@ -19242,7 +19245,11 @@ function vernApply(scope) {
     if (sg) MASS.balc = (m.loggia ? MASS.balc : []).concat([{ f:'S', x:vAlong(sg, m.balcAt)[0], y:vAlong(sg, m.balcAt)[1], mode:'out', w:Math.min(m.balc, Math.floor(sg.len)), d:1.2, lv:Math.min(m.balcLv || 2, MASS.fl), corner:0, stair:{ w:STAIR_W } }]);
   }
   if (all || scope === 'openings') {
+    /* the model's openings as the modeller holds them — each door, window and varandim with its own size, floor by floor */
+    const VB = (() => { try { return vmFromType(R.type); } catch (e) { return null; } })();
     ['S', 'N', 'E', 'W'].forEach(f => {
+      const ind = VB && VB.vols && VB.vols[0] ? vernOpenUnits(f, VB, m) : null;
+      if (ind) { OPEN[f] = ind; return; }
       const o = m.open[f] || { wwr:0.02, units:vOff() };
       OPEN[f] = { wwr:o.wwr, sillZ:o.sillZ || 0.9, headZ:o.headZ || 1.8, ovD:0, ovN:1, ovL:0, ovR:0, finD:0, finN:0, finSide:'both',
         units:JSON.parse(JSON.stringify(o.units)) };
@@ -19270,6 +19277,50 @@ function vernApply(scope) {
     const dr = vDress(R.type); RENDER_DRESS = { barra:dr ? dr.barra : null, frames:dr ? dr.frames : null }; }
   mountApp(STATE.site, null, STATE.tab, true, true);
   toast(VL({ en:'Model applied: ', pt:'Modelo aplicado: ' }) + VL(R.T.name));
+}
+
+/** One face of the model as individual openings — not a glazed share cut into pieces: every door, window and
+    varandim of the modeller's body keeps its own width, height and place on its own floor. The face's band is made
+    the whole wall (92 %), so a window's share of it is its width; its height is its own. Returns null where a floor
+    has more openings than the Openings tab holds (6), so the older band reading takes over there. */
+function vernOpenUnits(f, vm, m) {
+  const fl = Math.max(1, m.fl | 0), fh = m.fh, len = f === 'S' || f === 'N' ? m.L : m.D;
+  /* a model whose roof is in parts is drawn as one body per part: the long walls gather every part's openings back
+     onto the whole wall, the gables are the end parts' own */
+  const nz = m.roof && m.roof.zones && m.roof.zones.length > 1 ? m.roof.zones.length : 1, parts = vm.vols.slice(0, nz);
+  const src0 = f === 'E' ? [parts[parts.length - 1]] : f === 'W' ? [parts[0]] : parts;
+  const ops = [].concat(...src0.map(v => (v.open && v.open[f] || []).map(o => Object.assign({}, o,
+    nz > 1 && (f === 'S' || f === 'N') ? { pos:((v.x || 0) - v.L / 2 + o.pos * v.L + m.L / 2) / m.L } : {}))))
+    .filter(o => o.fl < fl && o.w > 0.1);
+  const base = { ovD:0, ovN:1, ovL:0, ovR:0, finD:0, finN:0, finSide:'both' };
+  if (!ops.length) return Object.assign({ wwr:0, sillZ:0.9, headZ:1.8, units:[] }, base);
+  /* an upper-floor door is a varandim only over a ground-floor door; on its own it stays a door (a loft door, a gable door) */
+  ops.forEach(o => { if (o.t === 'v' && !ops.some(q => q.fl === 0 && q.t === 'd' && Math.abs(q.pos - o.pos) < 0.02)) o.t = 'd'; });
+  /* never more glass than the source gives the wall: windows larger than the stated share shrink together, doors aside */
+  const src = m.open && m.open[f], target = src && src.wwr > 0 ? src.wwr * len * fl * fh : Infinity;
+  const glz = ops.filter(o => o.t !== 'd'), have = glz.reduce((a, o) => a + o.w * Math.min(o.h, fh - 0.15), 0);
+  if (have > target * 1.02) { const k = Math.sqrt(target / have); glz.forEach(o => { o.w = Math.max(0.3, o.w * k); o.h = Math.max(0.3, o.h * k); }); }
+  const per = Array.from({ length:fl }, (_, k) => ops.filter(o => o.fl === k).sort((a, b) => a.pos - b.pos));
+  const nU = Math.max(...per.map(r => r.length));
+  if (nU > 6) return null;
+  const wins = ops.filter(o => o.t === 'w'), sill = 0.9;
+  const head0 = sill + (wins.length ? Math.max(...wins.map(o => o.h)) : 1.2);
+  const head = fl > 1 ? Math.max(sill + 0.3, Math.min(head0, fh - 0.1)) : head0, hb = Math.max(0.3, head - sill);
+  const band = len * 0.92, wwr = Math.min(0.95, 0.92 * hb / fh * 1.001);
+  const units = Array.from({ length:nU }, () => ({ on:true, frac:0, pos:0.5, off:0, floors:[] }));
+  per.forEach((row, k) => units.forEach((u, i) => {
+    const o = row[i];
+    if (!o) { u.floors[k] = { on:false }; return; }
+    const F = { on:true, frac:Math.min(1, o.w / band), pos:(o.pos - 0.04) / 0.92, off:0, door:o.t === 'd', gel:false };
+    if (o.t === 'v') { F.rail = true; F.sl = 0; F.ht = Math.min(o.h, fh - 0.3); }
+    else F.ht = Math.max(0.3, Math.min(o.h, fh - 0.15));
+    u.floors[k] = F;
+    /* the unit's share counts its glass only: a timber door is no glazing */
+    if (!F.door) u.frac += o.w * F.ht / (fl * hb * band);
+  }));
+  units.forEach(u => { const F0 = u.floors.find(F => F && F.on) || {}; u.pos = isFinite(F0.pos) ? F0.pos : 0.5; u.door = !!(u.floors[0] && u.floors[0].door);
+    u.frac = +Math.max(u.floors.some(F => F && F.on) ? 1e-4 : 0, Math.min(1, u.frac)).toFixed(4); });
+  return Object.assign({ wwr:+wwr.toFixed(4), sillZ:sill, headZ:+head.toFixed(2), units:units.filter(u => u.frac > 0) }, base);
 }
 
 /* --- the panel, on every tab ----------------------------------------------- */
@@ -25863,7 +25914,8 @@ Object.assign(VERN_SRC, {
     model:{ L:12, D:8, fl:2, fh:2.7, rot:135, form:'rect', roof:{ n:2, th:24, bei:0.4 },
       yard:{ front:true, W:20, D:12, wall:2.4, gate:{ at:0.55, w:3 }, ranges:[{ side:'W', w:5, h:2.8, marseille:true, doors:3 }, { side:'E', w:4, h:2.6, open:true }] },
       open:{ S:vOpen([W(0.2, 0.06, up2), W(0.45, 0.06, up2), W(0.7, 0.06, up2), D(0.88, 0.1, dn2)], 0.05),
-        N:vOpen([D(0.15, 0.12, dn2), D(0.35, 0.12, dn2), D(0.6, 0.1, dn2), W(0.8, 0.06, [{ on:true }, { on:true }])], 0.08), E:vOpen([W(0.5, 0.1, up2)], 0.02), W:vOpen([W(0.3, 0.04, [{ on:true }, { on:false }]), W(0.7, 0.04, [{ on:true }, { on:false }])], 0.01) },
+        N:vOpen([D(0.15, 0.12, [{ door:true }, { on:true, door:false }]), D(0.38, 0.12, [{ door:true }, { on:true, door:false }]), D(0.62, 0.1, [{ door:true }, { on:true, door:false }]), W(0.85, 0.06, [{ on:true }, { on:true }])], 0.1),
+          E:vOpen([W(0.3, 0.1, up2), W(0.7, 0.1, up2)], 0.03), W:vOpen([W(0.3, 0.04, [{ on:true }, { on:false }]), W(0.7, 0.04, [{ on:true }, { on:false }])], 0.01) },
       render:{ en:'granite stone walls, tile roof, green door', pt:'paredes de granito, telhado de telha, porta verde' },
       walls:{ en:'irregular granite masonry left bare inside and out in the farm rooms and the kitchen; the bedrooms rendered inside, divided by tabique', pt:'alvenaria de granito irregular à vista por dentro e por fora nas dependências agrícolas e na cozinha; os quartos rebocados por dentro e divididos por tabiques' } },
     feats:[
