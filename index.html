@@ -977,7 +977,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.176.0',
+  version:     '1.177.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -22642,7 +22642,7 @@ const popular = (key, build) => host => {
   const h = host.querySelector('.pagehead');
   if (h && POP_HEAD[key]) { h.querySelector('h2').textContent = VL(POP_HEAD[key].t); const p = h.querySelector('p'); if (p) p.textContent = VL(POP_HEAD[key].p); }
   try { vernMount(host, key, false); } catch (e) { console.error(e); }   // folded: the student opens it when wanted
-  if (['site', 'roof', 'openings', 'ventilation', 'visualization'].indexOf(key) >= 0) try { bodyBar(host); } catch (e) { console.error(e); }
+  if (['environment', 'site', 'roof', 'openings', 'ventilation', 'visualization'].indexOf(key) >= 0) { try { bodyBar(host); } catch (e) { console.error(e); } try { compBar(host); } catch (e) { console.error(e); } }
 };
 
 /** The first tab of the popular study: the archetype and its alternatives. */
@@ -25190,6 +25190,118 @@ function bodyBar(host) {
     + '.bbchip{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font:inherit;font-size:11px;color:var(--ink2)}'
     + '.bbchip svg{width:96px;height:auto}.bbchip.on{border-color:var(--c3);box-shadow:0 0 0 1px var(--c3);color:var(--ink)}' }));
   const head = host.querySelector('.pagehead'); host.insertBefore(bar, head ? head.nextSibling : host.firstChild);
+}
+
+/** Above each tab of the popular study: the yard wall round the house and the composition of the model's buildings,
+    adjusted here without going back to the modeller. The wall by four simple distances from the house (front, back,
+    west, east), its height and gate; the buildings and the wall's corners dragged on a small plan; a click on a
+    building works on it in this tab; any building turned a quarter; the archetype's own composition restored. */
+function compBar(host) {
+  let R = null; try { R = vernRead(); } catch (e) { return; } if (!R || (R.T && R.T.support)) return;
+  const vm = R.V.vm || (R.V.vm = vmFromType(R.type)); if (!vm || !vm.vols || !vm.vols.length) return;
+  vm.court = vm.court || { on:false, x:0, y:0, L:16, D:12, h:2, gate:{ face:'S', pos:0.5, w:3 } };
+  vm.court.gate = vm.court.gate || { face:'S', pos:0.5, w:3 };
+  const wi = Math.min(R.V.work || 0, vm.vols.length - 1);
+  if (!$('#compbarCSS')) document.head.appendChild(el('style', { id:'compbarCSS', text:
+    '.compbar{max-width:1380px;margin:0 auto 12px;border:1px solid var(--line);border-radius:8px;background:var(--wash)}'
+    + '.compbar>summary{cursor:pointer;padding:8px 12px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink2);list-style:none}'
+    + '.compbar>summary::-webkit-details-marker{display:none}.compbar>summary:before{content:"▸ ";color:var(--muted)}.compbar[open]>summary:before{content:"▾ "}'
+    + '.compbody{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:14px;padding:0 12px 12px}@media (max-width:820px){.compbody{grid-template-columns:1fr}}'
+    + '.compplan{border:1px solid var(--line);border-radius:6px;background:#fff;padding:4px}.compplan svg{width:100%;height:auto;display:block;touch-action:none}'
+    + '.compctl{font-size:12.5px}.compctl h5{margin:8px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}.compctl h5:first-child{margin-top:0}'
+    + '.compgrid{display:grid;grid-template-columns:repeat(4,minmax(90px,1fr));gap:6px 10px}.compgrid label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}'
+    + '.compgrid input,.compgrid select{font:inherit;font-size:12.5px;padding:3px 5px;border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--ink)}'
+    + '.compbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.compbtns button{font:inherit;font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:var(--ink)}'
+    + '.compbtns button.on{border-color:var(--c3);box-shadow:0 0 0 1px var(--c3)}.comphint{font-size:11.5px;color:var(--muted);margin:4px 0 0}' }));
+  const box = el('details', { class:'compbar' });
+  box.open = !!R.V.compOpen;
+  box.addEventListener('toggle', () => { R.V.compOpen = box.open; });
+  box.appendChild(el('summary', { text:vm.vols.length > 1 || vm.court.on ? VMT('Yard wall and composition of the buildings', 'Muro e composição dos edifícios') : VMT('Yard wall round the house', 'Muro em redor da casa') }));
+  const body = box.appendChild(el('div', { class:'compbody' }));
+  const planBox = body.appendChild(el('div', { class:'compplan' })), ctl = body.appendChild(el('div', { class:'compctl' }));
+  let timer = null;
+  const commit = (study) => { clearTimeout(timer); timer = setTimeout(() => { R.V.compOpen = true; if (study) vmWorkOn(Math.min(R.V.work || 0, vm.vols.length - 1)); else refreshAll(); }, 250); };
+  /* the bounding box of the buildings alone, the wall left out */
+  const houseBox = () => { const on = vm.court.on; vm.court.on = false; const b = vmBBox(Object.assign({}, vm, { row:{ n:1 } })); vm.court.on = on; return b; };
+  /* the wall's distances from the house, read back from where it stands */
+  const gaps = () => { const b = houseBox(), c = vm.court;
+    return { S:+(b[1] - (c.y - c.D / 2)).toFixed(1), N:+((c.y + c.D / 2) - b[3]).toFixed(1), W:+(b[0] - (c.x - c.L / 2)).toFixed(1), E:+((c.x + c.L / 2) - b[2]).toFixed(1) }; };
+  const setGaps = gp => { const b = houseBox(), c = vm.court, x0 = b[0] - gp.W, x1 = b[2] + gp.E, y0 = b[1] - gp.S, y1 = b[3] + gp.N;
+    c.L = Math.max(2, x1 - x0); c.D = Math.max(2, y1 - y0); c.x = (x0 + x1) / 2; c.y = (y0 + y1) / 2; };
+  function drawPlan() {
+    const PL = vmPlanSVG(vm, 420, { sel:wi, noRooms:true });
+    planBox.innerHTML = PL.svg;
+    const svg = planBox.querySelector('svg'); if (!svg) return;
+    let drag = null;
+    const pt = ev => { const b = svg.getBoundingClientRect(); return [(ev.clientX - b.left) * PL.w / b.width, (ev.clientY - b.top) * PL.h / b.height]; };
+    svg.addEventListener('pointerdown', ev => {
+      const t = ev.target, p = pt(ev), c = vm.court;
+      if (t.dataset.court !== undefined) { const ci = +t.dataset.court, sx = ci === 1 || ci === 2 ? 1 : -1, sy = ci >= 2 ? 1 : -1;
+        drag = { kind:'court', p, fx:c.x - sx * c.L / 2, fy:c.y - sy * c.D / 2, cx:c.x + sx * c.L / 2, cy:c.y + sy * c.D / 2 }; }
+      else if (t.dataset.vol !== undefined) { const i = +t.dataset.vol, v = vm.vols[i]; if (v) drag = { kind:'vol', i, v, p, x0:v.x, y0:v.y }; }
+      if (drag) { svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+    });
+    svg.addEventListener('pointermove', ev => {
+      if (!drag) return;
+      const p = pt(ev); if (Math.hypot(p[0] - drag.p[0], p[1] - drag.p[1]) > 3) drag.moved = true; if (!drag.moved) return;
+      const dx = Math.round((p[0] - drag.p[0]) / PL.s * 4) / 4, dy = -Math.round((p[1] - drag.p[1]) / PL.s * 4) / 4;
+      if (drag.kind === 'vol') { drag.v.x = drag.x0 + dx; drag.v.y = drag.y0 + dy; }
+      else { const c = vm.court, nx = drag.cx + dx, ny = drag.cy + dy; if (Math.abs(nx - drag.fx) >= 2) { c.L = Math.abs(nx - drag.fx); c.x = (nx + drag.fx) / 2; } if (Math.abs(ny - drag.fy) >= 2) { c.D = Math.abs(ny - drag.fy); c.y = (ny + drag.fy) / 2; } }
+      const PL2 = vmPlanSVG(vm, 420, { sel:wi, noRooms:true }); svg.innerHTML = PL2.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
+    });
+    const up = () => { if (!drag) return; const d = drag; drag = null;
+      if (!d.moved) { if (d.kind === 'vol' && d.i !== wi) { R.V.compOpen = true; vmWorkOn(d.i); } return; }
+      commit(false); };
+    svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+  }
+  function drawCtl() {
+    ctl.innerHTML = '';
+    const c = vm.court, num = (label, get, set, lo, hi, st) => el('label', null, [document.createTextNode(label), el('input', { type:'number', min:lo, max:hi, step:st || 0.5, value:+(+get()).toFixed(2),
+      onchange:e => { const v = clamp(+e.target.value, lo, hi); if (isFinite(v)) { set(v); drawPlan(); commit(false); } } })]);
+    ctl.appendChild(el('h5', { text:VMT('Wall round the house', 'Muro em redor da casa') }));
+    const sw = ctl.appendChild(el('div', { class:'compbtns' }));
+    sw.appendChild(el('button', { type:'button', class:c.on ? 'on' : '', text:c.on ? VMT('Wall: on', 'Muro: ligado') : VMT('Wall: off', 'Muro: desligado'),
+      onclick:() => { c.on = !c.on; if (c.on && !(c.L > 2 && c.D > 2 && c._set)) { setGaps({ S:4, N:2, W:2, E:2 }); c._set = true; c.open = null; } drawCtl(); drawPlan(); commit(false); } }));
+    if (c.on) {
+      const g = gaps(), round = ['S', 'N', 'W', 'E'].every(f => g[f] >= -0.05), grid = ctl.appendChild(el('div', { class:'compgrid' }));
+      /* a wall round the house reads as four distances from it; a yard beside or in front of it, by its own size and place */
+      if (round) [['S', VMT('Front (south)', 'Frente (sul)')], ['N', VMT('Back (north)', 'Trás (norte)')], ['W', VMT('West side', 'Lado poente')], ['E', VMT('East side', 'Lado nascente')]].forEach(([f, l]) =>
+        grid.appendChild(num(l + ' (m)', () => g[f], v => { const gg = gaps(); gg[f] = v; setGaps(gg); }, 0, 40, 0.5)));
+      else {
+        grid.appendChild(num(VMT('Yard length E–W (m)', 'Comprimento do pátio N–P (m)'), () => c.L, v => { c.L = v; }, 2, 80, 0.5));
+        grid.appendChild(num(VMT('Yard depth N–S (m)', 'Profundidade do pátio N–S (m)'), () => c.D, v => { c.D = v; }, 2, 80, 0.5));
+        grid.appendChild(num(VMT('Yard centre, east (m)', 'Centro do pátio, nascente (m)'), () => c.x, v => { c.x = v; }, -80, 80, 0.5));
+        grid.appendChild(num(VMT('Yard centre, north (m)', 'Centro do pátio, norte (m)'), () => c.y, v => { c.y = v; }, -80, 80, 0.5));
+        ctl.appendChild(el('div', { class:'compbtns' }, [el('button', { type:'button', text:VMT('Make it a wall round the whole house', 'Fazer um muro em redor de toda a casa'),
+          onclick:() => { setGaps({ S:4, N:2, W:2, E:2 }); c.open = null; c._set = true; drawCtl(); drawPlan(); commit(false); } })]));
+      }
+      grid.appendChild(num(VMT('Wall height (m)', 'Altura do muro (m)'), () => c.h, v => { c.h = v; }, 0.5, 5, 0.1));
+      grid.appendChild(el('label', null, [document.createTextNode(VMT('Gate on', 'Portão a')), (() => { const s = el('select', { onchange:e => { c.gate.face = e.target.value; drawPlan(); commit(false); } });
+        VM_FACES.forEach(f => s.appendChild(el('option', { value:f, text:VL({ en:{ S:'south', E:'east', N:'north', W:'west' }[f], pt:{ S:'sul', E:'nascente', N:'norte', W:'poente' }[f] }), selected:c.gate.face === f ? 'selected' : null }))); return s; })()]));
+      grid.appendChild(num(VMT('Gate width (m)', 'Largura do portão (m)'), () => c.gate.w, v => { c.gate.w = v; }, 0.8, 8, 0.1));
+      grid.appendChild(num(VMT('Gate along the wall (0–1)', 'Portão ao longo do muro (0–1)'), () => c.gate.pos, v => { c.gate.pos = v; }, 0.05, 0.95, 0.05));
+      grid.appendChild(el('label', null, [document.createTextNode(VMT('Side the house closes', 'Lado fechado pela casa')), (() => { const s = el('select', { onchange:e => { c.open = e.target.value || null; drawPlan(); commit(false); } });
+        [['', VMT('none', 'nenhum')]].concat(VM_FACES.map(f => [f, VL({ en:{ S:'south', E:'east', N:'north', W:'west' }[f], pt:{ S:'sul', E:'nascente', N:'norte', W:'poente' }[f] })])).forEach(([v, l]) => s.appendChild(el('option', { value:v, text:l, selected:(c.open || '') === v ? 'selected' : null }))); return s; })()]));
+      ctl.appendChild(el('p', { class:'comphint', text:VMT('Or drag the wall’s corners on the plan.', 'Ou arraste os cantos do muro na planta.') }));
+    }
+    ctl.appendChild(el('h5', { text:VMT('The buildings', 'Os edifícios') }));
+    const bb = ctl.appendChild(el('div', { class:'compbtns' }));
+    vm.vols.forEach((v, i) => {
+      bb.appendChild(el('button', { type:'button', class:i === wi ? 'on' : '', title:VMT('Work on this building in this tab', 'Trabalhar este edifício neste separador'), text:VL(v.name), onclick:() => { if (i !== wi) { R.V.compOpen = true; vmWorkOn(i); } } }));
+      if (v.kind !== 'round') bb.appendChild(el('button', { type:'button', title:VMT('Turn this building a quarter', 'Rodar este edifício 90°'), text:'↻',
+        onclick:() => { const t = v.L; v.L = v.D; v.D = t; const rg = v.roof.ridge || 'auto'; v.roof.ridge = rg === 'x' ? 'y' : rg === 'y' ? 'x' : (v.D > v.L ? 'x' : 'y');
+          const o = v.open; v.open = { S:o.W || [], E:o.S || [], N:o.E || [], W:o.N || [] }; drawPlan(); commit(i === wi); } }));
+    });
+    ctl.appendChild(el('p', { class:'comphint', text:vm.vols.length > 1 ? VMT('Drag a building on the plan to move it; click one to work on it in this tab; ↻ turns it 90°.', 'Arraste um edifício na planta para o mover; clique num para o trabalhar neste separador; ↻ roda-o 90°.')
+      : VMT('One building: move it on the plan, or add others in «Draw the model».', 'Um só edifício: mova-o na planta, ou acrescente outros em «Desenhar o modelo».') }));
+    const rb = ctl.appendChild(el('div', { class:'compbtns' }));
+    rb.appendChild(el('button', { type:'button', text:VMT('Back to the archetype’s composition', 'Repor a composição do arquétipo'), onclick:() => { const ref = vmFromType(R.type);
+      vm.vols.forEach((v, i) => { const r = ref.vols[i]; if (r) { v.x = r.x; v.y = r.y; if (v.kind !== 'round' && Math.abs(v.L - r.D) < 1e-6 && Math.abs(v.D - r.L) < 1e-6 && Math.abs(v.L - v.D) > 1e-6) { v.L = r.L; v.D = r.D; v.roof.ridge = r.roof.ridge; v.open = vmClone(r.open); } } });
+      vm.court = vmClone(ref.court); drawCtl(); drawPlan(); commit(true); } }));
+  }
+  drawCtl(); drawPlan();
+  const bar = host.querySelector('.bodybar'), head = host.querySelector('.pagehead');
+  host.insertBefore(box, bar ? bar.nextSibling : head ? head.nextSibling : host.firstChild);
 }
 
 /* ---------------------------------------------------------------- the finder */
