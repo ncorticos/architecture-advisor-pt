@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.169.0',
+  version:     '1.169.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19296,6 +19296,9 @@ function vernOpenUnits(f, vm, m) {
   if (!ops.length) return Object.assign({ wwr:0, sillZ:0.9, headZ:1.8, units:[] }, base);
   /* an upper-floor door is a varandim only over a ground-floor door; on its own it stays a door (a loft door, a gable door) */
   ops.forEach(o => { if (o.t === 'v' && !ops.some(q => q.fl === 0 && q.t === 'd' && Math.abs(q.pos - o.pos) < 0.02)) o.t = 'd'; });
+  /* onto the model's varanda an upper opening is a room's door, the varanda its railing — not a varandim of its own */
+  if (f === 'S' && m.balc && fl >= 2) { const lv = Math.min(fl, m.balcLv || 2) - 1, c = m.balcAt === undefined ? 0.5 : m.balcAt, hw = Math.min(m.balc, len - 1) / 2 / len;
+    ops.forEach(o => { if (o.t === 'v' && o.fl === lv && o.pos > c - hw && o.pos < c + hw) o.t = 'd'; }); }
   /* never more glass than the source gives the wall: windows larger than the stated share shrink together, doors aside */
   const src = m.open && m.open[f], target = src && src.wwr > 0 ? src.wwr * len * fl * fh : Infinity;
   const glz = ops.filter(o => o.t !== 'd'), have = glz.reduce((a, o) => a + o.w * Math.min(o.h, fh - 0.15), 0);
@@ -23651,7 +23654,7 @@ function vmFromType(k) {
         .map(o => Object.assign({}, o, { pos:f === 'S' || f === 'N' ? (o.pos - q.f0) / (q.f1 - q.f0) : o.pos })); });
       return v; });
   }
-  if (m.balc && m.fl >= 2) vm.els.push({ t:'varanda', vol:0, face:'S', kind:'corrida', pos:0.5, w:Math.min(m.balc, m.L - 2), floor:1 }, { t:'stair', vol:0, face:'S', along:'par', pos:0.12, w:1.1, landing:true, porch:false });
+  if (m.balc && m.fl >= 2) vm.els.push({ t:'varanda', vol:0, face:'S', kind:'corrida', pos:m.balcAt === undefined ? 0.5 : m.balcAt, w:Math.min(m.balc, m.L - 2), floor:Math.max(1, (m.balcLv || 2) - 1) }, { t:'stair', vol:0, face:'S', along:'par', pos:0.12, w:1.1, landing:true, porch:false });
   if (m.loggia) vm.els.push({ t:'varanda', vol:0, face:'S', kind:'reentrante', pos:0.5, w:m.loggia.w, floor:(m.loggia.lv || 1) - 1 });
   if (m.roof.latada) vm.els.push({ t:'latada', vol:0, face:'S', pos:0.5, w:Math.min(8, m.L - 1), d:3 });
   else if (m.roof.porch) vm.els.push({ t:'alpendre', vol:0, face:'S', pos:0.5, w:Math.min(8, m.L - 1), d:2.2 });
@@ -25883,8 +25886,12 @@ Object.assign(VERN_SRC, {
     summary:{ en:'The farm and the house in one long rectangle on a north-east–south-west axis, set by the public road on the rock the fields could not use. Below, half sunk, the lojas — adega, lagar, tulha — and the cortes of the animals; above, on the timber floor (sobrado), the bedrooms and the sala, reached by the granite outside stair from the quinteiro, the yard closed to the road by a high wall and its portal. The varanda faces south or south-east: corridor, workroom and drying place, closed at one end by the «quarto de fora». The kitchen sits half a level below the bedrooms, up to ≈ 5 m high, hearth and oven against a bedroom wall, without a chimney: the smoke leaves through the unlined tiles. An asymmetric roof, its ridge over the bedrooms, drops a low eave over the varanda; vine pergolas (ramadas) shade the yard in summer and let the sun in winter. Granite masonry pointed outside and rendered inside, oak joists, pine boards, tabique partitions, channel tile.',
       pt:'A lavoura e a casa num retângulo alongado segundo um eixo nordeste–sudoeste, implantado junto ao caminho público, no afloramento que os campos não aproveitavam. Em baixo, semienterradas, as lojas — adega, lagar, tulha — e as cortes dos animais; em cima, no piso sobradado, os quartos e a sala, servidos pela escada exterior de granito que sobe do quinteiro, fechado ao caminho por um muro alto e pelo portal. A varanda volta-se a sul ou sudeste: circulação, lugar de trabalho e sequeiro, fechada num topo pelo «quarto de fora». A cozinha fica meio piso abaixo dos quartos, com pé-direito até ≈ 5 m, a lareira e o forno encostados à parede de um quarto, sem chaminé: o fumo sai pela telha vã. Um telhado assimétrico, com a cumeeira a eixo do corpo dos quartos, deixa descair o beirado baixo sobre a varanda; as ramadas sombreiam o quinteiro no verão e deixam passar o sol no inverno. Alvenaria de granito, de juntas tomadas por fora e rebocada por dentro, barrotes de carvalho, soalho de pinho, tabiques, telha de canudo.' },
     model:{ L:16, D:7.5, fl:2, fh:2.6, rot:135, form:'rect', balc:8, balcAt:0.55, balcLv:2, roof:{ n:2, th:24, bei:0.5 },
-      open:{ S:vOpen([D(0.12, 0.12, dn2), D(0.3, 0.12, [{ door:true }, { door:true }]), W(0.45, 0.1, up2), D(0.62, 0.12, [{ door:true }, { door:true }]), W(0.8, 0.1, up2), D(0.92, 0.12, dn2)], 0.12),
-        N:vOpen([W(0.25, 0.05, up2), W(0.55, 0.05, up2), W(0.85, 0.05, up2)], 0.03), E:vOpen([W(0.5, 0.15, up2)], 0.02), W:{ wwr:0.02, units:vOff() } },
+      /* below, the doors of the cortes, the loja and the adega; above, under the varanda (0.30–0.80 of the front) the door of
+         each room onto it and the sala's window, the kitchen's small high window at the west end, a bedroom window beyond
+         the varanda; to the road only the tiny bedroom windows (modelled in the modeller at their own sizes) */
+      open:{ S:vOpen([D(0.12, 0.12, [{ door:true }, { on:true }]), D(0.38, 0.1, dn2), D(0.33, 0.08, [{ on:false }, { door:true }]), D(0.48, 0.08, [{ on:false }, { door:true }]),
+          W(0.58, 0.08, up2), D(0.62, 0.14, dn2), D(0.72, 0.08, [{ on:false }, { door:true }]), D(0.9, 0.12, [{ door:true }, { on:false }]), W(0.92, 0.08, up2)], 0.12),
+        N:vOpen([W(0.33, 0.04, up2), W(0.55, 0.04, up2), W(0.75, 0.04, up2), W(0.92, 0.04, up2)], 0.02), E:vOpen([W(0.5, 0.08, up2)], 0.01), W:vOpen([W(0.5, 0.06, up2)], 0.01) },
       render:{ en:'granite stone walls, tile roof, green door', pt:'paredes de granito, telhado de telha, porta verde' },
       walls:{ en:'granite masonry, pointed outside and rendered inside; regular ashlar where the owner could pay, irregular rubble with the best stones kept for quoins and lintels where not; oak joists on chestnut beams, pine boards, tabique partitions', pt:'alvenaria de granito, de juntas tomadas por fora e rebocada por dentro; aparelho regular onde havia posses, alvenaria irregular com as melhores pedras guardadas para cunhais e padieiras onde não havia; barrotes de carvalho sobre vigas de castanho, soalho de pinho, tabiques' } },
     feats:[
@@ -25987,6 +25994,13 @@ Object.assign(VERN_SRC, {
     return list.map(([n, w]) => { const ww = b.L * w / tot, r = { n, x:x0 + a + ww / 2, y, w:ww - 0.4, d, fl }; a += ww; return r; }); };
   const granite = b => { b.wall.mat = 'stone'; b.wall.barra = null; b.wall.frames = 'cantaria'; b.wall.cunhais = true; };
   VM_OVR['pt-lavoura-varanda'] = (vm, b) => { granite(b);
+    /* the openings at their own sizes (m): doors 0.8–1.4 × 2.0 below, room doors 0.8 × 2.0 onto the varanda, the tiny
+       bedroom windows to the road */
+    b.open.S = [vmOp('d', 0.12, 1.2, 2.0, 0), vmOp('d', 0.38, 1.0, 2.0, 0), vmOp('d', 0.62, 1.4, 2.0, 0), vmOp('d', 0.9, 1.1, 2.0, 0),
+      vmOp('w', 0.12, 0.6, 0.6, 1), vmOp('d', 0.33, 0.8, 2.0, 1), vmOp('d', 0.48, 0.8, 2.0, 1), vmOp('w', 0.58, 0.8, 1.0, 1), vmOp('d', 0.72, 0.8, 2.0, 1), vmOp('w', 0.92, 0.6, 0.8, 1)];
+    b.open.N = [0.33, 0.55, 0.75, 0.92].map(p => vmOp('w', p, 0.4, 0.5, 1));
+    b.open.E = [vmOp('w', 0.5, 0.5, 0.6, 1)]; b.open.W = [vmOp('w', 0.5, 0.4, 0.5, 1)];
+    vm.els.forEach(e => { if (e.t === 'stair') e.pos = 0.2; });
     vm.court = { on:true, x:0, y:-b.D / 2 - 5, L:b.L, D:10, h:2.4, open:'N', gate:{ face:'S', pos:0.8, w:3 } };
     vm.els.push({ t:'latada', vol:0, face:'S', pos:0.3, w:5, d:3 });
     vm.rooms0 = along(b, 0, [[R.corte, 1], [R.loja, 1], [R.adega, 1.2], [R.corte, 0.8]]).concat(along(b, 1, [[R.coz, 1.2], [R.q, 1], [R.sala, 1.2], [R.q, 1], [R.q, 0.8]])); };
