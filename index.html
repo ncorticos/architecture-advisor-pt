@@ -385,6 +385,8 @@ body.in-study .foot-refs{display:none}
 #setupMapOverlay[hidden]{display:none}
 #setupMapSheet{width:min(920px,94vw); max-height:92vh; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:14px 16px; box-shadow:0 18px 60px rgba(0,0,0,.3)}
 #setupMapSheetHead{display:flex; align-items:center; gap:10px; margin-bottom:8px}
+.sitefind{display:flex; gap:6px; margin:0 0 8px}.sitefind input{flex:1; min-width:0; font:inherit; font-size:13px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink)}
+.sitefindres{display:flex; flex-direction:column; gap:3px; margin:0 0 8px; font-size:12.5px}.sitefindres:empty{display:none}.sitefindres button{text-align:left; font:inherit; font-size:12.5px; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); cursor:pointer}.sitefindres button:hover{border-color:var(--c3)}.sitefindres .msg{color:var(--muted)}
 #setupMapSheetHead h3{font-size:14px; margin:0}
 #setupMapSheetHead .btn{margin-left:auto}
 #setupClimoSheet{width:min(920px,94vw); max-height:92vh; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:14px 16px; box-shadow:0 18px 60px rgba(0,0,0,.3)}
@@ -673,6 +675,7 @@ details.more[open] > summary{color:var(--ink)}
                 <h3 id="setupMapSheetTitle" data-t="mapSheetTitle">Choose the site position</h3>
                 <button type="button" class="btn" id="setupMapClose" data-t="mapSheetBack">Back to regular size</button>
               </div>
+              <form id="setupMapFind" class="sitefind" autocomplete="off"><input type="search" id="setupMapFindQ" aria-label="Address search"><button type="submit" class="btn" data-t="findBtn">Search</button></form><div id="setupMapFindRes" class="sitefindres" aria-live="polite"></div>
               <canvas id="setupMapBig" role="img" aria-label="Enlarged satellite view"></canvas>
               <p class="hint" id="setupMapPos"></p>
               <div id="setupMapBigRow">
@@ -693,6 +696,8 @@ details.more[open] > summary{color:var(--ink)}
               <p class="hint" data-t="mapSheetHint">Drag to explore, click to place the site — the coordinates follow and the altitude reads itself. Then use this position to return.</p>
             </div>
           </div>
+          <div class="gh" data-t="ghFind">Find by address</div>
+          <form id="setupSiteFind" class="sitefind" autocomplete="off"><input type="search" id="setupSiteFindQ" aria-label="Address search"><button type="submit" class="btn" data-t="findBtn">Search</button></form><div id="setupSiteFindRes" class="sitefindres" aria-live="polite"></div>
           <div class="gh" data-t="ghCoords">Coordinates</div>
           <div class="sbox two">
             <div class="fld">
@@ -977,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.178.0',
+  version:     '1.179.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -29065,6 +29070,48 @@ function initSetup() {
     });
   });
   [lat, lon, alt].forEach(f => f.addEventListener('input', () => { syncMirrorsFromMain(); if (bigOpen && f !== alt) kickBigMap(); }));
+  /* --- find the site by its address: a street, a place, a parish or a municipality anywhere in Portugal, the
+     mainland, the Azores and Madeira (OpenStreetMap's Nominatim, limited to Portugal); coordinates or a Google
+     Maps link are read directly. A pick writes the coordinates, brings the map onto it and reads the altitude. */
+  const sitePick = (la, lo, res, name) => {
+    echoGuard = true;
+    lat.value = +la.toFixed(5); lon.value = +lo.toFixed(5);
+    fireInput(lat); fireInput(lon);
+    echoGuard = false;
+    syncMirrorsFromMain();
+    view = { lat:la, lon:lo };
+    if (bigOpen) kickBigMap();
+    kickSetupMap();
+    scheduleAutoAlt();
+    res.innerHTML = '';
+    if (name) res.appendChild(el('div', { class:'msg', text:'✓ ' + name }));
+  };
+  const siteFind = pre => {
+    const form = $('#' + pre + 'Find'), inp = $('#' + pre + 'FindQ'), res = $('#' + pre + 'FindRes');
+    if (!form || !inp || !res) return;
+    const ph = () => { inp.placeholder = LANG === 'pt' ? 'Morada, lugar, freguesia ou concelho — continente, Açores ou Madeira' : 'Address, place, parish or municipality — mainland, Azores or Madeira'; };
+    ph(); inp.addEventListener('focus', ph);
+    const msg = txt => { res.innerHTML = ''; res.appendChild(el('div', { class:'msg', text:txt })); };
+    form.addEventListener('submit', ev => {
+      ev.preventDefault();
+      const q = String(inp.value || '').trim(); if (!q) return;
+      const spot = parseSpot(q);
+      if (spot) { if (inPortugal(spot.lat, spot.lon)) sitePick(spot.lat, spot.lon, res, null); else msg(LANG === 'pt' ? 'Esse ponto fica fora de Portugal e das suas ilhas.' : 'That point lies outside Portugal and its islands.'); return; }
+      msg(LANG === 'pt' ? 'A procurar…' : 'Searching…');
+      fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=pt&addressdetails=1&accept-language=pt&q=' + encodeURIComponent(q))
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
+        .then(js => {
+          const hits = (js || []).map(h => ({ la:+h.lat, lo:+h.lon, name:String(h.display_name || '').split(',').slice(0, 4).join(',').trim() })).filter(h => isFinite(h.la) && isFinite(h.lo) && inPortugal(h.la, h.lo))
+            .filter((h, i, A) => A.findIndex(o => o.name === h.name) === i).slice(0, 5);   // the same name once
+          if (!hits.length) { msg(LANG === 'pt' ? 'Nada encontrado com essa morada em Portugal.' : 'Nothing found for that address in Portugal.'); return; }
+          if (hits.length === 1) { sitePick(hits[0].la, hits[0].lo, res, hits[0].name); return; }
+          res.innerHTML = '';
+          hits.forEach(h => res.appendChild(el('button', { type:'button', text:h.name, onclick:() => sitePick(h.la, h.lo, res, h.name) })));
+        })
+        .catch(() => msg(LANG === 'pt' ? 'A pesquisa por morada não está disponível — escreva as coordenadas ou cole uma ligação do Google Maps.' : 'The address search is unavailable — type the coordinates or paste a Google Maps link.'));
+    });
+  };
+  siteFind('setupMap'); siteFind('setupSite');
   zoomBtns.forEach(b => b.addEventListener('click', () => {
     bigAcross = +b.dataset.across || 900;
     zoomBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
@@ -29935,6 +29982,8 @@ Object.assign(STATIC_PT, {
   mapSheetTitle: 'Escolher a posição do local',
   mapSheetBack: 'Voltar ao tamanho normal',
   mapSheetDone: 'Usar esta posição',
+  findBtn: 'Procurar',
+  ghFind: 'Procurar por morada',
   mapSheetHint: 'Arraste para explorar, clique para colocar o local — as coordenadas acompanham e a altitude lê-se sozinha. Depois regresse com Usar esta posição.',
   ghCoords: 'Coordenadas',
   ghBuilding: 'O edifício',
