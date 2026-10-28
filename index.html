@@ -977,7 +977,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.175.0',
+  version:     '1.176.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24418,8 +24418,9 @@ function vmVolFaces(v, opts) {
   /* piers or a plinth under a raised floor */
   if (z0 > 0.05 && !v._onTop) {
     if (v.piers) { const nx = Math.max(2, Math.round(v.L / 1.5)); for (let i = 0; i <= nx; i++) { const px = x0 + i * (v.L - 0.25) / nx; [y0, y1 - 0.25].forEach(py => {
-        push([[px, py, 0], [px + 0.25, py, 0], [px + 0.25, py, z0], [px, py, z0]], '#8E8A80'); push([[px + 0.25, py, 0], [px + 0.25, py + 0.25, 0], [px + 0.25, py + 0.25, z0], [px + 0.25, py, z0]], '#77736A');
-        push([[px - 0.12, py - 0.12, z0 - 0.05], [px + 0.37, py - 0.12, z0 - 0.05], [px + 0.37, py + 0.37, z0 - 0.05], [px - 0.12, py + 0.37, z0 - 0.05]], '#9A968C', { top:true }); }); } }
+        /* under the floor: painted before the body's walls, so a pier and its cap never show through them */
+        push([[px, py, 0], [px + 0.25, py, 0], [px + 0.25, py, z0], [px, py, z0]], '#8E8A80', { under:true }); push([[px + 0.25, py, 0], [px + 0.25, py + 0.25, 0], [px + 0.25, py + 0.25, z0], [px + 0.25, py, z0]], '#77736A', { under:true });
+        push([[px - 0.12, py - 0.12, z0 - 0.05], [px + 0.37, py - 0.12, z0 - 0.05], [px + 0.37, py + 0.37, z0 - 0.05], [px - 0.12, py + 0.37, z0 - 0.05]], '#9A968C', { top:true, under:true }); }); } }
     else if (v.kind === 'rect') { push([[x0, y0, 0], [x1, y0, 0], [x1, y0, z0], [x0, y0, z0]], '#8E8A80'); push([[x1, y0, 0], [x1, y1, 0], [x1, y1, z0], [x1, y0, z0]], '#77736A'); }
   }
   /* walls */
@@ -24656,7 +24657,41 @@ function vmElFaces(vm, vs) {
     if (E.t === 'alpendre' || E.t === 'latada') {
       if (f !== 'S') return;
       const w = Math.min(E.w || 6, v.L), d = E.d || 2.4, u0 = (E.pos || 0.5) * len - w / 2, [px, py] = at(u0, 0), z = Math.min(H, z0 + v.fh) - 0.1;
-      [px + 0.1, px + w - 0.25].forEach(cx => box(cx, py - d, 0, 0.15, 0.15, z, E.t === 'latada' ? '#6E4B2E' : '#E9E4D8', o));
+      if (E.t === 'alpendre') {
+        /* the telheiro hangs at the main roof's eave: it meets the wall just under the eave's edge and falls
+           outward at up to 15°, never lower than 2.1 m over the floor it shelters */
+        const rr = v.roof, tht = (rr.th || 0) * Math.PI / 180, alongX = rr.ridge === 'x' || (rr.ridge !== 'y' && v.L >= v.D);
+        const eaveS = rr.type === 'flat' ? 0 : (rr.type === 'gable' && !alongX) ? 0 : (rr.bei || 0) * Math.tan(tht);
+        /* it starts where the eave ends, so the main roof's overhang stays over it */
+        const eOver = eaveS > 0 ? Math.min(rr.bei || 0, d - 0.3) : 0, run = d + 0.2 - eOver;
+        const zTop = H - eaveS - 0.05, floor = z0 > 0.15 ? z0 : 0, zOut = clamp(zTop - run * Math.tan(15 * Math.PI / 180), Math.min(zTop, floor + 2.1), zTop);
+        const zPost = zOut + (zTop - zOut) * 0.2 / run, wood = '#8A6240';
+        [px + 0.1, px + w - 0.25].forEach(cx => box(cx, py - d, 0, 0.15, 0.15, zPost, '#E9E4D8', o));
+        push([[px - 0.2, py - d - 0.2, zOut], [px + w + 0.2, py - d - 0.2, zOut], [px + w + 0.2, py - eOver, zTop], [px - 0.2, py - eOver, zTop]], (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c, o);
+        /* over a raised floor, a timber deck from the door to the posts, railed, with a side stair down */
+        if (floor > 0.15 && E.deck !== false) {
+          box(px, py - d, floor - 0.12, w, d, 0.12, wood, o);
+          for (let t = 0.3; t < d - 0.05; t += 0.3) push([[px, py - d + t, floor + 0.002], [px + w, py - d + t, floor + 0.002], [px + w, py - d + t + 0.012, floor + 0.002], [px, py - d + t + 0.012, floor + 0.002]], vmShade(wood, 0.7), o);
+          for (let t = 1.6; t < w - 0.5; t += 1.6) box(px + t, py - d + 0.05, 0, 0.12, 0.12, floor - 0.12, vmShade(wood, 0.8), o);
+          const side = E.stair === 'W' ? 'W' : E.stair === 'none' ? null : 'E';
+          const n = Math.max(2, Math.round(floor / 0.18)), rise = floor / n, run = 0.28, sw = Math.min(1.0, d - 0.2), ys = py - d;
+          const rail = (a, b) => { const L2 = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.max(1, Math.round(L2 / 0.5));
+            push([[a[0], a[1], floor + 0.86], [b[0], b[1], floor + 0.86], [b[0], b[1], floor + 0.92], [a[0], a[1], floor + 0.92]], vmShade(wood, 0.85), o);
+            for (let i = 0; i <= k; i++) { const q = [a[0] + (b[0] - a[0]) * i / k, a[1] + (b[1] - a[1]) * i / k]; box(q[0] - 0.02, q[1] - 0.02, floor, 0.04, 0.04, 0.86, vmShade(wood, 0.9), o); } };
+          rail([px, ys], [px + w, ys]);
+          if (side !== 'W') rail([px, ys], [px, py]); else rail([px, ys + sw], [px, py]);
+          if (side !== 'E') rail([px + w, ys], [px + w, py]); else rail([px + w, ys + sw], [px + w, py]);
+          if (side) {
+            const sg = side === 'E' ? 1 : -1, xa = side === 'E' ? px + w : px;
+            for (let i = 1; i < n; i++) { const xi = xa + sg * (i - 1) * run, zt = floor - i * rise; box(Math.min(xi, xi + sg * run), ys, zt - 0.04, run, sw, 0.04, wood, o); }
+            const xb = xa + sg * (n - 1) * run;
+            [ys, ys + sw].forEach(yy => { push([[xa, yy, floor], [xb, yy, rise * 0.5], [xb, yy, 0], [xa, yy, floor - 0.28]], vmShade(wood, 0.75), o);
+              push([[xa, yy, floor + 0.9], [xb, yy, 0.9], [xb, yy, 0.84], [xa, yy, floor + 0.84]], vmShade(wood, 0.85), o); });
+          }
+        }
+        return;
+      }
+      [px + 0.1, px + w - 0.25].forEach(cx => box(cx, py - d, 0, 0.15, 0.15, z, '#6E4B2E', o));
       if (E.t === 'latada') { for (let t = 0; t <= w + 1e-6; t += 0.6) push([[px + t, py - d, z], [px + t + 0.06, py - d, z], [px + t + 0.06, py, z], [px + t, py, z]], '#6E4B2E', o);
         push([[px, py - d, z + 0.08], [px + w, py - d, z + 0.08], [px + w, py, z + 0.08], [px, py, z + 0.08]], 'rgba(110,150,70,.55)', o); }
       else push([[px - 0.2, py - d - 0.2, z], [px + w + 0.2, py - d - 0.2, z], [px + w + 0.2, py, z + 0.45], [px - 0.2, py, z + 0.45]], (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c, o);
@@ -24713,7 +24748,7 @@ function vmFaces(vm) {
      a face's own middle alone lets a near gable cover the roof's overhang, or a far roof slope the gable */
   const G = new Map(), gOf = q => q.el === 'chimney' ? 'v' + q.ev + '.' + q.rr : q.el ? 'e' + q.ei + '.' + q.rr : q.vol !== undefined && !q.court ? 'v' + q.vol + '.' + q.rr : 'f' + q.k;
   F.forEach(q => { const g = gOf(q); if (!G.has(g)) G.set(g, []); G.get(g).push(q); });
-  const rank = q => q.ground ? -1 : q.nocull && q.thin ? 0.5 : q.el === 'chimney' ? 2 : q.par ? 1.5 : q.roof || q.top ? 1 : 0, out = [];
+  const rank = q => q.ground ? -1 : q.under ? -0.5 : q.nocull && q.thin ? 0.5 : q.el === 'chimney' ? 2 : q.par ? 1.5 : q.roof || q.top ? 1 : 0, out = [];
   [...G.values()].map(A => { const pts = A.filter(q => q.el !== 'chimney').flatMap(q => q.P), lo = [0, 1, 2].map(j => Math.min(...pts.map(p => p[j]))), hi = [0, 1, 2].map(j => Math.max(...pts.map(p => p[j])));
     return { A, k: A.length === 1 ? A[0].k : vmKey([lo, hi]) }; })
     .sort((a, b) => a.k - b.k).forEach(g => g.A.sort((a, b) => rank(a) - rank(b) || a.k - b.k).forEach(q => out.push(q)));
@@ -25318,6 +25353,8 @@ function buildModeller(host) {
         row.appendChild(vmNum(VMT('Storey (0 = ground)', 'Piso (0 = térreo)'), () => E.floor || 0, x => { E.floor = Math.round(x); }, 0, 3, 1)); }
       if (E.t === 'oven') { row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 1, 0.05)); row.appendChild(vmNum(VMT('Radius (m)', 'Raio (m)'), () => E.r || 0.9, x => { E.r = x; }, 0.5, 2, 0.1)); }
       if (E.t === 'alpendre' || E.t === 'latada') { row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 1, 20, 0.5)); row.appendChild(vmNum(VMT('Depth (m)', 'Profundidade (m)'), () => E.d, x => { E.d = x; }, 1, 6, 0.1)); }
+      if (E.t === 'alpendre') { row.appendChild(vmChk(VMT('timber deck (raised floor)', 'deck de madeira (piso elevado)'), () => E.deck !== false, x => { E.deck = x; }));
+        row.appendChild(vmSel(VMT('Deck stair', 'Escada do deck'), [['E', VMT('east side', 'lado nascente')], ['W', VMT('west side', 'lado poente')], ['none', VMT('none', 'nenhuma')]], () => E.stair || 'E', x => { E.stair = x; })); }
       row.appendChild(el('button', { type:'button', class:'x', text:'✕ ' + VMT('remove', 'remover'), onclick:() => { M.els.splice(i, 1); vmChanged(true); } }));
     });
     const eb = ed.appendChild(el('div', { class:'vmbtns' }));
