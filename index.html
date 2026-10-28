@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.191.0',
+  version:     '1.192.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -20295,6 +20295,8 @@ Object.assign(VERN_SRC, {
   IFE:{ tag:'Ferreira 2024', cite:'Ferreira, I. M. C. (2024). <i>Arquitetura vernácula beirã: Aspetos construtivos na região do Alto Paiva</i> (dissertação de mestrado, orient. J. Vieira Caldas). Lisboa: Instituto Superior Técnico — Vila Nova de Paiva, Moimenta da Beira, Castro Daire; reading APP Zona 3 (1961), Correia (1995) and Pinto (2000).', url:'https://fenix.tecnico.ulisboa.pt/cursos/ma/dissertacao/565303595503714' },
   LSO:{ tag:'Lavrador de Sousa 2021', cite:'Sousa, J. J. F. A. L. de (2021). <i>Arquitectura popular ou vernácula? O caso da Serra da Estrela</i> (dissertação de mestrado). Lisboa: Instituto Superior Técnico — the Zona 3 types of APP (1961) checked in the field.', url:'https://fenix.tecnico.ulisboa.pt/cursos/ma/dissertacao/846778572213578' },
   OGP:{ tag:'Oliveira & Galhano 1957', cite:'Oliveira, E. V. de, &amp; Galhano, F. (1957). «Casas de pescadores da Póvoa de Varzim». <i>Trabalhos de Antropologia e Etnologia</i>, 15(3–4), 219–271. Porto: Universidade do Porto.', url:'https://ojs.letras.up.pt/index.php/tae/article/view/8667' },
+  SMB:{ tag:'Silva, Mendonça & Branco 2011', cite:'Silva, M., Mendonça, P., &amp; Branco, J. (2011). «Reabilitação de casas tradicionais em madeira do litoral norte e centro de Portugal». In <i>CIMAD 11 — 1.º Congresso Ibero-Latino-Americano da Madeira na Construção</i>, Coimbra, 7–9 June 2011. Guimarães: Universidade do Minho — the palheiros of the Costa Nova, Mira and the north coast, and an avieiro house at Caneiras.', url:null },
+  LPR:{ tag:'Leal & Prista 2021', cite:'Leal, J., &amp; Prista, M. (2021). «Os arquitetos no campo: O inquérito à arquitetura popular em Portugal no terreno». <i>Etnográfica</i>, 25(1), 257–283 — António Menéres (zona 1) on the palheiros of the Costa Nova and Mira.', url:null },
   NSA:{ tag:'Santos 2016', cite:'Santos, N. (2016). <i>Arquitetura e memória: O palheiro como objeto de identidade territorial</i> (dissertação de mestrado integrado). Coimbra: Universidade de Coimbra — Praia de Mira and Praia da Tocha, after Oliveira &amp; Galhano (1964), <i>Palheiros do litoral central português</i>.', url:'https://estudogeral.sib.uc.pt/handle/10316/33033' },
   MGG:{ tag:'Macedo & Garcia 2012', cite:'Macedo, S. C., &amp; Garcia, C. T. (2012). «Os marítimos de Monte Gordo e o veraneio na passagem do século XIX para o século XX: Estratégias de sobrevivência» (conference paper). Mértola: Campo Arqueológico de Mértola.', url:'http://hdl.handle.net/10400.26/3867' },
   CMA:{ tag:'CM Alcácer do Sal', cite:'Câmara Municipal de Alcácer do Sal. «Cabanas de colmo da Carrasqueira».', url:'https://cm-alcacerdosal.pt/locais/cabanas-de-colmo-da-carrasqueira/' },
@@ -21402,6 +21404,29 @@ Object.assign(MN_TYPES, {
       vI('site', { en:'The level below was often closed with stone or timber walls for stores: choose Plinth for a closed store, Piers for open stakes.', pt:'O nível de baixo era muitas vezes fechado com paredes de pedra ou de madeira para arrumações: escolha Soco para uma arrecadação fechada, Pilares para a estacaria aberta.' }, 'MOU'),
       vWall({ en:'timber', pt:'madeira' }, ['timber'], 'MOU')
     ] },
+  'pt-costa-nova':{ region:'mainland',
+    name:{ en:'Palheiro of the Costa Nova (Ílhavo, Aveiro)', pt:'Palheiro da Costa Nova (Ílhavo, Aveiro)' },
+    where:{ en:'The Costa Nova do Prado (Ílhavo), on the sand bar between the Ria de Aveiro and the sea', pt:'A Costa Nova do Prado (Ílhavo), no cordão de areia entre a Ria de Aveiro e o mar' },
+    summary:{ en:'A cluster of palheiros lived in through summer and autumn by part of the people of Ílhavo and nearby places — fishermen of the companhas that worked the beach, and the mercantéis who bought the fish to sell on. Timber houses on shifting sand, lifted and moved every few years: one storey on stakes left open to view, set on the dry sand. The outer boards ran horizontally, painted vermilion; at the end of the 19th century the wealthier families, for show, turned to vertical boards in light colours. As the population grew and the sand was fixed, the stakes gave way and the palheiros came to stand on the ground.',
+      pt:'Um agregado de palheiros habitado no Verão e no Outono por parte da população de Ílhavo e de terras próximas — pescadores das companhas que ali trabalhavam e mercantéis, compradores de peixe para revender. Casas de madeira sobre areias movediças, levantadas e mudadas de anos a anos: um só piso sobre estacaria à vista, assente na areia seca. O tabuado exterior era horizontal, pintado de vermelhão; no final do século XIX, como sinal de ostentação, as famílias abastadas passaram ao tabuado vertical pintado a cores claras. Com o aumento da população e a fixação das areias, as estacas foram desaparecendo e os palheiros passaram a assentar no chão.' },
+    model:{ L:7, D:9, fl:1, fh:2.6, rot:90, form:'rect', raise:{ h:0.8, kind:'piers' }, roof:{ n:2, th:30, bei:0.3 },
+      open:{ S:vOpen([W(0.22, 0.2), D(0.5, 0.18), W(0.78, 0.2)], 0.12), N:vOpen([D(0.5, 0.2)], 0.05), E:vOpen([W(0.3, 0.12), W(0.72, 0.12)], 0.04), W:vOpen([W(0.5, 0.12)], 0.02) },
+      render:{ en:'timber walls, tile roof, timber door', pt:'paredes de madeira, telhado de telha, porta de madeira' }, paint:'#F3F1EA', stripes:'#B8322B', frames:'#6E9CC4', gableFront:true,
+      walls:{ en:'timber boards on a timber frame — horizontal and vermilion, later vertical in light colours — on open stakes', pt:'tabuado de madeira sobre estrutura de madeira — horizontal e de vermelhão, depois vertical em cores claras — sobre estacaria à vista' } },
+    feats:[
+      vFloors('1', 1, 1, 'SMB'),
+      vRaise({ en:'on open stakes over the dry sand — later on the ground', pt:'sobre estacaria à vista na areia seca — depois assente no chão' }, 0, 1.2, 'SMB'),
+      vRoofN(null, { en:'two slopes, gable to the street', pt:'duas águas, empena para a rua' }, [2], 'NSA'),
+      vRoofFin({ en:'Marseille tile — once thatch or estorno', pt:'telha marselha — outrora colmo ou estorno' }, ['marseille', 'tile', 'canudo'], 'SMB'),
+      vN('site', { en:'Front', pt:'Frente' }, { en:'6–12 m (Mira)', pt:'6–12 m (Mira)' }, () => MASS.L, 6, 12, 'm', 'SMB'),
+      vN('site', { en:'Depth', pt:'Profundidade' }, { en:'4–9 m (Mira)', pt:'4–9 m (Mira)' }, () => MASS.D, 4, 9, 'm', 'SMB'),
+      vI('site', { en:'The door, with its postigo, opens straight on the sala, the core of the house, lit by windows set where they are needed; thin board partitions part the common rooms from the private ones; the kitchen at the back opens on the vegetable plots. The wealthier palheiros kept the same outline with more rooms: the sala in two communicating rooms on the main front, giving on a corridor that runs from front to back, always on the same side. At Mira three to six rooms, the kitchen at the far end, the bedrooms in the middle; front 6–12 m, depth 4–9 m, 3–5 m high from the stakes.', pt:'A porta, com postigo, dá directamente para a sala, o núcleo da casa, iluminada por janelas pontuais colocadas estrategicamente; tabuados finos separam os compartimentos comuns dos privados; a cozinha, nas traseiras, serve as hortas. Os palheiros das famílias abastadas tinham mais divisões, mantendo a traça: a sala em dois compartimentos comunicantes na fachada principal, dando para um corredor de fachada a fachada, sempre do mesmo lado. Em Mira, de três a seis compartimentos, a cozinha na extremidade oposta, os quartos no miolo; frente de 6 a 12 m, profundidade de 4 a 9 m, 3 a 5 m de altura desde a estacaria.' }, 'SMB'),
+      vI('roof', { en:'The roof on a truss like those of the popular architecture, of green eucalyptus soaked in soapy water before it was fitted, so the wood would not swell; once thatch and estorno, then tile, a few tiles lifted over the kitchen to let the smoke out.', pt:'A cobertura sobre uma asna idêntica às da arquitectura popular, de eucalipto verde, encharcado em água e sabão antes de aplicado, para a madeira não inchar; outrora colmo e estorno, depois telha, com algumas telhas levantadas sobre a cozinha para a saída dos fumos.' }, 'SMB'),
+      vI('visualization', { en:'The boards were treated with a paint of sili (sardine-gut oil), a drier, pigments and turpentine, renewed about every three years. Red made the pine stand out; postigos and windows, when there were any, were framed and picked out in light colours, blue and white. The model draws the vertical boards with every other band painted — change the colour or plain boards under Walls in Draw the model.', pt:'O revestimento era tratado com uma pintura de sili (óleo de tripa de sardinha), secante, pigmentos e água-rás, repetida normalmente de três em três anos. O vermelho fazia sobressair o pinho; postigos e janelas, quando os havia, eram emoldurados e realçados por cores claras, azul e branco. O modelo desenha o tabuado vertical com bandas alternadas pintadas — mude a cor, ou deixe o tabuado liso, em Paredes no Desenhar o modelo.' }, 'SMB'),
+      vI('ventilation', { en:'Built on shifting sand, the palheiros stood on open stakes so the wind could carry the sand under them; on the dunes it was the wind that set them on stakes.', pt:'Construídos sobre areias movediças, os palheiros erguiam-se sobre estacaria aberta para que o vento levasse a areia por baixo; nas dunas foi o vento que os pôs sobre estacas.' }, 'SMB'),
+      vI('openings', { en:'For António Menéres (zona 1 of the Inquérito, 1955–61) the Costa Nova and the palheiros of Mira were a revelation: houses on stakes because of the winds crossing the dunes — architecture he had never met at school.', pt:'Para António Menéres (zona 1 do Inquérito, 1955–61) a Costa Nova e os palheiros de Mira foram uma revelação: construções apoiadas em estacaria por causa dos ventos que atravessavam as dunas — arquitectura que nunca lhe fora ensinada na escola.' }, 'LPR'),
+      vWall({ en:'timber boards', pt:'tabuado de madeira' }, ['timber'], 'SMB')
+    ] },
   'pt-alpendrada':{ region:'mainland',
     name:{ en:'Porch house of Leiria (casa alpendrada)', pt:'Casa alpendrada (Leiria)' },
     where:{ en:'Pinhal Litoral and the plains round Leiria', pt:'Pinhal Litoral e os campos de Leiria' },
@@ -21957,9 +21982,11 @@ const ARCH_BIB = [
     'Oliveira, E. V. de, &amp; Galhano, F. (1957). Casas de pescadores da Póvoa de Varzim. <i>Trabalhos de Antropologia e Etnologia</i>, <i>15</i>(3–4), 219–271. https://ojs.letras.up.pt/index.php/tae/article/view/8667',
     'Pinto, S. M. L. R. (2016). <i>A tradição portuguesa das coberturas de colmo: Os casos práticos de Vale de Papas e Corte de Ouro</i> [Master’s dissertation, Universidade Lusíada]. http://hdl.handle.net/11067/1787',
     'Santos, N. (2016). <i>Arquitetura e memória: O palheiro como objeto de identidade territorial</i> [Master’s dissertation, Universidade de Coimbra]. https://estudogeral.sib.uc.pt/handle/10316/33033'] },
-  { r:{ en:'Aveiro and the Gândara — Ria de Aveiro, Baixo Vouga and Baixo Mondego', pt:'Aveiro e a Gândara — Ria de Aveiro, Baixo Vouga e Baixo Mondego' }, types:['pt-gandara', 'pt-tocha', 'pt-murtosa', 'pt-palheiro'], refs:[
+  { r:{ en:'Aveiro and the Gândara — Ria de Aveiro, Baixo Vouga and Baixo Mondego', pt:'Aveiro e a Gândara — Ria de Aveiro, Baixo Vouga e Baixo Mondego' }, types:['pt-gandara', 'pt-tocha', 'pt-murtosa', 'pt-palheiro', 'pt-costa-nova'], refs:[
     'Almeida, V. M. C. (2015). <i>Arquitectura de terra na região de Aveiro: Reabilitação de construções em adobe</i> [Master’s dissertation, Universidade Lusíada do Porto]. http://hdl.handle.net/11067/1814',
     'Dias, J., Galhano, F., &amp; Oliveira, E. V. de. (1959). A região e a casa gandaresa. <i>Trabalhos de Antropologia e Etnologia</i>, <i>17</i>(1–4), 417–443. https://ojs.letras.up.pt/index.php/tae/article/view/8725',
+    'Leal, J., &amp; Prista, M. (2021). Os arquitetos no campo: O inquérito à arquitetura popular em Portugal no terreno. <i>Etnográfica</i>, <i>25</i>(1), 257–283.',
+    'Silva, M., Mendonça, P., &amp; Branco, J. (2011). Reabilitação de casas tradicionais em madeira do litoral norte e centro de Portugal. In <i>CIMAD 11 — 1.º Congresso Ibero-Latino-Americano da Madeira na Construção</i>, Coimbra.',
     'Tavares, A. M. H. B. (2016). <i>Conversemos sobre casas: Uma reabilitação na Murtosa</i> [Master’s dissertation, Universidade da Beira Interior]. https://ubibliorum.ubi.pt/entities/publication/78bb9282-61c9-41fd-84a5-724f7e837a11'] },
   { r:{ en:'Leiria, Marinha Grande and Alcobaça — Pinhal Litoral and the Serras de Aire e Candeeiros', pt:'Leiria, Marinha Grande e Alcobaça — Pinhal Litoral e Serras de Aire e Candeeiros' }, types:['pt-alpendrada', 'pt-candeeiros', 'pt-alcobaca'], refs:[
     'Câmara Municipal da Marinha Grande. (n.d.). <i>Guia turístico da Marinha Grande</i>. https://www.cm-mgrande.pt/cmmgrande/uploads/document/file/1909/GUIATURISTICO_MG_PT_web.pdf',
@@ -22036,7 +22063,7 @@ vAdd('pt-alg-pescadores', [
    dwellings the sources give no chimney (the smoke through the tiles). */
 const VICON_URBAN = ['pt-porto-esguia', 'pt-porto-ilha', 'pt-lisboa-patio', 'pt-povoado', 'pt-ale-a1a', 'pt-ale-c1', 'pt-ale-b2', 'pt-ale-d',
   'pt-rib-vila', 'pt-alg-pescadores', 'pt-casa-judeus', 'pt-meia-casa', 'pt-povoa', 'pt-tavira'];
-const VICON_NOCHIM = ['pt-tmontes', 'pt-alg-trave'];
+const VICON_NOCHIM = ['pt-tmontes', 'pt-alg-trave', 'pt-costa-nova'];
 /** What the icon dresses a type with, for the app to wear the same: the
     coloured barra and frames of the south (or stone frames), and whether a
     chimney rises — and of which kind, where it stands on the roof. */
@@ -22088,10 +22115,13 @@ function vNeighbours(m, L, Dd, H, zones, P, face, out) {
     east: () => block(L, Math.max(2.4, H - 0.6))
   };
 }
+/** A house whose gable is its front, turned for the icon — which runs the ridge along the near wall and
+    shows the east end as the gable — so the front, its door and windows, is the gable the icon shows. */
+const vGableTurn = m => Object.assign({}, m, { L:m.D, D:m.L, open:Object.assign({}, m.open, { S:m.open.W, E:m.open.S, N:m.open.E, W:m.open.N }) });
 function vIcon(key, size) {
   const T = VERN_TYPES[key];
   if (!T) return '';
-  const m = T.model, L = m.L, Dd = m.D, fl = m.fl, fh = m.fh, H = fl * fh;
+  const m = T.model.gableFront ? vGableTurn(T.model) : T.model, L = m.L, Dd = m.D, fl = m.fl, fh = m.fh, H = fl * fh;
   const rp = typeof m.render === 'function' ? m.render({ nuts:'' }) : m.render, pr = parseRenderPrompt(rp.en);
   const wcAll = m.paint || (pr.wall ? pr.wall.c : '#E8E4DC'), wc = wcAll, rc = pr.roof ? pr.roof.c : '#A45E41', dc = pr.door ? pr.door.c : '#5A4632';
   const wk = pr.wall ? pr.wall.key : 'plaster', rk = pr.roof ? pr.roof.key : 'tile';
@@ -22189,7 +22219,14 @@ function vIcon(key, size) {
   const swall = [P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H)], ewall = [P(L, 0, 0), P(L, Dd, 0)].concat(eastTop);
   face(swall, wc); face(ewall, vShade(wc, 0.82));
   /* wall texture: stone courses, schist, timber boards; a darker plinth band on rendered walls */
-  const tex = { stone:[0.42, 'rgba(0,0,0,.18)'], schist:[0.2, 'rgba(0,0,0,.22)'], timber:[0.24, 'rgba(0,0,0,.25)'], earth:[0.5, 'rgba(0,0,0,.12)'] }[wk];
+  const tex = m.stripes ? null : { stone:[0.42, 'rgba(0,0,0,.18)'], schist:[0.2, 'rgba(0,0,0,.22)'], timber:[0.24, 'rgba(0,0,0,.25)'], earth:[0.5, 'rgba(0,0,0,.12)'] }[wk];
+  /* vertical boards painted in bands (the Costa Nova's riscas): every other band in the stripe colour, up the gable */
+  if (m.stripes) {
+    const bw = 0.34, tz = u => zl.n === 2 ? H + (Dd / 2 - Math.abs(u - Dd / 2)) * Math.tan(thl) : zl.n === 1 ? H + u * Math.tan(thl) : H;
+    for (let u = bw; u < L - 1e-6; u += 2 * bw) { const u1 = Math.min(L, u + bw); face([P(u, -0.01, 0), P(u1, -0.01, 0), P(u1, -0.01, H), P(u, -0.01, H)], m.stripes, 0.01); }
+    for (let u = bw; u < Dd - 1e-6; u += 2 * bw) { const u1 = Math.min(Dd, u + bw), pk = u < Dd / 2 && u1 > Dd / 2 && zl.n === 2 ? [P(L + 0.01, Dd / 2, tz(Dd / 2))] : [];
+      face([P(L + 0.01, u, 0), P(L + 0.01, u1, 0), P(L + 0.01, u1, tz(u1))].concat(pk, [P(L + 0.01, u, tz(u))]), vShade(m.stripes, 0.82), 0.01); }
+  }
   if (tex) { courses(P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H), H, tex[0], tex[1], 0.035); courses(P(L, 0, 0), P(L, Dd, 0), P(L, Dd, H), P(L, 0, H), H, tex[0], tex[1], 0.035);
     if (wk === 'timber') { ticks(P(0, 0, 0), P(L, 0, 0), P(L, 0, H), P(0, 0, H), L, 1.2, 'rgba(255,255,255,.45)', 0.05); }
     if (wk === 'stone') {
@@ -23407,7 +23444,7 @@ const VERN_DIST = {
   'pt-alg-taipa':['Faro'], 'pt-alg-acoteia':['Faro'], 'pt-alg-serra':['Faro'], 'pt-alg-trave':['Faro'], 'pt-alg-pescadores':['Faro'],
   'pt-alg-central':['Faro'], 'pt-alg-monchique':['Faro'],
   'pt-ribatejo':['Santarém'], 'pt-rib-vila':['Santarém'], 'pt-setubal':['Setúbal'], 'pt-avieiro':['Santarém', 'Lisboa'],
-  'pt-palheiro':['Aveiro', 'Coimbra', 'Leiria'], 'pt-alpendrada':['Leiria'], 'pt-povoado':['Évora', 'Beja', 'Portalegre'],
+  'pt-palheiro':['Aveiro', 'Coimbra', 'Leiria'], 'pt-costa-nova':['Aveiro'], 'pt-alpendrada':['Leiria'], 'pt-povoado':['Évora', 'Beja', 'Portalegre'],
   'pt-ale-a1a':['Beja'], 'pt-ale-c1':['Beja', 'Portalegre'], 'pt-ale-b2':['Beja', 'Évora'], 'pt-ale-d':['Évora', 'Beja'], 'pt-monte-patio':['Beja', 'Évora'],
   'pt-pinhal':['Coimbra', 'Castelo Branco'], 'pt-candeeiros':['Leiria', 'Santarém'], 'pt-alcobaca':['Leiria'], 'pt-freita':['Aveiro'],
   'pt-montemuro':['Viseu'], 'pt-beira-campo':['Castelo Branco'], 'pt-paul':['Castelo Branco'],
@@ -24778,6 +24815,15 @@ function vmVolFaces(v, opts) {
       if (v.wall.barra && lime) push([at(0, z0), at(len, z0), at(len, z0 + bh), at(0, z0 + bh)], v.wall.barra, { thin:true });
       else if (lime && !z0) push([at(0, 0), at(len, 0), at(len, 0.3), at(0, 0.3)], vmShade(wc, 0.72), { thin:true });
       if (v.wall.cunhais) [[0, 0.3], [len - 0.3, len]].forEach(([p, q]) => push([at(p, z0 + bh), at(q, z0 + bh), at(q, H), at(p, H)], v.wall.barra && lime ? vmShade(v.wall.barra, 1.1) : vmShade(wc, lime ? 0.88 : 1.15), { thin:true }));
+      /* boards painted in bands (the Costa Nova's riscas): every other band of vertical boards in the stripe colour, up to the wall's own top, the gable's too */
+      if (v.wall.stripes) {
+        const uOf = p => (p[0] - a[0]) * dir[0] + (p[1] - a[1]) * dir[1];
+        const topL = P.filter(p => p[2] > z0 + 1e-6).map(p => [uOf(p), p[2]]).sort((p, q) => p[0] - q[0]);
+        const zt = u => { for (let i = 0; i < topL.length - 1; i++) if (u >= topL[i][0] - 1e-6 && u <= topL[i + 1][0] + 1e-6) { const k = (u - topL[i][0]) / Math.max(1e-9, topL[i + 1][0] - topL[i][0]); return topL[i][1] + (topL[i + 1][1] - topL[i][1]) * k; } return H; };
+        const sc = f === 'S' || f === 'N' ? v.wall.stripes : vmShade(v.wall.stripes, 0.86), bw = 0.34;
+        for (let u = bw; u < len - 1e-6; u += 2 * bw) { const u1 = Math.min(len, u + bw), mid = topL.filter(q => q[0] > u + 1e-6 && q[0] < u1 - 1e-6).reverse();
+          push([at(u, z0), at(u1, z0), at(u1, zt(u1))].concat(mid.map(q => at(q[0], q[1])), [at(u, zt(u))]), sc, { thin:true }); }
+      }
       /* buttresses as solids: at the corners (the cunhais), with others at the half, the thirds or the quarters, the same on both long sides */
       if (f === 'S' || f === 'N') vmButtAt(v, len).forEach(u => { const hb = vmH(v) * 0.75, w = 0.3, sc = at(u, z0 + hb * 0.3, 0.3);
         const sides = [[at(u - w, z0, 0.02), at(u - w, z0, 0.6), at(u - w, z0 + hb * 0.55, 0.6), at(u - w, z0 + hb, 0.02)], [at(u + w, z0, 0.6), at(u + w, z0, 0.02), at(u + w, z0 + hb, 0.02), at(u + w, z0 + hb * 0.55, 0.6)]];
@@ -24928,7 +24974,8 @@ function vmDoorsOffStairs(vm) {
     const toWall = u => u;
     let T;
     /* every tread in front of the wall counts, the outer lane's too: seen from the yard, a flight across a door is a flight across it */
-    if (E.along === 'perp') { const top = z0 + v.fh, w = E.w || 1.1, u0 = (E.pos || 0.1) * len; T = [{ a:toWall(u0), b:toWall(u0 + w), h:top, lo:0, land:false }]; }
+    /* an entry step climbs only to the raised floor: it leads to its door, never blocks it */
+    if (E.along === 'perp') { const top = E.entry ? z0 : z0 + v.fh, w = E.w || 1.1, u0 = (E.pos || 0.1) * len; T = [{ a:toWall(u0), b:toWall(u0 + w), h:top, lo:0, land:false }]; }
     else T = vmStairRuns(vm, v, E, z0 + v.fh).treads.map(r => ({ a:toWall(r.ua), b:toWall(r.ub), h:r.h, lo:r.z0 == null ? 0 : r.z0, land:!!r.landing }));
     T.forEach(t => { if (t.a > t.b) { const x = t.a; t.a = t.b; t.b = x; } });
     const blocked = (c, w, k, h) => { const zs = z0 + k * v.fh, a = c - w / 2 + 0.05, b = c + w / 2 - 0.05;
@@ -24988,7 +25035,7 @@ function vmElFaces(vm, vs) {
       return;
     }
     if (E.t === 'stair') {
-      const top = z0 + v.fh, n = Math.max(4, Math.round(top / 0.19)), tr = 0.28, w = E.w || 1.1, u0 = (E.pos || 0.1) * len, stone = '#A49D90';
+      const top = E.entry ? z0 : z0 + v.fh, n = Math.max(E.entry ? 2 : 4, Math.round(top / 0.19)), tr = 0.28, w = E.w || 1.1, u0 = (E.pos || 0.1) * len, stone = E.timber ? '#8A6240' : '#A49D90';
       if (E.along === 'perp') { for (let i = 0; i < n; i++) { const [px, py] = at(u0, 0); const dd = (n - i) * tr;
           if (f === 'S') box(px, py - dd, 0, w, tr, (i + 1) * top / n, stone, o); else if (f === 'E') box(px + dd - tr, py, 0, tr, w, (i + 1) * top / n, stone, o);
           else if (f === 'N') box(px, py + dd - tr, 0, w, tr, (i + 1) * top / n, stone, o); else box(px - dd, py, 0, tr, w, (i + 1) * top / n, stone, o); }
@@ -25250,7 +25297,7 @@ function vmPlanSVG(vm, w, opts) {
       /* the same treads the isometric draws: each its outline, so the run, its corner landing and its turn read on the plan */
       vmStairRuns(vm, v, E, (v.raise || 0) + v.fh).treads.forEach(r => { const A = P(...at(r.ua, r.da)), B = P(...at(r.ub, r.db));
         o.push('<rect x="' + Math.min(A[0], B[0]).toFixed(1) + '" y="' + Math.min(A[1], B[1]).toFixed(1) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="' + (r.landing ? '#E2DCCF' : 'none') + '" stroke="#6B645A" stroke-width="1"/>'); }); }
-    else if (E.t === 'stair') { const w = E.w || 1.1, n = 8, u0 = (E.pos || 0.1) * len;
+    else if (E.t === 'stair') { const w = E.w || 1.1, n = E.entry ? Math.max(2, Math.round((v.raise || 0) / 0.19)) : 8, u0 = (E.pos || 0.1) * len;
       for (let i = 0; i <= n; i++) { const [ax, ay] = E.along === 'perp' ? at(u0, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, 0); const [bx, by] = E.along === 'perp' ? at(u0 + w, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, w);
         const A = P(ax, ay), B = P(bx, by); o.push('<line x1="' + A[0] + '" y1="' + A[1] + '" x2="' + B[0] + '" y2="' + B[1] + '" stroke="#6B645A" stroke-width="1"/>'); } }
     if (E.t === 'varanda' || E.t === 'alpendre' || E.t === 'latada') { const w = E.w || 4, d = E.t === 'varanda' ? (E.kind === 'reentrante' ? -1 : E.kind === 'sacada' ? 0.5 : 1.1) : (E.d || 2.4), u0 = (E.pos || 0.5) * len - w / 2;
@@ -25941,6 +25988,7 @@ function buildModeller(host) {
       r3.appendChild(vmSel(VMT('Frames of the openings', 'Molduras dos vãos'), [['', VMT('none', 'sem')], ['cal', VMT('lime band', 'faixa caiada')], ['cantaria', VMT('cut stone', 'cantaria')], ['cor', VMT('coloured', 'pintadas')]], () => v.wall.frames || '', x => { v.wall.frames = x || null; }));
       r3.appendChild(vmSel(VMT('Buttresses (both long sides)', 'Contrafortes (nos dois lados maiores)'), [['none', VMT('none', 'nenhum')], ['corners', VMT('at the corners', 'nos cunhais')], ['half', VMT('corners + half', 'cunhais + a meio')], ['thirds', VMT('corners + thirds', 'cunhais + terços')], ['quarters', VMT('corners + quarters', 'cunhais + quartos')]], () => vmButtMode(v), x => { v.wall.butt = x; v.wall.buttress = x === 'none' ? 0 : 1; }));
       r3.appendChild(vmChk(VMT('coloured corners (cunhais)', 'cunhais marcados'), () => !!v.wall.cunhais, x => { v.wall.cunhais = x; }));
+      r3.appendChild(vmSel(VMT('Boards painted in bands (riscas)', 'Tabuado pintado às riscas'), [['', VMT('none', 'sem')], ['#B8322B', VMT('red', 'vermelho')], ['#2F5F9E', VMT('blue', 'azul')], ['#3E7D4F', VMT('green', 'verde')], ['#D9A520', VMT('yellow', 'amarelo')], ['#2B2B2B', VMT('black', 'preto')]], () => v.wall.stripes || '', x => { if (x) v.wall.stripes = x; else delete v.wall.stripes; }));
       /* the openings of one floor at a time: the floor picked here or by clicking its plan */
       const flE = Math.max(0, Math.min(VM_ROOMFL || 0, v.fl - 1));
       ed.appendChild(el('h4', { text:VMT('Openings of this body', 'Vãos deste corpo') + (v.fl > 1 ? ' — ' + (flE ? VMT('floor ', 'piso ') + flE : VMT('ground floor', 'piso térreo')) : '') }));
@@ -27320,6 +27368,22 @@ Object.assign(VERN_SRC, {
    One representative site per district the archetype is recorded in — the municipality, its region (NUTS III), the
    coordinates and an altitude of the place its sources name — so the model is among the houses offered there. The
    student fine-tunes the place, the coordinates and the altitude before working through the design. */
+/* the Costa Nova palheiro in the modeller: gable to the front, Marseille tile, white boards painted in red bands,
+   frames picked out in light blue, on open stakes, a timber step up to the door (Silva, Mendonça & Branco 2011) */
+VM_OVR['pt-costa-nova'] = (vm, b) => {
+  b.roof.mat = 'marseille'; b.roof.ridge = 'y'; b.roof.beirado = 0;
+  Object.assign(b.wall, { mat:'timber', c:'#F3F1EA', stripes:'#B8322B', barra:'#6E9CC4', frames:'cor', cunhais:false, buttress:0 });
+  b.piers = true;
+  vm.els = vm.els.filter(e => e.t !== 'chimney');
+  vm.els.push({ t:'stair', vol:0, face:'S', along:'perp', pos:(b.L / 2 - 0.55) / b.L, w:1.1, landing:false, porch:false, entry:true, timber:true });
+};
+/* the Costa Nova leads on the sand bar between the Ria de Aveiro and the sea, from the Barra to the Vagueira */
+(() => {
+  const mn = VERN_REGIONS.find(r => r.key === 'mainland'), P0 = mn.place;
+  mn.place = (S, V) => { const o = P0(S, V); if (!o) return o;
+    if (S.lat > 40.50 && S.lat < 40.65 && S.lon < -8.735 && S.lon > -8.78) { const c = o.cand.filter(k => k !== 'pt-costa-nova'); c.unshift('pt-costa-nova'); o.cand = c.slice(0, 3); }
+    return o; };
+})();
 const VERN_SITES = (() => {
   const S = (place, nuts, lat, lon, alt, dist) => ({ place, nuts, lat, lon, alt, dist });
   const MD = 'RA da Madeira', AZ = 'RA dos Açores';
@@ -27364,6 +27428,7 @@ const VERN_SITES = (() => {
     'pt-alg-serra':[S('Alcoutim', 'Algarve', 37.470, -7.470, 80, 'Faro')], 'pt-ribatejo':[S('Almeirim', 'Lezíria do Tejo', 39.210, -8.630, 20, 'Santarém')],
     'pt-setubal':[S('Sesimbra', 'Península de Setúbal', 38.444, -9.100, 100, 'Setúbal')],
     'pt-avieiro':[S('Cartaxo', 'Lezíria do Tejo', 39.160, -8.790, 20, 'Santarém'), S('Azambuja', 'Lezíria do Tejo', 39.070, -8.870, 10, 'Lisboa')],
+    'pt-costa-nova':[S('Ílhavo', 'Baixo Vouga', 40.613, -8.752, 3, 'Aveiro')],
     'pt-palheiro':[S('Ílhavo', 'Baixo Vouga', 40.600, -8.750, 5, 'Aveiro'), S('Mira', 'Baixo Mondego', 40.430, -8.800, 5, 'Coimbra'), S('Marinha Grande', 'Pinhal Litoral', 39.870, -8.970, 5, 'Leiria')],
     'pt-alpendrada':[S('Leiria', 'Pinhal Litoral', 39.744, -8.807, 50, 'Leiria')],
     'pt-povoado':[S('Estremoz', 'Alentejo Central', 38.843, -7.587, 420, 'Évora'), S('Serpa', 'Baixo Alentejo', 37.944, -7.598, 230, 'Beja'), S('Castelo de Vide', 'Alto Alentejo', 39.416, -7.456, 550, 'Portalegre')],
