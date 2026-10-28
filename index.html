@@ -977,7 +977,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.174.0',
+  version:     '1.175.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4475,9 +4475,13 @@ const RW_SIZES = {
 /* RW_W / RW_H bound a roof window the student types in (size 'custom'):
    width across the slope, length down it, as built by the catalogue's kin */
 const RW_W = [0.3, 2.5], RW_H = [0.3, 3.0];
-const rwSizeNow = () => RWIN.size === 'custom' && isFinite(+RWIN.cw) && isFinite(+RWIN.ch)
-  ? { w:clamp(+RWIN.cw, RW_W[0], RW_W[1]), h:clamp(+RWIN.ch, RW_H[0], RW_H[1]), label:fmt(clamp(+RWIN.cw, RW_W[0], RW_W[1]) * 100, 0) + ' x ' + fmt(clamp(+RWIN.ch, RW_H[0], RW_H[1]) * 100, 0) + ' cm' }
-  : RW_SIZES[RWIN.size] || RW_SIZES['78x140'];
+const rwSizeFrom = o => o && o.size === 'custom' && isFinite(+o.cw) && isFinite(+o.ch)
+  ? { w:clamp(+o.cw, RW_W[0], RW_W[1]), h:clamp(+o.ch, RW_H[0], RW_H[1]), label:fmt(clamp(+o.cw, RW_W[0], RW_W[1]) * 100, 0) + ' x ' + fmt(clamp(+o.ch, RW_H[0], RW_H[1]) * 100, 0) + ' cm' }
+  : RW_SIZES[o && o.size] || RW_SIZES['78x140'];
+/** The roof window size on one slope (S, N, E, W; F, the flat roof's
+    skylights, reads the main slope's): its own when the student set one
+    (RWIN.per), else the study's common size. */
+const rwSizeOf = sl => { const k = sl === 'F' ? 'S' : sl, o = RWIN && RWIN.per && RWIN.per[k]; return rwSizeFrom(o || RWIN); };
 /** A roof plane for one way of facing, with its range along the fall (d,
     the height above its eave over the pitch's tangent) and across it (q). */
 function roofPlaneFor(G, RF, dir) {
@@ -4516,7 +4520,7 @@ const rwCount = sl => sl === 'F' ? RWIN.s : sl === 'S' ? RWIN.s : sl === 'N' ? R
     fraction of the fall (0 eave, 1 ridge), centred on the widest run of
     the plane there; the flat roof's row slides sideways. */
 function roofRowOf(G, RF, slope) {
-  const z = rwSizeNow(), count = rwCount(slope);
+  const z = rwSizeOf(slope), count = rwCount(slope);
   if (count <= 0) return null;
   if (slope === 'F') {
     if (RF.n !== 0) return null;
@@ -11936,28 +11940,37 @@ function buildOpenings(host) {
   host.appendChild(hint('open-sunspace',
     'An attached sunspace collects like a direct-gain window but stores and releases through the day — Galloway’s own instrumented house held an unshaded solarium between 33 and 54°C while the living room stayed near 27°C behind it (pp.24–30). It works best equator-facing but is "about half as sensitive to orientation" as other passive systems — within 30° of due south costs under 10% of the optimum (DeKay &amp; Brown, p.235). It is also the most expensive and least efficient of the passive systems, and unusable when too hot or cold unless it is fully vented — combined inlet and outlet vents should reach at least 16% of the glazing area (Lechner, pp.183–187). It stands against the outermost wall on its side. Drag its outer glazed corner to set both how far it stands off the building and how wide it runs along the wall.'));
 
-  const rwSize = rwSizeNow;
   const planeFor = dir => roofPlaneFor(G, RF, dir);
   const roofRow = slope => roofRowOf(G, RF, slope);
-  const rwArea = () => ['S', 'N', 'E', 'W', 'F'].reduce((a, sl) => { const r = roofRow(sl); return a + (r ? r.quads.length * rwSize().w * rwSize().h : 0); }, 0);
+  const rwArea = () => ['S', 'N', 'E', 'W', 'F'].reduce((a, sl) => { const r = roofRow(sl), z = rwSizeOf(sl); return a + (r ? r.quads.length * z.w * z.h : 0); }, 0);
   rail.appendChild(el('div', { class:'gh', text:'Roof windows' }));
-  const cRwSize = selectCtl('Standard size', Object.keys(RW_SIZES).map(k => ({ value:k, label:RW_SIZES[k].label })).concat([{ value:'custom', label:t('Custom (typed below)') }]), RWIN.size,
-    v => { RWIN.size = v; if (RW_SIZES[v]) { RWIN.cw = RW_SIZES[v].w; RWIN.ch = RW_SIZES[v].h; } syncRwDims(); refreshOpenings(); });
-  /* or typed: width across the slope, length down it — any value turns the size to custom */
-  const rwNum = (val, lo, hi, set) => el('input', { type:'number', min:lo, max:hi, step:0.01, value:+val.toFixed(2), inputmode:'decimal',
-    onchange:e => { const v = parseFloat(String(e.target.value).replace(',', '.')); if (isFinite(v)) set(clamp(v, lo, hi)); syncRwDims(); refreshOpenings(); } });
-  const setCustom = () => { const z = rwSizeNow(); RWIN.cw = z.w; RWIN.ch = z.h; RWIN.size = 'custom'; const sel = cRwSize.querySelector('select'); if (sel) sel.value = 'custom'; };
-  const rwWin = rwNum(rwSizeNow().w, RW_W[0], RW_W[1], v => { setCustom(); RWIN.cw = v; });
-  const rwHin = rwNum(rwSizeNow().h, RW_H[0], RW_H[1], v => { setCustom(); RWIN.ch = v; });
-  const syncRwDims = () => { const z = rwSizeNow(); rwWin.value = +z.w.toFixed(2); rwHin.value = +z.h.toFixed(2); };
-  const rwDims = el('div', { class:'udims' }, [
-    el('label', null, [document.createTextNode(t('Width')), rwWin, document.createTextNode('m')]),
-    el('label', null, [document.createTextNode(t('Length down the slope')), rwHin, document.createTextNode('m')])]);
+  /* each slope its own size: a catalogue size or one typed — width across
+     the slope, length down it; a slope never set reads the common size */
+  const rwNum = (val, lo, hi, set, sync) => el('input', { type:'number', min:lo, max:hi, step:0.01, value:+val.toFixed(2), inputmode:'decimal',
+    onchange:e => { const v = parseFloat(String(e.target.value).replace(',', '.')); if (isFinite(v)) set(clamp(v, lo, hi)); sync(); refreshOpenings(); } });
+  const rwSizeRow = sl => {
+    const own = () => { if (!RWIN.per) RWIN.per = {}; if (!RWIN.per[sl]) { const z = rwSizeOf(sl); RWIN.per[sl] = { size:RW_SIZES[RWIN.size] ? RWIN.size : 'custom', cw:z.w, ch:z.h }; } return RWIN.per[sl]; };
+    const cur = () => (RWIN.per && RWIN.per[sl]) || RWIN;
+    const sel = el('select', { 'aria-label':t('Roof window size'), style:'font:inherit;font-size:12px;max-width:150px' });
+    Object.keys(RW_SIZES).forEach(k => sel.appendChild(el('option', { value:k, text:RW_SIZES[k].label })));
+    sel.appendChild(el('option', { value:'custom', text:t('Custom (typed)') }));
+    let wIn = null, hIn = null;
+    const sync = () => { const z = rwSizeOf(sl); sel.value = RW_SIZES[cur().size] ? cur().size : 'custom'; wIn.value = +z.w.toFixed(2); hIn.value = +z.h.toFixed(2); };
+    sel.addEventListener('change', () => { const o = own(); o.size = sel.value; if (RW_SIZES[sel.value]) { o.cw = RW_SIZES[sel.value].w; o.ch = RW_SIZES[sel.value].h; } sync(); refreshOpenings(); });
+    wIn = rwNum(rwSizeOf(sl).w, RW_W[0], RW_W[1], v => { const o = own(); o.size = 'custom'; o.cw = v; }, () => sync());
+    hIn = rwNum(rwSizeOf(sl).h, RW_H[0], RW_H[1], v => { const o = own(); o.size = 'custom'; o.ch = v; }, () => sync());
+    const row = el('div', { class:'udims' }, [sel,
+      el('label', null, [document.createTextNode(t('Width')), wIn, document.createTextNode('m')]),
+      el('label', null, [document.createTextNode(t('Length down the slope')), hIn, document.createTextNode('m')])]);
+    sync();
+    return row;
+  };
   const cRwS = rangeCtl(RF.n === 0 ? 'Skylights' : 'South slope windows', 0, 4, 1, RWIN.s, v => { RWIN.s = v; refreshOpenings(); }, v => fmt(v, 0));
   const cRwN = rangeCtl('North slope windows', 0, 4, 1, RWIN.n, v => { RWIN.n = v; refreshOpenings(); }, v => fmt(v, 0));
   const cRwE = rangeCtl('East slope windows', 0, 4, 1, RWIN.e, v => { RWIN.e = v; refreshOpenings(); }, v => fmt(v, 0));
   const cRwW = rangeCtl('West slope windows', 0, 4, 1, RWIN.w, v => { RWIN.w = v; refreshOpenings(); }, v => fmt(v, 0));
-  rail.appendChild(controls([cRwSize, rwDims, cRwS, cRwN, cRwE, cRwW]));
+  const zS = rwSizeRow('S'), zN = rwSizeRow('N'), zE = rwSizeRow('E'), zW = rwSizeRow('W');
+  rail.appendChild(controls([cRwS, zS, cRwN, zN, cRwE, zE, cRwW, zW]));
   host.appendChild(hint('open-roofwin',
     'Daylight and winter sun from above: glass on the slope facing the main facade earns its keep where the climate leans heating and overheats where it leans cooling; glass on the opposite slope gives soft diffuse light with little gain either way. Each slope is the roof’s own largest plane facing that way — the slope facing the main facade is the one the Roof tab collects on, so each glazed square metre there is one less for collectors. A slope the roof does not have takes no windows. Rows centre on the widest run of their slope; drag a row’s dot to slide it up or down the slope, or, on a flat roof, along it. Windows on a slope turned away from the camera draw dashed at their true places.'));
 
@@ -12315,8 +12328,10 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     else if (sc >= 60) { pillShade.className = 'pill empty'; pillShade.textContent = t(heating ? 'Some seasonal discrimination, but still costs real winter sun' : 'Leaves some of the summer sun on this window'); }
     else { pillShade.className = 'pill bad'; pillShade.textContent = t(heating ? 'Blocks winter sun almost as much as summer — too deep for this climate' : 'Leaves much of the summer sun on this window'); }
     [[cRwN, 'N'], [cRwE, 'E'], [cRwW, 'W']].forEach(([c, sl]) => { c.style.display = RF.n !== 0 && planeFor(sl) ? '' : 'none'; });
+    /* a slope's size row shows while it carries windows */
+    [[zS, 'S', RWIN.s], [zN, 'N', RWIN.n], [zE, 'E', RWIN.e], [zW, 'W', RWIN.w]].forEach(([z, sl, n]) => { z.style.display = n > 0 && (sl === 'S' || (RF.n !== 0 && planeFor(sl))) ? '' : 'none'; });
     {
-      const z = rwSize(), cp = RF.n === 0 ? null : collectPlane(Mod());
+      const z = rwSizeOf(RF.n === 0 ? 'F' : 'S'), cp = RF.n === 0 ? null : collectPlane(Mod());
       const cpT = cp ? cp.pieces.reduce((a, q) => q.area > a.area ? q : a, cp.pieces[0]).f.th : 0;
       const slope = cp ? cp.area / Math.cos(cpT * RAD) : 0;
       const sr = roofRow(RF.n === 0 ? 'F' : 'S'), sG = sr ? sr.quads.length * z.w * z.h : 0;
@@ -12617,7 +12632,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
           rows.push(['Clerestory opening ' + (i + 1) + ' (' + fmt(q.w, 1) + ' m)' + (u && u.door && on ? ' · door' : u && u.gel && on ? ' · brick ventilation' : ''), on ? 'on' : 'off', '',
             +q.area.toFixed(2), '', vv ? fmt(vv[0], 2) : '', vv ? fmt(vv[1], 2) : '', '', '', '', '', '', '', '', '']);
         }); }
-      rows.push(['Sunspace', SUNSP.on ? SUNSP.face : 'off', '', '', '', '', '', fmt(SUNSP.depth, 2), '', '', '', '', '', fmt(SUNSP.widthFrac, 2)]);      rows.push(['Roof window size', rwSizeNow().label]);
+      rows.push(['Sunspace', SUNSP.on ? SUNSP.face : 'off', '', '', '', '', '', fmt(SUNSP.depth, 2), '', '', '', '', '', fmt(SUNSP.widthFrac, 2)]);      rows.push(['Roof window size', (RF.n === 0 ? ['S'] : ['S', 'N', 'E', 'W']).map(k => (RF.n === 0 ? '' : k + ' ') + rwSizeOf(k).label).join(' · ')]);
       if (RF.n === 0) rows.push(['Skylights', RWIN.s]);
       else ['S', 'N', 'E', 'W'].forEach(sl => { const r = roofRow(sl); rows.push([{ S:'Slope facing the main facade', N:'Opposite slope', E:'East-facing slope', W:'West-facing slope' }[sl] + ' roof windows', r ? r.quads.length : 0]); });
       rows.push(['Roof glazing total (m²)', +rwArea().toFixed(1)]);
@@ -14253,7 +14268,7 @@ function buildVentilation(host) {
     const none = { Q:0, v:0, n:0, Ain:0, Aout:0, dh:0, dT:SCENE.stackDT };
     const rw = roofWindowQuads(G, RF);
     if (!rw.length) return none;
-    const z = rwSizeNow(), Aout = rw.length * z.w * z.h * 0.5;
+    const Aout = rw.reduce((a, o) => { const z = rwSizeOf(o.sl); return a + z.w * z.h * 0.5; }, 0);
     const zOut = rw.reduce((a, o) => a + o.q.reduce((b, q) => b + q[2], 0) / o.q.length, 0) / rw.length;
     let Ain = 0, zA = 0;
     planModel(G).segs.forEach(sg => {
@@ -27914,16 +27929,15 @@ function collectConstructionHandoff() {
   }
   /* roof windows sit on slopes: map each slope count to that slope's true
      facing (flat roofs take skylights, bucket F = horizontal) */
-  const rwz = (sz => [sz.w, sz.h])(rwSizeNow());
-  const rwUnit = rwz[0] * rwz[1];
+  const rwUnitOf = sl => { const z = rwSizeOf(sl); return z.w * z.h; };
   const skyO = caZero8(); let skyF = 0;
-  if (RF.n === 0) skyF = (RWIN.s || 0) * rwUnit;
+  if (RF.n === 0) skyF = (RWIN.s || 0) * rwUnitOf('F');
   else {
     const slopeOf = { s:'S', n:'N', e:'E', w:'W' };
     Object.keys(slopeOf).forEach(k => {
       const n = RWIN[k] || 0;
       if (!n || !per[slopeOf[k]]) return;
-      skyO[per[slopeOf[k]].compass] += n * rwUnit;
+      skyO[per[slopeOf[k]].compass] += n * rwUnitOf(slopeOf[k]);
     });
   }
   const rwArea = skyF + Object.keys(skyO).reduce((a, k) => a + skyO[k], 0);
@@ -28126,6 +28140,10 @@ function applyStudy(o) {
   if (typeof W0.size === 'string' && (/^\d+x\d+$/.test(W0.size) || W0.size === 'custom')) RWIN.size = W0.size;
   if (isFinite(+W0.cw)) RWIN.cw = clamp(+W0.cw, RW_W[0], RW_W[1]);
   if (isFinite(+W0.ch)) RWIN.ch = clamp(+W0.ch, RW_H[0], RW_H[1]);
+  RWIN.per = {};
+  if (W0.per && typeof W0.per === 'object') ['S', 'N', 'E', 'W'].forEach(k => { const q = W0.per[k];
+    if (q && typeof q.size === 'string' && (RW_SIZES[q.size] || q.size === 'custom'))
+      RWIN.per[k] = { size:q.size, cw:clamp(+q.cw || 0.78, RW_W[0], RW_W[1]), ch:clamp(+q.ch || 1.4, RW_H[0], RW_H[1]) }; });
   SCENE.veg.length = 0;
   (Array.isArray(o.veg) ? o.veg : []).forEach(v => { if (v && typeof v.type === 'string' && isFinite(+v.x) && isFinite(+v.y)) SCENE.veg.push(v); });
   if (o.render && typeof o.render.prompt === 'string') RENDER_PROMPT = o.render.prompt.slice(0, 500);
@@ -29432,7 +29450,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
     STUDY = null;
   }
   SUNSP = { on:false, face:'S', depth:2.2, widthFrac:0.6 };
-  RWIN = { size:'78x140', cw:0.78, ch:1.40, s:0, n:0, e:0, w:0, sF:0.5, nF:0.5, eF:0.35, wF:0.35, fX:0 };
+  RWIN = { size:'78x140', cw:0.78, ch:1.40, per:{}, s:0, n:0, e:0, w:0, sF:0.5, nF:0.5, eF:0.35, wF:0.35, fX:0 };
   TURB = { on:false, diam:2.0, hub:9, x:16, y:10 };
   }
   const app = $('#app');
@@ -31296,6 +31314,11 @@ Object.assign(PT, {
 Object.assign(PT, {
   "Custom (typed below)": "Por medida (indicada abaixo)",
   "Length down the slope": "Comprimento na pendente",
+});
+
+Object.assign(PT, {
+  "Custom (typed)": "Por medida",
+  "Roof window size": "Tamanho da janela de cobertura",
 });
 
 /* boot, last: a page opened in Portuguese renders its first screen with
