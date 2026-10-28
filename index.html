@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.179.0',
+  version:     '1.180.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4792,11 +4792,12 @@ function balcScene(G) {
     /* the storey's window, moved back with the wall it was cut from */
     const wn = segWindow(B.sg, G), row = wn && wn.rows[c.k - 1];
     if (row) {
-      const a = Math.max(B.u0 + 0.1, wn.uc - wn.w / 2), b2 = Math.min(B.u1 - 0.1, wn.uc + wn.w / 2), top = Math.min(row.head, z1 - 0.1);
-      if (b2 - a > 0.2 && top - row.sill > 0.2) {
-        const P = (u, z) => { const q = B.P(u, -B.d); return [q[0], q[1], z]; };
-        L.glass.push([P(a, row.sill), P(b2, row.sill), P(b2, top), P(a, top)]);
-      }
+      /* the model's own units on that storey, not one band */
+      const P = (u, z) => { const q = B.P(u, -B.d); return [q[0], q[1], z]; };
+      unitRects(B.sg, wn, G, Infinity).filter(q => q.k === c.k - 1).forEach(q => {
+        const a = Math.max(B.u0 + 0.1, q.a), b2 = Math.min(B.u1 - 0.1, q.b), top = Math.min(q.v1, z1 - 0.1);
+        if (b2 - a > 0.2 && top - q.v0 > 0.2) L.glass.push([P(a, q.v0), P(b2, q.v0), P(b2, top), P(a, top)]);
+      });
     }
     L.mid = [cx, cy, (z0 + z1) / 2];
   });
@@ -5821,6 +5822,24 @@ function segWindow(sg, G) {
   const w = Math.min(sg.len * 0.92, o.wwr * sg.len * H0 / (n * h));
   const zR = raiseH(MASS), rows = Array.from({ length:n }, (_, k) => ({ sill:zR + k * G.fh + o.sillZ, head:zR + k * G.fh + head }));
   return { f, w, h, sill:o.sillZ, head, uc:sg.len / 2, n, rows, area:n * w * h, glass:o.wwr * sg.len * H0 };
+}
+/** The model's own openings on a wall, one rect per unit and storey
+    ({a, b, v0, v1, door}) — the same windows as Openings, never a band.
+    Every tab that draws glass goes through this. */
+function unitRects(sg, w, G, H0) {
+  if (!w) return [];
+  const f = w.f, us = faceUnits(f), u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2, out = [];
+  w.rows.forEach((r, k) => {
+    const kk = f === 'C' ? 0 : k, head = f === 'C' ? r.head : Math.min(r.head, H0);
+    glassSpans(f, u0, u1, sg.len, kk).forEach(sp => {
+      const u = us[sp.ui]; if (!sp.on || !u || sp.b - sp.a < 0.05) return;
+      const eu = unitFloor(u, kk);
+      const vv = f === 'C' ? spanVC(u, r.sill, r.head, w.base, w.ceil) : eu.door ? doorSpanV(u, head, kk, G.fh) : unitSpanV(u, r.sill, head, kk, G.fh);
+      const v1 = f === 'C' ? vv[1] : Math.min(vv[1], H0);
+      if (v1 - vv[0] >= 0.1) out.push({ a:sp.a, b:sp.b, v0:vv[0], v1, door:!!eu.door, k:kk });
+    });
+  });
+  return out;
 }
 /** One clerestory unit's vertical span: like unitSpanV/doorSpanV but against
     the step wall's own base and ceiling instead of a storey — doors stand on
@@ -7425,7 +7444,7 @@ function buildEnvironment(host) {
       if (n[0] * c3[0] + n[1] * c3[1] <= 1e-6) return;
       const wn = segWindow(sg, G);
       faces.push({ pts:[P(0, raiseBottom(G)), P(sg.len, raiseBottom(G))].concat(wl.prof.slice().reverse().map(q => P(q[0], q[1]))), fill:wallCol(sg.n[1] !== 0), cells, sg,
-        wins:wn ? wn.rows.map(r => [P(wn.uc - wn.w / 2, r.sill), P(wn.uc + wn.w / 2, r.sill), P(wn.uc + wn.w / 2, Math.min(r.head, M.H0)), P(wn.uc - wn.w / 2, Math.min(r.head, M.H0))]) : null });
+        wins:wn ? unitRects(sg, wn, G, M.H0).map(q => [P(q.a, q.v0), P(q.b, q.v0), P(q.b, q.v1), P(q.a, q.v1)]) : null });
     });
     M.steps.forEach(st => {
       const n = toW(st.n[0], st.n[1]);
