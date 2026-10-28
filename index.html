@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.169.2',
+  version:     '1.170.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -19179,6 +19179,8 @@ function vernRead() {
   if (!reg) return null;
   if (!STATE.vern || STATE.vern.sk !== vSiteKey(S)) STATE.vern = { sk:vSiteKey(S), face:'auto', type:null, open:{} };
   const V = STATE.vern, P = reg.place(S, V), alt = +S.alt || 0;
+  /* A model whose own recorded site this is was built here, whatever the zoning says. */
+  if (V.type && P.cand.indexOf(V.type) < 0 && vernBuiltAt(V.type, S)) P.cand = P.cand.concat(V.type);
   const type = V.type && VERN_TYPES[V.type] ? V.type : P.cand[0];
   return Object.assign({ S, V, alt, reg, type, T:VERN_TYPES[type] }, P);
 }
@@ -22770,11 +22772,16 @@ function buildArchDist(box, refsBox) {
     panel.innerHTML = '';
     panel.appendChild(el('h6', { text:d + ' · ' + ks.length }));
     const sup = ks.filter(k => VERN_TYPES[k].support), houses = ks.filter(k => !VERN_TYPES[k].support);
-    const fig = list => '<div class="archicons">' + list.map(k => '<figure title="' + VL(VERN_TYPES[k].where).replace(/"/g, '&quot;') + '">' + vIcon(k, 112)
+    const fig = list => '<div class="archicons">' + list.map(k => '<figure class="pick" role="button" tabindex="0" data-k="' + k + '" title="' + (VL(VERN_TYPES[k].where)
+      + ' — ' + VL({ en:'touch to study it here: the place and region are set, then fine-tune them', pt:'toque para o estudar aqui: o local e a região ficam definidos, depois afine-os' })).replace(/"/g, '&quot;') + '">' + vIcon(k, 112)
       + '<figcaption>' + VL(VERN_TYPES[k].name).replace(/ \(.*\)$/, '') + '</figcaption></figure>').join('') + '</div>';
     if (houses.length) panel.appendChild(el('div', { html:fig(houses) }));
     if (sup.length) { panel.appendChild(el('p', { class:'vm', text:VL({ en:'Support structures', pt:'Estruturas de apoio' }) })); panel.appendChild(el('div', { html:fig(sup) })); }
     if (!ks.length) panel.appendChild(el('p', { class:'vm', text:VL({ en:'No archetype recorded yet.', pt:'Ainda sem arquétipo registado.' }) }));
+    else panel.appendChild(el('p', { class:'vm', text:VL({ en:'Touch a house to study it: its place and region fill the site above, ready to fine-tune before working through the design.',
+      pt:'Toque numa casa para a estudar: o seu local e a sua região preenchem o local acima, prontos a afinar antes de percorrer o projecto.' }) }));
+    panel.querySelectorAll('figure.pick').forEach(f => { const pick = () => vernPickModel(f.dataset.k, d);
+      f.addEventListener('click', pick); f.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); } }); });
     /* only the sources of the archetypes shown */
     if (refsBox) {
       /* a group's reference is kept when all its houses are shown here, or when a house shown cites its author and year */
@@ -22807,6 +22814,17 @@ function buildArchDist(box, refsBox) {
     + '.distpanel h6{margin:0 0 4px;font-size:13px}.vdist{font-size:11px;color:var(--c3);font-weight:600;margin:0}';
   document.head.appendChild(el('style', { text:css }));
 })();
+/** A house chosen on the district map: back to the setup if a study is open, the site set at the house's place. */
+function vernPickModel(k, dist) {
+  if (!initSetup.fromModel) return;
+  if (!$('#app').hidden) $('#btnReload').click();
+  const s = initSetup.fromModel(k, dist);
+  if (!s) { toast(VL({ en:'No place recorded for this house yet.', pt:'Ainda sem local registado para esta casa.' })); return; }
+  const sg = document.querySelector('.s-site'); if (sg) sg.scrollIntoView({ behavior:'smooth', block:'start' }); else window.scrollTo(0, 0);
+  toast(VL(VERN_TYPES[k].name) + ' — ' + s.place + ' (' + s.nuts + '). ' + VL({ en:'Fine-tune the place, then work through the design.', pt:'Afine o local e depois percorra o projecto.' }));
+}
+(() => { document.head.appendChild(el('style', { text:'.archicons figure.pick{cursor:pointer;border-radius:10px;transition:background .15s}'
+  + '.archicons figure.pick:hover,.archicons figure.pick:focus-visible{background:rgba(0,0,0,.05);outline:2px solid var(--c3);outline-offset:2px}' })); })();
 const _buildArchBib = buildArchBib;
 buildArchBib = function () {
   const box = $('#archBib');
@@ -26081,6 +26099,121 @@ Object.assign(VERN_SRC, {
   };
   vernNames();
 })();
+/* --- a place for every archetype: a click on a house in the district map sets the setup's place and region there ------
+   One representative site per district the archetype is recorded in — the municipality, its region (NUTS III), the
+   coordinates and an altitude of the place its sources name — so the model is among the houses offered there. The
+   student fine-tunes the place, the coordinates and the altitude before working through the design. */
+const VERN_SITES = (() => {
+  const S = (place, nuts, lat, lon, alt, dist) => ({ place, nuts, lat, lon, alt, dist });
+  const MD = 'RA da Madeira', AZ = 'RA dos Açores';
+  return {
+    'md-santana':[S('Santana', MD, 32.805, -16.882, 430, 'Madeira')], 'md-redonda':[S('Santana', MD, 32.828, -16.905, 250, 'Madeira')],
+    'md-camacha':[S('Santa Cruz', MD, 32.680, -16.845, 700, 'Madeira')], 'md-elementar':[S('Santa Cruz', MD, 32.652, -16.840, 180, 'Madeira')],
+    'md-doispisos':[S('Calheta', MD, 32.755, -17.205, 620, 'Madeira')], 'md-curral':[S('Câmara de Lobos', MD, 32.720, -16.968, 650, 'Madeira')],
+    'md-salao':[S('Porto Santo', MD, 33.060, -16.335, 40, 'Madeira')], 'md-funchal':[S('Funchal', MD, 32.648, -16.908, 40, 'Madeira')],
+    'az-abarracada':[S('Ponta Delgada', AZ, 37.890, -25.820, 40, 'Açores')], 'az-empenafachada':[S('Ponta Delgada', AZ, 37.862, -25.795, 260, 'Açores')],
+    'az-integrada':[S('Nordeste', AZ, 37.830, -25.145, 180, 'Açores')], 'az-mariense':[S('Vila do Porto', AZ, 36.985, -25.085, 250, 'Açores')],
+    'az-terceira':[S('Angra do Heroísmo', AZ, 38.700, -27.330, 150, 'Açores')], 'az-pico':[S('Lajes do Pico', AZ, 38.395, -28.255, 30, 'Açores')],
+    'az-linear':[S('Velas', AZ, 38.680, -28.205, 40, 'Açores')], 'az-flores':[S('Lajes das Flores', AZ, 39.430, -31.255, 50, 'Açores')],
+    'az-moinho':[S('Ribeira Grande', AZ, 37.820, -25.520, 60, 'Açores')], 'az-corvo':[S('Corvo', AZ, 39.672, -31.113, 30, 'Açores')],
+    'az-imperio':[S('Angra do Heroísmo', AZ, 38.660, -27.230, 60, 'Açores')], 'az-cisterna':[S('Madalena', AZ, 38.535, -28.525, 50, 'Açores')],
+    'az-atafona':[S('Madalena', AZ, 38.535, -28.525, 50, 'Açores')], 'az-angra':[S('Angra do Heroísmo', AZ, 38.655, -27.220, 40, 'Açores')],
+    'pt-minho':[S('Ponte de Lima', 'Minho-Lima', 41.767, -8.583, 40, 'Viana do Castelo'), S('Barcelos', 'Cávado', 41.532, -8.615, 40, 'Braga'), S('Santo Tirso', 'Grande Porto', 41.343, -8.478, 80, 'Porto')],
+    'pt-castro':[S('Melgaço', 'Minho-Lima', 42.030, -8.157, 950, 'Viana do Castelo'), S('Terras de Bouro', 'Cávado', 41.760, -8.190, 700, 'Braga')],
+    'pt-tmontes':[S('Bragança', 'Alto Trás-os-Montes', 41.806, -6.757, 690, 'Bragança'), S('Montalegre', 'Alto Trás-os-Montes', 41.825, -7.790, 1000, 'Vila Real')],
+    'pt-beira':[S('Fundão', 'Cova da Beira', 40.140, -7.500, 500, 'Castelo Branco'), S('Sabugal', 'Beira Interior Norte', 40.351, -7.090, 800, 'Guarda'), S('Arganil', 'Pinhal Interior Norte', 40.218, -8.054, 250, 'Coimbra')],
+    'pt-gandara':[S('Vagos', 'Baixo Vouga', 40.555, -8.685, 20, 'Aveiro'), S('Mira', 'Baixo Mondego', 40.428, -8.737, 15, 'Coimbra')],
+    'pt-murtosa':[S('Murtosa', 'Baixo Vouga', 40.737, -8.640, 10, 'Aveiro')],
+    'pt-tocha':[S('Cantanhede', 'Baixo Mondego', 40.320, -8.730, 40, 'Coimbra'), S('Vagos', 'Baixo Vouga', 40.470, -8.700, 30, 'Aveiro')],
+    'pt-sico':[S('Penela', 'Pinhal Interior Norte', 40.030, -8.390, 300, 'Coimbra'), S('Ansião', 'Pinhal Interior Norte', 39.910, -8.435, 300, 'Leiria')],
+    'pt-lousa':[S('Lousã', 'Pinhal Interior Norte', 40.095, -8.215, 640, 'Coimbra')],
+    'pt-xisto-zezere':[S('Fundão', 'Cova da Beira', 40.010, -7.820, 300, 'Castelo Branco')],
+    'pt-monsanto':[S('Idanha-a-Nova', 'Beira Interior Sul', 40.039, -7.114, 750, 'Castelo Branco')],
+    'pt-saloia-elementar':[S('Mafra', 'Grande Lisboa', 38.937, -9.327, 200, 'Lisboa')], 'pt-saloia-corrida':[S('Sintra', 'Grande Lisboa', 38.800, -9.380, 200, 'Lisboa')],
+    'pt-beira-alta':[S('Viseu', 'Dão-Lafões', 40.657, -7.913, 480, 'Viseu'), S('Trancoso', 'Beira Interior Norte', 40.779, -7.349, 870, 'Guarda')],
+    'pt-raia-c':[S('Almeida', 'Beira Interior Norte', 40.726, -6.906, 760, 'Guarda')], 'pt-lajes':[S('Almeida', 'Beira Interior Norte', 40.530, -6.890, 800, 'Guarda')],
+    'pt-estrela-xisto':[S('Seia', 'Serra da Estrela', 40.330, -7.770, 700, 'Guarda'), S('Arganil', 'Pinhal Interior Norte', 40.180, -7.900, 600, 'Coimbra')],
+    'pt-monte-gordo':[S('Vila Real de Santo António', 'Algarve', 37.180, -7.450, 5, 'Faro')], 'pt-carrasqueira':[S('Alcácer do Sal', 'Alentejo Litoral', 38.400, -8.770, 5, 'Setúbal')],
+    'pt-povoa':[S('Póvoa de Varzim', 'Grande Porto', 41.380, -8.762, 10, 'Porto')], 'pt-meia-casa':[S('Caminha', 'Minho-Lima', 41.875, -8.840, 10, 'Viana do Castelo')],
+    'pt-tavira':[S('Tavira', 'Algarve', 37.127, -7.649, 20, 'Faro')],
+    'pt-casa-judeus':[S('Trancoso', 'Beira Interior Norte', 40.779, -7.349, 870, 'Guarda'), S('Belmonte', 'Cova da Beira', 40.359, -7.349, 600, 'Castelo Branco'), S('Castelo de Vide', 'Alto Alentejo', 39.416, -7.456, 550, 'Portalegre')],
+    'pt-moinho-vento':[S('Viana do Castelo', 'Minho-Lima', 41.750, -8.870, 60, 'Viana do Castelo'), S('Penacova', 'Baixo Mondego', 40.270, -8.280, 300, 'Coimbra'), S('Ourém', 'Médio Tejo', 39.650, -8.580, 200, 'Leiria'),
+      S('Mafra', 'Grande Lisboa', 38.940, -9.330, 200, 'Lisboa'), S('Silves', 'Algarve', 37.190, -8.440, 100, 'Faro')],
+    'pt-moinho-rodizio':[S('Castro Daire', 'Dão-Lafões', 40.900, -7.930, 500, 'Viseu'), S('Arouca', 'Entre Douro e Vouga', 40.930, -8.250, 300, 'Aveiro'), S('Castelo Branco', 'Beira Interior Sul', 39.820, -7.490, 400, 'Castelo Branco'),
+      S('Carrazeda de Ansiães', 'Douro', 41.240, -7.310, 700, 'Bragança')],
+    'az-moinho_':[], 'pt-saloia':[S('Sintra', 'Grande Lisboa', 38.800, -9.380, 200, 'Lisboa')], 'pt-torreada':[S('Loures', 'Grande Lisboa', 38.830, -9.170, 100, 'Lisboa')],
+    'pt-alentejo':[S('Évora', 'Alentejo Central', 38.571, -7.909, 300, 'Évora'), S('Beja', 'Baixo Alentejo', 38.015, -7.863, 280, 'Beja'), S('Avis', 'Alto Alentejo', 39.050, -7.890, 200, 'Portalegre')],
+    'pt-alg-taipa':[S('Aljezur', 'Algarve', 37.317, -8.803, 50, 'Faro')], 'pt-alg-acoteia':[S('Loulé', 'Algarve', 37.140, -8.020, 170, 'Faro')],
+    'pt-alg-serra':[S('Alcoutim', 'Algarve', 37.470, -7.470, 80, 'Faro')], 'pt-ribatejo':[S('Almeirim', 'Lezíria do Tejo', 39.210, -8.630, 20, 'Santarém')],
+    'pt-setubal':[S('Sesimbra', 'Península de Setúbal', 38.444, -9.100, 100, 'Setúbal')],
+    'pt-avieiro':[S('Cartaxo', 'Lezíria do Tejo', 39.160, -8.790, 20, 'Santarém'), S('Azambuja', 'Lezíria do Tejo', 39.070, -8.870, 10, 'Lisboa')],
+    'pt-palheiro':[S('Ílhavo', 'Baixo Vouga', 40.600, -8.750, 5, 'Aveiro'), S('Mira', 'Baixo Mondego', 40.430, -8.800, 5, 'Coimbra'), S('Marinha Grande', 'Pinhal Litoral', 39.870, -8.970, 5, 'Leiria')],
+    'pt-alpendrada':[S('Leiria', 'Pinhal Litoral', 39.744, -8.807, 50, 'Leiria')],
+    'pt-povoado':[S('Estremoz', 'Alentejo Central', 38.843, -7.587, 420, 'Évora'), S('Serpa', 'Baixo Alentejo', 37.944, -7.598, 230, 'Beja'), S('Castelo de Vide', 'Alto Alentejo', 39.416, -7.456, 550, 'Portalegre')],
+    'pt-alg-pescadores':[S('Olhão', 'Algarve', 37.026, -7.841, 10, 'Faro')], 'pt-rib-vila':[S('Torres Novas', 'Médio Tejo', 39.480, -8.540, 50, 'Santarém')],
+    'pt-ale-a1a':[S('Moura', 'Baixo Alentejo', 38.140, -7.449, 180, 'Beja')],
+    'pt-ale-c1':[S('Serpa', 'Baixo Alentejo', 37.944, -7.598, 230, 'Beja'), S('Arronches', 'Alto Alentejo', 39.120, -7.290, 280, 'Portalegre')],
+    'pt-ale-b2':[S('Moura', 'Baixo Alentejo', 38.140, -7.449, 180, 'Beja'), S('Borba', 'Alentejo Central', 38.806, -7.456, 400, 'Évora')],
+    'pt-ale-d':[S('Estremoz', 'Alentejo Central', 38.843, -7.587, 420, 'Évora'), S('Serpa', 'Baixo Alentejo', 37.944, -7.598, 230, 'Beja')],
+    'pt-monte-patio':[S('Moura', 'Baixo Alentejo', 38.200, -7.400, 180, 'Beja'), S('Reguengos de Monsaraz', 'Alentejo Central', 38.420, -7.530, 200, 'Évora')],
+    'pt-pinhal':[S('Miranda do Corvo', 'Pinhal Interior Norte', 40.093, -8.333, 150, 'Coimbra'), S('Vila de Rei', 'Pinhal Interior Sul', 39.675, -8.150, 400, 'Castelo Branco')],
+    'pt-candeeiros':[S('Porto de Mós', 'Pinhal Litoral', 39.540, -8.700, 250, 'Leiria'), S('Alcanena', 'Médio Tejo', 39.460, -8.670, 150, 'Santarém')],
+    'pt-alcobaca':[S('Alcobaça', 'Oeste', 39.552, -8.977, 50, 'Leiria')], 'pt-freita':[S('Arouca', 'Entre Douro e Vouga', 40.880, -8.220, 950, 'Aveiro')],
+    'pt-montemuro':[S('Cinfães', 'Tâmega', 40.990, -8.000, 1000, 'Viseu')], 'pt-beira-campo':[S('Idanha-a-Nova', 'Beira Interior Sul', 39.920, -7.240, 300, 'Castelo Branco')],
+    'pt-paul':[S('Covilhã', 'Cova da Beira', 40.210, -7.620, 450, 'Castelo Branco')], 'pt-alg-trave':[S('Tavira', 'Algarve', 37.330, -7.820, 450, 'Faro')],
+    'pt-alg-central':[S('Albufeira', 'Algarve', 37.089, -8.250, 40, 'Faro')], 'pt-alg-monchique':[S('Monchique', 'Algarve', 37.317, -8.555, 450, 'Faro')],
+    'pt-nora':[S('Beja', 'Baixo Alentejo', 38.015, -7.863, 280, 'Beja'), S('Loulé', 'Algarve', 37.140, -8.020, 170, 'Faro')],
+    'pt-chafurdao':[S('Marvão', 'Alto Alentejo', 39.394, -7.377, 860, 'Portalegre')], 'pt-malhada':[S('Idanha-a-Nova', 'Beira Interior Sul', 40.040, -7.020, 500, 'Castelo Branco')],
+    'pt-choca':[S('Alcoutim', 'Algarve', 37.440, -7.770, 300, 'Faro'), S('Mértola', 'Baixo Alentejo', 37.640, -7.660, 100, 'Beja')],
+    'pt-espigueiro':[S('Arcos de Valdevez', 'Minho-Lima', 41.876, -8.264, 300, 'Viana do Castelo'), S('Terras de Bouro', 'Cávado', 41.760, -8.190, 700, 'Braga'), S('Montalegre', 'Alto Trás-os-Montes', 41.825, -7.790, 1000, 'Vila Real'),
+      S('Arouca', 'Entre Douro e Vouga', 40.930, -8.250, 300, 'Aveiro'), S('Cinfães', 'Tâmega', 41.000, -8.050, 600, 'Viseu')],
+    'pt-barroso-redonda':[S('Boticas', 'Alto Trás-os-Montes', 41.690, -7.670, 700, 'Vila Real')], 'pt-mondego-alpendre':[S('Montemor-o-Velho', 'Baixo Mondego', 40.170, -8.680, 20, 'Coimbra')],
+    'pt-porto-arredores':[S('Matosinhos', 'Grande Porto', 41.180, -8.690, 20, 'Porto')],
+    'pt-tm-alpendrada':[S('Vila Real', 'Douro', 41.300, -7.740, 450, 'Vila Real'), S('Freixo de Espada à Cinta', 'Douro', 41.090, -6.807, 450, 'Bragança')],
+    'pt-sado-taipa':[S('Alcácer do Sal', 'Alentejo Litoral', 38.372, -8.513, 30, 'Setúbal')],
+    'pt-forno-comum':[S('Bragança', 'Alto Trás-os-Montes', 41.940, -6.610, 700, 'Bragança'), S('Montalegre', 'Alto Trás-os-Montes', 41.825, -7.790, 1000, 'Vila Real'), S('Melgaço', 'Minho-Lima', 42.030, -8.157, 950, 'Viana do Castelo'),
+      S('Terras de Bouro', 'Cávado', 41.760, -8.190, 700, 'Braga'), S('Idanha-a-Nova', 'Beira Interior Sul', 40.040, -7.020, 500, 'Castelo Branco')],
+    'pt-cardenha':[S('Melgaço', 'Minho-Lima', 42.030, -8.157, 950, 'Viana do Castelo')],
+    'pt-eira':[S('Arcos de Valdevez', 'Minho-Lima', 41.876, -8.264, 300, 'Viana do Castelo'), S('Terras de Bouro', 'Cávado', 41.760, -8.190, 700, 'Braga'), S('Montalegre', 'Alto Trás-os-Montes', 41.825, -7.790, 1000, 'Vila Real'),
+      S('Cinfães', 'Tâmega', 41.000, -8.050, 600, 'Viseu'), S('Arouca', 'Entre Douro e Vouga', 40.930, -8.250, 300, 'Aveiro')],
+    'pt-pombal':[S('Vimioso', 'Alto Trás-os-Montes', 41.585, -6.530, 700, 'Bragança'), S('Montalegre', 'Alto Trás-os-Montes', 41.825, -7.790, 1000, 'Vila Real')],
+    'pt-lagar':[S('Mirandela', 'Alto Trás-os-Montes', 41.487, -7.182, 250, 'Bragança'), S('Vila Real', 'Douro', 41.300, -7.740, 450, 'Vila Real'), S('Penafiel', 'Tâmega', 41.210, -8.280, 300, 'Porto'),
+      S('Vila Nova de Foz Côa', 'Douro', 41.080, -7.140, 400, 'Guarda'), S('Castelo Branco', 'Beira Interior Sul', 39.820, -7.490, 400, 'Castelo Branco'), S('Évora', 'Alentejo Central', 38.571, -7.909, 300, 'Évora'),
+      S('Portalegre', 'Alto Alentejo', 39.290, -7.430, 480, 'Portalegre')],
+    'pt-alfarroba':[S('Loulé', 'Algarve', 37.140, -8.020, 170, 'Faro')],
+    'pt-cortelho':[S('Ponte de Lima', 'Minho-Lima', 41.767, -8.583, 40, 'Viana do Castelo'), S('Barcelos', 'Cávado', 41.532, -8.615, 40, 'Braga'), S('Montalegre', 'Alto Trás-os-Montes', 41.825, -7.790, 1000, 'Vila Real'),
+      S('Bragança', 'Alto Trás-os-Montes', 41.806, -6.757, 690, 'Bragança'), S('Viseu', 'Dão-Lafões', 40.657, -7.913, 480, 'Viseu'), S('Trancoso', 'Beira Interior Norte', 40.779, -7.349, 870, 'Guarda')],
+    'pt-salina':[S('Aveiro', 'Baixo Vouga', 40.640, -8.650, 5, 'Aveiro'), S('Setúbal', 'Península de Setúbal', 38.520, -8.890, 10, 'Setúbal'), S('Vila Franca de Xira', 'Grande Lisboa', 38.950, -8.990, 10, 'Lisboa'),
+      S('Castro Marim', 'Algarve', 37.220, -7.440, 10, 'Faro')],
+    'pt-cercal':[S('Santiago do Cacém', 'Alentejo Litoral', 37.800, -8.670, 150, 'Setúbal')],
+    'pt-forno-cal':[S('Porto de Mós', 'Pinhal Litoral', 39.540, -8.700, 250, 'Leiria'), S('Alcanena', 'Médio Tejo', 39.460, -8.670, 150, 'Santarém'), S('Mafra', 'Grande Lisboa', 38.940, -9.330, 200, 'Lisboa'),
+      S('Loulé', 'Algarve', 37.140, -8.020, 170, 'Faro'), S('Praia da Vitória', AZ, 38.730, -27.070, 20, 'Açores')],
+    'pt-moinho-guadiana':[S('Mértola', 'Baixo Alentejo', 37.640, -7.660, 100, 'Beja'), S('Alcoutim', 'Algarve', 37.470, -7.470, 30, 'Faro')],
+    'pt-maia-b':[S('Maia', 'Grande Porto', 41.235, -8.620, 80, 'Porto'), S('Esposende', 'Cávado', 41.533, -8.781, 10, 'Braga')],
+    'pt-esposende':[S('Esposende', 'Cávado', 41.533, -8.781, 10, 'Braga')], 'pt-sousa-patio':[S('Paredes', 'Tâmega', 41.205, -8.330, 150, 'Porto')],
+    'pt-forno-sul':[S('Évora', 'Alentejo Central', 38.571, -7.909, 300, 'Évora'), S('Beja', 'Baixo Alentejo', 38.015, -7.863, 280, 'Beja'), S('Avis', 'Alto Alentejo', 39.050, -7.890, 200, 'Portalegre'),
+      S('Grândola', 'Alentejo Litoral', 38.180, -8.570, 100, 'Setúbal'), S('Loulé', 'Algarve', 37.140, -8.020, 170, 'Faro')],
+    'pt-porto-esguia':[S('Porto', 'Grande Porto', 41.146, -8.611, 80, 'Porto'), S('Braga', 'Cávado', 41.550, -8.426, 190, 'Braga')],
+    'pt-porto-ilha':[S('Porto', 'Grande Porto', 41.155, -8.600, 100, 'Porto')],
+    'pt-lisboa-patio':[S('Lisboa', 'Grande Lisboa', 38.715, -9.135, 50, 'Lisboa')], 'pt-vila-operaria':[S('Lisboa', 'Grande Lisboa', 38.720, -9.120, 60, 'Lisboa')],
+    'pt-casal-saloio':[S('Cascais', 'Grande Lisboa', 38.710, -9.340, 100, 'Lisboa')],
+    'pt-pombalino':[S('Lisboa', 'Grande Lisboa', 38.711, -9.137, 20, 'Lisboa'), S('Vila Real de Santo António', 'Algarve', 37.194, -7.416, 5, 'Faro')],
+    'pt-gaioleiro':[S('Lisboa', 'Grande Lisboa', 38.737, -9.146, 80, 'Lisboa')],
+    'pt-casa-corrente':[S('Coimbra', 'Baixo Mondego', 40.209, -8.426, 60, 'Coimbra'), S('Braga', 'Cávado', 41.550, -8.426, 190, 'Braga'), S('Porto', 'Grande Porto', 41.141, -8.613, 20, 'Porto'),
+      S('Viseu', 'Dão-Lafões', 40.657, -7.913, 480, 'Viseu'), S('Santarém', 'Lezíria do Tejo', 39.236, -8.686, 100, 'Santarém'), S('Leiria', 'Pinhal Litoral', 39.744, -8.807, 50, 'Leiria'),
+      S('Ponte de Lima', 'Minho-Lima', 41.767, -8.583, 40, 'Viana do Castelo')],
+    'pt-casa-economica':[S('Lisboa', 'Grande Lisboa', 38.780, -9.110, 80, 'Lisboa'), S('Porto', 'Grande Porto', 41.170, -8.600, 100, 'Porto'), S('Coimbra', 'Baixo Mondego', 40.200, -8.410, 80, 'Coimbra')],
+    'pt-lavoura-varanda':[S('Vila Verde', 'Cávado', 41.640, -8.430, 120, 'Braga'), S('Ponte de Lima', 'Minho-Lima', 41.740, -8.560, 60, 'Viana do Castelo'), S('Santo Tirso', 'Grande Porto', 41.343, -8.478, 80, 'Porto')],
+    'pt-lavoura-patio':[S('Vila Verde', 'Cávado', 41.645, -8.420, 100, 'Braga'), S('Ponte de Lima', 'Minho-Lima', 41.740, -8.560, 60, 'Viana do Castelo')],
+    'pt-lavoura-sequeiro':[S('Braga', 'Cávado', 41.590, -8.380, 100, 'Braga'), S('Ponte de Lima', 'Minho-Lima', 41.740, -8.560, 60, 'Viana do Castelo')],
+    'pt-lavoura-escada':[S('Braga', 'Cávado', 41.505, -8.430, 200, 'Braga')]
+  };
+})();
+delete VERN_SITES['az-moinho_'];
+/** The archetype's site in the district chosen on the map, else its first. */
+/** True when S lies within 5 km of one of the model's recorded sites. */
+const vernBuiltAt = (k, S) => (VERN_SITES[k] || []).some(s => Math.hypot((s.lat - S.lat) * 111, (s.lon - S.lon) * 111 * Math.cos(s.lat * Math.PI / 180)) <= 5);
+const vernSiteOf = (k, dist) => { const L = VERN_SITES[k] || []; return L.find(s => s.dist === dist) || L[0] || null; };
 
 /* --- support structures round the house -------------------------------------
    Placed on Ventilation from the archetypes' own support structures (the
@@ -28682,7 +28815,25 @@ function initSetup() {
     STATE.home = { site, clim:c };   // what 'Back to the coordinates set up' returns to
     STATE.note = null;
     mountApp(site, c);
+    /* the house chosen on the district map opens here, applied whole */
+    const pk = STATE.pendingType; STATE.pendingType = null;
+    if (pk && site.method === 'popular' && VERN_TYPES[pk]) { const R = vernRead(); if (R) { R.V.type = pk; vernApply('all'); } }
   });
+
+  /* a house touched on the district map: its place and region fill the site, the study turns to the popular models and
+     that house opens when the student works through the design — everything here can still be fine-tuned first */
+  initSetup.fromModel = (k, dist) => {
+    const s = vernSiteOf(k, dist);
+    if (!s) return false;
+    if (NUTS_LIST.indexOf(s.nuts) >= 0) sel.value = s.nuts;
+    fillConc(sel.value);
+    conc.value = s.place; lat.value = s.lat; lon.value = s.lon; alt.value = s.alt; altDirty = false;
+    sub.textContent = s.place + ' → ' + sel.value;
+    setMethod('popular');
+    STATE.pendingType = k;
+    autoNormals(); refresh(); kickSetupMap();
+    return s;
+  };
 
   /* a plot moved on Environmental moves the site: this screen follows, so
      coming back to it shows the site the pages read */
