@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.171.0',
+  version:     '1.172.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1616,7 +1616,7 @@ const inPoly = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i
    export can read them and a language switch keeps them; SCENE.plant is set
    by Ventilation to describe a plant's solid for export. Each tab registers
    its live corner scores in SCORES as it builds. */
-const SCENE = { veg:[], walls:[], water:[], waterAir:null, plant:null };
+const SCENE = { veg:[], walls:[], water:[], waterAir:null, stackDT:3, plant:null };
 /* ---- water in the garden: a pool or a pond on Ventilation ----------------
    {kind:'pool'|'pond', shape:'rect'|'square'|'circle'|'oval', a, b, depth, x, y}
    in metres, a along the plan's x, b along its y; a square and a circle read
@@ -14108,6 +14108,40 @@ function buildVentilation(host) {
     return { dir:ww.dir, spd:ww.spd, U, Uwall:U * hsum / Math.max(1e-9, wsum), cut, chan:chanMax };
   };
   /**
+   * Summer stack ventilation through the roof windows set on Openings and
+   * Shadowing. Warm air leaves by the roof windows, the outlets; cooler air
+   * enters by the ground-floor windows of every side, the inlets. Half of
+   * each opens, as for the walls (a teaching assumption). The flow is
+   * Q = Cd · A* · √(2 g Δh ΔT / T): Cd 0.61, A* the inlets and the outlets
+   * in series, Δh from the inlets' mid-height to the outlets', ΔT indoors over
+   * outdoors as the student sets it, T the summer months' mean air (CIBSE
+   * AM10; DeKay & Brown, Strategy 85). The wind and the stack are combined
+   * in quadrature, Q = √(Qw² + Qs²) — they are taken to assist, as they do
+   * when the roof windows sit in the wind's suction on the leeward slope or
+   * on a flat roof.
+   */
+  const stackAir = () => {
+    const none = { Q:0, v:0, n:0, Ain:0, Aout:0, dh:0, dT:SCENE.stackDT };
+    const rw = roofWindowQuads(G, RF);
+    if (!rw.length) return none;
+    const z = rwSizeNow(), Aout = rw.length * z.w * z.h * 0.5;
+    const zOut = rw.reduce((a, o) => a + o.q.reduce((b, q) => b + q[2], 0) / o.q.length, 0) / rw.length;
+    let Ain = 0, zA = 0;
+    planModel(G).segs.forEach(sg => {
+      const w = segWindow(sg, G);
+      if (!w || !w.rows || !w.rows.length) return;
+      const r = w.rows[0], a = w.w * Math.max(0, r.head - r.sill) * 0.5;
+      Ain += a; zA += a * (r.sill + r.head) / 2;
+    });
+    if (Ain <= 0) return Object.assign(none, { n:rw.length, Aout, zOut });
+    const zIn = zA / Ain, dh = Math.max(0, zOut - zIn), dT = SCENE.stackDT;
+    const tt = C && C.t ? SEASON_M.summer.map(m => C.t[m]).filter(v => isFinite(v)) : [];
+    const T = 273.15 + (tt.length ? tt.reduce((a, b) => a + b, 0) / tt.length : 22);
+    const Ae = 1 / Math.sqrt(1 / (Ain * Ain) + 1 / (Aout * Aout));
+    const Q = 0.61 * Ae * Math.sqrt(2 * 9.81 * dh * dT / T);
+    return { Q, v:Q / Ain, n:rw.length, Ain, Aout, Ae, dh, zIn, zOut, dT, T };
+  };
+  /**
    * Summer: the air the cross paths drive through the house. The June-to-
    * August wind at eave height meets each opposite pair of sides; the flow
    * through a pair is Q = Cd · A · U · √ΔCp — Cd 0.61 for a window, A the
@@ -14162,7 +14196,10 @@ function buildVentilation(host) {
     /* the rating reads the better path that reaches at least a quarter of the floor */
     const use = [SN, EW].filter(p => p.reach >= 0.25);
     const best = use.length ? use.reduce((p, q) => q.v > p.v ? q : p) : null;
-    return { dir:sw.dir, spd:sw.spd, U, SN, EW, best, v:best ? best.v : 0, ach:SN.ach + EW.ach, Q:SN.Q + EW.Q };
+    /* the roof windows' stack, in quadrature with the wind: through the inlets it adds its own speed */
+    const st = stackAir(), Qw = SN.Q + EW.Q, Q = Math.hypot(Qw, st.Q), vW = best ? best.v : 0;
+    return { dir:sw.dir, spd:sw.spd, U, SN, EW, best, stack:st, Qwind:Qw, v:st.Q > 0 ? Math.hypot(vW, st.v) : vW,
+      ach:V > 0 ? Q * 3600 / V : 0, achWind:SN.ach + EW.ach, Q };
   };
   /* ---- water in the garden ------------------------------------------------
      The hot afternoon it answers: the warmest month's mean plus half its daily
@@ -14228,7 +14265,9 @@ function buildVentilation(host) {
   SCORES.ventilation = () => {
     const fv = formVerdicts(), fr = fv.reach, ww = winterWind(), sa = summerAir();
     return { 'Winter wind, open ground at eaves (m/s)':+ww.U.toFixed(2), 'Winter wind at the windward walls (m/s)':+ww.Uwall.toFixed(2), 'Winter wind cut (%)':Math.round(100 * ww.cut),
-      'Summer air speed at the inlet windows (m/s)':+sa.v.toFixed(2), 'Summer cross flow (m³/h)':Math.round(sa.Q * 3600), 'Summer air changes (1/h)':+sa.ach.toFixed(1),
+      'Summer air speed at the inlet windows (m/s)':+sa.v.toFixed(2), 'Summer cross flow (m³/h)':Math.round(sa.Qwind * 3600), 'Summer air changes (1/h)':+sa.ach.toFixed(1),
+      'Roof windows in the stack':sa.stack.n, 'Summer stack flow through the roof windows (m³/h)':Math.round(sa.stack.Q * 3600), 'Stack height inlets to roof windows (m)':+sa.stack.dh.toFixed(2),
+      'Summer wind + stack flow (m³/h)':Math.round(sa.Q * 3600),
       'Planting':VEGETATION.length, 'Detached walls':WALLS.length,
       'Water bodies':WATER.length, 'Water evaporated, hottest month (L/day)':(() => { const ws = waterSummary(); return ws ? Math.round(ws.Lday) : 0; })(),
       'Water cooling at the house, hottest afternoon (K)':(() => { const ws = waterSummary(); return ws && ws.house ? +ws.house.dT.toFixed(2) : 0; })(),
@@ -14778,6 +14817,23 @@ function buildVentilation(host) {
   };
   host.appendChild(hint('vent-water',
     'How the water is counted. Evaporation follows the ASHRAE pool equation (after Carrier), w = A (pw − pa)(0.089 + 0.0782 V) / Y, halved for still, unoccupied water; the surface sits near the hottest month\u2019s mean air temperature, a degree up for the sun, deeper water holding nearer the year\u2019s mean. The air crossing the water is cooled against the dry garden it replaces: the water draws heat from the air by convection and, unlike dry ground in the sun, returns none to it (taken as 30 % of the sun on the ground). Both are shared by the lowest 1.5 m of the air that crosses it, fall away downwind as that layer deepens, and never pass 60 % of the wet-bulb depression. The humidity it adds is counted against the cooling in the apparent temperature (Steadman). Afternoon humidity and the daily range are estimated from where the site lies until you set them from the nearest station\u2019s normals; the cool surface\u2019s radiant effect and any fountain are not counted. A still pool cools little; wind across a wide surface and a house close downwind make the difference.'));
+
+  /* ---- the stack: the roof windows set on Openings and Shadowing let the
+     warm air out; the student sets how much warmer indoors is ---- */
+  rail.appendChild(el('div', { class:'gh', text:'Stack effect' }));
+  const stackBox = rail.appendChild(el('div'));
+  const stackSays = el('p', { class:'hint' });
+  stackBox.appendChild(rangeCtl('Indoors warmer than outdoors', 1, 8, 0.5, SCENE.stackDT, v => { SCENE.stackDT = +(+v).toFixed(1); refresh(); }, v => fmt(v, 1) + ' K'));
+  stackBox.appendChild(stackSays);
+  const syncStackUI = () => {
+    const st = stackAir();
+    stackSays.innerHTML = !st.n ? t('No roof windows — add them on Openings and Shadowing to let the warm air out at the top.')
+      : !st.Ain ? st.n + ' ' + t('roof windows, but no windows below to let air in.')
+      : st.n + ' ' + t('roof windows') + ' · Δh ' + fmt(st.dh, 1) + ' m · <b>' + fmt(st.Q * 3600, 0) + ' m³/h</b> · ' + fmt(st.v, 2) + ' m/s ' + t('at the inlet windows')
+        + '<br>' + t('on a still day, the stack alone') + ': <b>' + fmt(st.Q * 3600 / Math.max(1e-6, formFactor(G, RF).V), 1) + ' ' + t('air changes/h') + '</b>';
+  };
+  host.appendChild(hint('vent-stack',
+    'The stack effect through the roof windows. Warm indoor air is lighter than the air outside, so it leaves at the top and draws cooler air in at the bottom: the roof windows set on Openings and Shadowing are the outlets, the ground-floor windows of every side the inlets, half of each opening. The flow is Q = 0.61 · A* · √(2 g Δh ΔT / T), A* the inlets and outlets in series, Δh the height from the inlets\u2019 mid-height to the roof windows\u2019, ΔT how much warmer indoors is than outdoors, T the summer air (CIBSE AM10; DeKay &amp; Brown, Strategy 85). It works on still days, when cross ventilation fails, and grows with the height between inlet and outlet and with the warmth to be shed; with wind the two combine as √(Qwind² + Qstack²), taken as assisting — true when the roof windows sit on the leeward slope or a flat roof, in the wind\u2019s suction. On the windward slope the wind can push back against the stack.'));
 
   /* ---- a garden wind turbine: mast, rotor and its electricity, with the sun ----
      Taller than the walls is allowed — height is the whole point. */
@@ -15996,6 +16052,21 @@ function buildVentilation(host) {
       label(ctx, wtxt, lx, ly, '#1D4ED8', FM(10), 'center', 'middle');
       const up = proj(0, 0, ridge), upTop = proj(0, 0, ridge + Math.max(1.2, h0live() * 0.5));
       stroke(ctx, 'rgba(217,119,6,.8)', 1.6, [5,4]); seg(ctx, up[0], up[1], upTop[0], upTop[1]);
+      /* the stack: warm air rising out of each roof window, the arrow as long as its speed */
+      const stA = stackAir();
+      if (stA.Q > 0) {
+        let top = null;
+        roofWindowQuads(G, RF).forEach(o => {
+          const c = o.q.reduce((a2, q) => [a2[0] + q[0] / 4, a2[1] + q[1] / 4, a2[2] + q[2] / 4], [0, 0, 0]);
+          const L = 0.8 + 2.2 * Math.min(1, stA.v * stA.Ain / Math.max(1e-6, stA.Aout) / 1.5);
+          const A = proj(c[0], c[1], c[2] + 0.1), B = proj(c[0], c[1], c[2] + 0.1 + L), an = Math.atan2(B[1] - A[1], B[0] - A[0]);
+          stroke(ctx, 'rgba(217,119,6,.95)', 2.2); seg(ctx, A[0], A[1], B[0], B[1]);
+          seg(ctx, B[0], B[1], B[0] - 8 * Math.cos(an - 0.45), B[1] - 8 * Math.sin(an - 0.45));
+          seg(ctx, B[0], B[1], B[0] - 8 * Math.cos(an + 0.45), B[1] - 8 * Math.sin(an + 0.45));
+          if (!top || B[1] < top[1]) top = B;
+        });
+        if (top) waterTags.push({ txt:t('stack') + ' ' + fmt(stA.Q * 3600, 0) + ' m³/h', x:top[0], y:top[1] - 12, ink:'#92400E', edge:'#D97706' });
+      }
     }
 
     drawCompass();
@@ -16036,6 +16107,8 @@ function buildVentilation(host) {
       + fmt(wwR.Uwall, 1) + ' m/s ' + t('at the walls') + ' (' + (wwR.cut >= 0 ? '−' : '+') + Math.round(100 * Math.abs(wwR.cut)) + ' %)' + (wwR.chan > 1.05 ? ' · ' + t('avenue') + ' ×' + fmt(wwR.chan, 2) : ''), 8, ry);
     ctx.fillStyle = '#1D4ED8'; ctx.fillText(t('Summer') + ' ' + (lat < 0 ? t('Dec–Feb') : t('Jun–Aug')) + ' ' + cmp(saR.dir) + ' ' + fmt(saR.U, 1) + ' m/s → S–N '
       + fmt(saR.SN.v, 2) + ' · E–W ' + fmt(saR.EW.v, 2) + ' m/s ' + t('at the inlet windows') + ' · ' + fmt(saR.ach, 0) + ' ' + t('air changes/h') + (Math.max(saR.SN.ck, saR.EW.ck) > 1.05 ? ' · ' + t('avenue') + ' ×' + fmt(Math.max(saR.SN.ck, saR.EW.ck), 2) : ''), 8, ry + 12);
+    if (saR.stack.n) { ctx.fillStyle = '#B45309'; ctx.fillText(t('Stack') + ' · ' + saR.stack.n + ' ' + t('roof windows') + ' · Δh ' + fmt(saR.stack.dh, 1) + ' m · ΔT ' + fmt(saR.stack.dT, 0) + ' K → '
+      + fmt(saR.stack.Q * 3600, 0) + ' m³/h' + (saR.stack.Ain > 0 ? ' · ' + fmt(saR.stack.v, 2) + ' m/s ' + t('at the inlet windows') : ' · ' + t('no windows below to let air in')), 8, ry + 24); }
 
     /* ---- corner etiqueta: the Olgyay meta-evaluation on the model ----
        Winter badge reads the vegetation-and-wall windbreak (blockage after
@@ -16063,7 +16136,7 @@ function buildVentilation(host) {
         else { ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(x - 46, y + 14, 42, 22); label(ctx, txt, x - 6, y + 25, dcol, FM(15, '700'), 'right', 'middle'); }
       }
     };
-    const noPairFlow = effectiveArea('S', 'N') <= 0 && effectiveArea('E', 'W') <= 0;
+    const noPairFlow = effectiveArea('S', 'N') <= 0 && effectiveArea('E', 'W') <= 0 && !(saR.stack && saR.stack.Q > 0);
     /* winter: the wind left at the windward walls — lower is better; summer:
        the air driven through the house — higher is better; both in m/s */
     ventBadge(0, fmt(wwR.Uwall, 1), winterBand(wwR), 'm/s · winter walls', scoreDelta && scoreDelta.w);
@@ -16083,12 +16156,12 @@ function buildVentilation(host) {
       const around = q => [[q[0] + 8, q[1] - 9, 'left'], [q[0] - 8, q[1] - 9, 'right'], [q[0] + 8, q[1] + 9, 'left'], [q[0] - 8, q[1] + 9, 'right']];
       desk.place(shadowTag.txt, (spots.length ? spots : shadowTag.pts.slice(0, 1)).map(around).reduce((a, b) => a.concat(b), []), CH.ink2, FM(9.5));
     }
-    /* the water's numbers last, on a pill, so the air and the house never cover them */
+    /* the water's and the stack's numbers last, on a pill, so the air and the house never cover them */
     waterTags.forEach(g => {
       ctx.font = F(10, '600'); const tw = ctx.measureText(g.txt).width;
       ctx.fillStyle = 'rgba(255,255,255,.88)'; ctx.fillRect(g.x - tw / 2 - 4, g.y - 8, tw + 8, 16);
-      stroke(ctx, '#5DB8DA', 1); ctx.strokeRect(g.x - tw / 2 - 4, g.y - 8, tw + 8, 16);
-      label(ctx, g.txt, g.x, g.y, '#0B4F6C', F(10, '600'), 'center', 'middle');
+      stroke(ctx, g.edge || '#5DB8DA', 1); ctx.strokeRect(g.x - tw / 2 - 4, g.y - 8, tw + 8, 16);
+      label(ctx, g.txt, g.x, g.y, g.ink || '#0B4F6C', F(10, '600'), 'center', 'middle');
     });
     ctx.fillStyle = '#7b838b'; ctx.font = '9px ui-sans-serif';
     ctx.textAlign = 'center';
@@ -16121,6 +16194,8 @@ function buildVentilation(host) {
     rows.push(['Eave wind (' + monthSetName(MON3_EN) + ', m/s)', +eaveWind().toFixed(2)]);
     rows.push(['Airflow layer height (m)', +clamp(h0live() * 0.55, 1.0, 2.6).toFixed(2)], ['Airflow streamlines', ventAir ? ventAir.lines.length : 0]);
     rows.push(['Eave height H0 (m)', +h0live().toFixed(2)], ['Stack Δp ΔT=5K (Pa)', +stackPa(5).toFixed(2)]);
+    { const st = stackAir();
+      rows.push(['Stack through roof windows', st.n ? st.n + ' roof windows, outlets ' + st.Aout.toFixed(2) + ' m² open, inlets ' + st.Ain.toFixed(2) + ' m² open (ground-floor windows), Δh ' + st.dh.toFixed(2) + ' m, ΔT ' + st.dT + ' K → Q ' + Math.round(st.Q * 3600) + ' m³/h (Cd 0.61, A* in series)' : 'no roof windows']); }
     rows.push(['Plan L×D (m)', G.L.toFixed(1) + '×' + G.D.toFixed(1)], ['Roof slopes', RF.n], ['Roof pitch (°)', +RF.th.toFixed(0)]);
     ['S','N','E','W'].forEach(f => {
       const o = OPEN[f], ws = planModel(G).segs.filter(sg => segFace(sg) === f).map(sg => segWindow(sg, G)).filter(Boolean);
@@ -16612,7 +16687,7 @@ function buildVentilation(host) {
   };
   const signed = v => (v > 0.005 ? '+' : v < -0.005 ? '−' : '±') + fmt(Math.abs(v), 2);
   const refresh = () => {
-    const nowW = +winterWind().Uwall.toFixed(2), noFlow = effectiveArea('S', 'N') <= 0 && effectiveArea('E', 'W') <= 0;
+    const nowW = +winterWind().Uwall.toFixed(2), noFlow = effectiveArea('S', 'N') <= 0 && effectiveArea('E', 'W') <= 0 && !(stackAir().Q > 0);
     const nowS = noFlow ? null : +summerAir().v.toFixed(2);
     if (lastScores && (nowW !== lastScores.w || nowS !== lastScores.s)) {
       const dW = nowW - lastScores.w, dS = nowS === null || lastScores.s === null ? 0 : nowS - lastScores.s;
@@ -16639,6 +16714,7 @@ function buildVentilation(host) {
     syncPlantEd();
     syncWindCtls();
     syncWaterUI();
+    syncStackUI();
     vegCount.textContent = VEGETATION.length + '/10';
     /* exposure follows the surroundings every refresh: the relief names the
        terrain, the mapped neighbours name the shelter */
@@ -27611,7 +27687,7 @@ function studyJSON() {
     clim:{ t:C.t.slice(), p:C.p.slice(), source:C.source || '', mode:C.mode || '' },
     env:{ plot:ENV.plot ? { lat:ENV.plot.lat, lon:ENV.plot.lon } : null, doy:ENV.doy, h:ENV.h,
       map:ENV.map, view:ENV.view, az:isFinite(+ENV.az) ? +(+ENV.az).toFixed(1) : 225, wide:!!ENV.wide, nb:ENV.nb !== false },
-    mass:MASS, roof:ROOF, open:OPEN, sunsp:SUNSP, rwin:RWIN, turb:TURB, veg:SCENE.veg, walls:SCENE.walls, water:SCENE.water, waterAir:SCENE.waterAir || null,
+    mass:MASS, roof:ROOF, open:OPEN, sunsp:SUNSP, rwin:RWIN, turb:TURB, veg:SCENE.veg, walls:SCENE.walls, water:SCENE.water, waterAir:SCENE.waterAir || null, stackDT:SCENE.stackDT,
     render:{ prompt:RENDER_PROMPT },
     vern:STATE.vern || null,
     mesh:IMPORT.active ? { name:IMPORT.name, L:+IMPORT.L.toFixed(2), D:+IMPORT.D.toFixed(2), H:+IMPORT.H.toFixed(2) } : null,
@@ -27932,6 +28008,7 @@ function applyStudy(o) {
     SCENE.water.push({ kind:w.kind === 'pond' ? 'pond' : 'pool', shape:['rect', 'square', 'circle', 'oval'].indexOf(w.shape) >= 0 ? w.shape : 'rect',
       a:clamp(+w.a || 6, 1, 25), b:clamp(+w.b || 3, 1, 15), depth:clamp(+w.depth || 1.2, 0.1, 3), x:+w.x, y:+w.y });
   });
+  SCENE.stackDT = isFinite(+o.stackDT) && o.stackDT !== null ? clamp(+o.stackDT, 1, 8) : 3;
   if (o.waterAir && isFinite(+o.waterAir.rh) && isFinite(+o.waterAir.dtr)) SCENE.waterAir = { rh:clamp(+o.waterAir.rh, 10, 95), dtr:clamp(+o.waterAir.dtr, 3, 20) };
   const E0 = o.env || {};
   if (E0.plot && isFinite(+E0.plot.lat) && isFinite(+E0.plot.lon)) ENV.plot = { lat:+E0.plot.lat, lon:+E0.plot.lon };
@@ -29200,7 +29277,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
   PANELS = [];
   for (const k in SCORES) delete SCORES[k];
   if (!(keepModel && MASS)) {   // a language switch keeps the student's model; a new site starts afresh
-  SCENE.veg.length = 0; SCENE.walls.length = 0; SCENE.water.length = 0; SCENE.waterAir = null;
+  SCENE.veg.length = 0; SCENE.walls.length = 0; SCENE.water.length = 0; SCENE.waterAir = null; SCENE.stackDT = 3;
   MASS = { L:12, D:8, rot:180, fl:1, fh:3.0, col:null, form:'rect', wing:null, patio:{ on:false, w:4, d:3, cx:0, cy:0 }, balc:[] };
   if (IMPORT.active && IMPORT.L > 0 && IMPORT.D > 0) {
     MASS.L = clamp(Math.round(IMPORT.L * 2) / 2, 6, L_MAX);
@@ -31062,6 +31139,21 @@ Object.assign(PT, {
 });
 Object.assign(PT_HINT, {
   'vent-water': "Como a água é contada. A evaporação segue a equação da ASHRAE para piscinas (segundo Carrier), w = A (pw − pa)(0,089 + 0,0782 V) / Y, reduzida a metade para água parada e sem uso; a superfície fica perto da temperatura média do ar do mês mais quente, um grau acima pelo sol que recebe, e a água mais funda fica mais perto da média do ano. O ar que passa sobre a água arrefece face ao jardim seco que ela substitui: a água tira calor ao ar por convecção e, ao contrário do chão seco ao sol, não lhe devolve nenhum (tomado como 30 % do sol que chega ao chão). Ambos se repartem pelo 1,5 m mais baixo do ar que a atravessa, diminuem a jusante do vento à medida que essa camada engrossa, e nunca passam 60 % da depressão de bolbo húmido. A humidade que acrescenta é descontada ao arrefecimento na temperatura aparente (Steadman). A humidade à tarde e a amplitude diária são estimadas pela posição do local até as definir pelas normais da estação mais próxima; o efeito radiante da superfície fresca e qualquer repuxo não são contados. Uma piscina parada arrefece pouco; vento sobre uma superfície larga e uma casa próxima a jusante fazem a diferença.",
+});
+
+Object.assign(PT, {
+  "Stack effect": "Efeito chaminé",
+  "Indoors warmer than outdoors": "Interior mais quente que o exterior",
+  "No roof windows — add them on Openings and Shadowing to let the warm air out at the top.": "Sem janelas de cobertura — acrescente-as em Aberturas e Sombreamento para deixar sair o ar quente pelo topo.",
+  "roof windows, but no windows below to let air in.": "janelas de cobertura, mas sem janelas em baixo por onde o ar entre.",
+  "roof windows": "janelas de cobertura",
+  "Stack": "Efeito chaminé",
+  "stack": "chaminé",
+  "no windows below to let air in": "sem janelas em baixo por onde o ar entre",
+  "on a still day, the stack alone": "num dia sem vento, só o efeito chaminé",
+});
+Object.assign(PT_HINT, {
+  'vent-stack': "O efeito chaminé pelas janelas de cobertura. O ar quente do interior é mais leve do que o de fora, por isso sai pelo topo e puxa ar mais fresco por baixo: as janelas de cobertura definidas em Aberturas e Sombreamento são as saídas, as janelas do piso térreo de todas as fachadas as entradas, metade de cada uma a abrir. O caudal é Q = 0,61 · A* · √(2 g Δh ΔT / T), A* as entradas e as saídas em série, Δh a altura da meia-altura das entradas à das janelas de cobertura, ΔT quanto o interior está mais quente do que o exterior, T o ar de Verão (CIBSE AM10; DeKay &amp; Brown, Estratégia 85). Funciona nos dias sem vento, quando a ventilação transversal falha, e cresce com a altura entre entrada e saída e com o calor a evacuar; com vento os dois combinam-se como √(Qvento² + Qchaminé²), tomados como concorrentes — o que é verdade quando as janelas de cobertura estão na vertente a sotavento ou numa cobertura plana, na sucção do vento. Na vertente a barlavento o vento pode contrariar a chaminé.",
 });
 
 /* boot, last: a page opened in Portuguese renders its first screen with
