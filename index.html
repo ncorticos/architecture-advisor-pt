@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.170.0',
+  version:     '1.171.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1616,7 +1616,88 @@ const inPoly = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i
    export can read them and a language switch keeps them; SCENE.plant is set
    by Ventilation to describe a plant's solid for export. Each tab registers
    its live corner scores in SCORES as it builds. */
-const SCENE = { veg:[], walls:[], plant:null };
+const SCENE = { veg:[], walls:[], water:[], waterAir:null, plant:null };
+/* ---- water in the garden: a pool or a pond on Ventilation ----------------
+   {kind:'pool'|'pond', shape:'rect'|'square'|'circle'|'oval', a, b, depth, x, y}
+   in metres, a along the plan's x, b along its y; a square and a circle read
+   a alone (side, diameter). The physics is kept apart from the drawing so the
+   scores, the CSV and the view read one number. */
+const WATER_MAX = 3;
+const waterDims = w => (w.shape === 'circle' || w.shape === 'square') ? [w.a, w.a] : [w.a, w.b];
+const waterArea = w => { const [A, B] = waterDims(w); return w.shape === 'circle' || w.shape === 'oval' ? Math.PI * A * B / 4 : A * B; };
+/** The outline in plan, closed, counter-clockwise; an ellipse in 32 chords. */
+const waterOutline = (w, k) => {
+  const [A, B] = waterDims(w), f = k || 1;
+  if (w.shape === 'circle' || w.shape === 'oval') {
+    const out = [];
+    for (let i = 0; i < 32; i++) { const th = i / 32 * 2 * Math.PI; out.push([w.x + A * f / 2 * Math.cos(th), w.y + B * f / 2 * Math.sin(th)]); }
+    return out;
+  }
+  return [[w.x - A * f / 2, w.y - B * f / 2], [w.x + A * f / 2, w.y - B * f / 2], [w.x + A * f / 2, w.y + B * f / 2], [w.x - A * f / 2, w.y + B * f / 2]];
+};
+/** The width the wind crosses, square to its direction u (a unit vector). */
+const waterSpan = (w, u) => { const [A, B] = waterDims(w);
+  return w.shape === 'circle' || w.shape === 'oval' ? Math.hypot(A * u[1], B * u[0]) : A * Math.abs(u[1]) + B * Math.abs(u[0]); };
+/** Saturation vapour pressure over water, kPa (Magnus form, Alduchov & Eskridge 1996). */
+const psatKPa = T => 0.61094 * Math.exp(17.625 * T / (T + 243.04));
+/** Wet-bulb temperature from air temperature and relative humidity (Stull 2011), °C. */
+const wetBulbC = (T, RH) => T * Math.atan(0.151977 * Math.sqrt(RH + 8.313659)) + Math.atan(T + RH) - Math.atan(RH - 1.676331)
+  + 0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH) - 4.686035;
+/**
+ * What one body of water does on a hot afternoon. E carries the air: Ta (°C)
+ * and RH (%) of the hottest month's afternoon, Tmean and Tann (°C) the month's
+ * and the year's mean, V (m/s) the summer wind 1.5 m above the ground, Gh
+ * (W/m²) the clear-sky sun on the ground, rho (kg/m³), P (kPa), u the unit
+ * vector the wind blows toward, in the plan.
+ *  · The surface sits near the month's mean air temperature, a degree up for
+ *    the sun it takes in; depth holds it back toward the year's mean, up to
+ *    0.3 of the gap at 1.8 m and more (an approximation of thermal lag).
+ *  · Evaporation, ASHRAE Handbook — HVAC Applications (natatoriums), after
+ *    Carrier: w = A (pw − pa)(0.089 + 0.0782 V) / Y · Fa, kg/s, p in kPa, Y
+ *    the latent heat in kJ/kg, Fa 0.5 for still, unoccupied water. The air's
+ *    vapour pressure changes little through a day, so the afternoon's pa
+ *    holds for the day's total.
+ *  · The air crossing the water, against the dry garden it replaces: the
+ *    water takes heat from the air by convection, hc (Ta − Tw) with hc =
+ *    2.8 + 3.0 V W/m²K, and does not give back the sensible heat dry ground
+ *    returns to the air in the sun — taken as 0.3 Gh (an assumption: dry
+ *    Mediterranean ground in summer sends a quarter to two-fifths of the sun
+ *    it absorbs into the air). Both are shared by the air that crosses the
+ *    span in the lowest 1.5 m: ΔT = A q / (ρ V span 1.5 cp), held under 0.6
+ *    of the wet-bulb depression; the vapour the water gives raises the
+ *    air's vapour pressure by Δe = (w / ṁ) P / 0.622.
+ *  · Downwind the layer deepens about 0.1 m for every metre, so both
+ *    effects fall as 1.5 / (1.5 + 0.1 x).
+ */
+function waterEffect(w, E) {
+  const A = waterArea(w), dep = clamp(+w.depth || 0, 0.05, 5);
+  const lag = Math.max(0, E.Tmean - E.Tann) * Math.min(0.3, dep / 6);
+  const Tw = E.Tmean + 1 - lag;
+  const pw = psatKPa(Tw), pa = clamp(E.RH, 5, 100) / 100 * psatKPa(E.Ta), Y = 2501 - 2.361 * Tw;
+  const V = Math.max(0.3, E.V);
+  const flux = Math.max(0, pw - pa) * (0.089 + 0.0782 * V) / Y * 0.5;   // kg/s per m²
+  const evap = flux * A;
+  const hc = 2.8 + 3.0 * V, qConv = hc * (E.Ta - Tw), qDry = 0.3 * Math.max(0, E.Gh), span = Math.max(0.5, waterSpan(w, E.u)), hMix = 1.5;
+  const mAir = E.rho * V * span * hMix;
+  const cap = 0.6 * Math.max(0, E.Ta - wetBulbC(E.Ta, clamp(E.RH, 5, 100)));
+  const dT0 = clamp(A * (qConv + qDry) / (mAir * 1006), 0, cap);
+  const de0 = evap / mAir * E.P / 0.622;   // kPa
+  const at = x => { const f = hMix / (hMix + 0.1 * Math.max(0, x)), dT = dT0 * f, de = de0 * f;
+    const RH1 = 100 * Math.min(1, (pa + de) / psatKPa(E.Ta - dT));
+    return { dT, de, RH0:100 * pa / psatKPa(E.Ta), RH1, dAT:-dT + 0.33 * de * 10 }; };
+  return { A, vol:A * dep, Tw, V, flux, evap, mmDay:flux * 86400, Lday:evap * 86400, drop30:flux * 86400 * 30 / 1000,
+    qConv, qDry, span, hMix, mAir, dT0, de0, cap, at };
+}
+/** Defaults for the hot afternoon where no humidity record is at hand: the
+    islands mild and humid, the Atlantic and Algarve coasts in between, a
+    band 50–70 km inland drier, the interior hot and dry — estimates the
+    student replaces with the station's normals. */
+const waterClimDefaults = S => {
+  if (!inPortugal(S.lat, S.lon)) return { dtr:10, rh:45 };
+  if (S.lon < -14) return { dtr:6, rh:70 };
+  if (S.lon < -8.6 || S.lat < 37.2) return { dtr:9, rh:55 };
+  return S.lon < -8.0 ? { dtr:12, rh:42 } : { dtr:15, rh:30 };
+};
 const SCORES = {};
 /**
  * Build a titled panel that owns one canvas. `o.render(ctx, W, H)` draws in CSS
@@ -4379,6 +4460,120 @@ function roofModel(G, RF) {
     wallArea:walls.reduce((a, w) => a + w.area, 0) + steps.reduce((a, st) => a + st.area, 0) };
   ROOF_CACHE.key = key; ROOF_CACHE.val = val;
   return val;
+}
+/* Catalogue roof-window rectangles (w × h, m) with a count per slope. The
+   slopes are the roof model's own planes: the one facing the main facade
+   (the collecting plane of the Roof tab), and the largest facing each of
+   the other three ways; a flat roof takes level skylights. */
+const RW_SIZES = {
+  '55x78':{ w:0.55, h:0.78, label:'55 x 78 cm' },
+  '78x98':{ w:0.78, h:0.98, label:'78 x 98 cm' },
+  '78x140':{ w:0.78, h:1.40, label:'78 x 140 cm' },
+  '114x118':{ w:1.14, h:1.18, label:'114 x 118 cm' }
+};
+const rwSizeNow = () => RW_SIZES[RWIN.size] || RW_SIZES['78x140'];
+/** A roof plane for one way of facing, with its range along the fall (d,
+    the height above its eave over the pitch's tangent) and across it (q). */
+function roofPlaneFor(G, RF, dir) {
+  const Mm = roofModel(G, RF);
+  let pl0 = null;
+  if (dir === 'S') pl0 = collectPlane(Mm);
+  else {
+    const want = { N:[0, -1], W:[1, 0], E:[-1, 0] }[dir], byKey = {};
+    Mm.pieces.forEach(pc => { if (pc.f.a === want[0] && pc.f.b === want[1]) (byKey[pc.key] = byKey[pc.key] || []).push(pc); });
+    const area = k => byKey[k].reduce((a, pc) => a + pc.area, 0), ks = Object.keys(byKey);
+    if (ks.length) { const k = ks.reduce((p, q) => area(q) > area(p) ? q : p); pl0 = { key:k, pieces:byKey[k], f:byKey[k][0].f, area:area(k) }; }
+  }
+  if (!pl0) return null;
+  const f = pl0.f, ds = [], qs = [];
+  pl0.pieces.forEach(pc => pc.poly.forEach(q => { ds.push(f.a * q[0] + f.b * q[1] + f.c); qs.push(f.b !== 0 ? q[0] : q[1]); }));
+  const pt = pl0.pieces.reduce((p, q) => q.area > p.area ? q : p, pl0.pieces[0]).f.t;
+  return Object.assign({}, pl0, { dMin:Math.min.apply(null, ds), dMax:Math.max.apply(null, ds), qMin:Math.min.apply(null, qs), qMax:Math.max.apply(null, qs),
+    P:(q, d) => { const z = H0of(G) + pt * d + 0.03; return f.b !== 0 ? [q, (d - f.c) / f.b, z] : [(d - f.c) / f.a, q, z]; } });
+}
+/** The runs across a plane where a band along its fall lies wholly on it. */
+function roofBandSpans(G, RF, pp, d0, d1) {
+  const Mm = roofModel(G, RF), out = [], st = 0.05;
+  const on = (q, d) => { const p = pp.P(q, d), r0 = Mm.at(p[0], p[1]); return !!r0 && r0.key === pp.key; };
+  let run = null;
+  for (let q = pp.qMin + st / 2; q < pp.qMax; q += st) {
+    if (on(q, d0 + 0.01) && on(q, d1 - 0.01) && on(q, (d0 + d1) / 2)) { if (run) run[1] = q + st / 2; else run = [q - st / 2, q + st / 2]; }
+    else if (run) { out.push(run); run = null; }
+  }
+  if (run) out.push(run);
+  return out;
+}
+const RW_KEY = { S:'sF', N:'nF', E:'eF', W:'wF' };
+const rwCount = sl => sl === 'F' ? RWIN.s : sl === 'S' ? RWIN.s : sl === 'N' ? RWIN.n : sl === 'E' ? RWIN.e : RWIN.w;
+/** A slope's row of roof windows as world quads, and the plane under it:
+    one source for drawing, picking and dragging. The row rides its
+    fraction of the fall (0 eave, 1 ridge), centred on the widest run of
+    the plane there; the flat roof's row slides sideways. */
+function roofRowOf(G, RF, slope) {
+  const z = rwSizeNow(), count = rwCount(slope);
+  if (count <= 0) return null;
+  if (slope === 'F') {
+    if (RF.n !== 0) return null;
+    const Mm = roofModel(G, RF), big = Mm.pl.boxes.reduce((p, q) => (q[2] - q[0]) * (q[3] - q[1]) > (p[2] - p[0]) * (p[3] - p[1]) ? q : p);
+    const yc = (big[1] + big[3]) / 2, hEff = Math.min(z.h, (big[3] - big[1]) * 0.7);
+    const pp = { key:'flat', qMin:Mm.pl.bbox[0], qMax:Mm.pl.bbox[2], P:(q, d) => [q, d, H0of(G) + 0.03] };
+    const sp = roofBandSpans(G, RF, pp, yc - hEff / 2, yc + hEff / 2);
+    if (!sp.length) return null;
+    const wide = sp.reduce((p, q) => q[1] - q[0] > p[1] - p[0] ? q : p), len = wide[1] - wide[0];
+    const wE = Math.min(z.w, Math.max(0.3, (len * 0.8 - (count - 1) * 0.4) / count)), span = count * wE + (count - 1) * 0.4;
+    const maxX = Math.max(0, (len - span) / 2), cx = (wide[0] + wide[1]) / 2 + clamp(RWIN.fX, -maxX, maxX);
+    const quads = [];
+    for (let i = 0; i < count; i++) {
+      const u = cx - span / 2 + wE / 2 + i * (wE + 0.4);
+      quads.push([pp.P(u - wE / 2, yc - hEff / 2), pp.P(u + wE / 2, yc - hEff / 2), pp.P(u + wE / 2, yc + hEff / 2), pp.P(u - wE / 2, yc + hEff / 2)]);
+    }
+    return { quads, maxX, centre:(wide[0] + wide[1]) / 2 };
+  }
+  if (RF.n === 0) return null;
+  const pp = roofPlaneFor(G, RF, slope);
+  if (!pp || pp.dMax - pp.dMin < 0.3) return null;
+  const cos = Math.cos(pp.f.th * RAD), slant = (pp.dMax - pp.dMin) / cos;
+  const hp = Math.min(z.h, slant * 0.85) * cos, run = pp.dMax - pp.dMin;
+  const f0 = clamp(RWIN[RW_KEY[slope]], hp / run / 2 + 0.02, 1 - hp / run / 2 - 0.02);
+  const dc = pp.dMin + f0 * run, sp = roofBandSpans(G, RF, pp, dc - hp / 2, dc + hp / 2);
+  if (!sp.length) return null;
+  const wide = sp.reduce((p, q) => q[1] - q[0] > p[1] - p[0] ? q : p), len = wide[1] - wide[0], qc = (wide[0] + wide[1]) / 2;
+  const wE = Math.min(z.w, Math.max(0.3, (len * 0.8 - (count - 1) * 0.4) / count)), span = count * wE + (count - 1) * 0.4;
+  const quads = [];
+  for (let i = 0; i < count; i++) {
+    const u = qc - span / 2 + wE / 2 + i * (wE + 0.4);
+    quads.push([pp.P(u - wE / 2, dc - hp / 2), pp.P(u + wE / 2, dc - hp / 2), pp.P(u + wE / 2, dc + hp / 2), pp.P(u - wE / 2, dc + hp / 2)]);
+  }
+  return { quads, pp, qc, hp, run };
+}
+/** Every roof window the student set on Openings, as world quads with their
+    slope (S/N/E/W, or F for the flat roof's skylights): the one geometry each
+    3D view draws, so a skylight shows wherever the roof does. */
+const roofWindowQuads = (G, RF) => !RWIN ? [] : ['S', 'N', 'E', 'W', 'F'].reduce((a, sl) => { const r = roofRowOf(G, RF, sl); if (r) r.quads.forEach(q => a.push({ sl, q })); return a; }, []);
+/** The roof windows as the 3D views paint them, each tagged with the roof
+    plane it lies on, so a view paints it straight after that plane's piece
+    and it keeps the piece's place in the depth order. */
+function roofWinsFor(G, RF) {
+  const M = roofModel(G, RF);
+  return roofWindowQuads(G, RF).map(o => {
+    const cx = (o.q[0][0] + o.q[2][0]) / 2, cy = (o.q[0][1] + o.q[2][1]) / 2, r = M.at(cx, cy);
+    return { sl:o.sl, q:o.q, cx, cy, key:r ? r.key : null };
+  });
+}
+/** Paints the windows lying on roof piece pc through a view's own projector
+    P(x, y, z) → [px, py]: pane, frame and one glazing bar across the fall. */
+function paintRoofWins(ctx, wins, pc, P, look) {
+  const lk = look || {};
+  wins.forEach(o => {
+    if (o.sl === 'F' ? !inPoly(o.cx, o.cy, pc.poly) : o.key !== pc.key) return;
+    const p = o.q.map(q => P(q[0], q[1], q[2]));
+    ctx.beginPath(); p.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
+    ctx.setLineDash([]);
+    ctx.fillStyle = lk.fill || 'rgba(219,234,254,.95)'; ctx.fill();
+    ctx.strokeStyle = lk.ink || '#2563EB'; ctx.lineWidth = lk.lw || 1.2; ctx.stroke();
+    const a = [(p[0][0] + p[3][0]) / 2, (p[0][1] + p[3][1]) / 2], b = [(p[1][0] + p[2][0]) / 2, (p[1][1] + p[2][1]) / 2];
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineWidth = 0.8; ctx.stroke();
+  });
 }
 /* --- balconies: added to the volume or cut into it, on a side or a corner ---
    Each balcony stands on one wall of the outline, found again from its face
@@ -7188,6 +7383,7 @@ function buildEnvironment(host) {
       const P = (u, z) => { const w = toW(st.ax === 'x' ? st.a[0] : st.a[0] + u, st.ax === 'x' ? st.a[1] + u : st.a[1]); return [w[0], w[1], z]; };
       faces.push({ pts:st.prof.map(q => P(q[0], q[1])).concat(st.prof.slice().reverse().map(q => P(q[0], q[2]))), fill:wallCol(st.n[1] !== 0) });
     });
+    const RWS = roofWinsFor(G, RF);   // the roof windows set on Openings
     M.pieces.forEach(pc => {
       const f = pc.f, nh = toW(-f.t * f.a, -f.t * f.b), R = (x, y) => { const w = toW(x, y); return [w[0], w[1], M.zOf(f, x, y)]; };
       let cells = null;
@@ -7262,6 +7458,7 @@ function buildEnvironment(host) {
           const a = pt(wa[0], wa[1], M.zOf(f2.pc.f, e2[0][0], e2[0][1])), c = pt(wb[0], wb[1], M.zOf(f2.pc.f, e2[1][0], e2[1][1]));
           seg(ctx, a[0], a[1], c[0], c[1]);
         });
+        paintRoofWins(ctx, RWS, f2.pc, (x, y, z) => { const w = toW(x, y); return pt(w[0], w[1], z); });
         return;
       }
       stroke(ctx, CH.ink, 1.2); ctx.stroke();
@@ -8323,6 +8520,7 @@ function buildSite(host) {
       /* the volume under the roof set on Roof — the same model every other
          page draws: walls up to the roof's profile, gables, steps, slopes */
       const RM = roofModel(G, ROOF), Rdg = RM.ridge;
+      const RWS = roofWinsFor(G, ROOF);   // the roof windows set on Openings
       const Lsh = shadowLen(Rdg, sun.alt);   // the ridge's shadow: the farthest the roofed volume reaches
       const saz = (sun.azi + 180) * RAD, kz = shadowLen(1, sun.alt), sxz = Math.sin(saz) * kz, syz = Math.cos(saz) * kz;
       const pl = planOf();
@@ -8528,6 +8726,7 @@ function buildSite(host) {
             stroke(ctx, CH.ink, 1.6);
             fc.pc.edges.forEach(e => { const a = at(e[0][0], e[0][1], beta, RM.zOf(f, e[0][0], e[0][1])), b = at(e[1][0], e[1][1], beta, RM.zOf(f, e[1][0], e[1][1]));
               seg(ctx, a[0], a[1], b[0], b[1]); desk.line(a[0], a[1], b[0], b[1]); });
+            paintRoofWins(ctx, RWS, fc.pc, (x, y, z) => at(x, y, beta, z));
             return;
           }
           ctx.fillStyle = fc.stone ? STONE_FILL : opaque(wallFill(fc.ns ? 0.14 : 0.08, fc.ns ? 0.82 : 1));   // local north/south walls a touch darker, as the bar always drew them
@@ -10182,6 +10381,7 @@ function buildRoof(host) {
         const P = (u, z) => st.ax === 'x' ? [st.a[0], st.a[1] + u, z] : [st.a[0] + u, st.a[1], z];
         faces.push({ pts:st.prof.map(q => P(q[0], q[1])).concat(st.prof.slice().reverse().map(q => P(q[0], q[2]))), fill:wallCol(st.n[1] !== 0) });
       });
+      const RWS = roofWinsFor(G, RF);   // the roof windows set on Openings, painted on their slopes
       M.pieces.forEach(pc => {
         const f = pc.f;
         if (!camSees(A, -f.t * f.a, -f.t * f.b, 1)) return;   // a slope turned away from the camera
@@ -10256,6 +10456,7 @@ if (F.chim || F.par) {
             const a = proj(e[0][0], e[0][1], M.zOf(F.pc.f, e[0][0], e[0][1])), b = proj(e[1][0], e[1][1], M.zOf(F.pc.f, e[1][0], e[1][1]));
             seg(ctx, a[0], a[1], b[0], b[1]); desk.line(a[0], a[1], b[0], b[1]);
           });
+          paintRoofWins(ctx, RWS, F.pc, proj);
         } else { stroke(ctx, CH.ink, 1.4); ctx.stroke(); desk.path(p, true); if (F.sg) balcHoles(ctx, BS.holes.get(F.sg), P3, dep3, sees3); }
       });
 
@@ -11637,91 +11838,9 @@ function buildOpenings(host) {
   host.appendChild(hint('open-sunspace',
     'An attached sunspace collects like a direct-gain window but stores and releases through the day — Galloway’s own instrumented house held an unshaded solarium between 33 and 54°C while the living room stayed near 27°C behind it (pp.24–30). It works best equator-facing but is "about half as sensitive to orientation" as other passive systems — within 30° of due south costs under 10% of the optimum (DeKay &amp; Brown, p.235). It is also the most expensive and least efficient of the passive systems, and unusable when too hot or cold unless it is fully vented — combined inlet and outlet vents should reach at least 16% of the glazing area (Lechner, pp.183–187). It stands against the outermost wall on its side. Drag its outer glazed corner to set both how far it stands off the building and how wide it runs along the wall.'));
 
-  /* Catalogue roof-window rectangles (w × h, m) with a count per slope. The
-     slopes are the roof model's own planes: the one facing the main facade
-     (the collecting plane of the Roof tab), and the largest facing each of
-     the other three ways; a flat roof takes level skylights. */
-  const RW_SIZES = {
-    '55x78':{ w:0.55, h:0.78, label:'55 x 78 cm' },
-    '78x98':{ w:0.78, h:0.98, label:'78 x 98 cm' },
-    '78x140':{ w:0.78, h:1.40, label:'78 x 140 cm' },
-    '114x118':{ w:1.14, h:1.18, label:'114 x 118 cm' }
-  };
-  const rwSize = () => RW_SIZES[RWIN.size] || RW_SIZES['78x140'];
-  /** A roof plane for one way of facing, with its range along the fall (d,
-      the height above its eave over the pitch's tangent) and across it (q). */
-  const planeFor = dir => {
-    const Mm = Mod();
-    let pl0 = null;
-    if (dir === 'S') pl0 = collectPlane(Mm);
-    else {
-      const want = { N:[0, -1], W:[1, 0], E:[-1, 0] }[dir], byKey = {};
-      Mm.pieces.forEach(pc => { if (pc.f.a === want[0] && pc.f.b === want[1]) (byKey[pc.key] = byKey[pc.key] || []).push(pc); });
-      const area = k => byKey[k].reduce((a, pc) => a + pc.area, 0), ks = Object.keys(byKey);
-      if (ks.length) { const k = ks.reduce((p, q) => area(q) > area(p) ? q : p); pl0 = { key:k, pieces:byKey[k], f:byKey[k][0].f, area:area(k) }; }
-    }
-    if (!pl0) return null;
-    const f = pl0.f, ds = [], qs = [];
-    pl0.pieces.forEach(pc => pc.poly.forEach(q => { ds.push(f.a * q[0] + f.b * q[1] + f.c); qs.push(f.b !== 0 ? q[0] : q[1]); }));
-    const pt = pl0.pieces.reduce((p, q) => q.area > p.area ? q : p, pl0.pieces[0]).f.t;
-    return Object.assign({}, pl0, { dMin:Math.min.apply(null, ds), dMax:Math.max.apply(null, ds), qMin:Math.min.apply(null, qs), qMax:Math.max.apply(null, qs),
-      P:(q, d) => { const z = h0() + pt * d + 0.03; return f.b !== 0 ? [q, (d - f.c) / f.b, z] : [(d - f.c) / f.a, q, z]; } });
-  };
-  /** The runs across a plane where a band along its fall lies wholly on it. */
-  const bandSpans = (pp, d0, d1) => {
-    const Mm = Mod(), out = [], st = 0.05;
-    const on = (q, d) => { const p = pp.P(q, d), r0 = Mm.at(p[0], p[1]); return !!r0 && r0.key === pp.key; };
-    let run = null;
-    for (let q = pp.qMin + st / 2; q < pp.qMax; q += st) {
-      if (on(q, d0 + 0.01) && on(q, d1 - 0.01) && on(q, (d0 + d1) / 2)) { if (run) run[1] = q + st / 2; else run = [q - st / 2, q + st / 2]; }
-      else if (run) { out.push(run); run = null; }
-    }
-    if (run) out.push(run);
-    return out;
-  };
-  const RW_KEY = { S:'sF', N:'nF', E:'eF', W:'wF' };
-  const rwCount = sl => sl === 'F' ? RWIN.s : sl === 'S' ? RWIN.s : sl === 'N' ? RWIN.n : sl === 'E' ? RWIN.e : RWIN.w;
-  /** A slope's row of roof windows as world quads, and the plane under it:
-      one source for drawing, picking and dragging. The row rides its
-      fraction of the fall (0 eave, 1 ridge), centred on the widest run of
-      the plane there; the flat roof's row slides sideways. */
-  function roofRow(slope) {
-    const z = rwSize(), count = rwCount(slope);
-    if (count <= 0) return null;
-    if (slope === 'F') {
-      if (RF.n !== 0) return null;
-      const Mm = Mod(), big = Mm.pl.boxes.reduce((p, q) => (q[2] - q[0]) * (q[3] - q[1]) > (p[2] - p[0]) * (p[3] - p[1]) ? q : p);
-      const yc = (big[1] + big[3]) / 2, hEff = Math.min(z.h, (big[3] - big[1]) * 0.7);
-      const pp = { key:'flat', qMin:Mm.pl.bbox[0], qMax:Mm.pl.bbox[2], P:(q, d) => [q, d, h0() + 0.03] };
-      const sp = bandSpans(pp, yc - hEff / 2, yc + hEff / 2);
-      if (!sp.length) return null;
-      const wide = sp.reduce((p, q) => q[1] - q[0] > p[1] - p[0] ? q : p), len = wide[1] - wide[0];
-      const wE = Math.min(z.w, Math.max(0.3, (len * 0.8 - (count - 1) * 0.4) / count)), span = count * wE + (count - 1) * 0.4;
-      const maxX = Math.max(0, (len - span) / 2), cx = (wide[0] + wide[1]) / 2 + clamp(RWIN.fX, -maxX, maxX);
-      const quads = [];
-      for (let i = 0; i < count; i++) {
-        const u = cx - span / 2 + wE / 2 + i * (wE + 0.4);
-        quads.push([pp.P(u - wE / 2, yc - hEff / 2), pp.P(u + wE / 2, yc - hEff / 2), pp.P(u + wE / 2, yc + hEff / 2), pp.P(u - wE / 2, yc + hEff / 2)]);
-      }
-      return { quads, maxX, centre:(wide[0] + wide[1]) / 2 };
-    }
-    if (RF.n === 0) return null;
-    const pp = planeFor(slope);
-    if (!pp || pp.dMax - pp.dMin < 0.3) return null;
-    const cos = Math.cos(pp.f.th * RAD), slant = (pp.dMax - pp.dMin) / cos;
-    const hp = Math.min(z.h, slant * 0.85) * cos, run = pp.dMax - pp.dMin;
-    const f0 = clamp(RWIN[RW_KEY[slope]], hp / run / 2 + 0.02, 1 - hp / run / 2 - 0.02);
-    const dc = pp.dMin + f0 * run, sp = bandSpans(pp, dc - hp / 2, dc + hp / 2);
-    if (!sp.length) return null;
-    const wide = sp.reduce((p, q) => q[1] - q[0] > p[1] - p[0] ? q : p), len = wide[1] - wide[0], qc = (wide[0] + wide[1]) / 2;
-    const wE = Math.min(z.w, Math.max(0.3, (len * 0.8 - (count - 1) * 0.4) / count)), span = count * wE + (count - 1) * 0.4;
-    const quads = [];
-    for (let i = 0; i < count; i++) {
-      const u = qc - span / 2 + wE / 2 + i * (wE + 0.4);
-      quads.push([pp.P(u - wE / 2, dc - hp / 2), pp.P(u + wE / 2, dc - hp / 2), pp.P(u + wE / 2, dc + hp / 2), pp.P(u - wE / 2, dc + hp / 2)]);
-    }
-    return { quads, pp, qc, hp, run };
-  }
+  const rwSize = rwSizeNow;
+  const planeFor = dir => roofPlaneFor(G, RF, dir);
+  const roofRow = slope => roofRowOf(G, RF, slope);
   const rwArea = () => ['S', 'N', 'E', 'W', 'F'].reduce((a, sl) => { const r = roofRow(sl); return a + (r ? r.quads.length * rwSize().w * rwSize().h : 0); }, 0);
   rail.appendChild(el('div', { class:'gh', text:'Roof windows' }));
   const cRwSize = selectCtl('Standard size', Object.keys(RW_SIZES).map(k => ({ value:k, label:RW_SIZES[k].label })), RWIN.size,
@@ -12866,6 +12985,8 @@ function buildVentilation(host) {
     : !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const VEGETATION = SCENE.veg;   // {type, height, density, x, y} — shared, see SCENE
   const WALLS = SCENE.walls;      // {x, y, along:'x'|'y', height, length}
+  const WATER = SCENE.water;      // pools and ponds, see waterEffect
+  let waterArmed = null, waterBtn = null;   // the water tool, armed with its kind
   /* Surrounding buildings for this redraw, in the plan's own metres with
      their ground and top above the site — refreshed wherever the wind is
      rebuilt, read by the scores, the streamlines and the drawing alike. */
@@ -12923,9 +13044,10 @@ function buildVentilation(host) {
      shifts from deletions cannot retarget it. Drag still moves,
      double-click still removes. */
   let selected = null;
+  const arrOfKind = k => k === 'wall' ? WALLS : k === 'water' ? WATER : VEGETATION;
   const selItem = () => {
     if (!selected) return null;
-    const arr = selected.kind === 'wall' ? WALLS : VEGETATION;
+    const arr = arrOfKind(selected.kind);
     const i = arr.indexOf(selected.ref);
     return i < 0 ? null : { kind:selected.kind, index:i, obj:arr[i] };
   };
@@ -14042,6 +14164,56 @@ function buildVentilation(host) {
     const best = use.length ? use.reduce((p, q) => q.v > p.v ? q : p) : null;
     return { dir:sw.dir, spd:sw.spd, U, SN, EW, best, v:best ? best.v : 0, ach:SN.ach + EW.ach, Q:SN.Q + EW.Q };
   };
+  /* ---- water in the garden ------------------------------------------------
+     The hot afternoon it answers: the warmest month's mean plus half its daily
+     range, at the humidity the student sets (estimated from the site until
+     then), with the summer wind 1.5 m above the ground — the same terrain,
+     exposure and power law as at the eaves — and the clear-sky sun at 15 h
+     solar time on the month's middle day. */
+  const MID_DOY = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349];
+  const waterAirNow = () => {
+    const d0 = waterClimDefaults(S), wa = SCENE.waterAir || d0;
+    const tt = C && C.t ? C.t : [], mi = tt.length ? tt.reduce((b, v, i) => v > tt[b] ? i : b, 0) : (lat < 0 ? 0 : 6);
+    const Tmean = tt.length ? tt[mi] : 24, Tann = meanTemp();
+    const sw = seasonWind('summer'), a = ALPHA[terrainKey] != null ? ALPHA[terrainKey] : 0.18;
+    const V = sw.spd * (TERRAIN_WIND[terrainKey] || 1) * (EXPOSURE_WIND[windKey] || 1) * Math.pow(1.5 / 10, a);
+    const sp = sunPos(MID_DOY[mi], 15, lat, lon, tz), sa = Math.sin(Math.max(0, sp.alt) * RAD);
+    const Gh = sp.alt > 0 ? 1361 * Math.pow(0.7, Math.pow(1 / (sa + 0.50572 * Math.pow(sp.alt + 6.07995, -1.6364)), 0.678)) * sa * 1.1 : 0;
+    const P = 101.325 * Math.pow(1 - 2.25577e-5 * Math.max(0, S.alt || 0), 5.25588);
+    const ui = localDir(sw.dir);   // toward where the wind comes from
+    return { Ta:Tmean + wa.dtr / 2, RH:wa.rh, dtr:wa.dtr, Tmean, Tann, V, Gh, rho:airDensity(), P, u:[-ui[0], -ui[1]], mi, dir:sw.dir, def:d0, set:!!SCENE.waterAir };
+  };
+  /** Metres from the water's lee edge to the first wall of the house straight
+      downwind, across the band of air that crossed it; null when it misses. */
+  const waterToHouse = (w, E, R) => {
+    const u = E.u, n = [-u[1], u[0]], half = R.span / 2, bx = planModel(G).boxes;
+    const inside = (x, y) => bx.some(r => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]);
+    let best = null;
+    [-0.8, -0.4, 0, 0.4, 0.8].forEach(k => {
+      for (let x = 0; x <= 40; x += 0.25) {
+        if (inside(w.x + u[0] * x + n[0] * k * half, w.y + u[1] * x + n[1] * k * half)) { if (best === null || x < best) best = x; break; }
+      }
+    });
+    if (best === null) return null;
+    const [A, B] = waterDims(w);
+    return Math.max(0, best - (Math.abs(u[0]) * A + Math.abs(u[1]) * B) / 2);
+  };
+  /** Every body of water and what reaches the house: the effects add, held
+      under the same wet-bulb limit. */
+  const waterSummary = () => {
+    if (!WATER.length) return null;
+    const E = waterAirNow();
+    const list = WATER.map(w => { const R = waterEffect(w, E), xh = waterToHouse(w, E, R); return { w, R, xh, h:xh === null ? null : R.at(xh) }; });
+    const reach = list.filter(o => o.h), cap = list[0].R.cap, pa = E.RH / 100 * psatKPa(E.Ta);
+    const dT = Math.min(cap, reach.reduce((a2, o) => a2 + o.h.dT, 0)), de = reach.reduce((a2, o) => a2 + o.h.de, 0);
+    return { E, list, Lday:list.reduce((a2, o) => a2 + o.R.Lday, 0), vol:list.reduce((a2, o) => a2 + o.R.vol, 0),
+      house:reach.length ? { dT, de, dAT:-dT + 0.33 * de * 10, RH0:100 * pa / psatKPa(E.Ta), RH1:100 * Math.min(1, (pa + de) / psatKPa(E.Ta - dT)), x:Math.min.apply(null, reach.map(o => o.xh)) } : null };
+  };
+  const waterNew = (kind, x, y) => kind === 'pond'
+    ? { kind:'pond', shape:'oval', a:6, b:4, depth:0.8, x:+x.toFixed(1), y:+y.toFixed(1) }
+    : { kind:'pool', shape:'rect', a:8, b:4, depth:1.5, x:+x.toFixed(1), y:+y.toFixed(1) };
+  const waterSizeTxt = w => (w.shape === 'circle' ? '⌀ ' + fmt(w.a, 1) : w.shape === 'square' ? fmt(w.a, 1) + ' × ' + fmt(w.a, 1) : fmt(w.a, 1) + ' × ' + fmt(w.b, 1))
+    + ' m · ' + t('depth') + ' ' + fmt(w.depth, 1) + ' m · ' + fmt(waterArea(w), 1) + ' m² · ' + fmt(waterArea(w) * w.depth, 1) + ' m³';
   const effectiveArea = (f1, f2) => {
     const a1 = openArea(f1), a2 = openArea(f2);
     if (a1 <= 0 || a2 <= 0) return 0;
@@ -14058,6 +14230,8 @@ function buildVentilation(host) {
     return { 'Winter wind, open ground at eaves (m/s)':+ww.U.toFixed(2), 'Winter wind at the windward walls (m/s)':+ww.Uwall.toFixed(2), 'Winter wind cut (%)':Math.round(100 * ww.cut),
       'Summer air speed at the inlet windows (m/s)':+sa.v.toFixed(2), 'Summer cross flow (m³/h)':Math.round(sa.Q * 3600), 'Summer air changes (1/h)':+sa.ach.toFixed(1),
       'Planting':VEGETATION.length, 'Detached walls':WALLS.length,
+      'Water bodies':WATER.length, 'Water evaporated, hottest month (L/day)':(() => { const ws = waterSummary(); return ws ? Math.round(ws.Lday) : 0; })(),
+      'Water cooling at the house, hottest afternoon (K)':(() => { const ws = waterSummary(); return ws && ws.house ? +ws.house.dT.toFixed(2) : 0; })(),
       'Floor cross-ventilable %':Math.round(100 * fr.cross / Math.max(1e-9, fr.total)), 'Floor single-sided %':Math.round(100 * fr.single / Math.max(1e-9, fr.total)),
       'Floor beyond reach %':Math.round(100 * fr.none / Math.max(1e-9, fr.total)),
       'Glass facing the winter wind unsheltered %':Math.round(100 * fv.glassShare), 'Windward wall self-sheltered %':Math.round(100 * fv.wm.share),
@@ -14508,7 +14682,7 @@ function buildVentilation(host) {
       title:q.pt + ' — ' + q.sci + ' · ' + t(q.kind === 'bush' ? 'bush' : 'tree') + ', ' + fmt(q.h, 1) + ' m' });
     b.onclick = () => {
       plantArmed = (plantArmed === sp) ? null : sp;
-      wallArmed = false;
+      wallArmed = false; waterArmed = null;
       paintTools();
       toast(plantArmed ? t('Click open ground to plant') + ' ' + nameOf(sp) : 'Placement cancelled');
     };
@@ -14534,7 +14708,7 @@ function buildVentilation(host) {
   const wallPalette = rail.appendChild(el('div', { class:'rgroup' }));
   let wallArmed = false, supArmed = null, supBtn = null;
   const wallBtn = el('button', { class:'btn small', text:'Place wall', onclick: () => {
-    wallArmed = !(wallArmed && !supArmed); supArmed = null; plantArmed = null;
+    wallArmed = !(wallArmed && !supArmed); supArmed = null; plantArmed = null; waterArmed = null;
     paintTools();
     toast(wallArmed ? 'Click open ground to place a wall' : 'Placement cancelled');
   } });
@@ -14544,11 +14718,12 @@ function buildVentilation(host) {
     vegBtns.forEach(x => x.classList.toggle('solid', x.dataset.species === plantArmed));
     wallBtn.classList.toggle('solid', wallArmed && !supArmed);
     if (supBtn) supBtn.classList.toggle('solid', !!supArmed);
-    selectBtn.classList.toggle('solid', !plantArmed && !wallArmed);
-    if (!plantArmed && !wallArmed) ghost = null;
+    if (waterBtn) waterBtn.classList.toggle('solid', !!waterArmed);
+    selectBtn.classList.toggle('solid', !plantArmed && !wallArmed && !waterArmed);
+    if (!plantArmed && !wallArmed && !waterArmed) ghost = null;
     draw();
   }
-  selectBtn.onclick = () => { plantArmed = null; wallArmed = false; paintTools(); };
+  selectBtn.onclick = () => { plantArmed = null; wallArmed = false; waterArmed = null; paintTools(); };
   rail.appendChild(el('div', { class:'keys', text:t('Esc cancels a tool · Delete removes the selected item') }));
   wallPalette.appendChild(wallBtn);
   const wallClear = el('button', { class:'btn small', text:'Clear walls', onclick: () => { for (let i = WALLS.length - 1; i >= 0; i--) if (!WALLS[i].sup) WALLS.splice(i, 1); selected = null; refresh(); } });
@@ -14559,13 +14734,51 @@ function buildVentilation(host) {
   supKeys().forEach(k => supSel.appendChild(el('option', { value:k, text:VL(VERN_TYPES[k].name).replace(/ \(.*\)$/, '').replace(/ — .*$/, '') })));
   supBtn = el('button', { class:'btn small', text:'Place the structure', onclick: () => {
     const k = supSel.value, on = supArmed !== k;
-    supArmed = on ? k : null; wallArmed = on; plantArmed = null;
+    supArmed = on ? k : null; wallArmed = on; plantArmed = null; waterArmed = null;
     paintTools();
     toast(on ? t('Click open ground to place') + ' — ' + VL(VERN_TYPES[k].name).replace(/ \(.*\)$/, '') : 'Placement cancelled');
   } });
   supSel.addEventListener('change', () => { if (supArmed) { supArmed = supSel.value; paintTools(); } });
   rail.appendChild(el('div', { class:'rgroup' }, [supSel, supBtn,
     el('button', { class:'btn small', text:'Clear structures', onclick:() => { for (let i = WALLS.length - 1; i >= 0; i--) if (WALLS[i].sup) WALLS.splice(i, 1); selected = null; refresh(); } })]));
+  /* ---- water: a pool or a pond, placed like a plant; it evaporates through
+     the hot months and cools the air that crosses it ---- */
+  host.appendChild(section('Water in the garden',
+    'A pool or a pond on open ground. Choose pool or pond, arm the tool and click open ground; click it to set its shape — rectangular, square, circular or oval —, its sides and its depth, drag to move it, double-click to remove it. Through the hottest month the water evaporates and cools the air the summer wind carries across it: the model shows the cooled band downwind and what reaches the house.'));
+  rail.appendChild(el('div', { class:'gh', text:'Water' }));
+  const waterKindSel = el('select', { style:'max-width:100%;font:inherit;font-size:12px', 'aria-label':t('Kind of water') });
+  [['pool', 'Pool'], ['pond', 'Pond']].forEach(([v, n]) => waterKindSel.appendChild(el('option', { value:v, text:t(n) })));
+  waterBtn = el('button', { class:'btn small', text:'Place water', onclick:() => {
+    const on = waterArmed !== waterKindSel.value;
+    waterArmed = on ? waterKindSel.value : null; plantArmed = null; wallArmed = false;
+    paintTools();
+    toast(on ? t('Click open ground to place the water') : 'Placement cancelled');
+  } });
+  waterKindSel.addEventListener('change', () => { if (waterArmed) { waterArmed = waterKindSel.value; paintTools(); } });
+  const waterCount = el('span', { class:'hint', text:'0/' + WATER_MAX });
+  rail.appendChild(el('div', { class:'rgroup' }, [waterKindSel, waterBtn, waterCount,
+    el('button', { class:'btn small', text:'Clear water', onclick:() => { WATER.length = 0; if (selected && selected.kind === 'water') selected = null; refresh(); } })]));
+  /* the hot afternoon: humidity and daily range, estimated until the student sets them */
+  const waterAirBox = rail.appendChild(el('div'));
+  const waterSays = el('p', { class:'hint' });
+  const waterAirCtl = () => SCENE.waterAir || Object.assign({}, waterClimDefaults(S));
+  const cWaterRH = rangeCtl('Afternoon humidity', 10, 95, 1, waterAirCtl().rh, v => { SCENE.waterAir = Object.assign(waterAirCtl(), { rh:Math.round(v) }); refresh(); }, v => fmt(v, 0) + ' %');
+  const cWaterDT = rangeCtl('Daily range', 3, 20, 0.5, waterAirCtl().dtr, v => { SCENE.waterAir = Object.assign(waterAirCtl(), { dtr:+(+v).toFixed(1) }); refresh(); }, v => fmt(v, 1) + ' K');
+  [cWaterRH, cWaterDT, waterSays].forEach(n => waterAirBox.appendChild(n));
+  const syncWaterUI = () => {
+    waterCount.textContent = WATER.length + '/' + WATER_MAX;
+    waterAirBox.style.display = WATER.length ? '' : 'none';
+    const ws = waterSummary();
+    if (!ws) { waterSays.textContent = ''; return; }
+    const E = ws.E, h = ws.house;
+    waterSays.innerHTML = MON3[E.mi] + ' 15 h · ' + fmt(E.Ta, 1) + ' °C · ' + fmt(E.RH, 0) + ' % ' + (E.set ? '' : '<i>(' + t('estimate — set it from the station normals') + ')</i>')
+      + ' · ' + t('wind at 1.5 m') + ' ' + fmt(E.V, 1) + ' m/s<br>' + t('Evaporated') + ' <b>' + fmt(ws.Lday, 0) + ' L/' + t('day') + '</b>'
+      + (h ? ' · ' + t('at the house') + ' <b>−' + fmt(h.dT, 1) + ' °C</b>, ' + t('humidity') + ' ' + fmt(h.RH0, 0) + ' → ' + fmt(h.RH1, 0) + ' %'
+        : ' · ' + t('its cooled air misses the house in the summer wind'));
+  };
+  host.appendChild(hint('vent-water',
+    'How the water is counted. Evaporation follows the ASHRAE pool equation (after Carrier), w = A (pw − pa)(0.089 + 0.0782 V) / Y, halved for still, unoccupied water; the surface sits near the hottest month\u2019s mean air temperature, a degree up for the sun, deeper water holding nearer the year\u2019s mean. The air crossing the water is cooled against the dry garden it replaces: the water draws heat from the air by convection and, unlike dry ground in the sun, returns none to it (taken as 30 % of the sun on the ground). Both are shared by the lowest 1.5 m of the air that crosses it, fall away downwind as that layer deepens, and never pass 60 % of the wet-bulb depression. The humidity it adds is counted against the cooling in the apparent temperature (Steadman). Afternoon humidity and the daily range are estimated from where the site lies until you set them from the nearest station\u2019s normals; the cool surface\u2019s radiant effect and any fountain are not counted. A still pool cools little; wind across a wide surface and a house close downwind make the difference.'));
+
   /* ---- a garden wind turbine: mast, rotor and its electricity, with the sun ----
      Taller than the walls is allowed — height is the whole point. */
   rail.appendChild(el('div', { class:'gh', text:'Wind turbine' }));
@@ -14642,6 +14855,23 @@ function buildVentilation(host) {
     selBox.innerHTML = '';
     edH = edT = edC = edWH = edWL = null;
     if (!s) { selBox.appendChild(selHint); return; }
+    if (s.kind === 'water') {
+      const w = s.obj, rebuild = () => { selKey = '@'; refresh(); };
+      const kSel = el('select', { style:'font:inherit;font-size:12px', 'aria-label':t('Kind of water') });
+      [['pool', 'Pool'], ['pond', 'Pond']].forEach(([v, n]) => kSel.appendChild(el('option', { value:v, text:t(n), selected:w.kind === v ? 'selected' : null })));
+      kSel.addEventListener('change', () => { w.kind = kSel.value; refresh(); });
+      const shSel = el('select', { style:'font:inherit;font-size:12px', 'aria-label':t('Shape') });
+      [['rect', 'Rectangular'], ['square', 'Square'], ['circle', 'Circular'], ['oval', 'Oval']].forEach(([v, n]) => shSel.appendChild(el('option', { value:v, text:t(n), selected:w.shape === v ? 'selected' : null })));
+      shSel.addEventListener('change', () => { w.shape = shSel.value; rebuild(); });
+      selBox.appendChild(el('div', { class:'rgroup' }, [kSel, shSel]));
+      const one = w.shape === 'circle' || w.shape === 'square';
+      selBox.appendChild(rangeCtl(w.shape === 'circle' ? 'Diameter' : one ? 'Side' : 'Length (east–west on the plan)', 1, 25, 0.5, w.a, v => { w.a = +(+v).toFixed(1); refresh(); }, v => fmt(v, 1) + ' m'));
+      if (!one) selBox.appendChild(rangeCtl('Width (north–south on the plan)', 1, 15, 0.5, w.b, v => { w.b = +(+v).toFixed(1); refresh(); }, v => fmt(v, 1) + ' m'));
+      selBox.appendChild(rangeCtl('Depth', 0.1, 3, 0.1, w.depth, v => { w.depth = +(+v).toFixed(1); refresh(); }, v => fmt(v, 1) + ' m'));
+      if (!one) selBox.appendChild(el('button', { class:'btn small', text:'Turn 90°', onclick:() => { const a0 = w.a; w.a = clamp(w.b, 1, 25); w.b = clamp(a0, 1, 15); rebuild(); } }));
+      selBox.appendChild(el('button', { class:'btn small', text:'Delete water', onclick:() => { WATER.splice(s.index, 1); selected = null; refresh(); toast('Water removed'); } }));
+      return;
+    }
     if (s.kind === 'wall' && s.obj.sup) {
       const w = s.obj, T = VERN_TYPES[w.sup];
       selBox.appendChild(el('span', { class:'hint', text:(T ? VL(T.name) : w.sup) + ' — ' + fmt(w.length, 1) + ' × ' + fmt(w.depth, 1) + ' m, ' + fmt(w.height, 1) + ' m ' + t('high') }));
@@ -15137,6 +15367,37 @@ function buildVentilation(host) {
       }
     }
 
+    /* ---- water on the ground, and the band of air it cools downwind in the
+       summer wind: fading as the layer deepens, cut where it meets the house ---- */
+    const gz = (x, y) => terrOn ? terraAt(x, y) + 0.03 : 0.02;
+    const wSum = waterSummary(), wSel = selItem(), waterTags = [];
+    if (wSum) wSum.list.forEach((o, i) => {
+      const w = o.w, R = o.R, u = wSum.E.u, n = [-u[1], u[0]], half = R.span / 2;
+      const [A, B] = waterDims(w), lee = (Math.abs(u[0]) * A + Math.abs(u[1]) * B) / 2;
+      const Lp = Math.min(o.xh !== null ? o.xh : 18, 18), steps = 6;
+      for (let k = 0; k < steps; k++) {
+        const x0 = lee + Lp * k / steps, x1 = lee + Lp * (k + 1) / steps, f = R.at((x0 + x1) / 2 - lee).dT / Math.max(1e-6, R.dT0 || 1);
+        const P = (x, s2) => { const px = w.x + u[0] * x + n[0] * s2 * half, py = w.y + u[1] * x + n[1] * s2 * half; return [px, py, gz(px, py)]; };
+        if (R.dT0 > 0.01) poly([P(x0, -1), P(x1, -1), P(x1, 1), P(x0, 1)], 'rgba(56,140,200,' + (0.18 * f).toFixed(3) + ')', null);
+      }
+      const out = waterOutline(w).map(q => [q[0], q[1], gz(q[0], q[1])]);
+      const pool = w.kind !== 'pond';
+      poly(out, pool ? '#5DB8DA' : '#4C8C8F', pool ? '#EDE8DC' : '#7A8B5A', pool ? 3 : 2);
+      const deep = clamp(w.depth / 3, 0.15, 1);
+      poly(waterOutline(w, 0.72).map(q => [q[0], q[1], gz(q[0], q[1])]), pool ? 'rgba(20,90,140,' + (0.35 * deep).toFixed(2) + ')' : 'rgba(20,60,60,' + (0.35 * deep).toFixed(2) + ')', null);
+      if (wSel && wSel.kind === 'water' && wSel.index === i) poly(out, null, '#D97706', 1.6, [5, 4]);
+      const c = proj(w.x, w.y, gz(w.x, w.y));
+      waterTags.push({ txt:(R.dT0 > 0.05 ? '−' + fmt(R.dT0, 1) + ' °C · ' : '') + fmt(R.mmDay, 1) + ' mm/' + t('day'), x:c[0], y:c[1] });
+      if (o.h && o.h.dT > 0.02) {
+        const hp = [w.x + u[0] * (lee + o.xh), w.y + u[1] * (lee + o.xh)], q = proj(hp[0], hp[1], gz(hp[0], hp[1]) + 0.3);
+        waterTags.push({ txt:'−' + fmt(o.h.dT, 1) + ' °C ' + t('at the house'), x:q[0], y:q[1] });
+      }
+    });
+    if (ghost && waterArmed) {
+      const g = waterNew(waterArmed, ghost.x, ghost.y);
+      poly(waterOutline(g).map(q => [q[0], q[1], gz(q[0], q[1])]), ghost.ok ? 'rgba(93,184,218,.35)' : 'rgba(220,38,38,.12)', ghost.ok ? '#2563EB' : '#DC2626', 1.2, [4, 3]);
+    }
+
     /* ---- sun shadow of the whole volume on the garden: every roof piece's
        prism dropped along the sun ray, filled as one path ---- */
     let shadowTag = null, shadeHit = null;
@@ -15280,6 +15541,7 @@ function buildVentilation(host) {
     stairsOf(MASS).forEach(({ st }) => {
       stairFaceGroups(st, sees3v, null).forEach(g => items.push(g));
     });
+    const RWS = roofWinsFor(G, RF);   // the roof windows set on Openings
     M.pieces.forEach(pc => {
       const f = pc.f;
       if ((-f.t * f.a * AX.c[0] - f.t * f.b * AX.c[1]) * AX.ce + AX.se <= 1e-6) return;   // a slope turned away from the camera
@@ -15341,6 +15603,7 @@ function buildVentilation(host) {
         stroke(ctx, it.fill, 1); ctx.stroke();
         stroke(ctx, CH.ink, 1.5);
         it.pc.edges.forEach(e => { const a2 = proj(e[0][0], e[0][1], M.zOf(it.pc.f, e[0][0], e[0][1])), b2 = proj(e[1][0], e[1][1], M.zOf(it.pc.f, e[1][0], e[1][1])); seg(ctx, a2[0], a2[1], b2[0], b2[1]); });
+        paintRoofWins(ctx, RWS, it.pc, proj);
         return;
       }
       stroke(ctx, CH.ink, 1.3); ctx.stroke();
@@ -15820,6 +16083,13 @@ function buildVentilation(host) {
       const around = q => [[q[0] + 8, q[1] - 9, 'left'], [q[0] - 8, q[1] - 9, 'right'], [q[0] + 8, q[1] + 9, 'left'], [q[0] - 8, q[1] + 9, 'right']];
       desk.place(shadowTag.txt, (spots.length ? spots : shadowTag.pts.slice(0, 1)).map(around).reduce((a, b) => a.concat(b), []), CH.ink2, FM(9.5));
     }
+    /* the water's numbers last, on a pill, so the air and the house never cover them */
+    waterTags.forEach(g => {
+      ctx.font = F(10, '600'); const tw = ctx.measureText(g.txt).width;
+      ctx.fillStyle = 'rgba(255,255,255,.88)'; ctx.fillRect(g.x - tw / 2 - 4, g.y - 8, tw + 8, 16);
+      stroke(ctx, '#5DB8DA', 1); ctx.strokeRect(g.x - tw / 2 - 4, g.y - 8, tw + 8, 16);
+      label(ctx, g.txt, g.x, g.y, '#0B4F6C', F(10, '600'), 'center', 'middle');
+    });
     ctx.fillStyle = '#7b838b'; ctx.font = '9px ui-sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(fmt(lat,2)+'° '+(lat<0?'S':'N')+' · '+fmt(Math.abs(lon),2)+'° '+(lon<0?'W':'E')+' · '+fmt(S.alt||0,0)+' m · ρ '+fmt(airDensity(),3)+' kg/m³ · eave '+fmt(eaveWind(),1)+' m/s · stack(5K) '+fmt(stackPa(5),1)+' Pa', W/2, H-18);
@@ -15893,6 +16163,15 @@ function buildVentilation(host) {
     }
     VEGETATION.forEach(v => rows.push([vegKind(v), specOf(v.type).pt + ' (' + specOf(v.type).sci + ') h=' + v.height + 'm trunk=' + trunkOf(v).toFixed(1) + 'm canopy=' + canopyOf(v).toFixed(1) + 'm ' + crownFormOf(v) + ' d=' + v.density + ' x=' + v.x + ' y=' + v.y + ' → ' + sideOf(v.x, v.y)]));
     WALLS.forEach(w => rows.push(['Wall', 'x=' + w.x + ' y=' + w.y + ' ' + w.along + ' h=' + w.height + 'm l=' + w.length + 'm → ' + sideOf(w.x, w.y)]));
+    { const ws = waterSummary();
+      if (ws) {
+        const E = ws.E;
+        rows.push(['Water — hot afternoon', MON3_EN[E.mi] + ' 15 h solar: air ' + E.Ta.toFixed(1) + ' °C (month mean ' + E.Tmean.toFixed(1) + ' + half of ' + E.dtr + ' K), RH ' + E.RH + ' %' + (E.set ? '' : ' (estimate)') + ', wind at 1.5 m ' + E.V.toFixed(2) + ' m/s, sun on the ground ' + Math.round(E.Gh) + ' W/m²']);
+        ws.list.forEach((o, i) => rows.push(['Water ' + (i + 1), o.w.kind + ' ' + o.w.shape + ' a=' + o.w.a + 'm' + (o.w.shape === 'rect' || o.w.shape === 'oval' ? ' b=' + o.w.b + 'm' : '') + ' depth=' + o.w.depth + 'm x=' + o.w.x + ' y=' + o.w.y
+          + ' · area ' + o.R.A.toFixed(1) + ' m² · surface ' + o.R.Tw.toFixed(1) + ' °C · evaporation ' + o.R.mmDay.toFixed(2) + ' mm/day = ' + Math.round(o.R.Lday) + ' L/day · air leaving it −' + o.R.dT0.toFixed(2) + ' K'
+          + (o.h ? ' · at the house (' + o.xh.toFixed(1) + ' m downwind) −' + o.h.dT.toFixed(2) + ' K, RH ' + o.h.RH0.toFixed(0) + '→' + o.h.RH1.toFixed(0) + ' %, apparent ' + o.h.dAT.toFixed(2) + ' K' : ' · misses the house')]));
+      }
+    }
     rows.push(['Köppen–Geiger', (C && C.k) ? C.k.code : '']);
     rows.push(['Olgyay verdict', olgyayVerdict(winterBand(winterWind()), summerBand(summerAir()))]);
     {
@@ -16068,9 +16347,19 @@ function buildVentilation(host) {
       if (w.sup) { const c = proj(w.x, w.y, w.height / 2); d = Math.min(d, Math.hypot(sx - c[0], sy - c[1]) * 0.5); }
       if (d <= (w.sup ? 30 : 16) && (!best || d < best.d)) best = { kind:'wall', index:i, d };
     });
+    /* water lies flat on the ground: anything standing over it wins */
+    if (!best && WATER.length) {
+      const pos = getWorldPos(clientX, clientY);
+      WATER.forEach((w, i) => { if (!best && inPoly(pos.x, pos.y, waterOutline(w))) best = { kind:'water', index:i, d:40 }; });
+    }
     return best;
   };
   const itemTip = hit => {
+    if (hit.kind === 'water') {
+      const w = WATER[hit.index], ws = waterSummary(), o = ws ? ws.list[hit.index] : null;
+      return '<b>' + t(w.kind === 'pond' ? 'Pond' : 'Pool') + ' ' + (hit.index + 1) + '</b><br><span class="tv">' + waterSizeTxt(w)
+        + (o ? ' · ' + fmt(o.R.mmDay, 1) + ' ' + t('mm/day evaporated') : '') + '</span><br><span class="tm">' + t('Click to tune · drag to move · double-click to remove') + '</span>';
+    }
     if (hit.kind === 'tree') {
       const v = VEGETATION[hit.index], f = sideOf(v.x, v.y);
       return '<b>' + t(vegKind(v)) + ' ' + (hit.index + 1) + '</b> ' + nameOf(v.type) + ' <i>' + specOf(v.type).sci + '</i><br><span class="tv">' +
@@ -16094,7 +16383,7 @@ function buildVentilation(host) {
     return distSeg(sx, sy, a[0], a[1], b[0], b[1]) <= 12;
   };
   const clickHandler = ev => {
-    if (!plantArmed && !wallArmed) return;
+    if (!plantArmed && !wallArmed && !waterArmed) return;
     const pos = getWorldPos(ev.clientX, ev.clientY);
     const lim = { x:reachXY()[0] + FR.garden, y:reachXY()[1] + FR.garden };
     pos.x = clamp(pos.x, -lim.x, lim.x);
@@ -16107,6 +16396,11 @@ function buildVentilation(host) {
       /* the tool stays armed, as a CAD tool does, until Esc or the select
          tool; the new plant is selected so its effect reads at once */
       selected = { kind:'tree', ref:VEGETATION[VEGETATION.length - 1] };
+      refresh();
+    } else if (waterArmed) {
+      if (WATER.length >= WATER_MAX) { toast(t('Maximum ' + WATER_MAX + ' bodies of water reached')); return; }
+      WATER.push(waterNew(waterArmed, pos.x, pos.y));
+      selected = { kind:'water', ref:WATER[WATER.length - 1] };
       refresh();
     } else if (wallArmed) {
       const f = sideOf(pos.x, pos.y);
@@ -16123,7 +16417,7 @@ function buildVentilation(host) {
   let dragV = null, downXY = null, handleDrag = null;
   let orbit = null;   // a drag on open ground turns the camera
   cv.addEventListener('pointerdown', ev => {
-    if (plantArmed || wallArmed || !FR) return;
+    if (plantArmed || wallArmed || waterArmed || !FR) return;
     if (TURB && TURB.on && turbHit(ev.clientX, ev.clientY)) {
       ev.preventDefault();
       const pos = getWorldPos(ev.clientX, ev.clientY);
@@ -16154,7 +16448,7 @@ function buildVentilation(host) {
     downXY = [ev.clientX, ev.clientY];
     ev.preventDefault();
     const pos = getWorldPos(ev.clientX, ev.clientY);
-    const it = hit.kind === 'tree' ? VEGETATION[hit.index] : WALLS[hit.index];
+    const it = arrOfKind(hit.kind)[hit.index];
     dragV = { kind:hit.kind, index:hit.index, ox:it.x - pos.x, oy:it.y - pos.y };
     try { cv.setPointerCapture(ev.pointerId); } catch (err) {}
     cv.style.cursor = 'grabbing';
@@ -16210,7 +16504,7 @@ function buildVentilation(host) {
       const nx = clamp(pos.x + dragV.ox, -lim.x, lim.x);
       const ny = clamp(pos.y + dragV.oy, -lim.y, lim.y);
       if (onBuilding(nx, ny)) return;   // keep the last open-ground spot
-      const it = dragV.kind === 'tree' ? VEGETATION[dragV.index] : WALLS[dragV.index];
+      const it = arrOfKind(dragV.kind)[dragV.index];
       if (!it) { dragV = null; return; }
       it.x = +nx.toFixed(1); it.y = +ny.toFixed(1);
       if (dragV.kind === 'wall' && !it.sup) {
@@ -16220,7 +16514,7 @@ function buildVentilation(host) {
       draw();
       return;
     }
-    if (plantArmed || wallArmed) {
+    if (plantArmed || wallArmed || waterArmed) {
       const pos = getWorldPos(ev.clientX, ev.clientY);
       const lim = { x:reachXY()[0] + FR.garden, y:reachXY()[1] + FR.garden };
       const gx = clamp(pos.x, -lim.x, lim.x), gy = clamp(pos.y, -lim.y, lim.y);
@@ -16262,11 +16556,11 @@ function buildVentilation(host) {
       const dk = dragV.kind, di = dragV.index;
       dragV = null; downXY = null; cv.style.cursor = 'default';
       if (moved < 6) {
-        const arr = dk === 'wall' ? WALLS : VEGETATION;
-        if (arr[di]) { selected = { kind:dk, ref:arr[di] }; toast((dk === 'wall' ? 'Wall' : vegKind(arr[di])) + ' selected — tune it below'); }
+        const arr = arrOfKind(dk);
+        if (arr[di]) { selected = { kind:dk, ref:arr[di] }; toast((dk === 'wall' ? 'Wall' : dk === 'water' ? 'Water' : vegKind(arr[di])) + ' selected — tune it below'); }
       }
       refresh();
-    } else if (ev && ev.type === 'pointerup' && !plantArmed && !wallArmed && FR) {
+    } else if (ev && ev.type === 'pointerup' && !plantArmed && !wallArmed && !waterArmed && FR) {
       if (!pickItem(ev.clientX, ev.clientY) && !(TURB && TURB.on && turbHit(ev.clientX, ev.clientY)) && (selected || turbSel)) { selected = null; turbSel = false; refresh(); }
     }
   };
@@ -16282,28 +16576,27 @@ function buildVentilation(host) {
     if (ev.key === '+' || ev.key === '=') { modelZoom('vent', 1.25); return; }
     if (ev.key === '-' || ev.key === '_') { modelZoom('vent', 1 / 1.25); return; }
     if (ev.key === 'Escape') {
-      if (plantArmed || wallArmed) { plantArmed = null; wallArmed = false; paintTools(); }
+      if (plantArmed || wallArmed || waterArmed) { plantArmed = null; wallArmed = false; waterArmed = null; paintTools(); }
       else if (selected) { selected = null; refresh(); }
     } else if (ev.key === 'Delete' || ev.key === 'Backspace') {
       const s0 = selItem();
       if (!s0) return;
       ev.preventDefault();
-      (s0.kind === 'wall' ? WALLS : VEGETATION).splice(s0.index, 1);
+      arrOfKind(s0.kind).splice(s0.index, 1);
       selected = null; refresh();
-      toast(s0.kind === 'wall' ? 'Wall removed' : 'Plant removed');
+      toast(s0.kind === 'wall' ? 'Wall removed' : s0.kind === 'water' ? 'Water removed' : 'Plant removed');
     }
   });
   cv.addEventListener('dblclick', ev => {
-    if (plantArmed || wallArmed) return;
+    if (plantArmed || wallArmed || waterArmed) return;
     const hit = pickItem(ev.clientX, ev.clientY);
     if (!hit) return;
     ev.preventDefault();
-    if (hit.kind === 'tree') VEGETATION.splice(hit.index, 1);
-    else WALLS.splice(hit.index, 1);
+    arrOfKind(hit.kind === 'handle' ? 'wall' : hit.kind).splice(hit.index, 1);
     hideTip();
     selected = null;
     refresh();
-    toast(hit.kind === 'tree' ? 'Tree removed' : 'Wall removed');
+    toast(hit.kind === 'tree' ? 'Tree removed' : hit.kind === 'water' ? 'Water removed' : 'Wall removed');
   });
 
   /* ---- refresh everything ----
@@ -16328,8 +16621,16 @@ function buildVentilation(host) {
       clearTimeout(deltaTimer); deltaTimer = setTimeout(draw, 3300);
     }
     lastScores = { w:nowW, s:nowS };
-    const sel0 = selItem(), eff = sel0 ? effectOf(sel0) : null;
-    effLine.innerHTML = !sel0 || !eff ? t('Pick a tool on the left and click open ground; click a placed item to see what it does.')
+    const sel0 = selItem(), eff = sel0 && sel0.kind !== 'water' ? effectOf(sel0) : null;
+    const wsel = sel0 && sel0.kind === 'water' ? waterSummary() : null, wo = wsel ? wsel.list[sel0.index] : null;
+    effLine.innerHTML = wo ? '<b>' + t(sel0.obj.kind === 'pond' ? 'This pond' : 'This pool') + '</b>: ' + waterSizeTxt(sel0.obj) + '<br>'
+        + t('surface') + ' ' + fmt(wo.R.Tw, 1) + ' °C · ' + t('evaporates') + ' <b>' + fmt(wo.R.mmDay, 1) + ' mm/' + t('day') + '</b> (' + fmt(wo.R.Lday, 0) + ' L) — '
+        + fmt(wo.R.drop30 * 100, 0) + ' cm ' + t('in 30 days without rain or top-up') + '<br>'
+        + t('air leaving it') + ' <b>−' + fmt(wo.R.dT0, 1) + ' °C</b>'
+        + (wo.h ? ' · ' + t('at the house') + ', ' + fmt(wo.xh, 1) + ' m ' + t('downwind') + ': <b>−' + fmt(wo.h.dT, 1) + ' °C</b>, ' + t('humidity') + ' +' + fmt(wo.h.RH1 - wo.h.RH0, 0) + ' ' + t('points') + ', ' + t('feels') + ' ' + signed(wo.h.dAT) + ' °C'
+          : ' · ' + t('its cooled air misses the house in the summer wind'))
+        + '<br><span style="color:var(--muted)">' + t('against the dry garden without it, on the hottest month\u2019s afternoon') + '</span>'
+      : !sel0 || !eff ? t('Pick a tool on the left and click open ground; click a placed item to see what it does.')
       : '<b>' + t(sel0.kind === 'wall' ? 'This wall' : 'This plant') + '</b>: ' + t('winter wind at the walls') + ' <b>' + signed(eff.w) + ' m/s</b> · '
         + t('summer air at the inlets') + ' <b>' + signed(eff.s) + ' m/s</b><br><span style="color:var(--muted)">' + t('what it changes, against the garden without it') + '</span>';
     syncEditor();
@@ -16337,6 +16638,7 @@ function buildVentilation(host) {
     syncWallEd();
     syncPlantEd();
     syncWindCtls();
+    syncWaterUI();
     vegCount.textContent = VEGETATION.length + '/10';
     /* exposure follows the surroundings every refresh: the relief names the
        terrain, the mapped neighbours name the shelter */
@@ -16347,7 +16649,7 @@ function buildVentilation(host) {
     nbStatus.textContent = !ENV.nb ? t('Neighbours off — switch them on for the wind to meet them.')
       : NBV.some(n => !n.model) ? t(NBV.filter(n => !n.model).length + ' neighbours shape the wind (OpenStreetMap)') + (nbView === 'shown' ? '' : ' ' + t('— hidden from the model')) : t('No mapped neighbours here — the wind meets the garden alone.');
     syncNbAsk();
-    placeHint.textContent = (plantArmed ? ' planting ' + plantArmed + ' — click open ground' : '') + (wallArmed ? ' placing wall — click open ground' : '');
+    placeHint.textContent = (plantArmed ? ' planting ' + plantArmed + ' — click open ground' : '') + (wallArmed ? ' placing wall — click open ground' : '') + (waterArmed ? ' placing water — click open ground' : '');
     const sn = sunPos(SH.doy, SH.h, lat, lon, tz);
     liveLine.innerHTML = '';
     liveLine.appendChild(document.createTextNode(
@@ -17762,6 +18064,14 @@ style === 'sketch' ? '#EFEBE0'
         : night ? 'rgba(24,30,48,.85)' : 'rgba(120,140,105,.30)',
         style === 'sketch' ? CH.ink : CH.line, style === 'sketch' ? 1.6 : 1.2);
     }
+    /* the pools and ponds set on Ventilation, flat on the ground */
+    SCENE.water.forEach(w => {
+      const z = (x, y) => (terrOn ? rTerraAt(x, y) : 0) + 0.03, pool = w.kind !== 'pond';
+      const out = waterOutline(w).map(q => [q[0], q[1], z(q[0], q[1])]);
+      poly(out, style === 'sketch' ? '#DCEBF2' : night ? (pool ? '#1D4A63' : '#1A3A3C') : pool ? '#5DB8DA' : '#4C8C8F',
+        style === 'sketch' ? CH.ink : pool ? (night ? '#5B6470' : '#EDE8DC') : '#7A8B5A', style === 'sketch' ? 1.4 : pool ? 3 : 2);
+      if (style !== 'sketch') poly(waterOutline(w, 0.72).map(q => [q[0], q[1], z(q[0], q[1])]), 'rgba(20,80,120,' + (0.3 * clamp(w.depth / 3, 0.15, 1)).toFixed(2) + ')', null);
+    });
     /* shadow blob: the footprint dropped along the sun ray */
     if (showShadow && sun.alt > 0.5 && style !== 'sketch') {
       const k = 1 / Math.max(0.08, Math.tan(Math.max(0.5, sun.alt) * RAD));
@@ -17834,6 +18144,7 @@ style === 'sketch' ? '#EFEBE0'
       const q = [off(onWall(sg, 0, 0), 0.03), off(onWall(sg, sg.len, 0), 0.03), off(onWall(sg, sg.len, eh), 0.03), off(onWall(sg, 0, eh), 0.03)];
       items.push(onWallLayer(sg, 1, { pts:q, fill:shadeHex(STONE_C, night ? 0.3 : faceK(sg.n) * (style === 'watercolor' ? 0.92 : 1)), sh:night ? 0.3 : faceK(sg.n), d:q.reduce((a2, p) => a2 + depthOf(p[0], p[1], p[2]), 0) / 4, mat:embas ? 'stone' : 'site', wallSg:sg, uv:q.map(p => [(p[0] - sg.a[0]) * tu[0] + (p[1] - sg.a[1]) * tu[1], -p[2]]) }));
     });
+    const RWS = roofWinsFor(G, RF);   // the roof windows set on Openings
     M.pieces.forEach(pc => {
       const f = pc.f;
       if ((-f.t * f.a * ax.c[0] - f.t * f.b * ax.c[1]) * ax.ce + ax.se <= 1e-6) return;
@@ -17847,7 +18158,18 @@ style === 'sketch' ? '#EFEBE0'
       const ruv = fl > 1e-9 && sl > 1e-6
         ? pts.map(q => [(-f.b * q[0] + f.a * q[1]) / fl, -(q[2] - H0) * Math.sqrt(1 + sl * sl) / sl])
         : pts.map(q => [q[0], q[1]]);
-      items.push({ pts, fill:shadeHex(base, night ? 0.32 : fk), sh:night ? 0.32 : fk, d:pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / pts.length, mat:look.roof ? look.roof.key : 'site', roof:true, uv:ruv });
+      const dR = pts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / pts.length;
+      const rItem = { pts, fill:shadeHex(base, night ? 0.32 : fk), sh:night ? 0.32 : fk, d:dR, mat:look.roof ? look.roof.key : 'site', roof:true, uv:ruv };
+      items.push(rItem);
+      /* the roof windows on this plane, frame then glass just in front of it
+         (their depths follow the slope's once the roofs are moved over the walls) */
+      RWS.forEach(o => {
+        if (o.sl === 'F' ? !inPoly(o.cx, o.cy, pc.poly) : o.key !== pc.key) return;
+        const c = [(o.q[0][0] + o.q[2][0]) / 2, (o.q[0][1] + o.q[2][1]) / 2, (o.q[0][2] + o.q[2][2]) / 2], k3 = 0.1;
+        const fr = o.q.map(q => [q[0] + (q[0] - c[0]) * k3, q[1] + (q[1] - c[1]) * k3, q[2] + (q[2] - c[2]) * k3]);
+        items.push({ pts:fr, fill:night ? '#1E2024' : '#4A4F55', d:dR, rwOf:rItem, rwK:2e-4 });
+        items.push({ pts:o.q, fill:night ? '#FFD27A' : style === 'watercolor' ? 'rgba(150,180,205,.55)' : glassC(), glass:true, d:dR, rwOf:rItem, rwK:4e-4 });
+      });
     });
     /* the openings as Openings and Shadowing lays them, and the export
        with it (glassSpans, unitSpanV, doorSpanV): every switched-on window
@@ -18314,6 +18636,7 @@ style === 'sketch' ? '#EFEBE0'
     const wallNear = items.reduce((m, it) => it.wl && it.d < m ? it.d : m, Infinity);
     const roofs = items.filter(it => it.roof);
     if (isFinite(wallNear)) roofs.forEach(rf => { rf.d = Math.min(rf.d, wallNear - 1e-3); });
+    items.forEach(it => { if (it.rwOf) it.d = it.rwOf.d - it.rwK; });
     items.forEach(it => {
       if (it.chim || it.par) roofs.forEach(rf => { if (standsOn(it, rf)) it.d = Math.min(it.d, rf.d - 1e-3); });
     });
@@ -27288,7 +27611,7 @@ function studyJSON() {
     clim:{ t:C.t.slice(), p:C.p.slice(), source:C.source || '', mode:C.mode || '' },
     env:{ plot:ENV.plot ? { lat:ENV.plot.lat, lon:ENV.plot.lon } : null, doy:ENV.doy, h:ENV.h,
       map:ENV.map, view:ENV.view, az:isFinite(+ENV.az) ? +(+ENV.az).toFixed(1) : 225, wide:!!ENV.wide, nb:ENV.nb !== false },
-    mass:MASS, roof:ROOF, open:OPEN, sunsp:SUNSP, rwin:RWIN, turb:TURB, veg:SCENE.veg, walls:SCENE.walls,
+    mass:MASS, roof:ROOF, open:OPEN, sunsp:SUNSP, rwin:RWIN, turb:TURB, veg:SCENE.veg, walls:SCENE.walls, water:SCENE.water, waterAir:SCENE.waterAir || null,
     render:{ prompt:RENDER_PROMPT },
     vern:STATE.vern || null,
     mesh:IMPORT.active ? { name:IMPORT.name, L:+IMPORT.L.toFixed(2), D:+IMPORT.D.toFixed(2), H:+IMPORT.H.toFixed(2) } : null,
@@ -27603,6 +27926,13 @@ function applyStudy(o) {
   if (o.vern && typeof o.vern === 'object' && typeof o.vern.sk === 'string') STATE.vern = Object.assign({ face:'auto', type:null, open:{} }, o.vern);
   SCENE.walls.length = 0;
   (Array.isArray(o.walls) ? o.walls : []).forEach(w => { if (w && isFinite(+w.x) && isFinite(+w.y) && ['x', 'y'].indexOf(w.along) >= 0) SCENE.walls.push(w); });
+  SCENE.water.length = 0;
+  (Array.isArray(o.water) ? o.water : []).slice(0, WATER_MAX).forEach(w => {
+    if (!w || !isFinite(+w.x) || !isFinite(+w.y)) return;
+    SCENE.water.push({ kind:w.kind === 'pond' ? 'pond' : 'pool', shape:['rect', 'square', 'circle', 'oval'].indexOf(w.shape) >= 0 ? w.shape : 'rect',
+      a:clamp(+w.a || 6, 1, 25), b:clamp(+w.b || 3, 1, 15), depth:clamp(+w.depth || 1.2, 0.1, 3), x:+w.x, y:+w.y });
+  });
+  if (o.waterAir && isFinite(+o.waterAir.rh) && isFinite(+o.waterAir.dtr)) SCENE.waterAir = { rh:clamp(+o.waterAir.rh, 10, 95), dtr:clamp(+o.waterAir.dtr, 3, 20) };
   const E0 = o.env || {};
   if (E0.plot && isFinite(+E0.plot.lat) && isFinite(+E0.plot.lon)) ENV.plot = { lat:+E0.plot.lat, lon:+E0.plot.lon };
   if (isFinite(+E0.doy)) ENV.doy = clamp(Math.round(+E0.doy), 1, 365);
@@ -28870,7 +29200,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
   PANELS = [];
   for (const k in SCORES) delete SCORES[k];
   if (!(keepModel && MASS)) {   // a language switch keeps the student's model; a new site starts afresh
-  SCENE.veg.length = 0; SCENE.walls.length = 0;
+  SCENE.veg.length = 0; SCENE.walls.length = 0; SCENE.water.length = 0; SCENE.waterAir = null;
   MASS = { L:12, D:8, rot:180, fl:1, fh:3.0, col:null, form:'rect', wing:null, patio:{ on:false, w:4, d:3, cx:0, cy:0 }, balc:[] };
   if (IMPORT.active && IMPORT.L > 0 && IMPORT.D > 0) {
     MASS.L = clamp(Math.round(IMPORT.L * 2) / 2, 6, L_MAX);
@@ -30679,6 +31009,59 @@ Object.assign(PT, {
 });
 Object.assign(PT_HINT, {
   'vent-wind': 'A direcção é aquela de onde o vento sopra, em oitavos como numa rosa dos ventos. Um vento de norte atravessa o par sul–norte e apenas roça o par nascente–poente — active e desactive meses e veja o padrão azul e as duas pontuações mudarem juntos. Meses opostos no mesmo conjunto anulam-se na média, tal como o faria o tempo alternado.',
+});
+
+Object.assign(PT, {
+  "Water in the garden": "Água no jardim",
+  "A pool or a pond on open ground. Choose pool or pond, arm the tool and click open ground; click it to set its shape — rectangular, square, circular or oval —, its sides and its depth, drag to move it, double-click to remove it. Through the hottest month the water evaporates and cools the air the summer wind carries across it: the model shows the cooled band downwind and what reaches the house.": "Uma piscina ou um lago em terreno livre. Escolha piscina ou lago, arme a ferramenta e clique em terreno livre; clique na água para definir a forma — rectangular, quadrada, circular ou oval —, os lados e a profundidade, arraste-a para a mover, duplo clique para a remover. No mês mais quente a água evapora e arrefece o ar que o vento de Verão faz passar sobre ela: o modelo mostra a faixa de ar arrefecido a jusante do vento e o que chega à casa.",
+  "Water": "Água",
+  "Kind of water": "Piscina ou lago",
+  "Pool": "Piscina",
+  "Pond": "Lago",
+  "Place water": "Colocar água",
+  "Clear water": "Limpar água",
+  "Afternoon humidity": "Humidade à tarde",
+  "Daily range": "Amplitude diária",
+  "Click open ground to place the water": "Clique em terreno livre para colocar a água",
+  "This pool": "Esta piscina",
+  "This pond": "Este lago",
+  "depth": "profundidade",
+  "surface": "superfície",
+  "evaporates": "evapora",
+  "day": "dia",
+  "in {} days without rain or top-up": "em {} dias sem chuva nem reposição",
+  "air leaving it": "ar à saída",
+  "its cooled air misses the house in the summer wind": "o ar que arrefece não chega à casa com o vento de Verão",
+  "against the dry garden without it, on the hottest month’s afternoon": "face ao jardim seco sem ela, na tarde do mês mais quente",
+  "Shape": "Forma",
+  "Rectangular": "Rectangular",
+  "Square": "Quadrada",
+  "Circular": "Circular",
+  "Oval": "Oval",
+  "Length (east–west on the plan)": "Comprimento (nascente–poente na planta)",
+  "Width (north–south on the plan)": "Largura (norte–sul na planta)",
+  "Diameter": "Diâmetro",
+  "Side": "Lado",
+  "Depth": "Profundidade",
+  "Turn {}°": "Rodar {}°",
+  "Delete water": "Apagar água",
+  "estimate — set it from the station normals": "estimativa — defina-a pelas normais da estação",
+  "wind at {} m": "vento a {} m",
+  "Evaporated": "Evaporados",
+  "−{} °C · {} mm/day": "−{} °C · {} mm/dia",
+  "at the house": "na casa",
+  "downwind": "a jusante do vento",
+  "humidity": "humidade",
+  "points": "pontos",
+  "feels": "sensação",
+  "−{} °C at the house": "−{} °C na casa",
+  "mm/day evaporated": "mm/dia evaporados",
+  "Water selected — tune it below": "Água seleccionada — afine-a abaixo",
+  "Water removed": "Água removida",
+  "Maximum {} bodies of water reached": "Atingido o máximo de {} superfícies de água",
+});
+Object.assign(PT_HINT, {
+  'vent-water': "Como a água é contada. A evaporação segue a equação da ASHRAE para piscinas (segundo Carrier), w = A (pw − pa)(0,089 + 0,0782 V) / Y, reduzida a metade para água parada e sem uso; a superfície fica perto da temperatura média do ar do mês mais quente, um grau acima pelo sol que recebe, e a água mais funda fica mais perto da média do ano. O ar que passa sobre a água arrefece face ao jardim seco que ela substitui: a água tira calor ao ar por convecção e, ao contrário do chão seco ao sol, não lhe devolve nenhum (tomado como 30 % do sol que chega ao chão). Ambos se repartem pelo 1,5 m mais baixo do ar que a atravessa, diminuem a jusante do vento à medida que essa camada engrossa, e nunca passam 60 % da depressão de bolbo húmido. A humidade que acrescenta é descontada ao arrefecimento na temperatura aparente (Steadman). A humidade à tarde e a amplitude diária são estimadas pela posição do local até as definir pelas normais da estação mais próxima; o efeito radiante da superfície fresca e qualquer repuxo não são contados. Uma piscina parada arrefece pouco; vento sobre uma superfície larga e uma casa próxima a jusante fazem a diferença.",
 });
 
 /* boot, last: a page opened in Portuguese renders its first screen with
