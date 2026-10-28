@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.167.0',
+  version:     '1.168.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21386,7 +21386,49 @@ function vIcon(key, size) {
   const urban = VICON_URBAN.indexOf(key) >= 0, nbr = urban ? vNeighbours(m, L, Dd, H, zones, P, face, out) : null;
   const ground = (gx, gy, gr) => { const La0 = m.annex ? m.annex.L || 3 : 0, R0 = gr || Math.hypot(L + La0, Dd) / 2 + 1.6, ox = gx === undefined ? (L + La0) / 2 : gx, oy = gy === undefined ? Dd / 2 : gy, pts = Array.from({ length:48 }, (_, i) => { const a = i / 48 * 2 * Math.PI; return P(ox + R0 * Math.cos(a), oy + R0 * Math.sin(a), -rz); });
     pts.forEach(p => all.push(p)); out.push('<polygon points="' + fmtP(pts) + '" fill="#E3E5D6" stroke="#C9CDB8" stroke-width="0.05"/>'); };
-  if (urban) nbr.street(); else ground();
+  /* a farmyard: the ranges round the pátio behind the house, with their walls; the eira and the espigueiro before it */
+  const yd = m.yard && !m.icon && !urban ? m.yard : null;
+  const yBox = (ax, ay, bx, by, h, front) => {
+    face([P(bx, ay, 0), P(bx, by, 0), P(bx, by, h), P(bx, ay, h)], vShade(wc, 0.82), 0.04);
+    face([P(ax, ay, 0), P(bx, ay, 0), P(bx, ay, h), P(ax, ay, h)], front || wc, 0.04); };
+  const yRoof = (ax, ay, bx, by, h, alongY, col) => { const t = 0.42, e = 0.25, c = col || rc;
+    if (alongY) { const xm = (ax + bx) / 2, hr = h + (bx - ax) / 2 * t;
+      face([P(ax, ay, h), P(bx, ay, h), P(xm, ay, hr)], wc, 0.04);
+      const l = [P(ax - e, ay - e, h - e * t), P(xm, ay - e, hr), P(xm, by + e, hr), P(ax - e, by + e, h - e * t)], r = [P(xm, ay - e, hr), P(bx + e, ay - e, h - e * t), P(bx + e, by + e, h - e * t), P(xm, by + e, hr)];
+      face(l, vShade(c, 0.88)); face(r, c); ticks(r[0], r[3], r[2], r[1], by - ay, 0.6, 'rgba(0,0,0,.18)', 0.03); }
+    else { const ym = (ay + by) / 2, hr = h + (by - ay) / 2 * t;
+      face([P(ax - e, ym, hr), P(bx + e, ym, hr), P(bx + e, by + e, h - e * t), P(ax - e, by + e, h - e * t)], vShade(c, 0.85));
+      face([P(bx, ay, h), P(bx, by, h), P(bx, ym, hr)], vShade(wc, 0.82), 0.04);
+      const f = [P(ax - e, ay - e, h - e * t), P(bx + e, ay - e, h - e * t), P(bx + e, ym, hr), P(ax - e, ym, hr)];
+      face(f, c); ticks(f[0], f[1], f[2], f[3], bx - ax, 0.6, 'rgba(0,0,0,.18)', 0.03); } };
+  if (yd) {
+    const yW = yd.W || L, yD = yd.D || 0, E = yd.eira, G = yd.espig;
+    const xmin = Math.min(0, (L - yW) / 2, E ? E.x : 0, G ? G.x - 0.8 : 0), xmax = Math.max(L, (L + yW) / 2, E ? E.x + E.w : 0);
+    const ymin = Math.min(0, E ? -(E.d + 0.8) : 0, G ? -(G.L + 0.8) : 0), ymax = Dd + yD;
+    ground((xmin + xmax) / 2, (ymin + ymax) / 2, Math.hypot(xmax - xmin, ymax - ymin) / 2 + 0.8);
+    /* the eira: the granite threshing floor, flat on the ground */
+    if (E) face([P(E.x, -0.8, 0.02), P(E.x + E.w, -0.8, 0.02), P(E.x + E.w, -(E.d + 0.8), 0.02), P(E.x, -(E.d + 0.8), 0.02)], '#D3CDBF', 0.04);
+    if (yD > 0) {
+      /* the ranges and the walls, the farthest first: the back range, then the west, then the east */
+      const x0 = (L - yW) / 2, x1 = x0 + yW, y0 = Dd, y1 = Dd + yD, rg = {}; (yd.ranges || []).forEach(r => { rg[r.side] = r; });
+      const wN = rg.N ? rg.N.w : 0.35, wW = rg.W ? rg.W.w : 0.35, wE = rg.E ? rg.E.w : 0.35, wh = yd.wall || 2.2, parts = [];
+      parts.push({ k:x0 + wW, r:rg.N, a:[x0 + wW, y1 - wN, x1 - wE, y1], along:false });
+      parts.push({ k:x0 - y0, r:rg.W, a:[x0, y0, x0 + wW, y1], along:true });
+      parts.push({ k:x1 - y0, r:rg.E, a:[x1 - wE, y0, x1, y1], along:true });
+      parts.sort((p1, p2) => (p1.a[0] - p1.a[3]) - (p2.a[0] - p2.a[3])).forEach(q => { const [ax, ay, bx, by] = q.a;
+        if (!q.r) { yBox(ax, ay, bx, by, wh); face([P(ax, ay, wh), P(bx, ay, wh), P(bx, by, wh), P(ax, by, wh)], vShade(wc, 1.08), 0.03);
+          const g = yd.gate; if (g && ((g.side === 'N' && !q.along) || (g.side === 'W' && q.along && ax === x0) || (g.side === 'E' && q.along && bx === x1))) {
+            const gx = ax + (bx - ax) * (g.at || 0.5), gy = ay + (by - ay) * (g.at || 0.5), gw = (g.w || 3) / 2;
+            if (!q.along) face([P(gx - gw, ay - 0.01, 0), P(gx + gw, ay - 0.01, 0), P(gx + gw, ay - 0.01, wh - 0.3), P(gx - gw, ay - 0.01, wh - 0.3)], dc, 0.04);
+            else face([P(bx + 0.01, gy - gw, 0), P(bx + 0.01, gy + gw, 0), P(bx + 0.01, gy + gw, wh - 0.3), P(bx + 0.01, gy - gw, wh - 0.3)], dc, 0.04); }
+          return; }
+        const h = q.r.h || 2.6;
+        /* an open range (the coberto, the alpendre) shows its dark inside between the posts */
+        yBox(ax, ay, bx, by, h, q.r.open ? '#4A4038' : null);
+        if (q.r.open) for (let t = ay + 0.2; t <= by; t += 2.5) face([P(bx + 0.01, t, 0), P(bx + 0.01, t + 0.3, 0), P(bx + 0.01, t + 0.3, h), P(bx + 0.01, t, h)], '#B8B0A2', 0.02);
+        yRoof(ax, ay, bx, by, h, q.along, q.r.marseille ? '#B5603D' : null); });
+    }
+  } else if (urban) nbr.street(); else ground();
   if (urban) nbr.west();
   /* ground shadow */
   const sh = [P(-0.4, -0.4, -rz), P(L + 0.9, -0.4, -rz), P(L + 0.9, Dd + 0.9, -rz), P(-0.4, Dd + 0.9, -rz)];
@@ -21896,6 +21938,16 @@ function vIcon(key, size) {
       face([P(x - w / 2, -0.03, -rz), P(x + w / 2, -0.03, -rz), P(x + w / 2, -0.03, -rz * 0.3), P(x, -0.03, -rz * 0.12), P(x - w / 2, -0.03, -rz * 0.3)], '#2E3A40', 0.03);
       face([P(x - w / 2 - 0.2, -1.6, -rz), P(x + w / 2 + 0.2, -1.6, -rz), P(x + w / 2, -0.03, -rz), P(x - w / 2, -0.03, -rz)], 'rgba(90,140,180,.55)', 0.02); }
   }
+  /* the espigueiro before the house: the granary of slats raised on its pillars and rat-stones */
+  if (yd && yd.espig) { const G = yd.espig, gx = G.x, gl = G.L || 5, gy0 = -(gl + 0.8), gy1 = -0.8, z0 = 1.0, gh = 1.5;
+    [[gx + 0.15, gy0 + 0.3], [gx + 0.15, gy1 - 0.5], [gx + 0.15, (gy0 + gy1) / 2]].forEach(([px, py]) => {
+      face([P(px, py, 0), P(px + 0.3, py, 0), P(px + 0.3, py, z0), P(px, py, z0)], '#9A958B', 0.02); face([P(px + 0.3, py, 0), P(px + 0.3, py + 0.3, 0), P(px + 0.3, py + 0.3, z0), P(px + 0.3, py, z0)], '#86817A', 0.02); });
+    face([P(gx + 1.2, gy0, z0), P(gx + 1.2, gy1, z0), P(gx + 1.2, gy1, z0 + gh), P(gx + 1.2, gy0, z0 + gh)], '#8F887C', 0.04);
+    face([P(gx, gy0, z0), P(gx + 1.2, gy0, z0), P(gx + 1.2, gy0, z0 + gh), P(gx, gy0, z0 + gh)], '#A39C90', 0.04);
+    for (let t = gy0 + 0.25; t < gy1; t += 0.25) line(P(gx + 1.21, t, z0 + 0.1), P(gx + 1.21, t, z0 + gh - 0.1), 'rgba(40,35,30,.55)', 0.03);
+    const xm = gx + 0.6, hr = z0 + gh + 0.45;
+    face([P(gx - 0.1, gy0 - 0.15, z0 + gh), P(xm, gy0 - 0.15, hr), P(xm, gy1 + 0.15, hr), P(gx - 0.1, gy1 + 0.15, z0 + gh)], '#7F7B74', 0.04);
+    face([P(xm, gy0 - 0.15, hr), P(gx + 1.3, gy0 - 0.15, z0 + gh), P(gx + 1.3, gy1 + 0.15, z0 + gh), P(xm, gy1 + 0.15, hr)], '#94908A', 0.04); }
   if (urban && !m.icon) nbr.east();
   const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
   const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) - x0, hgt = Math.max(...ys) - y0;
@@ -25749,7 +25801,7 @@ Object.assign(VERN_SRC, {
 (function ptLavoura() {
   Object.assign(VERN_SRC, {
     MOT:{ tag:'Mota 2014', cite:'Mota, F. D. V. da (2014). <i>Monitorização e validação de sistemas construtivos da arquitetura vernácula — Reinterpretação da autossuficiência de uma casa de lavoura do Minho</i> (dissertação de mestrado em Construção e Tecnologia, orient. R. Mateus). Universidade do Minho, Escola de Arquitetura — seis casos de estudo (Quinta de S. José; Couto, Poça e Alívio, em Soutelo; Vale, em Adaúfe; Palmeira, Braga), temperatura e humidade registadas na primavera e no verão de 2013; após <i>Arquitectura popular em Portugal</i> (AAVV, 1980).', url:null },
-    RIB:{ tag:'Casa do Ribeiro, Escudeiros', cite:'<i>Escudeiros, Braga. Casa do Ribeiro</i>: alçado (esc. 1/75), plantas dos dois pisos (esc. 1/200), fotografias e texto; e o esquema tipológico «Casa de lavoura (c/ escada integrada)» — páginas de obra impressa fornecidas pela docência (referência bibliográfica completa a indicar).', url:null }
+    RIB:{ tag:'AAP 1980 — zona 1 (Minho)', cite:'AAVV (1980). <i>Arquitectura popular em Portugal</i>, 2.ª ed. Lisboa: Associação dos Arquitectos Portugueses (1.ª ed. 1961, Sindicato Nacional dos Arquitectos) — zona 1, Minho (F. Távora, R. Pimentel, A. Menéres): «Escudeiros, Braga. Casa do Ribeiro», alçado (esc. 1/75), plantas dos dois pisos (esc. 1/200), fotografias e texto, e o esquema tipológico «Casa de lavoura (c/ escada integrada)»; também em Mota (2014).', url:null },
   });
   const T = o => Object.assign({ region:'mainland' }, o), up2 = [{ on:false }, { on:true }], dn2 = [{ door:true }, { on:false }];
   Object.assign(VERN_TYPES, {
@@ -25786,7 +25838,9 @@ Object.assign(VERN_SRC, {
     where:{ en:'The river plains of the Minho — Couto and Alívio (Soutelo), by the Homem and the EN 101', pt:'As veigas do Minho — Couto e Alívio (Soutelo), junto ao rio Homem e à EN 101' },
     summary:{ en:'A farm more than a house: of the roofed area of both floors only ≈ 15 % is dwelling. The cortes and the kitchen open onto a pátio closed by the house, high walls and roofed parts — shelter from rain, wind and sun, the animals watched from the kitchen, the tools kept under cover — with portals to the fields and to the road. The great loja to the north-west keeps the produce cool behind small openings; the adega sits behind alpendres that keep the sun off; to the south-west the sequeiro, the eira and the espigueiro take the sun. Below, the kitchen and a small sala; on the sobrado, four bedrooms and the other sala, opening into the sequeiro. Irregular granite left bare, tabique partitions, Marseille tile on timber, the kitchen unlined and without a chimney.',
       pt:'Mais lavoura do que casa: da área coberta dos dois pisos só ≈ 15 % é habitação. As cortes e a cozinha abrem para um pátio fechado pela casa, por muros altos e por partes cobertas — abrigo da chuva, do vento e do sol, os animais vigiados da cozinha, as alfaias guardadas ao abrigo — com portais para os campos e para a estrada. A grande loja a noroeste conserva os produtos atrás de pequenas aberturas; a adega fica por trás de alpendres que lhe cortam o sol; a sudoeste o sequeiro, a eira e o espigueiro tomam o sol. Em baixo, a cozinha e uma pequena sala; no sobrado, quatro quartos e a outra sala, que abre para o sequeiro. Granito irregular à vista, tabiques, telha marselha sobre madeira, a cozinha sem forro e sem chaminé.' },
-    model:{ L:18, D:8, fl:2, fh:2.7, rot:135, form:'rect', roof:{ n:2, th:24, bei:0.4 },
+    /* the dwelling block (Site, Roof, Openings) and the farmyard round the pátio behind it, as Couto's plans draw it (Fig. 39) */
+    model:{ L:12, D:8, fl:2, fh:2.7, rot:135, form:'rect', roof:{ n:2, th:24, bei:0.4 },
+      yard:{ W:20, D:15, wall:2.4, ranges:[{ side:'W', w:5, h:2.8, marseille:true }, { side:'N', w:4.5, h:2.6, marseille:true }, { side:'E', w:4, h:2.6, open:true }], eira:{ x:-4, w:8, d:7 }, espig:{ x:-6.6, L:5 } },
       open:{ S:vOpen([W(0.2, 0.06, up2), W(0.45, 0.06, up2), W(0.7, 0.06, up2), D(0.88, 0.1, dn2)], 0.05),
         N:vOpen([D(0.15, 0.12, dn2), D(0.35, 0.12, dn2), D(0.6, 0.1, dn2), W(0.8, 0.06, [{ on:true }, { on:true }])], 0.08), E:vOpen([W(0.5, 0.1, up2)], 0.02), W:vOpen([W(0.3, 0.04, [{ on:true }, { on:false }]), W(0.7, 0.04, [{ on:true }, { on:false }])], 0.01) },
       render:{ en:'granite stone walls, tile roof, green door', pt:'paredes de granito, telhado de telha, porta verde' },
@@ -25798,6 +25852,7 @@ Object.assign(VERN_SRC, {
       vGlaze(10),
       vWall({ en:'granite left bare', pt:'granito à vista' }, ['stone'], 'MOT'),
       vI('site', { en:'The pátio, closed by the house and high walls, partly roofed: the cortes and the kitchen open to it; two portals, one to the fields, one to the road.', pt:'O pátio, fechado pela casa e por muros altos, em parte coberto: para ele abrem as cortes e a cozinha; dois portais, um para os campos, outro para a estrada.' }, 'MOT'),
+      vI('site', { en:'As drawn at Couto (Soutelo): a ring of one-storey ranges round a pátio of ≈ 10 × 10 m — the great loja and a corte to the north-west, a row of cortes to the north-east, open alpendres on the remaining side — and the two-storey block on the south: the kitchen and the adega below; four bedrooms, the sala and the sequeiro above, the sequeiro facing south-west over the eira, the espigueiro to its west. At Alívio the same ring: three cortes to the west, cobertos to the north and east, the kitchen, the salinha and two lojas in the south range under the bedrooms, a sequeiro of almost half the first floor, the eira and the espigueiro before it. The model\u2019s single bar on Site is the dwelling block; the ranges are drawn in «Draw the model».', pt:'Como desenhado no Couto (Soutelo): um anel de corpos térreos em volta de um pátio de ≈ 10 × 10 m — a grande loja e uma corte a noroeste, uma fiada de cortes a nordeste, alpendres abertos no lado restante — e o bloco de dois pisos a sul: em baixo a cozinha e a adega; em cima quatro quartos, a sala e o sequeiro, este voltado a sudoeste sobre a eira, o espigueiro a poente. No Alívio o mesmo anel: três cortes a poente, cobertos a norte e a nascente, a cozinha, a salinha e duas lojas no corpo sul sob os quartos, um sequeiro de quase metade do primeiro piso, a eira e o espigueiro em frente. A barra única do modelo no separador Local é o bloco de habitação; os corpos do pátio desenham-se em «Desenhar o modelo».' }, 'MOT'),
       vI('site', { en:'Measured (spring 2013): the central sala kept the steadiest air — little ventilation and hygroscopic tabique walls; bedroom and sala swung under 4 °C a day while outside reached 28 °C by day and 8 °C at night, yet stayed at 13–19 °C, below 20 °C. The corte with two cows read 1–2 °C above the rooms — enough to warm a floor over it.', pt:'Medido (primavera de 2013): a sala central manteve o ar mais estável — pouca ventilação e tabiques higroscópicos; quarto e sala variaram menos de 4 °C por dia, com o exterior a 28 °C de dia e 8 °C de noite, mas ficaram entre 13 e 19 °C, abaixo dos 20 °C. A corte com duas vacas esteve 1–2 °C acima dos quartos — o bastante para aquecer um piso por cima.' }, 'MOT'),
       vI('site', { en:'At Alívio the «salinha» beside the kitchen, walls of ≈ 60 cm granite, is told to be warm in winter and cool in summer.', pt:'No Alívio, a «salinha» junto à cozinha, com paredes de granito de ≈ 60 cm, é descrita como quente no inverno e fresca no verão.' }, 'MOT'),
       vI('openings', { en:'The loja to the north-west keeps only small openings, for an even temperature; the adega behind alpendres that block the direct sun.', pt:'A loja a noroeste tem só pequenas aberturas, para uma temperatura estável; a adega fica por trás de alpendres que bloqueiam o sol direto.' }, 'MOT'),
@@ -25809,7 +25864,7 @@ Object.assign(VERN_SRC, {
     where:{ en:'The Minho lowlands — Vale (Adaúfe), Alívio (Soutelo)', pt:'As terras baixas do Minho — Vale (Adaúfe), Alívio (Soutelo)' },
     summary:{ en:'The house that takes in its sequeiro: the slatted drying room on the upper floor, joined to the dwelling, makes the south or west front, the eira below and beyond it, the espigueiro beside — sun and wind working the maize. Below, the loja, the kitchen and the cortes; above, the bedrooms, the sala and the sequeiro, which shades the next room and works as its antechamber — cooler in summer, and in winter its open slats chill it. At Alívio the sequeiro takes almost half of the first floor. The kitchen, between corte and loja, unlined and without a chimney — the smoke through a strip of tiles laid flatter — its door sheltered by the upper floor carried out as an alpendre the length of the front. Built in phases: rubble below and round the bedrooms, coursed granite blocks (perpianho) for the sala and the sequeiro.',
       pt:'A casa que integra o seu sequeiro: a dependência ripada de secagem no piso de cima, junta à habitação, define a fachada sul ou poente, a eira por baixo e em frente, o espigueiro ao lado — o sol e o vento a tratar o milho. Em baixo, a loja, a cozinha e as cortes; em cima, os quartos, a sala e o sequeiro, que sombreia a divisão seguinte e lhe serve de antecâmara — mais fresca no verão, e no inverno arrefecida pelo ripado aberto. No Alívio o sequeiro ocupa quase metade do primeiro piso. A cozinha, entre a corte e a loja, sem forro e sem chaminé — o fumo sai por uma faixa de telhas de menor inclinação — tem a porta abrigada pelo piso de cima, que avança em alpendre por toda a fachada. Construída por fases: alvenaria irregular em baixo e nos quartos, blocos de granito em fiadas (perpianho) na sala e no sequeiro.' },
-    model:{ L:15, D:7, fl:2, fh:2.6, rot:210, form:'rect', roof:{ n:2, th:24, bei:0.6 },
+    model:{ L:15, D:7, fl:2, fh:2.6, rot:210, form:'rect', roof:{ n:2, th:24, bei:0.6 }, yard:{ eira:{ x:3, w:9, d:6 }, espig:{ x:0.4, L:5 } },
       open:{ S:vOpen([D(0.15, 0.1, dn2), D(0.4, 0.1, dn2), W(0.55, 0.12, up2), W(0.8, 0.12, up2), D(0.92, 0.08, dn2)], 0.1),
         N:{ wwr:0.01, units:vOff() }, E:vOpen([W(0.5, 0.1, up2)], 0.02), W:vOpen([W(0.5, 0.05, [{ on:true }, { on:false }])], 0.01) },
       render:{ en:'granite stone walls, tile roof, green door', pt:'paredes de granito, telhado de telha, porta verde' },
@@ -25845,7 +25900,8 @@ Object.assign(VERN_SRC, {
       vI('site', { en:'Plans: on the ground floor (1) the kitchen, (2) the adega, (3) the lagar; above (1) the closed varanda, (2) the sala with its altar, (3) a bedroom, (4) the sala.', pt:'Plantas: no 1.º piso (1) cozinha, (2) adega, (3) lagar; no 2.º piso (1) varanda fechada, (2) sala com altar, (3) quarto, (4) sala.' }, 'RIB'),
       vI('site', { en:'The type in the scheme «casa de lavoura com escada integrada»: the rooms in a row, the stair inside the plan at one end, a long low front on pillars and a higher body at the top of the row.', pt:'O tipo no esquema «casa de lavoura com escada integrada»: os compartimentos em fila, a escada dentro da planta num topo, uma fachada longa e baixa sobre pilares e um corpo mais alto no topo.' }, 'RIB'),
       vI('openings', { en:'The varanda closed with glass along the upper floor — the sunspace of the house — and the wide sheltered stair in line with it.', pt:'A varanda fechada a vidro ao longo do piso de cima — a estufa da casa — e a escada ampla e abrigada no seu enfiamento.' }, 'RIB'),
-      vI('roof', { en:'The eave on projecting timber rafter ends (barrotes do beirado) under the channel tile.', pt:'O beirado sobre barrotes de madeira salientes, sob a telha de canudo.' }, 'RIB')
+      vI('roof', { en:'The eave on projecting timber rafter ends (barrotes do beirado) under the channel tile.', pt:'O beirado sobre barrotes de madeira salientes, sob a telha de canudo.' }, 'RIB'),
+      vI('ventilation', { en:'Glazed later, the varandas of the Minho farmhouse work as sunspaces, adding gains and cutting the losses of the rooms behind.', pt:'Fechadas a vidro mais tarde, as varandas da casa de lavoura minhota funcionam como estufas, somando ganhos e reduzindo as perdas das divisões por trás.' }, 'MOT')
     ] })
   });
   Object.assign(VERN_DIST, { 'pt-lavoura-varanda':['Braga', 'Viana do Castelo', 'Porto'], 'pt-lavoura-patio':['Braga', 'Viana do Castelo'], 'pt-lavoura-sequeiro':['Braga', 'Viana do Castelo'], 'pt-lavoura-escada':['Braga'] });
@@ -25862,10 +25918,28 @@ Object.assign(VERN_SRC, {
     vm.els.push({ t:'latada', vol:0, face:'S', pos:0.3, w:5, d:3 });
     vm.rooms0 = along(b, 0, [[R.corte, 1], [R.loja, 1], [R.adega, 1.2], [R.corte, 0.8]]).concat(along(b, 1, [[R.coz, 1.2], [R.q, 1], [R.sala, 1.2], [R.q, 1], [R.q, 0.8]])); };
   VM_OVR['pt-lavoura-patio'] = (vm, b) => { granite(b); b.roof.mat = 'marseille';
-    vm.court = { on:true, x:0, y:b.D / 2 + 5, L:b.L, D:10, h:2.4, open:'S', gate:{ face:'N', pos:0.25, w:3 } };
-    vm.vols.push(vmVol({ name:{ en:'Cortes and alpendre on the pátio', pt:'Cortes e alpendre do pátio' }, x:(b.x || 0) - b.L / 2 + 2.5, y:(b.y || 0) + b.D / 2 + 5, L:5, D:10, fl:1, fh:2.6,
-      roof:{ type:'gable', th:22, bei:0.3, mat:'tile', ridge:'y', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall), open:{ S:[], E:[vmOp('d', 0.3, 1.4, 2.0), vmOp('d', 0.7, 1.4, 2.0)], N:[], W:[] } }));
-    vm.rooms0 = along(b, 0, [[R.loja, 1.4], [R.corte, 1], [R.coz, 1], [R.sala, 0.6], [R.adega, 1]]).concat(along(b, 1, [[R.q, 1], [R.q, 1], [R.sala, 1], [R.q, 1], [R.q, 1], [R.seq, 1.6]])); };
+    /* the farmyard behind the dwelling block, as Couto's plans draw it: the ring of ranges round the pátio, a portal to the fields in the north wall */
+    const yb = (b.y || 0) + b.D / 2, cy = yb + 7.5, rng = (name, x, y, L, D, h, open, mat) => vmVol({ name, x, y, L, D, fl:1, fh:h,
+      roof:{ type:'gable', th:22, bei:0.3, mat:mat || 'marseille', ridge:L >= D ? 'x' : 'y', par:0, cells:2, beirado:1 }, wall:vmClone(b.wall), open });
+    vm.court = { on:true, x:0, y:cy, L:20, D:15, h:2.4, open:'S', gate:{ face:'N', pos:0.725, w:2.8 } };
+    vm.vols.push(rng({ en:'Loja and corte (north-west range)', pt:'Loja e corte (corpo noroeste)' }, -7.5, cy, 5, 15, 2.8, { S:[], E:[vmOp('d', 0.25, 1.2, 2.0), vmOp('d', 0.7, 1.6, 2.2)], N:[], W:[vmOp('w', 0.3, 0.4, 0.4), vmOp('w', 0.7, 0.4, 0.4)] }));
+    vm.vols.push(rng({ en:'Cortes (north-east range)', pt:'Cortes (corpo nordeste)' }, -1, cy + 5.25, 8, 4.5, 2.6, { S:[vmOp('d', 0.2, 1.0, 1.8), vmOp('d', 0.5, 1.0, 1.8), vmOp('d', 0.8, 1.0, 1.8)], E:[], N:[], W:[] }));
+    vm.vols.push(rng({ en:'Alpendres (open to the pátio)', pt:'Alpendres (abertos para o pátio)' }, 8, cy, 4, 15, 2.6, { S:[], E:[], N:[], W:[vmOp('d', 0.2, 2.6, 2.3), vmOp('d', 0.5, 2.6, 2.3), vmOp('d', 0.8, 2.6, 2.3)] }, 'tile'));
+    /* the sequeiro over the south front, the eira before it, the espigueiro to its west */
+    const sq = vmVol({ name:{ en:'Sequeiro (over the adega)', pt:'Sequeiro (sobre a adega)' }, x:b.x || 0, y:(b.y || 0) - b.D / 2 - 1.75, L:b.L, D:3.5, fl:2, fh:b.fh, slits:true,
+      roof:{ type:'shed', th:14, bei:0.4, mat:'marseille', ridge:'x', par:0, cells:2, beirado:1 }, wall:{ mat:'timber', barra:null, cunhais:false, frames:null, buttress:0 },
+      open:{ S:[vmOp('d', 0.3, 2.4, 2.2, 0), vmOp('d', 0.7, 2.4, 2.2, 0), vmOp('w', 0.5, 9.5, 1.6, 1)], E:[vmOp('w', 0.5, 2.6, 1.6, 1)], N:[], W:[vmOp('w', 0.5, 2.6, 1.6, 1)] } });
+    vm.vols.push(sq);
+    vm.vols.push(vmVol({ name:{ en:'Eira (granite threshing floor)', pt:'Eira (lajeado de granito)' }, x:(b.x || 0) - 2, y:sq.y - 1.75 - 4.5, L:8, D:7, fl:1, fh:0.2,
+      roof:{ type:'flat', th:0, bei:0, mat:'stone', ridge:'auto', par:0, cells:2, beirado:1 }, wall:{ mat:'granite', barra:null, cunhais:false, frames:null, buttress:0 }, open:{ S:[], E:[], N:[], W:[] } }));
+    const esp = vmVol({ name:{ en:'Espigueiro', pt:'Espigueiro' }, x:(b.x || 0) - 7.5, y:sq.y - 1.75 - 4.5, L:1.3, D:5, fl:1, fh:1.7, raise:1.0, slits:true,
+      roof:{ type:'gable', th:35, bei:0.15, mat:'stone', ridge:'y', par:0, cells:2, beirado:1 }, wall:{ mat:'granite', barra:null, cunhais:false, frames:null, buttress:0 },
+      open:{ S:[], E:[vmOp('w', 0.5, 4.5, 1.4)], N:[], W:[vmOp('w', 0.5, 4.5, 1.4)] } });
+    esp.piers = true; vm.vols.push(esp);
+    vm.els.push({ t:'alpendre', vol:0, face:'W', pos:0.5, w:5, d:2.4 });
+    const rv = i => vm.vols[i];
+    vm.rooms0 = along(b, 0, [[R.coz, 1.2], [R.sala, 0.6], [R.adega, 1.2]]).concat(along(b, 1, [[R.q, 1], [R.q, 1], [R.sala, 1.2], [R.q, 1], [R.q, 1]]),
+      along(rv(1), 0, [[R.loja, 1]]), along(rv(2), 0, [[R.corte, 1], [R.corte, 1], [R.corte, 1]]), along(rv(3), 0, [[{ en:'Alpendre', pt:'Alpendre' }, 1]]), along(sq, 1, [[R.seq, 1]])); };
   VM_OVR['pt-lavoura-sequeiro'] = (vm, b) => { granite(b);
     const W0 = { mat:'timber', barra:null, cunhais:false, frames:null, buttress:0 };
     vm.vols.push(vmVol({ name:{ en:'Sequeiro (slatted)', pt:'Sequeiro (ripado)' }, x:(b.x || 0) + b.L / 2 + 2.5, y:b.y || 0, L:5, D:b.D, fl:2, fh:b.fh, slits:true,
