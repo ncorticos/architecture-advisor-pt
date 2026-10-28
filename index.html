@@ -977,7 +977,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.177.0',
+  version:     '1.178.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4946,7 +4946,34 @@ function canopyFrame(hit) {
   const h = CANOPY_POST / 2, bw = CANOPY_BEAM[0] / 2;
   const posts = Array.from({ length:N }, (_, i) => hit.u0 + inset + (w - 2 * inset) * i / (N - 1))
     .map(u => box(at(u - h, nC - h), at(u + h, nC + h), 0, zBot));
-  return { posts, beam:box(at(hit.u0, nC - bw), at(hit.u1, nC + bw), zBot, zTop), n:N, span:(w - 2 * inset) / (N - 1), slats:pergolaParts(hit, zTop) };
+  return { posts, beam:box(at(hit.u0, nC - bw), at(hit.u1, nC + bw), zBot, zTop), n:N, span:(w - 2 * inset) / (N - 1),
+    slats:(pergolaParts(hit, zTop) || []).concat(canopyDeck(hit, at, box)) };
+}
+/** Over a raised floor (a house on stakes, the palheiro), the porch stands on a timber deck at the door's level: the boards
+    from the wall to the posts, its joists on short posts down to the ground, a timber guard round its three free sides —
+    rail and balusters — and a timber stair down to the ground at its east end, the guard open where the stair arrives.
+    World boxes, drawn by every tab with the porch's own posts and beam. */
+function canopyDeck(hit, at, box) {
+  let z = 0; try { z = raiseH(MASS); } catch (e) { z = 0; }
+  if (!(z > 0.15) || !hit || isPergola(hit.c) || !(hit.d > 0.5)) return [];
+  const out = [], u0 = hit.u0, u1 = hit.u1, d = hit.d, t = 0.1, rh = 0.9, bal = 0.04, sw = Math.min(1.0, d - 0.2);
+  out.push(box(at(u0, 0), at(u1, d), z - t, z));                                            // the boards
+  for (let u = u0 + 0.15; u <= u1 - 0.1; u += 1.6) out.push(box(at(u, d - 0.2), at(u + 0.12, d - 0.08), 0, z - t));   // its short posts
+  out.push(box(at(u1 - 0.12, d - 0.2), at(u1, d - 0.08), 0, z - t));
+  const rail = (ua, na, ub, nb) => { out.push(box(at(Math.min(ua, ub) - 0.03, Math.min(na, nb) - 0.03), at(Math.max(ua, ub) + 0.03, Math.max(na, nb) + 0.03), z + rh - 0.06, z + rh));
+    const L = Math.hypot(ub - ua, nb - na), k = Math.max(1, Math.round(L / 0.14));
+    for (let i = 0; i <= k; i++) { const uu = ua + (ub - ua) * i / k, nn = na + (nb - na) * i / k; out.push(box(at(uu - bal / 2, nn - bal / 2), at(uu + bal / 2, nn + bal / 2), z, z + rh - 0.06)); } };
+  rail(u0, d - 0.05, u1, d - 0.05);                 // the outer edge
+  rail(u0 + 0.05, 0.1, u0 + 0.05, d - 0.05);        // the west side
+  rail(u1 - 0.05, 0.1, u1 - 0.05, d - 0.05 - sw);   // the east side, open where the stair lands
+  /* the stair: treads from the deck down to the ground, running east along the wall, with its side rails */
+  const n = Math.max(2, Math.round(z / 0.18)), rise = z / n, run = 0.27, n0 = d - sw - 0.05, n1 = d - 0.05;
+  for (let i = 1; i <= n; i++) { const ua = u1 + (i - 1) * run, zt = z - i * rise; out.push(box(at(ua, n0), at(ua + run, n1), Math.max(0, zt - 0.04), Math.max(0.04, zt))); }
+  const uEnd = u1 + n * run;
+  [n0, n1].forEach(nn => { for (let i = 0; i <= n; i++) { const uu = u1 + i * run, zz = z - i * rise; out.push(box(at(uu - bal / 2, nn - bal / 2), at(uu + bal / 2, nn + bal / 2), Math.max(0, zz - 0.1), zz + rh - 0.06)); }
+    for (let i = 0; i < n; i++) { const uu = u1 + i * run, zz = z - i * rise; out.push(box(at(uu, nn - 0.03), at(uu + run, nn + 0.03), zz + rh - 0.12 - rise, zz + rh - 0.06)); } });
+  void uEnd;
+  return out;
 }
 /** Stone for canvas loops, kin to the embasamento. The treads — each box's
     top — take the lighter tone, so a flight reads as steps, not a ramp. */
@@ -15694,7 +15721,14 @@ function buildVentilation(host) {
           faceFins(w.f).map(t => fx[0] + t * (fx[1] - fx[0]))
             .forEach(uF => out.push({ ov:false, pts:[onWallV(sg, uF, v0), off(onWallV(sg, uF, v0), o.finD), off(onWallV(sg, uF, v1), o.finD), onWallV(sg, uF, v1)] }));
         }
-        glass.push([off(onWallV(sg, u0, v0), -WIN_REVEAL), off(onWallV(sg, u1, v0), -WIN_REVEAL), off(onWallV(sg, u1, v1), -WIN_REVEAL), off(onWallV(sg, u0, v1), -WIN_REVEAL)]);
+        const quad = (a, b, z0, z1) => [off(onWallV(sg, a, z0), -WIN_REVEAL), off(onWallV(sg, b, z0), -WIN_REVEAL), off(onWallV(sg, b, z1), -WIN_REVEAL), off(onWallV(sg, a, z1), -WIN_REVEAL)];
+        /* the popular study draws its windows one by one, each at its own size and height, as on Openings — not as one band */
+        if (typeof isPopular === 'function' && isPopular()) {
+          const us = faceUnits(w.f);
+          glassSpans(w.f, u0, u1, sg.len, kv).forEach(sp => { const u = us[sp.ui]; if (!sp.on || !u || sp.b - sp.a < 0.05) return;
+            const eu = unitFloor(u, kv), vv = eu.door ? doorSpanV(u, v1, kv, G.fh) : unitSpanV(u, v0, v1, kv, G.fh), z1 = Math.min(vv[1], H0);
+            if (z1 - vv[0] >= 0.1) glass.push(quad(sp.a, sp.b, vv[0], z1)); });
+        } else glass.push(quad(u0, u1, v0, v1));
       });
       return { glass, devs:out };
     };
@@ -19743,6 +19777,7 @@ function vernApply(scope) {
   const R = vernRead();
   if (!R) return;
   const m = R.T.model, all = scope === 'all';
+  if (all) { R.V.bodyStudy = {}; R.V.work = 0; }
   if (all || scope === 'site') {
     MASS.L = m.L; MASS.D = m.D; MASS.fl = m.fl; MASS.fh = m.fh; MASS.rot = m.rot;
     MASS.form = m.form; MASS.wing = m.wing ? Object.assign({}, m.wing) : null;
@@ -25173,7 +25208,27 @@ function vmChimToRoof(vm, wi) {
 /** The body the other tabs work on: picked from the model's bodies, the rest staying as glass around it. */
 function vmWorkOn(i) {
   const R = vernRead(); if (!R) return; const vm = R.V.vm || (R.V.vm = vmFromType(R.type));
-  R.V.work = Math.max(0, Math.min(i, vm.vols.length - 1)); vmPassToStudy(vm, R.V.work);
+  const prev = Math.min(R.V.work || 0, vm.vols.length - 1), next = Math.max(0, Math.min(i, vm.vols.length - 1));
+  /* each building keeps what the student set on it in the tabs — its plan, roof and pitch, its openings — and
+     the model's drawing follows, so the others see it as it now is */
+  const keep = R.V.bodyStudy || (R.V.bodyStudy = {});
+  if (prev !== next || !keep[prev]) {
+    keep[prev] = JSON.parse(JSON.stringify({ MASS, ROOF, OPEN }));
+    const v = vm.vols[prev];
+    if (v && (MASS.form || 'rect') === 'rect') { v.L = MASS.L; v.D = MASS.D; v.fl = MASS.fl; v.fh = MASS.fh;
+      const z = ROOF.zones && ROOF.zones[0], n = z ? z.n : ROOF.n, th = z ? z.th : ROOF.th;
+      if (v.roof && !['cone', 'dome', 'pyramid', 'tesoura', 'ground'].includes(v.roof.type)) { v.roof.type = ['flat', 'shed', 'gable', 'hip'][n] || v.roof.type; v.roof.th = n === 0 ? 0 : th; } }
+  }
+  R.V.work = next;
+  const put = (T, S) => { Object.keys(T).forEach(k => delete T[k]); Object.assign(T, S); };
+  if (keep[next] && prev !== next) { const S = JSON.parse(JSON.stringify(keep[next])); put(MASS, S.MASS); put(ROOF, S.ROOF); put(OPEN, S.OPEN);
+    toast(VMT('Now working on: ', 'Agora a trabalhar: ') + VL(vm.vols[next].name)); refreshAll(); return; }
+  /* first time on this building: its plan and roof from the model, and its own openings, one by one */
+  const v = vm.vols[next];
+  if (next !== 0 && v) ['S', 'N', 'E', 'W'].forEach(f => { let u = null;
+    try { u = vernOpenUnits(f, { vols:[v] }, { L:v.L, D:v.D, fl:v.fl, fh:v.fh, roof:{}, open:{}, balc:0 }); } catch (e) { u = null; }
+    OPEN[f] = u || { wwr:0, sillZ:0.9, headZ:1.8, ovD:0, ovN:1, ovL:0, ovR:0, finD:0, finN:0, finSide:'both', units:[] }; });
+  vmPassToStudy(vm, next);
 }
 /** Above each tab of the popular study, when the model has several bodies: one chip per body, drawn with the others as glass. */
 function bodyBar(host) {
