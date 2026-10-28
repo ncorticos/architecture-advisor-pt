@@ -976,7 +976,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.169.1',
+  version:     '1.169.2',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -21455,7 +21455,15 @@ function vIcon(key, size) {
       face([P(bx, ay, h), P(bx, by, h), P(bx, ym, hr)], vShade(wc, 0.82), 0.04);
       const f = [P(ax - e, ay - e, h - e * t), P(bx + e, ay - e, h - e * t), P(bx + e, ym, hr), P(ax - e, ym, hr)];
       face(f, c); ticks(f[0], f[1], f[2], f[3], bx - ax, 0.6, 'rgba(0,0,0,.18)', 0.03); } };
-  if (yd) {
+  /* a sequeiro joined at the west gable: the slatted two-storey drying room under its own roof, behind the house's corner */
+  const sqI = m.sequeiro && !m.icon && !urban ? m.sequeiro : null;
+  const sqDraw = () => { const Ls = sqI.L || 5, hs = H - 0.2, tc = '#8A6A48';
+    yBox(-Ls, 0, 0, Dd, hs, tc);
+    for (let t = -Ls + 0.25; t < -0.1; t += 0.3) line(P(t, -0.01, fh + 0.2), P(t, -0.01, hs - 0.15), 'rgba(40,30,20,.55)', 0.035);
+    face([P(-Ls + 0.3, -0.01, 0), P(-0.3, -0.01, 0), P(-0.3, -0.01, fh - 0.4), P(-Ls + 0.3, -0.01, fh - 0.4)], '#4A4038', 0.03);
+    yRoof(-Ls, 0, 0, Dd, hs, true); };
+  if (sqI && !m.yard) { ground(L / 2 - (sqI.L || 5) / 2, Dd / 2, Math.hypot(L + (sqI.L || 5), Dd) / 2 + 1.4); sqDraw(); }
+  else if (yd) {
     const yW = yd.W || L, yD = yd.D || 0, E = yd.eira, G = yd.espig;
     const xmin = Math.min(0, (L - yW) / 2, E ? E.x : 0, G ? G.x - 0.8 : 0), xmax = Math.max(L, (L + yW) / 2, E ? E.x + E.w : 0);
     const ymin = yd.front ? -yD - 0.4 : Math.min(0, E ? -(E.d + 0.8) : 0, G ? -(G.L + 0.8) : 0), ymax = yd.front ? Dd : Dd + yD;
@@ -22621,7 +22629,7 @@ const BASE_TYPES = {
     ] },
   'pt-tm-alpendrada':{ region:'mainland',
     name:{ en:'Trás-os-Montes house with recessed varanda (casa alpendrada)', pt:'Casa alpendrada transmontana (varanda recolhida)' },
-    where:{ en:'The schist and granite villages of Trás-os-Montes and the Alto Douro — round Vila Real, Mirandela, Moncorvo (Felgar)', pt:'As aldeias de xisto e granito de Trás-os-Montes e do Alto Douro — em volta de Vila Real, Mirandela, Moncorvo (Felgar)' },
+    where:{ en:'The schist and granite villages of Trás-os-Montes and the Alto Douro — round Vila Real, Mirandela, Moncorvo (Felgar), and the Douro Superior down to Freixo de Espada à Cinta', pt:'As aldeias de xisto e granito de Trás-os-Montes e do Alto Douro — em volta de Vila Real, Mirandela, Moncorvo (Felgar), e o Douro Superior até Freixo de Espada à Cinta' },
     summary:{ en:'Two storeys of schist or granite, the varanda recessed into the middle of the front under the main roof, stores and animals below; two slopes of tile. At Felgar (Moncorvo) the potters set the tops of broken water jars on the roofs as chimneys (Jorge Dias).',
       pt:'Dois pisos de xisto ou granito, a varanda recolhida a meio da fachada sob o telhado principal, lojas e animais em baixo; duas águas de telha. No Felgar (Moncorvo) os oleiros pousam nos telhados as partes superiores das talhas como chaminés (Jorge Dias).' },
     model:{ L:10, D:7, fl:2, fh:2.6, rot:180, form:'rect', loggia:{ w:3.6, d:1.8, lv:2, at:0.22 }, balc:1.2, balcAt:0.46, roof:{ n:2, th:22, bei:0.35 },
@@ -22877,6 +22885,7 @@ VERN_DIST['pt-cardenha'] = ['Viana do Castelo'];
 VERN_DIST['pt-forno-comum'] = ['Bragança', 'Vila Real', 'Viana do Castelo', 'Braga', 'Castelo Branco'];
 vAddT('pt-forno-comum', [vI('site', { en:'Still in use or kept: Rio de Onor (oven, forge and mills, all communal), Pitões das Júnias, Vila da Ponte (Montalegre) on its «rota do pão» with the canastros.', pt:'Ainda em uso ou conservados: Rio de Onor (forno, forja e moinhos, todos comunitários), Pitões das Júnias, Vila da Ponte (Montalegre) na sua «rota do pão» com os canastros.' }, 'ANP')]);
 vAddT('pt-tmontes', [vI('site', { en:'Pitões das Júnias (Barroso): an arch over the main street carries a passage linking the dwellings to the cattle byres (cortes); some houses keep their thatch. Montesinho: granite houses with slate roofs and timber varandas open to the serra. Rio de Onor: schist mountain houses with porched varandas.', pt:'Pitões das Júnias (Barroso): um arco sobre a rua principal leva uma passagem que liga as habitações às cortes do gado; algumas casas guardam o colmo. Montesinho: casas de granito com telhados de lousa e varandas de madeira abertas para a serra. Rio de Onor: casas serranas de xisto com varandas alpendradas.' }, 'ANP')]);
+vAddT('pt-tm-alpendrada', [vI('site', { en:'Arquitectura popular em Portugal (zone 2, Trás-os-Montes) places the house with its varanda under the main roof in the Douro Superior too, as far as Freixo de Espada à Cinta.', pt:'A Arquitectura popular em Portugal (zona 2, Trás-os-Montes) situa também a casa com a varanda sob o telhado principal no Douro Superior, até Freixo de Espada à Cinta.' }, 'INQ')]);
 vAddT('pt-tm-alpendrada', [vI('site', { en:'Picote and Abreiro: plain granite houses with the typical timber varandas, beside the manor houses of the village.', pt:'Picote e Abreiro: singelas casas de granito com as típicas varandas de madeira, ao lado das casas senhoriais da aldeia.' }, 'ANP')]);
 vAddT('pt-minho', [vI('site', { en:'Ponte de Mouro (Monção), Sistelo, Urjal (Amares): granite houses on two floors — the dwelling above, the cattle byres (cortes) below — among terraces of maize and pasture, with their espigueiros, mills and public wash-houses.', pt:'Ponte de Mouro (Monção), Sistelo, Urjal (Amares): casas de granito de dois pisos — habitação em cima, cortes dos animais em baixo — entre socalcos de milho e pasto, com os seus espigueiros, moinhos e lavadouros públicos.' }, 'ANP')]);
 vAddT('pt-freita', [vI('site', { en:'By the Paiva (Arouca): Meitriz and Paradinha, houses of schist and slate on terraces, with eiras, canastros, espigueiros, ovens, wine cellars and olive presses.', pt:'Junto ao Paiva (Arouca): Meitriz e Paradinha, casario de xisto e ardósia em socalcos, com eiras, canastros, espigueiros, fornos, adegas e lagares de azeite.' }, 'ANP')]);
@@ -25944,20 +25953,26 @@ Object.assign(VERN_SRC, {
     where:{ en:'The Minho lowlands — Vale (Adaúfe), Alívio (Soutelo)', pt:'As terras baixas do Minho — Vale (Adaúfe), Alívio (Soutelo)' },
     summary:{ en:'The house that takes in its sequeiro: the slatted drying room on the upper floor, joined to the dwelling, makes the south or west front, the eira below and beyond it, the espigueiro beside — sun and wind working the maize. Below, the loja, the kitchen and the cortes; above, the bedrooms, the sala and the sequeiro, which shades the next room and works as its antechamber — cooler in summer, and in winter its open slats chill it. At Alívio the sequeiro takes almost half of the first floor. The kitchen, between corte and loja, unlined and without a chimney — the smoke through a strip of tiles laid flatter — its door sheltered by the upper floor carried out as an alpendre the length of the front. Built in phases: rubble below and round the bedrooms, coursed granite blocks (perpianho) for the sala and the sequeiro.',
       pt:'A casa que integra o seu sequeiro: a dependência ripada de secagem no piso de cima, junta à habitação, define a fachada sul ou poente, a eira por baixo e em frente, o espigueiro ao lado — o sol e o vento a tratar o milho. Em baixo, a loja, a cozinha e as cortes; em cima, os quartos, a sala e o sequeiro, que sombreia a divisão seguinte e lhe serve de antecâmara — mais fresca no verão, e no inverno arrefecida pelo ripado aberto. No Alívio o sequeiro ocupa quase metade do primeiro piso. A cozinha, entre a corte e a loja, sem forro e sem chaminé — o fumo sai por uma faixa de telhas de menor inclinação — tem a porta abrigada pelo piso de cima, que avança em alpendre por toda a fachada. Construída por fases: alvenaria irregular em baixo e nos quartos, blocos de granito em fiadas (perpianho) na sala e no sequeiro.' },
-    model:{ L:15, D:7, fl:2, fh:2.6, rot:210, form:'rect', roof:{ n:2, th:24, bei:0.6 }, yard:{ eira:{ x:3, w:9, d:6 }, espig:{ x:0.4, L:5 } },
-      open:{ S:vOpen([D(0.15, 0.1, dn2), D(0.4, 0.1, dn2), W(0.55, 0.12, up2), W(0.8, 0.12, up2), D(0.92, 0.08, dn2)], 0.1),
-        N:{ wwr:0.01, units:vOff() }, E:vOpen([W(0.5, 0.1, up2)], 0.02), W:vOpen([W(0.5, 0.05, [{ on:true }, { on:false }])], 0.01) },
+    /* as at Vale (Adaúfe): along the north–south road, the front onto the quinteiro to the east with nearly all the openings —
+       the doors of the cortes, the loja and the kitchen under the alpendre, the bedrooms' windows, the sala glazed like a
+       varanda, the stone stair to its landing — the back on the road blind but for the kitchen's small window, the
+       sequeiro at the south end opening west over the eira */
+    model:{ L:15, D:7, fl:2, fh:2.6, rot:90, form:'rect', roof:{ n:2, th:24, bei:0.6 }, balc:1.4, balcAt:0.5, balcLv:2, sequeiro:{ L:5, side:'W' },
+      open:{ S:vOpen([D(0.12, 0.1, [{ door:true }, { on:true, door:false }]), D(0.32, 0.08, [{ door:true }, { on:true, door:false }]), D(0.5, 0.07, [{ on:false }, { door:true }]),
+          D(0.62, 0.08, dn2), W(0.78, 0.22, up2), D(0.9, 0.1, dn2)], 0.1),
+        N:vOpen([W(0.62, 0.04, [{ on:true }, { on:false }])], 0.005), E:vOpen([W(0.5, 0.08, up2)], 0.01), W:{ wwr:0.01, units:vOff() } },
       render:{ en:'granite stone walls, tile roof, green door', pt:'paredes de granito, telhado de telha, porta verde' },
       walls:{ en:'granite: irregular rubble on the ground floor and round the bedrooms, coursed blocks (perpianho) in the later sala and sequeiro; the sequeiro walled in timber slats (ripado) between stone pillars', pt:'granito: alvenaria irregular no rés-do-chão e nos quartos, blocos em fiadas (perpianho) na sala e no sequeiro, mais tardios; o sequeiro em ripado de madeira entre pilares de pedra' } },
     feats:[
       vFloors({ en:'2', pt:'2' }, 2, 2, 'MOT'),
-      vFacing({ en:'the sequeiro to the south–west quadrant, for the strongest sun', pt:'o sequeiro no quadrante sul–poente, para o sol mais forte' }, 160, 270, 'MOT'),
+      vFacing({ en:'the quinteiro front to the east; the sequeiro, at the south end, opens west', pt:'a frente do quinteiro a nascente; o sequeiro, no topo sul, abre a poente' }, 60, 150, 'MOT'),
       vRoofN(null, { en:'two slopes, tile', pt:'duas águas, telha' }, [2, 3], 'MOT'),
       vPitch({ en:'tile', pt:'telha' }, 20, 32, 'INF'),
       vWall({ en:'granite', pt:'granito' }, ['stone'], 'MOT'),
       vI('site', { en:'Sequeiro, eira and espigueiro: walls, pillars and lintels of stone, tiled roof on timber, slatted fronts and shutters for air; the eira in front of the sequeiro on the same sun; the espigueiro raised on columns capped by rat-stones, out of the damp and in the wind.', pt:'Sequeiro, eira e espigueiro: muros, pilares e lintéis de pedra, cobertura de telha sobre madeira, fachadas e portadas ripadas para o ar; a eira em frente do sequeiro, com o mesmo sol; o espigueiro sobre colunas coroadas por mós que travam os ratos, fora da humidade e ao vento.' }, 'MOT'),
       vI('site', { en:'Measured (Couto, spring 2013): the south-west sequeiro stayed drier and usually warmer than the outside — right for drying; the sala behind it did not warm up: the sequeiro acts as an antechamber, trimming the losses more than adding heat.', pt:'Medido (Couto, primavera de 2013): o sequeiro a sudoeste esteve mais seco e em regra mais quente do que o exterior — certo para secar; a sala por trás não aqueceu: o sequeiro funciona como antecâmara, reduzindo as perdas mais do que somando calor.' }, 'MOT'),
       vI('openings', { en:'At Vale the sequeiro opens to the west, for the low sun that reaches deep inside; at Palmeira to the east, for the first morning sun.', pt:'No Vale, o sequeiro abre a poente, para o sol baixo que entra em profundidade; em Palmeira, a nascente, para os primeiros raios da manhã.' }, 'MOT'),
+      vI('openings', { en:'Nearly all the openings face the quinteiro: the doors below, the bedrooms\u2019 windows above, the sala glazed like a varanda, the stone stair from the quinteiro to the upper floor. The house stands on the road but opens nothing to it; on that side the kitchen has only a small window.', pt:'Quase todos os vãos dão para o quinteiro: as portas em baixo, as janelas dos quartos em cima, a sala envidraçada como uma varanda, a escada de pedra do quinteiro para o piso de cima. A casa está junto ao caminho mas não lhe abre nada; desse lado a cozinha tem só uma pequena janela.' }, 'MOT'),
       vI('ventilation', { en:'The kitchen between corte and loja has little outside wall — few losses, few gains — and only the hearth and oven to warm it; one small window to the west for light.', pt:'A cozinha entre a corte e a loja tem pouca parede exterior — poucas perdas e poucos ganhos — e só a lareira e o forno para a aquecer; uma pequena janela a poente para a luz.' }, 'MOT')
     ] }),
 
@@ -26028,16 +26043,25 @@ Object.assign(VERN_SRC, {
     vm.rooms0 = along(b, 0, [[R.coz, 1.2], [R.sala, 0.6], [R.adega, 1.2]]).concat(along(b, 1, [[R.q, 1], [R.q, 1], [R.sala, 1.2], [R.q, 1], [R.q, 1]]),
       along(rv(1), 0, [[R.loja, 1]]), along(rv(2), 0, [[R.corte, 1], [R.corte, 1], [R.corte, 1]]), along(rv(3), 0, [[{ en:'Alpendre', pt:'Alpendre' }, 1]]), along(sq, 1, [[R.seq, 1]])); };
   VM_OVR['pt-lavoura-sequeiro'] = (vm, b) => { granite(b);
-    const W0 = { mat:'timber', barra:null, cunhais:false, frames:null, buttress:0 };
-    vm.vols.push(vmVol({ name:{ en:'Sequeiro (slatted)', pt:'Sequeiro (ripado)' }, x:(b.x || 0) + b.L / 2 + 2.5, y:b.y || 0, L:5, D:b.D, fl:2, fh:b.fh, slits:true,
-      roof:{ type:'gable', th:b.roof.th, bei:0.6, mat:'tile', ridge:'auto', par:0, cells:2, beirado:1 }, wall:W0,
-      open:{ S:[vmOp('d', 0.5, 3.6, 2.2, 0), vmOp('w', 0.5, 4.0, 1.4, 1)], E:[vmOp('w', 0.5, 5.0, 1.4, 1)], N:[vmOp('w', 0.5, 3.6, 1.4, 1)], W:[] } }));
-    const esp = vmVol({ name:{ en:'Espigueiro', pt:'Espigueiro' }, x:(b.x || 0) + b.L / 2 + 2.5, y:(b.y || 0) - b.D / 2 - 6, L:5, D:1.3, fl:1, fh:1.7, raise:1.0, slits:true,
-      roof:{ type:'gable', th:35, bei:0.15, mat:'stone', ridge:'x', par:0, cells:2, beirado:1 }, wall:{ mat:'granite', barra:null, cunhais:false, frames:null, buttress:0 },
-      open:{ S:[vmOp('w', 0.5, 4.5, 1.4)], E:[], N:[vmOp('w', 0.5, 4.5, 1.4)], W:[] } });
+    /* the openings at their own sizes (m), on the quinteiro front (the model's S, to the east) and the blind back on the road */
+    b.open.S = [vmOp('d', 0.12, 1.2, 2.0, 0), vmOp('d', 0.32, 1.0, 2.0, 0), vmOp('d', 0.62, 0.9, 2.0, 0), vmOp('d', 0.9, 1.2, 2.0, 0),
+      vmOp('w', 0.12, 0.7, 1.0, 1), vmOp('w', 0.32, 0.7, 1.0, 1), vmOp('d', 0.5, 0.8, 2.0, 1), vmOp('w', 0.78, 2.6, 1.3, 1)];
+    b.open.N = [vmOp('w', 0.62, 0.4, 0.5, 0)]; b.open.E = [vmOp('w', 0.5, 0.5, 0.6, 1)]; b.open.W = [];
+    /* the stone stair from the quinteiro to the upper door, on its own landing — no varanda */
+    vm.els = vm.els.filter(e => e.t !== 'varanda'); vm.els.forEach(e => { if (e.t === 'stair') e.pos = 0.36; });
+    /* the sequeiro at the south end (the model's W), its slats open west (the model's N) over the eira; the espigueiro beside the eira */
+    const W0 = { mat:'timber', barra:null, cunhais:false, frames:null, buttress:0 }, sx = (b.x || 0) - b.L / 2 - 2.5;
+    vm.vols.push(vmVol({ name:{ en:'Sequeiro (slatted, opening west)', pt:'Sequeiro (ripado, aberto a poente)' }, x:sx, y:b.y || 0, L:5, D:b.D, fl:2, fh:b.fh, slits:true,
+      roof:{ type:'gable', th:b.roof.th, bei:0.6, mat:'tile', ridge:'y', par:0, cells:2, beirado:1 }, wall:W0,
+      open:{ S:[vmOp('w', 0.5, 3.6, 1.4, 1)], E:[], N:[vmOp('d', 0.5, 3.6, 2.2, 0), vmOp('w', 0.5, 4.0, 1.4, 1)], W:[vmOp('w', 0.5, 5.0, 1.4, 1)] } }));
+    vm.vols.push(vmVol({ name:{ en:'Eira (granite threshing floor)', pt:'Eira (lajeado de granito)' }, x:sx + 1, y:(b.y || 0) + b.D / 2 + 4.5, L:9, D:7, fl:1, fh:0.2,
+      roof:{ type:'flat', th:0, bei:0, mat:'stone', ridge:'auto', par:0, cells:2, beirado:1 }, wall:{ mat:'granite', barra:null, cunhais:false, frames:null, buttress:0 }, open:{ S:[], E:[], N:[], W:[] } }));
+    const esp = vmVol({ name:{ en:'Espigueiro', pt:'Espigueiro' }, x:sx + 7.5, y:(b.y || 0) + b.D / 2 + 4.5, L:1.3, D:5, fl:1, fh:1.7, raise:1.0, slits:true,
+      roof:{ type:'gable', th:35, bei:0.15, mat:'stone', ridge:'y', par:0, cells:2, beirado:1 }, wall:{ mat:'granite', barra:null, cunhais:false, frames:null, buttress:0 },
+      open:{ S:[], E:[vmOp('w', 0.5, 4.5, 1.4)], N:[], W:[vmOp('w', 0.5, 4.5, 1.4)] } });
     esp.piers = true; vm.vols.push(esp);
-    vm.els.push({ t:'alpendre', vol:0, face:'S', pos:0.4, w:Math.min(8, b.L - 2), d:1.6 });
-    vm.rooms0 = along(b, 0, [[R.loja, 1], [R.coz, 1], [R.corte, 1.2]]).concat(along(b, 1, [[R.q, 1], [R.q, 1], [R.sala, 1.2]])); };
+    vm.els.push({ t:'alpendre', vol:0, face:'S', pos:0.62, w:Math.min(8, b.L - 2), d:1.6 });
+    vm.rooms0 = along(b, 0, [[R.corte, 1], [R.loja, 1], [R.coz, 1], [R.corte, 1]]).concat(along(b, 1, [[R.q, 1], [R.q, 1], [R.sala, 1.4]])); };
   VM_OVR['pt-lavoura-escada'] = (vm, b) => { granite(b);
     vm.els.forEach(e => { if (e.t === 'varanda') e.kind = 'envidracada'; });
     /* the stair is inside the plan, at the varanda's end — a room, not the modeller's outside stair */
