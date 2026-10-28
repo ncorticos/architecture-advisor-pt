@@ -977,7 +977,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.173.0',
+  version:     '1.174.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -4472,7 +4472,12 @@ const RW_SIZES = {
   '78x140':{ w:0.78, h:1.40, label:'78 x 140 cm' },
   '114x118':{ w:1.14, h:1.18, label:'114 x 118 cm' }
 };
-const rwSizeNow = () => RW_SIZES[RWIN.size] || RW_SIZES['78x140'];
+/* RW_W / RW_H bound a roof window the student types in (size 'custom'):
+   width across the slope, length down it, as built by the catalogue's kin */
+const RW_W = [0.3, 2.5], RW_H = [0.3, 3.0];
+const rwSizeNow = () => RWIN.size === 'custom' && isFinite(+RWIN.cw) && isFinite(+RWIN.ch)
+  ? { w:clamp(+RWIN.cw, RW_W[0], RW_W[1]), h:clamp(+RWIN.ch, RW_H[0], RW_H[1]), label:fmt(clamp(+RWIN.cw, RW_W[0], RW_W[1]) * 100, 0) + ' x ' + fmt(clamp(+RWIN.ch, RW_H[0], RW_H[1]) * 100, 0) + ' cm' }
+  : RW_SIZES[RWIN.size] || RW_SIZES['78x140'];
 /** A roof plane for one way of facing, with its range along the fall (d,
     the height above its eave over the pitch's tangent) and across it (q). */
 function roofPlaneFor(G, RF, dir) {
@@ -5595,7 +5600,7 @@ function faceUnits(f) {
   if (!Array.isArray(o.units)) o.units = [{ on:true, frac:1, off:0 }];
   o.units = o.units.filter(w => w && isFinite(+w.frac) && +w.frac > 0).slice(0, 6);
   /* an emptied side stays empty: no glass, honest zeros everywhere */
-  o.units.forEach(w => { w.on = w.on !== false; w.frac = +w.frac; w.off = isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0; w.up = isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0; w.gel = !!w.gel && !w.door; w.ht = isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined; w.sl = isFinite(+w.sl) ? Math.max(-0.5, Math.min(2.5, +w.sl)) : undefined; });
+  o.units.forEach(w => { w.on = w.on !== false; w.frac = +w.frac; w.off = isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0; w.up = isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0; w.gel = !!w.gel && !w.door; w.ht = isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined; w.sl = isFinite(+w.sl) ? Math.max(-3, Math.min(30, +w.sl)) : undefined; });
   /* independence, backfilled once: units saved before anchors existed keep
      exactly where the old side-by-side tiling had them — each takes the
      centre the chain gave it, then never follows another unit again */
@@ -11659,10 +11664,12 @@ function buildOpenings(host) {
           if (v > wMax + 1e-6) toast(t('At most') + ' ' + fmt(wMax, 2) + ' m — ' + t('raise the window-to-wall ratio for a wider opening'));
           WV(u).frac = clamp(clamp(v, 0.3, wMax) / Math.max(0.3, d.band), 0.03, 0.95);
         }), txtN('m')]),
-        el('label', null, [txtN(t('Height')), numIn(d.H, 0.3, +(d.door ? G.fh - 0.1 : maxTop - d.z0).toFixed(2), v => {
-          const hi = d.door ? G.fh - 0.1 : maxTop - d.z0;
-          WV(u).ht = +clamp(v, 0.3, Math.max(0.3, hi)).toFixed(2);
-          if (d.door) WV(u).up = 0;
+        el('label', null, [txtN(t('Height')), numIn(d.H, 0.3, +(d.door ? G.fh - 0.1 : maxTop - zFloor).toFixed(2), v => {
+          if (d.door) { WV(u).ht = +clamp(v, 0.3, Math.max(0.3, G.fh - 0.1)).toFixed(2); WV(u).up = 0; return; }
+          /* a window taller than the room above its sill lowers the sill to fit */
+          const hh = clamp(v, 0.3, Math.max(0.3, maxTop - zFloor)), W = WV(u);
+          if (d.z0 + hh > maxTop) { W.sl = +Math.max(zFloor, maxTop - hh).toFixed(2); W.up = 0; }
+          W.ht = +hh.toFixed(2);
         }), txtN('m')])];
       if (!d.door) kids.push(el('label', null, [txtN(t('Sill')), numIn(d.sill, 0, +Math.max(0, maxTop - zFloor - d.H).toFixed(2), v => {
         const W = WV(u); W.sl = +(zFloor + clamp(v, 0, Math.max(0, maxTop - zFloor - d.H))).toFixed(2); W.up = 0;
@@ -11816,6 +11823,37 @@ function buildOpenings(host) {
     clerBox.appendChild(controls([cCwwr, cCsill, cChead]));
     clerBox._sync = () => { syncCtl(cCwwr, Math.round(o.wwr * 100), v => fmt(v, 0) + '%'); syncCtl(cCsill, o.sillZ, v => fmt(v, 2) + ' m'); syncCtl(cChead, o.headZ, v => fmt(v, 2) + ' m'); };
     const rows = [];
+    /* each opening's size typed, as on the sides: width along the step wall,
+       height, and for a window its sill above the lower roof — read off the
+       first step wall, written back as its share, height and sill */
+    const cw0 = stepWinList(Mod(), h0(), RF)[0];
+    const txtC = x => document.createTextNode(x);
+    const numC = (val, lo, hi, set) => el('input', { type:'number', min:lo, max:hi, step:0.05, value:+val.toFixed(2), inputmode:'decimal',
+      onchange:e => { const v = parseFloat(String(e.target.value).replace(',', '.')); if (isFinite(v)) set(v); buildClerUI(); refreshOpenings(); } });
+    const clerDims = (u, i) => {
+      if (!cw0 || !u.on) return null;
+      const w = cw0.w, r = w.rows[0], H = Math.max(0.3, w.ceil - w.base);
+      const sp = glassSpans('C', w.uc - w.w / 2, w.uc + w.w / 2, cw0.sg.len, 0).filter(q => q.ui === i && q.b - q.a > 0.05)[0];
+      const vv = spanVC(u, r.sill, r.head, w.base, w.ceil), W = sp ? sp.b - sp.a : u.frac * w.w, Hh = vv[1] - vv[0], sill = vv[0] - w.base;
+      const wMax = 0.95 * w.w;
+      const kids = [
+        el('label', null, [txtC(t('Width')), numC(W, 0.3, +wMax.toFixed(2), v => {
+          if (v > wMax + 1e-6) toast(t('At most') + ' ' + fmt(wMax, 2) + ' m — ' + t('raise the window-to-wall ratio for a wider opening'));
+          u.frac = clamp(clamp(v, 0.3, wMax) / Math.max(0.3, w.w), 0.05, 0.95);
+        }), txtC('m')]),
+        el('label', null, [txtC(t('Height')), numC(Hh, 0.3, +Math.max(0.3, H - (u.door ? 0.05 : 0)).toFixed(2), v => {
+          if (u.door) { u.ht = +clamp(v, 0.3, Math.max(0.3, H - 0.05)).toFixed(2); return; }
+          /* taller than the wall above its sill: the sill comes down to fit */
+          const hh = clamp(v, 0.3, Math.max(0.3, H));
+          if (sill + hh > H) { u.sl = +(Math.max(0, H - hh) - OPEN.C.sillZ).toFixed(2); u.up = 0; }
+          u.ht = +hh.toFixed(2);
+        }), txtC('m')])];
+      if (!u.door) kids.push(el('label', null, [txtC(t('Sill')), numC(sill, 0, +Math.max(0, H - Hh).toFixed(2), v => {
+        u.sl = +(clamp(v, 0, Math.max(0, H - Hh)) - OPEN.C.sillZ).toFixed(2); u.up = 0;
+        if (!isFinite(+u.ht)) u.ht = +Hh.toFixed(2);   // keep its height while the sill moves
+      }), txtC('m')]));
+      return el('div', { class:'udims' }, kids);
+    };
     faceUnits('C').forEach((u, i) => {
       const chk = checkCtl(openTag('C', i, 0), u.on, v => { u.on = v; updateClerTexts(); refreshOpenings(); });
       const gel = el('button', { class:'btn small' + (u.gel ? ' solid' : ''), text:t('brick ventilation'), title:t('A breeze-block panel instead of glass: ventilated, no view'),
@@ -11832,6 +11870,8 @@ function buildOpenings(host) {
       const r = { m:el('div', { class:'hint' }) };
       rows.push(r);
       clerBox.appendChild(el('div', { class:'urow' }, [chk, dor, gel, del, r.m]));
+      const cd = clerDims(u, i);
+      if (cd) clerBox.appendChild(cd);
       clerBox.appendChild(sh);
       clerBox.appendChild(ps);
     });
@@ -11901,13 +11941,23 @@ function buildOpenings(host) {
   const roofRow = slope => roofRowOf(G, RF, slope);
   const rwArea = () => ['S', 'N', 'E', 'W', 'F'].reduce((a, sl) => { const r = roofRow(sl); return a + (r ? r.quads.length * rwSize().w * rwSize().h : 0); }, 0);
   rail.appendChild(el('div', { class:'gh', text:'Roof windows' }));
-  const cRwSize = selectCtl('Standard size', Object.keys(RW_SIZES).map(k => ({ value:k, label:RW_SIZES[k].label })), RWIN.size,
-    v => { RWIN.size = v; refreshOpenings(); });
+  const cRwSize = selectCtl('Standard size', Object.keys(RW_SIZES).map(k => ({ value:k, label:RW_SIZES[k].label })).concat([{ value:'custom', label:t('Custom (typed below)') }]), RWIN.size,
+    v => { RWIN.size = v; if (RW_SIZES[v]) { RWIN.cw = RW_SIZES[v].w; RWIN.ch = RW_SIZES[v].h; } syncRwDims(); refreshOpenings(); });
+  /* or typed: width across the slope, length down it — any value turns the size to custom */
+  const rwNum = (val, lo, hi, set) => el('input', { type:'number', min:lo, max:hi, step:0.01, value:+val.toFixed(2), inputmode:'decimal',
+    onchange:e => { const v = parseFloat(String(e.target.value).replace(',', '.')); if (isFinite(v)) set(clamp(v, lo, hi)); syncRwDims(); refreshOpenings(); } });
+  const setCustom = () => { const z = rwSizeNow(); RWIN.cw = z.w; RWIN.ch = z.h; RWIN.size = 'custom'; const sel = cRwSize.querySelector('select'); if (sel) sel.value = 'custom'; };
+  const rwWin = rwNum(rwSizeNow().w, RW_W[0], RW_W[1], v => { setCustom(); RWIN.cw = v; });
+  const rwHin = rwNum(rwSizeNow().h, RW_H[0], RW_H[1], v => { setCustom(); RWIN.ch = v; });
+  const syncRwDims = () => { const z = rwSizeNow(); rwWin.value = +z.w.toFixed(2); rwHin.value = +z.h.toFixed(2); };
+  const rwDims = el('div', { class:'udims' }, [
+    el('label', null, [document.createTextNode(t('Width')), rwWin, document.createTextNode('m')]),
+    el('label', null, [document.createTextNode(t('Length down the slope')), rwHin, document.createTextNode('m')])]);
   const cRwS = rangeCtl(RF.n === 0 ? 'Skylights' : 'South slope windows', 0, 4, 1, RWIN.s, v => { RWIN.s = v; refreshOpenings(); }, v => fmt(v, 0));
   const cRwN = rangeCtl('North slope windows', 0, 4, 1, RWIN.n, v => { RWIN.n = v; refreshOpenings(); }, v => fmt(v, 0));
   const cRwE = rangeCtl('East slope windows', 0, 4, 1, RWIN.e, v => { RWIN.e = v; refreshOpenings(); }, v => fmt(v, 0));
   const cRwW = rangeCtl('West slope windows', 0, 4, 1, RWIN.w, v => { RWIN.w = v; refreshOpenings(); }, v => fmt(v, 0));
-  rail.appendChild(controls([cRwSize, cRwS, cRwN, cRwE, cRwW]));
+  rail.appendChild(controls([cRwSize, rwDims, cRwS, cRwN, cRwE, cRwW]));
   host.appendChild(hint('open-roofwin',
     'Daylight and winter sun from above: glass on the slope facing the main facade earns its keep where the climate leans heating and overheats where it leans cooling; glass on the opposite slope gives soft diffuse light with little gain either way. Each slope is the roof’s own largest plane facing that way — the slope facing the main facade is the one the Roof tab collects on, so each glazed square metre there is one less for collectors. A slope the roof does not have takes no windows. Rows centre on the widest run of their slope; drag a row’s dot to slide it up or down the slope, or, on a flat roof, along it. Windows on a slope turned away from the camera draw dashed at their true places.'));
 
@@ -12567,7 +12617,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
           rows.push(['Clerestory opening ' + (i + 1) + ' (' + fmt(q.w, 1) + ' m)' + (u && u.door && on ? ' · door' : u && u.gel && on ? ' · brick ventilation' : ''), on ? 'on' : 'off', '',
             +q.area.toFixed(2), '', vv ? fmt(vv[0], 2) : '', vv ? fmt(vv[1], 2) : '', '', '', '', '', '', '', '', '']);
         }); }
-      rows.push(['Sunspace', SUNSP.on ? SUNSP.face : 'off', '', '', '', '', '', fmt(SUNSP.depth, 2), '', '', '', '', '', fmt(SUNSP.widthFrac, 2)]);      rows.push(['Roof window size', RW_SIZES[RWIN.size].label]);
+      rows.push(['Sunspace', SUNSP.on ? SUNSP.face : 'off', '', '', '', '', '', fmt(SUNSP.depth, 2), '', '', '', '', '', fmt(SUNSP.widthFrac, 2)]);      rows.push(['Roof window size', rwSizeNow().label]);
       if (RF.n === 0) rows.push(['Skylights', RWIN.s]);
       else ['S', 'N', 'E', 'W'].forEach(sl => { const r = roofRow(sl); rows.push([{ S:'Slope facing the main facade', N:'Opposite slope', E:'East-facing slope', W:'West-facing slope' }[sl] + ' roof windows', r ? r.quads.length : 0]); });
       rows.push(['Roof glazing total (m²)', +rwArea().toFixed(1)]);
@@ -27794,7 +27844,6 @@ function studyJSON() {
     Fields this app cannot know (interior assemblies, prices, glazing spec)
     are left out so the receiver keeps its defaults. */
 const CA_HANDOFF_VERSION = '2.42.0';
-const CA_RW_SIZES = { '55x78':[0.55, 0.78], '78x98':[0.78, 0.98], '78x140':[0.78, 1.40], '114x118':[1.14, 1.18] };  // mirrors RW_SIZES in buildOpenings
 const CA_COMPASS8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const caZero8 = () => ({ N:0, NE:0, E:0, SE:0, S:0, SW:0, W:0, NW:0 });
 /* plan-frame vector of a true azimuth (same turn the app draws), inverted by
@@ -27865,7 +27914,7 @@ function collectConstructionHandoff() {
   }
   /* roof windows sit on slopes: map each slope count to that slope's true
      facing (flat roofs take skylights, bucket F = horizontal) */
-  const rwz = CA_RW_SIZES[RWIN.size] || CA_RW_SIZES['78x140'];
+  const rwz = (sz => [sz.w, sz.h])(rwSizeNow());
   const rwUnit = rwz[0] * rwz[1];
   const skyO = caZero8(); let skyF = 0;
   if (RF.n === 0) skyF = (RWIN.s || 0) * rwUnit;
@@ -28034,7 +28083,7 @@ function applyStudy(o) {
     if (Array.isArray(s.units) && s.units.length) {
       const vu = s.units.filter(w => w && isFinite(+w.frac) && +w.frac > 0).slice(0, 6)
         .map(w => {
-          const o = { on:w.on !== false, frac:+w.frac, pos:isFinite(+w.pos) ? +w.pos : undefined, door:!!w.door, gel:!!w.gel, off:isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0, up:isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0, ht:isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined, sl:isFinite(+w.sl) ? Math.max(-0.5, Math.min(2.5, +w.sl)) : undefined };
+          const o = { on:w.on !== false, frac:+w.frac, pos:isFinite(+w.pos) ? +w.pos : undefined, door:!!w.door, gel:!!w.gel, off:isFinite(+w.off) ? Math.max(-30, Math.min(30, +w.off)) : 0, up:isFinite(+w.up) ? Math.max(-30, Math.min(30, +w.up)) : 0, ht:isFinite(+w.ht) && +w.ht >= 0.1 ? +w.ht : undefined, sl:isFinite(+w.sl) ? Math.max(-3, Math.min(30, +w.sl)) : undefined };
           if (Array.isArray(w.floors)) {
             const fl = w.floors.slice(0, 3).map(F => {
               if (!F || typeof F !== 'object') return undefined;
@@ -28048,7 +28097,7 @@ function applyStudy(o) {
               if (F.rail) e.rail = true;
               if ('gel' in F) e.gel = !!F.gel;
               if (isFinite(+F.ht) && +F.ht >= 0.1) e.ht = +F.ht;
-              if (isFinite(+F.sl)) e.sl = Math.max(-0.5, Math.min(2.5, +F.sl));
+              if (isFinite(+F.sl)) e.sl = Math.max(-3, Math.min(30, +F.sl));
               return e;
             });
             if (fl.some(e => e !== undefined)) o.floors = fl;
@@ -28074,7 +28123,9 @@ function applyStudy(o) {
   const W0 = o.rwin || {};
   ['s', 'n', 'e', 'w'].forEach(k => { if (isFinite(+W0[k]) && +W0[k] >= 0 && +W0[k] <= 4) RWIN[k] = Math.round(+W0[k]); });
   ['sF', 'nF', 'eF', 'wF'].forEach(k => { if (isFinite(+W0[k])) RWIN[k] = clamp(+W0[k], 0, 1); });
-  if (typeof W0.size === 'string' && /^\d+x\d+$/.test(W0.size)) RWIN.size = W0.size;
+  if (typeof W0.size === 'string' && (/^\d+x\d+$/.test(W0.size) || W0.size === 'custom')) RWIN.size = W0.size;
+  if (isFinite(+W0.cw)) RWIN.cw = clamp(+W0.cw, RW_W[0], RW_W[1]);
+  if (isFinite(+W0.ch)) RWIN.ch = clamp(+W0.ch, RW_H[0], RW_H[1]);
   SCENE.veg.length = 0;
   (Array.isArray(o.veg) ? o.veg : []).forEach(v => { if (v && typeof v.type === 'string' && isFinite(+v.x) && isFinite(+v.y)) SCENE.veg.push(v); });
   if (o.render && typeof o.render.prompt === 'string') RENDER_PROMPT = o.render.prompt.slice(0, 500);
@@ -29381,7 +29432,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
     STUDY = null;
   }
   SUNSP = { on:false, face:'S', depth:2.2, widthFrac:0.6 };
-  RWIN = { size:'78x140', s:0, n:0, e:0, w:0, sF:0.5, nF:0.5, eF:0.35, wF:0.35, fX:0 };
+  RWIN = { size:'78x140', cw:0.78, ch:1.40, s:0, n:0, e:0, w:0, sF:0.5, nF:0.5, eF:0.35, wF:0.35, fX:0 };
   TURB = { on:false, diam:2.0, hub:9, x:16, y:10 };
   }
   const app = $('#app');
@@ -31240,6 +31291,11 @@ Object.assign(PT, {
   "At most": "No máximo",
   "Run it along the whole wall": "Estendê-la a toda a parede",
   "raise the window-to-wall ratio for a wider opening": "aumente a razão vão/parede para um vão mais largo",
+});
+
+Object.assign(PT, {
+  "Custom (typed below)": "Por medida (indicada abaixo)",
+  "Length down the slope": "Comprimento na pendente",
 });
 
 /* boot, last: a page opened in Portuguese renders its first screen with
