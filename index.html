@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.183.0',
+  version:     '1.184.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24299,7 +24299,10 @@ function vmFromType(k) {
   vm.els = vm.els.filter(e => e.t !== 'chimney');
   const ch = vmChimOf(k, wm);
   if (ch) vm.els.push(ch); else if (vmSmokeOf(k)) vm.smoke = true;
-  return vmFitOpenings(vm);
+  vmFitOpenings(vm);
+  /* a stair led to its door follows the door where the fit moved it */
+  vm.els.forEach(e => { if (e.t === 'stair' && e.toDoor && vm.vols[e.vol || 0]) vmStairFit(vm.vols[e.vol || 0], e); });
+  return vm;
 }
 /** The archetype's openings kept off the walls behind them: a door or a
     window never lands on a body's corner, on the joint with another body
@@ -24370,12 +24373,35 @@ function vmDedupeEls(vm) {
 }
 /** An outside stair up to the first upper door (or varandim) of a wall: its
     landing in front of that door, the run going off toward the longer end. */
-function vmStairTo(vm, vi, face, o) {
-  const v = vm.vols[vi], len = face === 'S' || face === 'N' ? v.L : v.D;
+function vmStairPos(v, face) {
+  const len = face === 'S' || face === 'N' ? v.L : v.D;
   const up = (v.open[face] || []).filter(q => q.fl >= 1 && q.t !== 'w').sort((a, b) => a.fl - b.fl)[0];
-  const at = up ? up.pos : 0.15;
+  return +Math.max(0.02, (up ? up.pos : 0.15) - 0.6 / len).toFixed(3);
+}
+/** Lead a stair to its door after the openings were fitted: the run goes the way that covers no
+    ground-floor door (west if east has one and west has room), and a door it still covers moves
+    under the landing — the byre or store door beneath the balcão. */
+function vmStairFit(v, e) {
+  const f = e.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D, ops = (v.open[f] || []).filter(o => o.fl === 0);
+  e.pos = vmStairPos(v, f); delete e.dir;
+  const u0 = e.pos * len, run = Math.round(((v.raise || 0) + v.fh) / 0.19) * 0.28;
+  const span = d => d > 0 ? [u0 + 1.2, Math.min(len, u0 + 1.2 + run)] : [Math.max(0, u0 - run), u0];
+  const under = (o, sp) => o.pos * len + o.w / 2 > sp[0] && o.pos * len - o.w / 2 < sp[1];
+  const cost = d => { const sp = span(d), room = d > 0 ? len - u0 - 1.2 : u0;
+    return ops.reduce((c, o) => c + (under(o, sp) ? (o.t === 'd' ? 3 : 1) : 0), 0) + (room < run ? 4 : 0); };
+  if (cost(-1) < cost(1)) e.dir = -1;
+  const sp = span(e.dir || 1), mid = u0 + 0.6;
+  ops.filter(o => o.t === 'd' && under(o, sp)).slice(0, 1).forEach(o => {
+    /* the openings in its way step aside, off the run, if the wall has room for them */
+    const moves = ops.filter(q => q !== o && Math.abs(q.pos * len - mid) <= (q.w + o.w) / 2 + 0.2).map(q => {
+      const side = q.pos * len < mid ? -1 : 1, c = mid + side * ((q.w + o.w) / 2 + 0.25);
+      return { q, c, ok:c - q.w / 2 >= 0.3 && c + q.w / 2 <= len - 0.3 && !under({ pos:c / len, w:q.w }, sp) }; });
+    if (moves.every(m => m.ok)) { moves.forEach(m => { m.q.pos = +(m.c / len).toFixed(4); }); o.pos = +(mid / len).toFixed(4); } });
+  return e;
+}
+function vmStairTo(vm, vi, face, o) {
   vm.els = (vm.els || []).filter(e => !(e.t === 'stair' && (e.vol || 0) === vi && (e.face || 'S') === face));
-  vm.els.push(Object.assign({ t:'stair', vol:vi, face, along:'par', pos:+Math.max(0.02, at - 0.6 / len).toFixed(3), w:1.0, landing:true, porch:false }, o || {}));
+  vm.els.push(Object.assign({ t:'stair', vol:vi, face, along:'par', pos:vmStairPos(vm.vols[vi], face), w:1.0, landing:true, porch:false, toDoor:true }, o || {}));
   return vm;
 }
 /* the review against the bibliography (v1.183): what each archetype's own
@@ -24409,6 +24435,41 @@ const VM_REVIEW = {
   'pt-lousa':vm => vmStairTo(vm, 0, 'S', { w:0.9 }),
   /* Zêzere: «a window, a door up steps and a porch» */
   'pt-xisto-zezere':vm => vmStairTo(vm, 0, 'S', { porch:true }),
+  /* batch 2 (v1.184) — Monsanto: houses «with a balcony (porched or not)» */
+  'pt-monsanto':vm => vmStairTo(vm, 0, 'S', { porch:true }),
+  /* saloia of two floors: «the oven moves about, and some have an outside stair» */
+  'pt-saloia-corrida':vm => { vmStairTo(vm, 0, 'S'); vm.els.push(vmOven(0, 'E', 0.5)); },
+  /* Estrela: the slope gives the street to each floor; drawn flat, a stair reaches the first, the top one a window */
+  'pt-estrela-xisto':(vm, b) => { b.open.S.forEach(o => { if (o.t === 'v' && o.fl === 2) Object.assign(o, { t:'w', w:0.8, h:1.0 }); }); vmStairTo(vm, 0, 'S'); },
+  /* Monchique: «the slope giving stores below and the dwelling above» */
+  'pt-alg-monchique':vm => vmStairTo(vm, 0, 'S'),
+  /* Pico: the half-buried store below, the house over it reached from the slope */
+  'az-pico':vm => vmStairTo(vm, 0, 'S'),
+  /* Freita: the upper sala-cozinha «reached straight from the slope or by a stone stair with a landing», the byre door under it */
+  'pt-freita':(vm, b) => { b.open.S = [vmOp('d', 0.15, 1.1, 1.9), vmOp('v', 0.2, 0.9, 2.0, 1), vmOp('w', 0.72, 0.7, 0.8, 1)]; vmStairTo(vm, 0, 'S'); },
+  /* Beira Tipo A: «the balcão — the stone stair and its landing, nearly always parallel to the front» */
+  'pt-beira-alta':vm => vmStairTo(vm, 0, 'S'),
+  /* Mondego and Trás-os-Montes: the stair ends in the porched landing, the recessed varanda on its columns — not a gallery as well */
+  'pt-mondego-alpendre':vm => { vm.els = vm.els.filter(e => !(e.t === 'varanda' && e.kind === 'corrida')); vmStairTo(vm, 0, 'S', { porch:true }); },
+  'pt-tm-alpendrada':vm => { vm.els = vm.els.filter(e => !(e.t === 'varanda' && e.kind === 'corrida')); vmStairTo(vm, 0, 'S', { porch:true }); },
+  /* Maia B: «against the inner side climbs a granite stair to a landing, both under the roof» — and «below, only stores» */
+  'pt-maia-b':(vm, b) => { b.open.N.push(vmOp('v', 0.1, 0.9, 2.1, 1)); b.open.S.push(vmOp('d', 0.25, 1.2, 2.0), vmOp('d', 0.75, 1.2, 2.0)); vmStairTo(vm, 0, 'N', { porch:true, w:1.2 }); },
+  /* torreada: the kitchen with its oven «in a one-storey annex under two slopes» */
+  'pt-torreada':vm => { const a = vm.vols[1]; a.fl = 1; a.roof = Object.assign({}, a.roof, { type:'gable' }); a.name = { en:'Kitchen with the oven', pt:'Cozinha com o forno' };
+    a.open = { S:[], E:[vmOp('w', 0.5, 0.6, 0.8)], N:[], W:[vmOp('w', 0.5, 0.6, 0.8)] }; vm.els.push(vmOven(1, 'N', 0.5)); },
+  /* Alpendrada: «a gate to the back yard, with the oven, pens, wine-cellar and firewood» */
+  'pt-alpendrada':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 3, L:b.L, D:6, h:1.8, gate:{ face:'E', pos:0.5, w:2.0 } }; vm.els.push(vmOven(0, 'N', 0.8)); },
+  /* Póvoa: «a long walled yard» behind the stone house */
+  'pt-povoa':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 4, L:b.L, D:8, h:1.8, gate:{ face:'N', pos:0.5, w:1.0 } }; },
+  /* Alentejo A1c: the «quintalão» behind, a small kitchen garden with hen-house and pen */
+  'pt-povoado':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 3, L:b.L, D:6, h:1.8, gate:{ face:'N', pos:0.5, w:1.0 } }; },
+  /* Ribatejo village: «to the street only the door and one or two windows», the yard behind */
+  'pt-rib-vila':(vm, b) => { b.open.S = [vmOp('w', 0.25, 0.8, 1.0), vmOp('d', 0.5, 1.4, 2.2), vmOp('w', 0.75, 0.8, 1.0)];
+    vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 5, L:b.L, D:10, h:2.0, gate:{ face:'N', pos:0.5, w:2.4 } }; },
+  /* Ribatejo: «in general one outside door and rare windows» */
+  'pt-ribatejo':(vm, b) => { b.open.S = [vmOp('w', 0.17, 0.6, 0.8), vmOp('d', 0.5, 0.9, 2.0), vmOp('w', 0.83, 0.6, 0.8)]; },
+  /* Cercal: laid north–south, the front to the east, «the openings only on the sheltered side, a small window to the west» */
+  'pt-cercal':(vm, b) => { const L = b.L; b.L = b.D; b.D = L; b.open = { S:[], N:[], E:b.open.S, W:[vmOp('w', 0.5, 0.5, 0.6)] }; },
 };
 /* what the sources add to the archetypes the one-bar model could not draw */
 const vmOven = (vol, face, pos) => ({ t:'oven', vol, face, pos, r:0.9 });
@@ -24725,7 +24786,8 @@ function vmStairRuns(vm, v, E, top) {
     return { treads, onGal:true, turn:false, w, lands, iron:!!E.iron };
   }
   const gal = (vm.els || []).filter(G => G !== E && G.t === 'varanda' && (G.vol || 0) === (E.vol || 0) && (G.face || 'S') === f && (G.floor || 0) >= 1 && G.kind !== 'reentrante');
-  let start = u0 + (E.landing ? 1.2 : 0), dir = 1, ztop = top, onGal = false;
+  /* the run goes off east (or north) of its landing, or back the other way where the review turned it (dir -1) */
+  let dir = E.dir === -1 ? -1 : 1, start = dir > 0 ? u0 + (E.landing ? 1.2 : 0) : u0, ztop = top, onGal = false;
   if (gal.length) { const gs = gal.map(G => { const gw = Math.min(G.w || 4, len - 0.4), a = (G.pos || 0.5) * len - gw / 2; return { a, b:a + gw, z:z0 + (G.floor || 1) * v.fh }; });
     const g = gs.sort((p, q) => Math.min(Math.abs(u0 - p.a), Math.abs(u0 - p.b)) - Math.min(Math.abs(u0 - q.a), Math.abs(u0 - q.b)))[0];
     const toA = Math.abs(u0 - g.a) <= Math.abs(u0 - g.b), roomA = g.a, roomB = len - g.b;
