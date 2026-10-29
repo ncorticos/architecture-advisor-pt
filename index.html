@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.190.0',
+  version:     '1.191.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6246,6 +6246,8 @@ function pushImportFaces(arr, map) {
 let GHOST_CACHE = { key:null, faces:[], blocks:[], city:[] };
 function vmCompanion() {
   let R = null; try { R = STATE.vern && STATE.vern.type ? vernRead() : null; } catch (e) { R = null; }
+  /* the model as the archetype draws it where the student has not opened Draw the model yet: its stair, its row, its ovens */
+  if (R && R.V && (!R.V.vm || R.V.vm.type !== R.type)) { try { vmRead(); } catch (e) { console.error(e); } }
   const vm = R && R.V && R.V.vm; if (!vm || !vm.vols || !vm.vols.length) return GHOST_CACHE = { key:null, faces:[], blocks:[], city:[] };   // no model: nothing around it either
   const wi = Math.min(R.V.work || 0, vm.vols.length - 1), w = vm.vols[wi];
   const key = JSON.stringify([vm.vols, vm.els, vm.court, vm.row]) + '|' + wi + '|' + (MASS && MASS.rot);
