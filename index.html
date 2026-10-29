@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.181.0',
+  version:     '1.182.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24296,6 +24296,63 @@ function vmFromType(k) {
   vm.els = vm.els.filter(e => e.t !== 'chimney');
   const ch = vmChimOf(k, wm);
   if (ch) vm.els.push(ch); else if (vmSmokeOf(k)) vm.smoke = true;
+  return vmFitOpenings(vm);
+}
+/** The archetype's openings kept off the walls behind them: a door or a
+    window never lands on a body's corner, on the joint with another body
+    or on a partition between rooms — it always opens into a room. A face
+    where one would is laid out again, symmetric: its openings in the rooms
+    behind it, equally spaced from the sides. Open sides (an opening wider
+    than most of the face) are left as they are. */
+function vmFitOpenings(vm) {
+  const rooms = vmDefaultRooms(vm), vols = vm.vols || [];
+  const CL = 0.12, END = 0.3;
+  vols.forEach((v, vi) => {
+    if (!v || v.kind !== 'rect' || !v.open) return;
+    VM_FACES.forEach(f => {
+      const list = v.open[f] || [], across = f === 'S' || f === 'N', len = across ? v.L : v.D;
+      if (!list.length || list.some(o => o.w > 0.6 * len)) return;
+      const x0 = v.x - v.L / 2, y0 = v.y - v.D / 2;
+      /* the strip just outside the face, to find another body standing against it */
+      const outAt = u => f === 'S' ? [x0 + u, y0 - 0.15] : f === 'N' ? [x0 + u, y0 + v.D + 0.15] : f === 'E' ? [x0 + v.L + 0.15, y0 + u] : [x0 - 0.15, y0 + u];
+      const covered = u => { const p = outAt(u); return vols.some((w, wi) => wi !== vi && w && (w.kind === 'rect'
+        ? Math.abs(p[0] - w.x) < w.L / 2 && Math.abs(p[1] - w.y) < w.D / 2 : ((p[0] - w.x) / (w.L / 2)) ** 2 + ((p[1] - w.y) / (w.D / 2)) ** 2 < 1)); };
+      const floors = [...new Set(list.map(o => o.fl || 0))];
+      floors.forEach(k => {
+        const ops = list.filter(o => (o.fl || 0) === k).sort((a, b) => a.pos - b.pos);
+        /* the walls behind the face on this floor, as intervals along it */
+        const walls = [[-1, END], [len - END, len + 1]];
+        if (across) {
+          const rs = rooms.filter(q => q.fl === k && Math.abs(q.x - v.x) < v.L / 2 && Math.abs(q.y - v.y) < v.D / 2
+            && (f === 'S' ? q.y - q.d / 2 - y0 : y0 + v.D - (q.y + q.d / 2)) < 0.9).sort((a, b) => a.x - b.x);   // the rooms along this face
+          for (let i = 1; i < rs.length; i++) walls.push([rs[i - 1].x + rs[i - 1].w / 2 - x0, rs[i].x - rs[i].w / 2 - x0]);
+        }
+        const N = Math.max(8, Math.ceil(len / 0.1));
+        let run = null;
+        for (let i = 0; i <= N; i++) { const u = len * i / N; if (covered(u)) { if (!run) run = [u, u]; run[1] = u; } else if (run) { walls.push([run[0] - 0.1, run[1] + 0.1]); run = null; } }
+        if (run) walls.push([run[0] - 0.1, run[1] + 0.1]);
+        walls.sort((a, b) => a[0] - b[0]);
+        const bays = [];
+        let at = -Infinity;
+        walls.forEach(w => { if (w[0] > at && isFinite(at)) bays.push([at, w[0]]); at = Math.max(at, w[1]); });
+        const good = bays.filter(b => b[1] - b[0] >= 0.7);
+        if (!good.length) return;
+        const fits = o => { const c = o.pos * len, a = c - o.w / 2 - CL, b = c + o.w / 2 + CL; return good.some(g => a >= g[0] && b <= g[1]); };
+        const apart = ops.every((o, i) => !i || (o.pos - ops[i - 1].pos) * len >= (o.w + ops[i - 1].w) / 2 + 0.3);
+        if (ops.every(fits) && apart) return;
+        /* lay the floor out again: one opening per room, symmetric, or shared out in the rooms there are */
+        const n = ops.length, m = good.length, cnt = good.map(() => 0);
+        if (n <= m) for (let i = 0; i < n; i++) cnt[Math.min(m - 1, Math.max(0, Math.round((i + 1) * (m + 1) / (n + 1)) - 1))]++;
+        else for (let i = 0; i < n; i++) { let best = 0; good.forEach((g, j) => { if ((g[1] - g[0]) / (cnt[j] + 1) > (good[best][1] - good[best][0]) / (cnt[best] + 1)) best = j; }); cnt[best]++; }
+        let oi = 0;
+        good.forEach((g, j) => { for (let t = 0; t < cnt[j] && oi < n; t++, oi++) {
+          const o = ops[oi], c = g[0] + (g[1] - g[0]) * (t + 1) / (cnt[j] + 1);
+          o.w = Math.min(o.w, Math.max(0.5, (g[1] - g[0]) / cnt[j] - 0.3));
+          o.pos = +(c / len).toFixed(4);
+        } });
+      });
+    });
+  });
   return vm;
 }
 /* what the sources add to the archetypes the one-bar model could not draw */
