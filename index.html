@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.187.0',
+  version:     '1.188.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24302,6 +24302,8 @@ function vmFromType(k) {
   vmFitOpenings(vm);
   /* a stair led to its door follows the door where the fit moved it */
   vm.els.forEach(e => { if (e.t === 'stair' && e.toDoor && vm.vols[e.vol || 0]) vmStairFit(vm.vols[e.vol || 0], e); });
+  /* and no door left behind a flight */
+  vmDoorsOffStairs(vm);
   return vm;
 }
 /** The archetype's openings kept off the walls behind them: a door or a
@@ -24710,7 +24712,9 @@ function vmVolFaces(v, opts) {
         push([at(u - w, z0, 0.6), at(u + w, z0, 0.6), at(u + w, z0 + hb * 0.55, 0.6), at(u - w, z0 + hb * 0.55, 0.6)], vmShade(wc, 0.92), { thin:true, solid:sc });
         push([at(u - w, z0 + hb * 0.55, 0.6), at(u + w, z0 + hb * 0.55, 0.6), at(u + w, z0 + hb, 0.02), at(u - w, z0 + hb, 0.02)], vmShade(wc, 1.04), { thin:true, solid:sc }); });
       (v.open[f] || []).filter(o => o.fl < v.fl).forEach(o => {
-        const cu = o.pos * len, z = z0 + o.fl * v.fh + (o.t !== 'w' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
+        /* the north and west walls are drawn from their far end (east, north) to face outward; an opening's place counts west→east and
+           south→north, as on the plan, the stair and the study's tabs — measured back from that far end here */
+        const cu = (f === 'N' || f === 'W' ? 1 - o.pos : o.pos) * len, z = z0 + o.fl * v.fh + (o.t !== 'w' ? 0.02 : 0.9), zz = Math.min(z + o.h, z0 + (o.fl + 1) * v.fh - 0.1);
         const fr = v.wall.frames ? 0.13 : 0;
         if (fr) push([at(cu - o.w / 2 - fr, z - (o.t !== 'w' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, z - (o.t !== 'w' ? 0 : fr), 0.03), at(cu + o.w / 2 + fr, zz + fr, 0.03), at(cu - o.w / 2 - fr, zz + fr, 0.03)],
           v.wall.frames === 'cantaria' ? '#CFC6B4' : v.wall.frames === 'cor' ? (v.wall.barra || '#3F6FA8') : vmShade(wc, lime ? 0.84 : 1.2), { thin:true });
@@ -24835,6 +24839,44 @@ function vmStairRuns(vm, v, E, top) {
     treads.push({ ua:Math.min(la, lb), ub:Math.max(la, lb), da:0, db:w, h:ztop * (1 - (k + 0.5) / (nn + 1)), landing:true });
     for (let j = k; j < nn; j++) { const dA = w + (j - k) * tr; treads.push({ ua:Math.min(la, lb), ub:Math.max(la, lb), da:dA, db:dA + tr, h:hs(j) }); } }
   return { treads, onGal, turn, w };
+}
+/**
+ * No door opens onto the middle of a flight: nobody can pass through the stair to reach it. A door (or varandim) whose
+ * opening a flight crosses — a tread against the wall above its sill and below its head — takes the place of the nearest
+ * window of its floor that is clear of the stair (the window takes the door's); with no window clear, it goes onto the
+ * landing of its floor, where there is one. Returns how many doors moved.
+ */
+function vmDoorsOffStairs(vm) {
+  let moved = 0;
+  (vm.els || []).filter(E => E.t === 'stair').forEach(E => {
+    const v = vm.vols[E.vol || 0]; if (!v || v.kind !== 'rect') return;
+    const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D, z0 = v.raise || 0, ops = v.open && v.open[f]; if (!ops || !ops.length) return;
+    /* the openings and the stair share one measure along the wall: west→east, south→north */
+    const toWall = u => u;
+    let T;
+    /* every tread in front of the wall counts, the outer lane's too: seen from the yard, a flight across a door is a flight across it */
+    if (E.along === 'perp') { const top = z0 + v.fh, w = E.w || 1.1, u0 = (E.pos || 0.1) * len; T = [{ a:toWall(u0), b:toWall(u0 + w), h:top, lo:0, land:false }]; }
+    else T = vmStairRuns(vm, v, E, z0 + v.fh).treads.map(r => ({ a:toWall(r.ua), b:toWall(r.ub), h:r.h, lo:r.z0 == null ? 0 : r.z0, land:!!r.landing }));
+    T.forEach(t => { if (t.a > t.b) { const x = t.a; t.a = t.b; t.b = x; } });
+    const blocked = (c, w, k, h) => { const zs = z0 + k * v.fh, a = c - w / 2 + 0.05, b = c + w / 2 - 0.05;
+      return T.some(t => t.b > a && t.a < b && t.h > zs + 0.08 && t.lo < zs + h - 0.1); };
+    ops.filter(o => (o.t === 'd' || o.t === 'v') && blocked(o.pos * len, o.w, o.fl || 0, o.h)).forEach(o => {
+      const k = o.fl || 0, c0 = o.pos * len;
+      const win = ops.filter(q => q.t === 'w' && (q.fl || 0) === k && !blocked(q.pos * len, o.w, k, o.h)).sort((p, q) => Math.abs(p.pos * len - c0) - Math.abs(q.pos * len - c0))[0];
+      if (win) { const x = win.pos; win.pos = o.pos; o.pos = x; moved++; return; }
+      const zs = z0 + k * v.fh, land = T.find(t => t.land && Math.abs(t.h - zs) < 0.15 && t.b - t.a >= Math.min(o.w, 0.7));
+      if (land) { o.w = Math.min(o.w, land.b - land.a - 0.1); o.pos = +((land.a + land.b) / 2 / len).toFixed(4); moved++; }
+    });
+    /* a service stair's upper doors open onto its landings: a door of a floor the stair serves, off its landing, goes onto it
+       (a window standing there takes the door's place) */
+    if ((E.flights || 1) > 1) ops.filter(o => o.t === 'd' && (o.fl || 0) >= 1).forEach(o => {
+      const zs = z0 + o.fl * v.fh, land = T.find(t => t.land && Math.abs(t.h - zs) < 0.15), c = o.pos * len;
+      if (!land || (c > land.a && c < land.b)) return;
+      const cl = (land.a + land.b) / 2, np = +(cl / len).toFixed(4);
+      ops.filter(q => q !== o && (q.fl || 0) === o.fl && Math.abs(q.pos * len - cl) < (q.w + o.w) / 2).forEach(q => { q.pos = o.pos; });
+      o.w = Math.min(o.w, land.b - land.a - 0.1); o.pos = np; moved++; });
+  });
+  return moved;
 }
 /** The pieces the elements add: chimneys, stairs, varandas, ovens, porches, pergolas. */
 function vmElFaces(vm, vs) {
@@ -25364,7 +25406,9 @@ function vmChk(label, get, set) {
 }
 const vmFaceOpts = () => VM_FACES.map(f => [f, VL({ en:{ S:'south', E:'east', N:'north', W:'west' }[f], pt:{ S:'sul', E:'nascente', N:'norte', W:'poente' }[f] })]);
 let VM_REDRAW = null, VM_REBUILD = null;
-function vmChanged(rebuild) { if (rebuild && VM_REBUILD) VM_REBUILD(); else if (VM_REDRAW) VM_REDRAW(); }
+function vmChanged(rebuild) {
+  try { const R = vernRead(), vm = R && R.V && R.V.vm; if (vm && vmDoorsOffStairs(vm)) toast(VMT('A door the stair crossed moved to a window’s place, clear of the flight.', 'Uma porta atravessada pela escada passou para o lugar de uma janela, fora do lanço.')); } catch (e) { console.error(e); }
+  if (rebuild && VM_REBUILD) VM_REBUILD(); else if (VM_REDRAW) VM_REDRAW(); }
 
 /* ---------------------------------------------------------------- comparison, Olgyay, rooms */
 /** The student's model against the archetype's, line by line. */
