@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.184.0',
+  version:     '1.185.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24408,8 +24408,6 @@ function vmStairTo(vm, vi, face, o) {
    sources describe and its drawing still lacked — stairs to the doors they
    name, the oven every Azorean house has, bodies where the texts place them */
 const VM_REVIEW = {
-  /* Madeira — «a steep timber stair, or an outside stair and balcony at one end» */
-  'md-doispisos':vm => vmStairTo(vm, 0, 'E', { porch:false }),
   /* «the upper door, in the gable» — the slope the app draws flat, a stair stands for it */
   'md-curral':vm => vmStairTo(vm, 0, 'E'),
   /* the terreiro in front, «closed by a low wall with rendered benches» */
@@ -24470,6 +24468,29 @@ const VM_REVIEW = {
   'pt-ribatejo':(vm, b) => { b.open.S = [vmOp('w', 0.17, 0.6, 0.8), vmOp('d', 0.5, 0.9, 2.0), vmOp('w', 0.83, 0.6, 0.8)]; },
   /* Cercal: laid north–south, the front to the east, «the openings only on the sheltered side, a small window to the west» */
   'pt-cercal':(vm, b) => { const L = b.L; b.L = b.D; b.D = L; b.open = { S:[], N:[], E:b.open.S, W:[vmOp('w', 0.5, 0.5, 0.6)] }; },
+  /* batch 3 (v1.185) — Gândara: «house and farm in one, round an inner yard that joins every room»,
+     the long front «window, door, window, gateway, window», the lower range of kitchens and stores behind */
+  'pt-gandara':(vm, b) => { Object.assign(b, { L:13, D:5, x:0, y:0 });
+    b.open = { S:[vmOp('w', 0.12, 0.8, 1.0), vmOp('d', 0.3, 0.9, 2.0), vmOp('w', 0.47, 0.8, 1.0), vmOp('d', 0.68, 2.6, 2.5), vmOp('w', 0.9, 0.8, 1.0)],
+      N:[vmOp('d', 0.3, 0.9, 2.0), vmOp('d', 0.68, 2.6, 2.5)], E:[], W:[] };
+    vm.vols.push(vmVol({ name:{ en:'Kitchens and stores', pt:'Cozinhas e arrumos' }, x:-4.5, y:7.5, L:4, D:10, fl:1, fh:2.3, roof:Object.assign(vmClone(b.roof), { type:'gable' }), wall:vmClone(b.wall),
+      open:{ S:[], N:[], E:[vmOp('d', 0.25, 0.9, 2.0), vmOp('w', 0.45, 0.6, 0.8), vmOp('d', 0.75, 1.6, 2.2)], W:[] } }));
+    vm.court = { on:true, x:0, y:7.5, L:13, D:10, h:2.2, open:'S', gate:{ face:'N', pos:0.6, w:3.0 } }; },
+  /* Tocha: «a courtyard house like Mira's, but the main body has a floor» — the granary «lit by small high óculos»,
+     «a lower body behind keeps the kitchens, joined to the sala by a door, with its own door and window» */
+  'pt-tocha':(vm, b) => {
+    b.open = { S:[vmOp('w', 0.2, 0.8, 1.0), vmOp('d', 0.5, 0.9, 2.0), vmOp('w', 0.8, 0.8, 1.0), vmOp('w', 0.2, 0.45, 0.45, 1), vmOp('w', 0.8, 0.45, 0.45, 1)], E:[], N:[], W:[] };
+    vm.vols.push(vmVol({ name:{ en:'Kitchens', pt:'Cozinhas' }, x:0, y:b.D / 2 + 2, L:b.L, D:4, fl:1, fh:2.3, roof:Object.assign(vmClone(b.roof), { type:'gable' }), wall:vmClone(b.wall),
+      open:{ S:[], N:[vmOp('d', 0.3, 0.9, 2.0), vmOp('w', 0.6, 0.7, 0.9)], E:[], W:[] } }));
+    vm.court = { on:true, x:0, y:b.D / 2 + 4 + 4, L:b.L, D:8, h:2.0, open:'S', gate:{ face:'N', pos:0.5, w:2.8 } }; },
+  /* Madeira of two floors: «a steep timber stair, or an outside stair and balcony at one end; a terrace in front» */
+  'md-doispisos':(vm, b) => { vmStairTo(vm, 0, 'E', { porch:false });
+    vm.court = { on:true, x:b.x, y:b.y - b.D / 2 - 2, L:b.L + 1, D:4, h:0.9, open:'N', gate:{ face:'S', pos:0.5, w:1.2 } }; },
+  /* Minho: the quinteiro in front, closed to the road by a high wall and its portal */
+  'pt-minho':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y - b.D / 2 - 4, L:b.L + 2, D:8, h:2.0, open:'N', gate:{ face:'S', pos:0.8, w:2.8 } }; },
+  /* town houses: the medieval casa corrente's «yard or garden behind», Angra's «kitchen and garden behind» */
+  'pt-casa-corrente':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 3, L:b.L, D:6, h:2.0, open:'S', gate:{ face:'N', pos:0.5, w:1.0 } }; },
+  'az-angra':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 4, L:b.L, D:8, h:2.0, open:'S', gate:{ face:'N', pos:0.5, w:1.0 } }; },
 };
 /* what the sources add to the archetypes the one-bar model could not draw */
 const vmOven = (vol, face, pos) => ({ t:'oven', vol, face, pos, r:0.9 });
