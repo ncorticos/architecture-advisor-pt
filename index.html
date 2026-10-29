@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.189.0',
+  version:     '1.190.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -1609,6 +1609,35 @@ function wantNeighbours(pos, done) {
         done();
       });
   }, 600);
+}
+/**
+ * The ground round a point at a fine step: the Terrarium elevation tiles (AWS open data — in Portugal they carry the EU-DEM,
+ * about 25–30 m, between SRTM's samples) read at zoom 15 (≈ 4 m a pixel) and sampled bilinearly every `step` metres over a
+ * square `2 × half` wide. Heights are kept relative to the centre, as the 240 m grids are: { n, step, h[j·n + i] }, i east,
+ * j north, the centre at ((n − 1) / 2, (n − 1) / 2). Only the tiles' addresses leave the browser.
+ */
+const TERRA_TILE = {};
+async function terrariumGrid(lat, lon, half, step, signal) {
+  const z = 15, n2 = 2 ** z, n = Math.round(2 * half / step) + 1, c = (n - 1) / 2, cl = Math.cos(lat * Math.PI / 180);
+  const tx = lo => (lo + 180) / 360 * n2, ty = la => { const r = la * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n2; };
+  const pts = [];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const la = lat + (j - c) * step / 111320, lo = lon + (i - c) * step / (111320 * cl); pts.push([tx(lo) * 256, ty(la) * 256]); }
+  const keys = [...new Set(pts.map(q => Math.floor(q[0] / 256) + '/' + Math.floor(q[1] / 256)))];
+  if (keys.length > 16) throw new Error('terrain-area');
+  await Promise.all(keys.map(async k => { if (TERRA_TILE[k]) return;
+    const r = await fetch('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/' + z + '/' + k + '.png', signal ? { signal } : {});
+    if (!r.ok) throw new Error('terrain-tile');
+    const bmp = await createImageBitmap(await r.blob()), cv = document.createElement('canvas'); cv.width = 256; cv.height = 256;
+    const g = cv.getContext('2d'); g.drawImage(bmp, 0, 0); const d = g.getImageData(0, 0, 256, 256).data, e = new Float32Array(65536);
+    for (let q = 0; q < 65536; q++) e[q] = d[4 * q] * 256 + d[4 * q + 1] + d[4 * q + 2] / 256 - 32768;
+    TERRA_TILE[k] = e; }));
+  /* a pixel's height, across tile edges */
+  const px = (X, Y) => { const k = Math.floor(X / 256) + '/' + Math.floor(Y / 256), e = TERRA_TILE[k]; return e ? e[((Y % 256 + 256) % 256) * 256 + ((X % 256 + 256) % 256)] : NaN; };
+  const H = pts.map(([X, Y]) => { const x0 = Math.floor(X - 0.5), y0 = Math.floor(Y - 0.5), ax = X - 0.5 - x0, ay = Y - 0.5 - y0;
+    return px(x0, y0) * (1 - ax) * (1 - ay) + px(x0 + 1, y0) * ax * (1 - ay) + px(x0, y0 + 1) * (1 - ax) * ay + px(x0 + 1, y0 + 1) * ax * ay; });
+  if (H.some(v => !isFinite(v) || v < -60 || v > 8800)) throw new Error('terrain-range');
+  const datum = H[c * n + c];
+  return { n, step, h:H.map(v => +(v - datum).toFixed(2)), src:'terrarium' };
 }
 /** Does the segment ab cross the segment cd? */
 const segCross = (ax, ay, bx, by, cx, cy, dx, dy) => {
@@ -17894,12 +17923,13 @@ function buildRender(host) {
   /* Surrounding buildings as a transparent tip: the Environment tab's
      OpenStreetMap footprints, hinted as massing only — their final render
      appearance is still to be decided, so they stay deliberately plain. */
-  let showNb = !!(K0 && K0.showNb);
+  let showNb = !K0 || K0.showNb !== false;
   let embas = !!(K0 && K0.embas), cant = !!(K0 && K0.cant);
   const saveStone = () => { KEEP.visualization = Object.assign(KEEP.visualization || {}, { embas, cant }); };
   /* terrain: the ventilation grid where this browser already derived it,
      else a grid of our own over the same service — only coordinates leave */
-  let rGrid = KEEP.vent && KEEP.vent.terrainGrid ? KEEP.vent.terrainGrid : null;
+  const terrKey = (+S.lat).toFixed(5) + ',' + (+S.lon).toFixed(5);
+  let rGrid = KEEP.rTerrain && KEEP.rTerrain.key === terrKey ? KEEP.rTerrain.grid : KEEP.vent && KEEP.vent.terrainGrid ? KEEP.vent.terrainGrid : null;
   if (rGrid) EXPORT_TERRAIN = rGrid;
   let rGridNote = rGrid ? '' : t('Flat for now — open Ventilation once, or fetch below, for the real ground.');
   const betaR = () => (G.rot - 180) * RAD;
@@ -17932,18 +17962,29 @@ function buildRender(host) {
       });
       const bb = [Infinity, Infinity, -Infinity, -Infinity];
       p.forEach(q => { if (q[0] < bb[0]) bb[0] = q[0]; if (q[1] < bb[1]) bb[1] = q[1]; if (q[0] > bb[2]) bb[2] = q[0]; if (q[1] > bb[3]) bb[3] = q[1]; });
-      if (bb[0] > 120 || bb[2] < -120 || bb[1] > 120 || bb[3] < -120) return;
+      const lim = rGrid && rGrid.n ? (rGrid.n - 1) * rGrid.step / 2 : 120;
+      if (bb[0] > lim || bb[2] < -lim || bb[1] > lim || bb[3] < -lim) return;
       if (inPoly(0, 0, p)) return;
       if (boxes.some(r => r.some(q => inPoly(q[0], q[1], p)) || p.some(q => q[0] > r[0] && q[0] < r[2] && q[1] > r[1] && q[1] < r[3]))) return;
-      const cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, ground = rTerraAt(cx, cy), h = Math.max(1, bd.h);
-      out.push({ poly:p, cx, cy, ground, top:ground + h, dist:Math.hypot(cx, cy) });
+      /* standing on the ground under it: its walls from the lowest corner, its eaves the tagged height over its middle */
+      const cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, gc = rTerraAt(cx, cy), ground = Math.min(gc, ...p.map(q => rTerraAt(q[0], q[1]))), h = Math.max(1, bd.h);
+      out.push({ poly:p, cx, cy, ground, top:gc + h, dist:Math.hypot(cx, cy), how:bd.how });
     });
     out.sort((x, y) => x.dist - y.dist);
-    return out.slice(0, 24);
+    return out.slice(0, 220);
   };
   async function fetchRenderTerrain() {
     rGridNote = t('Fetching the ground…');
     refreshRender();
+    /* the fine ground first: 300 m square at 10 m, from the EU-DEM tiles */
+    try {
+      const o = {}; try { if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) o.signal = AbortSignal.timeout(20000); } catch (e) {}
+      rGrid = await terrariumGrid(lat, lon, 150, 10, o.signal);
+      KEEP.rTerrain = { key:terrKey, grid:rGrid }; EXPORT_TERRAIN = rGrid;
+      const mm = rMinMax();
+      rGridNote = t('Ground in view: low ' + fmt(mm.lo, 0) + ' m, high +' + fmt(mm.hi, 0) + ' m (300 m at 10 m, EU-DEM).');
+      refreshRender(); return;
+    } catch (e) { /* the coarser grid below */ }
     try {
       const TN = 9, TSTEP = 30, TC = (TN - 1) / 2, o = {};
       try { if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) o.signal = AbortSignal.timeout(20000); } catch (e) {}
@@ -18191,7 +18232,7 @@ function buildRender(host) {
         else fallbackCopy(b, done);
       } catch (e) { fallbackCopy(b, done); }
     } }));
-  studioBox.appendChild(el('button', { class:'btn', text:'Fetch terrain', title:'Fetch the 240 m ground grid for this site',
+  studioBox.appendChild(el('button', { class:'btn', text:'Fetch terrain', title:'Fetch the ground round this site: 300 m at 10 m from the EU-DEM, else the 240 m grid',
     onclick: () => fetchRenderTerrain() }));
   const terrSlot = props.appendChild(el('div', { class:'hint' }));
   host.appendChild(hint('render-how',
@@ -18230,7 +18271,8 @@ function buildRender(host) {
     const cx = W / 2, M = roofModel(G, RF), H0 = M.H0, ridge = M.ridge, ax = camAx();
     const bb = planModel(G).bbox;
     const vegH = showTrees && SCENE.veg.length ? Math.max.apply(null, SCENE.veg.map(v => v.height)) : 0;
-    const terrHi = showGround && rGrid && rGrid.h ? Math.max.apply(null, [0].concat(rGrid.h)) : 0;
+    /* the ground's height only round the house frames the view: a hill 150 m off does not shrink the house */
+    const terrHi = showGround && rGrid && rGrid.h ? Math.max(0, ...[[bb[0], bb[1]], [bb[2], bb[1]], [bb[2], bb[3]], [bb[0], bb[3]], [0, 0]].map(q => rTerraAt(q[0] * 1.5, q[1] * 1.5))) : 0;
     const maxH = Math.max(ridge + 2, H0 + 2, vegH + 2, terrHi + 2);
     const gm = 10, gx = Math.max(-bb[0], bb[2]) + gm, gy = Math.max(-bb[1], bb[3]) + gm;
     const cs = [[-gx, -gy], [gx, -gy], [gx, gy], [-gx, gy]];
@@ -18321,19 +18363,40 @@ function buildRender(host) {
         return HH[jy * TN + ix] * (1 - axx) * (1 - ayy) + HH[jy * TN + ix + 1] * axx * (1 - ayy)
           + HH[(jy + 1) * TN + ix] * (1 - axx) * ayy + HH[(jy + 1) * TN + ix + 1] * axx * ayy;
       };
-      const cells = [], SUB = 3, st = TS / SUB, alpha = style === 'watercolor' ? .55 : 1;
+      const cells = [], SUB = TS > 15 ? 3 : 1, st = TS / SUB, alpha = style === 'watercolor' ? .55 : 1;
       for (let jj = 0; jj < (TN - 1) * SUB; jj++) for (let ii = 0; ii < (TN - 1) * SUB; ii++) {
         const E0 = -TE + ii * st, N0 = -TE + jj * st;
         const h00 = nodeH(E0, N0), h10 = nodeH(E0 + st, N0), h11 = nodeH(E0 + st, N0 + st), h01 = nodeH(E0, N0 + st);
         const p00 = toPlan(E0, N0), p10 = toPlan(E0 + st, N0), p11 = toPlan(E0 + st, N0 + st), p01 = toPlan(E0, N0 + st);
         const hm = (h00 + h10 + h11 + h01) / 4;
+        /* the slope of the cell (east, north) for its light */
+        const gE = ((h10 + h11) - (h00 + h01)) / (2 * st), gN = ((h01 + h11) - (h00 + h10)) / (2 * st);
         cells.push({ d:depthOf((p00[0] + p11[0]) / 2, (p00[1] + p11[1]) / 2, hm),
-          q:[[p00[0], p00[1], h00], [p10[0], p10[1], h10], [p11[0], p11[1], h11], [p01[0], p01[1], h01]], hm });
+          q:[[p00[0], p00[1], h00], [p10[0], p10[1], h10], [p11[0], p11[1], h11], [p01[0], p01[1], h01]], hm, gE, gN });
       }
       cells.sort((a, b) => b.d - a.d);
+      /* the light on the slopes: from the sun when it is up, else from the north-west as a map-maker's relief */
+      const sa = sun.alt > 3 ? sun.alt * RAD : 45 * RAD, saz = sun.alt > 3 && isFinite(sun.azi) ? sun.azi * RAD : 315 * RAD;
+      const Lx = Math.sin(saz) * Math.cos(sa), Ly = Math.cos(saz) * Math.cos(sa), Lz = Math.sin(sa);
+      const lit = c => { const nl = Math.hypot(c.gE, c.gN, 1), dd = (-c.gE * Lx - c.gN * Ly + Lz) / nl, flat = Lz;
+        return clamp(1 + 1.1 * (dd - flat), 0.72, 1.15); };
+      const shadeRGB = (rgb, k) => { const m = /rgb\((\d+),(\d+),(\d+)\)/.exec(rgb); if (!m) return rgb; return 'rgb(' + [m[1], m[2], m[3]].map(v => Math.round(clamp(+v * k, 0, 255))).join(',') + ')'; };
+      /* a contour every metre (every 5 m where the ground falls more than 40 m): a cell's edge where it crosses one */
+      const span = mm.hi - mm.lo, cStep = span > 40 ? 5 : span > 12 ? 2 : 1;
       ctx.save();
       if (style === 'watercolor') ctx.globalAlpha = alpha;
-      cells.forEach(c => poly(c.q, terrCol(c.hm), null, 1));
+      cells.forEach(c => { const f = style === 'sketch' ? terrCol(c.hm) : shadeRGB(terrCol(c.hm), lit(c)); poly(c.q, f, f, 0.6); });
+      if (style !== 'watercolor' && span > 0.8) {
+        ctx.strokeStyle = night ? 'rgba(160,170,190,.18)' : 'rgba(95,80,55,.22)'; ctx.lineWidth = 0.7;
+        cells.forEach(c => { const q = c.q, seg = [];
+          for (let k = 0; k < 4; k++) { const a = q[k], b = q[(k + 1) % 4], ha = a[2], hb = b[2];
+            const lv = Math.ceil(Math.min(ha, hb) / cStep) * cStep;
+            if (lv <= Math.max(ha, hb) && ha !== hb && lv > Math.min(ha, hb)) { const f = (lv - ha) / (hb - ha); seg.push({ lv, p:[a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, lv] }); } }
+          /* the pairs of crossings of one level make the contour's piece in the cell */
+          const by = {}; seg.forEach(x => (by[x.lv] = by[x.lv] || []).push(x.p));
+          Object.keys(by).forEach(k => { const P = by[k]; if (P.length < 2) return; const A = proj(FR, P[0][0], P[0][1], P[0][2]), B = proj(FR, P[1][0], P[1][1], P[1][2]);
+            ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke(); }); });
+      }
       ctx.restore();
     } else {
       const bb = M.pl.bbox, gx = Math.max(-bb[0], bb[2]) + 10, gy = Math.max(-bb[1], bb[3]) + 10;
@@ -18588,7 +18651,9 @@ style === 'sketch' ? '#EFEBE0'
     const hbox = [Math.min(...hp.map(q => q[0])), Math.min(...hp.map(q => q[1])), Math.max(...hp.map(q => q[0])), Math.max(...hp.map(q => q[1]))], seeThru = {};
     if (showCity) CO.city.forEach(f => { if (!f.city || seeThru[f.city] !== undefined) return; const c = proj(FR, f.c[0], f.c[1], f.c[2]), rr = f.r * CAM_K * FR.s;
       seeThru[f.city] = depthOf(f.c[0], f.c[1], f.c[2]) < hc && c[0] + rr > hbox[0] && c[0] - rr < hbox[2] && c[1] + rr > hbox[1] && c[1] - rr < hbox[3]; });
-    CO.faces.concat(showCity ? CO.city.filter(f => !(f.city && seeThru[f.city] && (f.host || f.thin))).map(f => f.city && seeThru[f.city] ? Object.assign({}, f, { fill:'rgba(200,206,212,.16)', glass:true }) : f) : []).forEach(f => { const P = f.P; if (P.length < 3) return;
+    /* the town drawn from the type stands back where the real buildings round the plot were read */
+    const realTown = showNb && nbRender().length >= 3;
+    CO.faces.concat(showCity && !realTown ? CO.city.filter(f => !(f.city && seeThru[f.city] && (f.host || f.thin))).map(f => f.city && seeThru[f.city] ? Object.assign({}, f, { fill:'rgba(200,206,212,.16)', glass:true }) : f) : []).forEach(f => { const P = f.P; if (P.length < 3) return;
       const n = vmNorm(P), cull = !(f.thin || f.court || f.roof || f.ground || f.glass) && n[0] * ax.d[0] * ax.ce + n[1] * ax.d[1] * ax.ce - n[2] * ax.se > 1e-6;
       if (cull) return;
       items.push({ pts:P, fill:/^#[0-9a-f]{6}$/i.test(f.fill) ? shadeHex(f.fill, night ? 0.3 : 1) : f.fill,
@@ -18623,13 +18688,17 @@ style === 'sketch' ? '#EFEBE0'
        the same depth order, final appearance to be decided */
     if (showNb) nbRender().forEach(nb => {
       const tpts = nb.poly.map(q => [q[0], q[1], nb.top]);
-      items.push({ pts:tpts, fill:'rgba(150,180,205,.30)', nbTip:true,
+      /* one standing between the eye and the house is barely there, so the house reads through it */
+      const pc = nb.poly.map(q => proj(FR, q[0], q[1], nb.top)).concat(nb.poly.map(q => proj(FR, q[0], q[1], nb.ground)));
+      const veil = depthOf(nb.cx, nb.cy, (nb.ground + nb.top) / 2) < hc && Math.max(...pc.map(q => q[0])) > hbox[0] && Math.min(...pc.map(q => q[0])) < hbox[2]
+        && Math.max(...pc.map(q => q[1])) > hbox[1] && Math.min(...pc.map(q => q[1])) < hbox[3];
+      items.push({ pts:tpts, fill:veil ? 'rgba(235,240,245,.10)' : night ? 'rgba(120,135,160,.30)' : 'rgba(205,218,232,.42)', nbTip:true, veil,
         d:tpts.reduce((a2, q) => a2 + depthOf(q[0], q[1], q[2]), 0) / tpts.length });
       for (let i = 0; i < nb.poly.length; i++) {
         const a2 = nb.poly[i], b2 = nb.poly[(i + 1) % nb.poly.length];
         const q = [[a2[0], a2[1], nb.ground + 0.05], [b2[0], b2[1], nb.ground + 0.05],
           [b2[0], b2[1], nb.top], [a2[0], a2[1], nb.top]];
-        items.push({ pts:q, fill:'rgba(150,180,205,.20)', nbTip:true,
+        items.push({ pts:q, fill:veil ? 'rgba(235,240,245,.06)' : night ? 'rgba(110,125,150,.20)' : 'rgba(170,190,210,.24)', nbTip:true, veil,
           d:q.reduce((s2, r) => s2 + depthOf(r[0], r[1], r[2]), 0) / 4 });
       }
     });
@@ -18967,7 +19036,7 @@ style === 'sketch' ? '#EFEBE0'
         });
         return;
       }
-      poly(it.pts, it.fill, style === 'sketch' ? CH.ink : (it.glass ? 'rgba(20,23,26,.45)' : it.nbTip ? 'rgba(90,110,130,.55)' : CH.ink), style === 'sketch' ? 1.6 : it.glass ? 1 : 1.2);
+      poly(it.pts, it.fill, style === 'sketch' ? CH.ink : (it.glass ? 'rgba(20,23,26,.45)' : it.nbTip ? (it.veil ? 'rgba(90,110,130,.22)' : 'rgba(90,110,130,.55)') : CH.ink), style === 'sketch' ? 1.6 : it.glass ? 1 : 1.2);
       /* the beirado: the round mouths of the canal tiles along the edge */
       if (it.tileEnds && style !== 'sketch') {
         const e = it.tileEnds, r = Math.max(1, 0.055 * kpx);
@@ -19327,7 +19396,9 @@ style === 'sketch' ? '#EFEBE0'
   });
   refreshReading();
   refreshRender();
-  if (!rGrid) fetchRenderTerrain();
+  /* the fine ground where only the 240 m grid (or none) is at hand; the buildings round the plot, asked once per spot */
+  if (!rGrid || !(rGrid.step <= 12)) fetchRenderTerrain();
+  if (showNb) { ENV.nb = true; wantNeighbours(nbRenderRef(), () => refreshRender()); }
   /* material availability, web-only: the Construction Advisor's library,
      fetched once per session — the thumbs and dots fill in on arrival */
   caMaterials(() => refreshRender());
