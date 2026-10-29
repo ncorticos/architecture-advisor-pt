@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.185.0',
+  version:     '1.186.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24298,7 +24298,7 @@ function vmFromType(k) {
   /* the chimney as the icon draws it — or, where the smoke left through the tiles, none and the smoke instead */
   vm.els = vm.els.filter(e => e.t !== 'chimney');
   const ch = vmChimOf(k, wm);
-  if (ch) vm.els.push(ch); else if (vmSmokeOf(k)) vm.smoke = true;
+  if (ch) { vm.els.push(ch); (VM_MORE_CHIMS[k] || []).forEach(u => vm.els.push(Object.assign({}, ch, { u }))); } else if (vmSmokeOf(k)) vm.smoke = true;
   vmFitOpenings(vm);
   /* a stair led to its door follows the door where the fit moved it */
   vm.els.forEach(e => { if (e.t === 'stair' && e.toDoor && vm.vols[e.vol || 0]) vmStairFit(vm.vols[e.vol || 0], e); });
@@ -24450,8 +24450,6 @@ const VM_REVIEW = {
   /* Mondego and Trás-os-Montes: the stair ends in the porched landing, the recessed varanda on its columns — not a gallery as well */
   'pt-mondego-alpendre':vm => { vm.els = vm.els.filter(e => !(e.t === 'varanda' && e.kind === 'corrida')); vmStairTo(vm, 0, 'S', { porch:true }); },
   'pt-tm-alpendrada':vm => { vm.els = vm.els.filter(e => !(e.t === 'varanda' && e.kind === 'corrida')); vmStairTo(vm, 0, 'S', { porch:true }); },
-  /* Maia B: «against the inner side climbs a granite stair to a landing, both under the roof» — and «below, only stores» */
-  'pt-maia-b':(vm, b) => { b.open.N.push(vmOp('v', 0.1, 0.9, 2.1, 1)); b.open.S.push(vmOp('d', 0.25, 1.2, 2.0), vmOp('d', 0.75, 1.2, 2.0)); vmStairTo(vm, 0, 'N', { porch:true, w:1.2 }); },
   /* torreada: the kitchen with its oven «in a one-storey annex under two slopes» */
   'pt-torreada':vm => { const a = vm.vols[1]; a.fl = 1; a.roof = Object.assign({}, a.roof, { type:'gable' }); a.name = { en:'Kitchen with the oven', pt:'Cozinha com o forno' };
     a.open = { S:[], E:[vmOp('w', 0.5, 0.6, 0.8)], N:[], W:[vmOp('w', 0.5, 0.6, 0.8)] }; vm.els.push(vmOven(1, 'N', 0.5)); },
@@ -24491,7 +24489,15 @@ const VM_REVIEW = {
   /* town houses: the medieval casa corrente's «yard or garden behind», Angra's «kitchen and garden behind» */
   'pt-casa-corrente':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 3, L:b.L, D:6, h:2.0, open:'S', gate:{ face:'N', pos:0.5, w:1.0 } }; },
   'az-angra':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 4, L:b.L, D:8, h:2.0, open:'S', gate:{ face:'N', pos:0.5, w:1.0 } }; },
+  /* Maia B: «against the inner side climbs a granite stair to a landing, both under the roof» — and «below, only stores», the wing's too */
+  'pt-maia-b':(vm, b) => { b.open.N.push(vmOp('v', 0.1, 0.9, 2.1, 1)); b.open.S.push(vmOp('d', 0.25, 1.2, 2.0), vmOp('d', 0.75, 1.2, 2.0)); vmStairTo(vm, 0, 'N', { porch:true, w:1.2 });
+    const w = vm.vols[1]; if (w) w.open.E.push(vmOp('d', 0.5, 1.1, 2.0)); },
+  /* photographs (Arquivo Municipal de Lisboa): the saloia house behind its walled terreiro, a timber gate under the vine (Banzão) */
+  'pt-saloia':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y - b.D / 2 - 2.5, L:b.L + 1, D:5, h:1.6, open:'N', gate:{ face:'S', pos:0.5, w:1.2 } }; },
 };
+/* more chimneys than the icon's one, where the photographs show a row of them: the large
+   monte of several hearths (Artur Pastor, «Monte alentejano», AML PT/AMLSB/ART/009/003822) */
+const VM_MORE_CHIMS = { 'pt-monte-patio':[0.22, 0.42, 0.86] };
 /* what the sources add to the archetypes the one-bar model could not draw */
 const vmOven = (vol, face, pos) => ({ t:'oven', vol, face, pos, r:0.9 });
 /** A lower body at right angles against a gable of b (side 'W' or 'E'): its ridge across b's, its back flush with b's, standing out in front, a door in its front gable. */
