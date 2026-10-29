@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.186.0',
+  version:     '1.187.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24979,6 +24979,13 @@ function vmCourtFaces(vm) {
 }
 /** All faces of the model in drawing order, back to front, the hidden walls left out. */
 function vmFaces(vm) {
+  let F = vmGather(vm);
+  /* the model turned on the spot by VM_AZ, the view staying where it is */
+  if (VM_AZ) { const R = vmTurn(vm); F.forEach(q => { q.P = q.P.map(R); q.n = vmNorm(q.P); if (q.solid) q.solid = R(q.solid); }); }
+  return vmCull(vm, F);
+}
+/** Every face of the model, the far ones too, in world metres — what vmFaces culls and what the 3D export writes whole. */
+function vmGather(vm) {
   const vs = vmAllVols(vm);
   /* a body on top of another (a mirante) stands on its roof */
   vs.forEach(v => { if (v.raise > 0.5 && !v.piers) v._onTop = true; });
@@ -24988,9 +24995,9 @@ function vmFaces(vm) {
       supGeo(vm.geo, v.L, v.D).forEach(f => { const P = f.pts.map(p => [v.x + p[0], v.y + p[1], (v.raise || 0) + p[2]]); F.push({ P, fill:f.fill, n:vmNorm(P), vol:0, rr:v._r || 0, roof:!!f.roof, thin:!!f.thin, ground:!!f.ground, top:!!f.roof, nocull:true }); });
       return; }
     vmVolFaces(v).forEach(q => F.push(Object.assign(q, { vol:v._i, rr:v._r || 0 }))); });
-  F = F.concat(vmElFaces(vm, vs));
-  /* the model turned on the spot by VM_AZ, the view staying where it is */
-  if (VM_AZ) { const R = vmTurn(vm); F.forEach(q => { q.P = q.P.map(R); q.n = vmNorm(q.P); if (q.solid) q.solid = R(q.solid); }); }
+  return F.concat(vmElFaces(vm, vs));
+}
+function vmCull(vm, F) {
   /* a small solid (a buttress): each face's normal turned out of it, so only its near faces are drawn */
   F.forEach(q => { if (!q.solid) return; const c = q.P.reduce((a, p) => [a[0] + p[0] / q.P.length, a[1] + p[1] / q.P.length, a[2] + p[2] / q.P.length], [0, 0, 0]);
     if ((c[0] - q.solid[0]) * q.n[0] + (c[1] - q.solid[1]) * q.n[1] + (c[2] - q.solid[2]) * q.n[2] < 0) q.n = q.n.map(x => -x); });
@@ -25194,6 +25201,77 @@ function vmElevSVG(vm, face, w, opts) {
   return '<svg xmlns="http://www.w3.org/2000/svg" class="vmelev" data-s="' + s.toFixed(4) + '" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' + o.join('') + '</svg>';
 }
 /** A plan and the south elevation as DXF (R12, lines and circles), metres. */
+/* ---------------------------------------------------------- 3D export (OBJ, glTF) */
+/** The model as coloured polygons for another program: every face, the row's houses whole, metres, z up. */
+function vmMesh(vm) {
+  const F = vmGather(vm), names = vm.vols.map((v, i) => (VL(v.name) || 'body ' + (i + 1)));
+  const col = c => { c = String(c || '#cccccc').trim(); let m;
+    if ((m = /^#([0-9a-f]{6})$/i.exec(c))) { const n = parseInt(m[1], 16); return [n >> 16 & 255, n >> 8 & 255, n & 255, 1]; }
+    if ((m = /^#([0-9a-f]{3})$/i.exec(c))) return m[1].split('').map(h => parseInt(h + h, 16)).concat(1);
+    if ((m = /^rgba?\(([^)]+)\)$/i.exec(c))) { const q = m[1].split(',').map(x => parseFloat(x)); return [q[0], q[1], q[2], q.length > 3 ? q[3] : 1]; }
+    return [200, 200, 200, 1]; };
+  const out = [];
+  F.forEach(q => { if (!q.P || q.P.length < 3) return;
+    /* drop the slivers: a polygon of no area */
+    const n = vmNorm(q.P); if (!n || !isFinite(n[0]) || Math.hypot(n[0], n[1], n[2]) < 0.5) return;
+    const grp = q.court ? VMT('Courtyard wall', 'Muro do pátio') : q.el ? VMT('Elements', 'Elementos') : q.vol !== undefined ? (names[q.vol] || 'body') + (q.rr ? ' · ' + VMT('row house ', 'casa da banda ') + q.rr : '') : VMT('Ground', 'Chão');
+    out.push({ P:q.P, c:col(q.fill), g:grp }); });
+  return out;
+}
+/* z up (the model) → y up (OBJ and glTF): x east, y up, z south */
+const vmYup = p => [p[0], p[2], -p[1]];
+const vmMatName = c => 'm_' + c.slice(0, 3).map(x => Math.round(x).toString(16).padStart(2, '0')).join('') + (c[3] < 1 ? '_a' + Math.round(c[3] * 100) : '');
+/** Wavefront OBJ and its MTL: one group per body, one material per colour. */
+function vmOBJ(vm, base) {
+  const M = vmMesh(vm), V = [], L = ['# ' + APP.name + ' ' + APP.version + ' — ' + VMT('popular model', 'modelo popular'), '# ' + VMT('metres, Y up, X east, Z south', 'metros, Y para cima, X nascente, Z sul'), 'mtllib ' + base + '.mtl'], mats = {};
+  let g = null, m = null, nv = 0;
+  M.forEach(f => { const mn = vmMatName(f.c); mats[mn] = f.c;
+    if (f.g !== g) { g = f.g; L.push('g ' + g.replace(/\s+/g, '_')); m = null; }
+    if (mn !== m) { m = mn; L.push('usemtl ' + mn); }
+    f.P.forEach(p => { const q = vmYup(p); V.push('v ' + q.map(x => x.toFixed(4)).join(' ')); });
+    L.push('f ' + f.P.map((_, i) => nv + i + 1).join(' ')); nv += f.P.length; });
+  const obj = L.slice(0, 3).concat(V, L.slice(3)).join('\n') + '\n';
+  const mtl = Object.keys(mats).map(k => { const c = mats[k]; return 'newmtl ' + k + '\nKd ' + c.slice(0, 3).map(x => (x / 255).toFixed(4)).join(' ') + '\nKa 0 0 0\nKs 0 0 0\nd ' + (+c[3]).toFixed(2) + '\nillum 1\n'; }).join('\n');
+  return { obj, mtl };
+}
+/** glTF 2.0 in one file (buffer embedded): one primitive per colour, two-sided, the polygons fanned into triangles. */
+function vmGLTF(vm) {
+  const M = vmMesh(vm), by = new Map();
+  M.forEach(f => { const k = vmMatName(f.c); if (!by.has(k)) by.set(k, { c:f.c, pos:[], idx:[] }); const B = by.get(k), o = B.pos.length / 3;
+    f.P.forEach(p => B.pos.push(...vmYup(p))); for (let i = 1; i < f.P.length - 1; i++) B.idx.push(o, o + i, o + i + 1); });
+  const lin = x => { x /= 255; return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+  const parts = [], bufViews = [], accessors = [], materials = [], prims = [];
+  let off = 0;
+  [...by.values()].forEach((B, i) => {
+    const pos = new Float32Array(B.pos), idx = new Uint32Array(B.idx), mn = [0, 1, 2].map(j => Math.min(...B.pos.filter((_, k) => k % 3 === j))), mx = [0, 1, 2].map(j => Math.max(...B.pos.filter((_, k) => k % 3 === j)));
+    parts.push(new Uint8Array(pos.buffer)); bufViews.push({ buffer:0, byteOffset:off, byteLength:pos.byteLength, target:34962 }); off += pos.byteLength;
+    parts.push(new Uint8Array(idx.buffer)); bufViews.push({ buffer:0, byteOffset:off, byteLength:idx.byteLength, target:34963 }); off += idx.byteLength;
+    accessors.push({ bufferView:2 * i, componentType:5126, count:pos.length / 3, type:'VEC3', min:mn, max:mx }, { bufferView:2 * i + 1, componentType:5125, count:idx.length, type:'SCALAR' });
+    materials.push(Object.assign({ name:vmMatName(B.c), doubleSided:true, pbrMetallicRoughness:{ baseColorFactor:[lin(B.c[0]), lin(B.c[1]), lin(B.c[2]), +B.c[3]], metallicFactor:0, roughnessFactor:0.9 } }, B.c[3] < 1 ? { alphaMode:'BLEND' } : {}));
+    prims.push({ attributes:{ POSITION:2 * i }, indices:2 * i + 1, material:i });
+  });
+  const all = new Uint8Array(off); let o = 0; parts.forEach(a => { all.set(a, o); o += a.length; });
+  let bin = ''; for (let i = 0; i < all.length; i += 0x8000) bin += String.fromCharCode.apply(null, all.subarray(i, i + 0x8000));
+  return JSON.stringify({ asset:{ version:'2.0', generator:APP.name + ' ' + APP.version }, scene:0, scenes:[{ nodes:[0] }], nodes:[{ mesh:0, name:VMT('Popular model', 'Modelo popular') }],
+    meshes:[{ primitives:prims }], materials, accessors, bufferViews:bufViews, buffers:[{ byteLength:off, uri:'data:application/octet-stream;base64,' + btoa(bin) }] });
+}
+/** A zip of stored (uncompressed) files: the OBJ travels with its MTL. */
+function vmZip(files) {
+  const enc = new TextEncoder(), T = vmZip.T || (vmZip.T = Array.from({ length:256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
+  const crc = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const chunks = [], cen = []; let off = 0;
+  Object.keys(files).forEach(nm => { const d = enc.encode(files[nm]), n = enc.encode(nm), c = crc(d), h = new DataView(new ArrayBuffer(30));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, 0, 2], [10, 0, 2], [12, 0x21, 2], [14, c, 4], [18, d.length, 4], [22, d.length, 4], [26, n.length, 2], [28, 0, 2]].forEach(([a, v, w]) => w === 4 ? h.setUint32(a, v, true) : h.setUint16(a, v, true));
+    chunks.push(new Uint8Array(h.buffer), n, d); cen.push({ n, c, len:d.length, off }); off += 30 + n.length + d.length; });
+  const cs = off; let csz = 0;
+  cen.forEach(e => { const h = new DataView(new ArrayBuffer(46));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, 0, 2], [12, 0, 2], [14, 0x21, 2], [16, e.c, 4], [20, e.len, 4], [24, e.len, 4], [28, e.n.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, e.off, 4]].forEach(([a, v, w]) => w === 4 ? h.setUint32(a, v, true) : h.setUint16(a, v, true));
+    chunks.push(new Uint8Array(h.buffer), e.n); csz += 46 + e.n.length; });
+  const z = new DataView(new ArrayBuffer(22));
+  [[0, 0x06054b50, 4], [4, 0, 2], [6, 0, 2], [8, cen.length, 2], [10, cen.length, 2], [12, csz, 4], [16, cs, 4], [20, 0, 2]].forEach(([a, v, w]) => w === 4 ? z.setUint32(a, v, true) : z.setUint16(a, v, true));
+  chunks.push(new Uint8Array(z.buffer));
+  return new Blob(chunks, { type:'application/zip' });
+}
 function vmDXF(vm) {
   const L = [], line = (a, b, layer) => L.push('0', 'LINE', '8', layer, '10', a[0].toFixed(3), '20', a[1].toFixed(3), '30', '0', '11', b[0].toFixed(3), '21', b[1].toFixed(3), '31', '0');
   const poly = (pts, layer) => pts.forEach((p, i) => line(p, pts[(i + 1) % pts.length], layer));
@@ -25312,6 +25390,48 @@ function vmCompare(ref, vm) {
   add(VMT('Courtyard wall', 'Pátio murado'), ref.court && ref.court.on ? '✓' : '—', vm.court && vm.court.on ? '✓' : '—', !!(ref.court && ref.court.on) === !!(vm.court && vm.court.on));
   add(VMT('Houses in the row', 'Casas em banda'), (ref.row || {}).n || 1, (vm.row || {}).n || 1, ((ref.row || {}).n || 1) === ((vm.row || {}).n || 1));
   return rows;
+}
+/* ---------------------------------------------------------------- variants */
+const vmEsc = x => String(x).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const VM_VAR_MAX = 6;
+/** The variants panel: save the model as it is, open one again, and read them all against the archetype in one table. */
+function vmVariantsBox(R, M, ref, cur, open, redraw) {
+  const V = R.V.variants = (R.V.variants || []).filter(x => x && x.vm && x.vm.type === R.type);
+  const box = el('div');
+  box.appendChild(section(VMT('Variants — your versions side by side', 'Variantes — as suas versões lado a lado'), V.length + ' / ' + VM_VAR_MAX));
+  box.appendChild(el('p', { class:'hint', text:VMT('Save the model as a variant before trying another idea; each column below reads one version against the archetype (✓ near it, ✗ away from it). Open a variant to keep working on it — save the model first if you want to keep it too. The variants are kept with the study.',
+    'Guarde o modelo como variante antes de experimentar outra ideia; cada coluna abaixo lê uma versão contra o arquétipo (✓ perto, ✗ afastada). Abra uma variante para continuar a trabalhá-la — guarde antes o modelo se também o quiser manter. As variantes ficam guardadas com o estudo.') }));
+  const bar = box.appendChild(el('div', { class:'vmbtns' }));
+  const next = () => { const used = V.map(x => x.name); for (let i = 0; i < 26; i++) { const n = VMT('Variant ', 'Variante ') + String.fromCharCode(65 + i); if (used.indexOf(n) < 0) return n; } return VMT('Variant', 'Variante'); };
+  const inp = bar.appendChild(el('input', { type:'text', value:next(), style:'min-width:11em;font:inherit;border:1px solid var(--line);border-radius:6px;padding:3px 8px', 'aria-label':VMT('Name of the variant', 'Nome da variante') }));
+  bar.appendChild(el('button', { type:'button', class:'pri', text:'+ ' + VMT('Save the model as a variant', 'Guardar o modelo como variante'), disabled:V.length >= VM_VAR_MAX ? 'disabled' : null,
+    onclick:() => { if (V.length >= VM_VAR_MAX) return; V.push({ name:(inp.value || '').trim() || next(), at:new Date().toISOString().slice(0, 16).replace('T', ' '), vm:vmClone(cur()), rooms:vmClone(R.V.rooms || []) }); redraw(); } }));
+  if (!V.length) return box;
+  /* the columns: the archetype, each variant, the model now */
+  const cols = [{ h:VMT('Archetype', 'Arquétipo'), vm:ref, arch:true }].concat(V.map((x, i) => ({ h:vmEsc(x.name), vm:x.vm, i })), [{ h:VMT('Model now', 'Modelo atual'), vm:M }]);
+  const thumbs = el('div', { style:'display:grid;grid-template-columns:repeat(' + cols.length + ',minmax(130px,1fr));gap:8px;margin:8px 0;overflow-x:auto' });
+  cols.forEach(c => { const card = thumbs.appendChild(el('div', { class:'vmview', style:'padding:4px' }));
+    card.appendChild(el('p', { class:'vmcap', html:c.h + (c.i !== undefined && V[c.i].at ? ' <span style="opacity:.6">· ' + vmEsc(V[c.i].at) + '</span>' : '') }));
+    card.appendChild(el('div', { html:vmIsoSVG(c.vm, 220) }));
+    if (c.i !== undefined) { const b = card.appendChild(el('div', { style:'display:flex;gap:4px;flex-wrap:wrap' }));
+      b.appendChild(el('button', { type:'button', class:'btn small', text:VMT('Open', 'Abrir'), title:VMT('Replace the model now with this variant', 'Substituir o modelo atual por esta variante'),
+        onclick:() => { if (!confirm(VMT('Replace the model now with «', 'Substituir o modelo atual por «') + V[c.i].name + '»?')) return; open({ vm:vmClone(V[c.i].vm), rooms:vmClone(V[c.i].rooms || []) }); } }));
+      b.appendChild(el('button', { type:'button', class:'btn small', text:VMT('Rename', 'Renomear'), onclick:() => { const n = prompt(VMT('Name of the variant', 'Nome da variante'), V[c.i].name); if (n && n.trim()) { V[c.i].name = n.trim(); redraw(); } } }));
+      b.appendChild(el('button', { type:'button', class:'btn small', text:'✕', title:VMT('Delete this variant', 'Apagar esta variante'), onclick:() => { if (confirm(VMT('Delete «', 'Apagar «') + V[c.i].name + '»?')) { V.splice(c.i, 1); redraw(); } } })); }
+  });
+  box.appendChild(thumbs);
+  /* the rows: the archetype checks, then the measures, each version in its column */
+  const order = [], cell = {};
+  cols.forEach((c, j) => vmCompare(ref, c.vm).forEach(r => { if (!(r.label in cell)) { cell[r.label] = []; order.push(r.label); } cell[r.label][j] = c.arch ? String(r.b) : r.b + ' ' + (r.ok ? '<span class="vmok">✓</span>' : '<span class="vmno">✗</span>'); }));
+  const mts = cols.map(c => vmMetrics(c.vm)), meas = [
+    [VMT('Floor area (m²)', 'Área de pavimento (m²)'), m => fmt(m.floor, 1)], [VMT('Enclosed volume (m³)', 'Volume (m³)'), m => fmt(m.vol, 0)],
+    [VMT('Envelope (m²)', 'Envolvente (m²)'), m => fmt(m.env, 1)], [VMT('Windows / doors (m²)', 'Janelas / portas (m²)'), m => fmt(m.glaze, 1) + ' / ' + fmt(m.door, 1)],
+    [VMT('Wall mass (kg/m²)', 'Massa das paredes (kg/m²)'), m => fmt(m.massW, 0)], [VMT('Overall size (m)', 'Dimensões totais (m)'), m => fmt(m.bbox[0], 1) + ' × ' + fmt(m.bbox[1], 1)]];
+  const rows = order.map(l => [l].concat(cols.map((_, j) => cell[l][j] == null ? '—' : cell[l][j])))
+    .concat(meas.map(([l, f]) => [l].concat(mts.map(f))))
+    .concat([[VMT('Near the archetype', 'Perto do arquétipo')].concat(cols.map(c => { const r = vmCompare(ref, c.vm); return '<b>' + r.filter(x => x.ok).length + ' / ' + r.length + '</b>'; }))]);
+  box.appendChild(dataTable([VMT('Feature', 'Característica')].concat(cols.map(c => c.h)), rows, [0]));
+  return box;
 }
 /** The site's optimum by Olgyay (adapted to Portugal), the archetype and the student's model. */
 function vmOlgyay(R, vm) {
@@ -25646,6 +25766,12 @@ function buildModeller(host) {
   top.appendChild(el('button', { type:'button', text:'SVG — ' + VMT('plan', 'planta'), onclick:() => dl(vmPlanSVG(vm(), 1200, { rooms:R.V.rooms.filter(q => q.fl === VM_ROOMFL) }).svg, 'modelo-planta', 'image/svg+xml') }));
   top.appendChild(el('button', { type:'button', text:'SVG — ' + VMT('elevation', 'alçado'), onclick:() => dl(vmElevSVG(vm(), VM_FACE, 1200), 'modelo-alcado-' + VM_FACE, 'image/svg+xml') }));
   top.appendChild(el('button', { type:'button', text:'DXF — ' + VMT('plan and elevation', 'planta e alçado'), onclick:() => dl(vmDXF(vm()), 'modelo', 'application/dxf') }));
+  /* the bodies in 3D, for SketchUp, Rhino, Blender, Revit or ArchiCAD: metres, Y up */
+  const base3d = () => slugify(sitePrefix() + 'modelo-3d');
+  top.appendChild(el('button', { type:'button', text:'OBJ — 3D', title:VMT('Every body, the elements and the courtyard wall as an OBJ with its colours (MTL), in a zip — opens in SketchUp, Rhino, Blender, Revit and ArchiCAD. Metres, Y up.', 'Todos os corpos, os elementos e o muro do pátio num OBJ com as cores (MTL), num zip — abre no SketchUp, Rhino, Blender, Revit e ArchiCAD. Metros, Y para cima.'),
+    onclick:() => { const b = base3d(), o = vmOBJ(vm(), b); download(vmZip({ [b + '.obj']:o.obj, [b + '.mtl']:o.mtl }), b + '.zip'); } }));
+  top.appendChild(el('button', { type:'button', text:'glTF — 3D', title:VMT('The same model in one glTF file, with its colours — Blender, Rhino 8, SketchUp (extension), three.js, Twinmotion.', 'O mesmo modelo num só ficheiro glTF, com as cores — Blender, Rhino 8, SketchUp (extensão), three.js, Twinmotion.'),
+    onclick:() => download(new Blob([vmGLTF(vm())], { type:'model/gltf+json' }), base3d() + '.gltf') }));
   top.appendChild(el('button', { type:'button', id:'btnVmReport', class:'pri', text:VMT('Report ▾', 'Relatório ▾'), onclick:() => vmToggleExportMenu() }));
 
   /* ---- the editor ---- */
@@ -25963,6 +26089,8 @@ function buildModeller(host) {
     cmp.appendChild(el('div', { class:'vmview', html:'<p class="vmcap">' + VMT('Yours', 'O seu') + '</p>' + vmIsoSVG(M, 420) }));
     metBox.appendChild(cmp);
     metBox.appendChild(dataTable([VMT('Feature', 'Característica'), VMT('Archetype', 'Arquétipo'), VMT('Yours', 'O seu'), ''], rows.map(r => [r.label, r.a, r.b, r.ok ? '<span class="vmok">✓</span>' : '<span class="vmno">✗</span>']), [0]));
+    /* variants: the student's versions, kept with the study and compared column by column */
+    metBox.appendChild(vmVariantsBox(R, M, ref, () => vm(), x => { R.V.vm = x.vm; R.V.rooms = x.rooms; VM_SEL = 0; vmChanged(true); }, () => drawBelow()));
     /* Olgyay */
     const O = vmOlgyay(R, M);
     metBox.appendChild(section(VMT('From the house to the climate — what Olgyay would say here', 'Da casa ao clima — o que Olgyay diria aqui'), O.code));
