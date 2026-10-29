@@ -693,7 +693,7 @@ details.more[open] > summary{color:var(--ink)}
                 <button type="button" class="btn" id="setupMapBigAltBtn" data-t="altLookup">Look up</button>
                 <button type="button" class="btn solid" id="setupMapDone" data-t="mapSheetDone">Use this position</button>
               </div>
-              <p class="hint" data-t="mapSheetHint">Drag to explore, click to place the site — the coordinates follow and the altitude reads itself. Then use this position to return.</p>
+              <p class="hint" data-t="mapSheetHint">Drag to explore, pinch with two fingers (or scroll) to zoom, click to place the site — the coordinates follow and the altitude reads itself. Then use this position to return.</p>
             </div>
           </div>
           <div class="gh" data-t="ghFind">Find by address</div>
@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.188.0',
+  version:     '1.189.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -29293,7 +29293,7 @@ function initSetup() {
     }
     const src = TILE_SRC.sat, cosl = Math.cos(cLa * RAD);
     const S = Math.min(W, H);
-    const zl = clamp(Math.floor(Math.log2(40075016.686 * cosl * S / (across * 256))) + 1, 10, 17);
+    const zl = clamp(Math.floor(Math.log2(40075016.686 * cosl * S / (across * 256))) + 1, 10, 18);   // 18 for the closest pinch
     const mpp = 40075016.686 * cosl / Math.pow(2, zl) / 256;
     const k = S / across;   // CSS px per metre
     const n2 = Math.pow(2, zl);
@@ -29575,6 +29575,44 @@ function initSetup() {
     };
     setupMapBig.addEventListener('pointerup', endPointer);
     setupMapBig.addEventListener('pointercancel', () => { pd = null; setupMapBig.style.cursor = ''; });
+    /* zoom with two fingers: a pinch on the trackpad (the browser sends it as a wheel with Ctrl), a two-finger scroll or a
+       mouse wheel, Safari's own pinch, or two fingers on a touch screen — the point under the fingers stays where it is,
+       from a whole town (20 km) down to the plot (200 m) */
+    const ACROSS_MIN = 200, ACROSS_MAX = 20000;
+    let zoomRaf = 0;
+    const zoomAt = (k, clientX, clientY) => {
+      if (!isFinite(view.lat) || !isFinite(view.lon) || !(k > 0)) return;
+      const r = setupMapBig.getBoundingClientRect(), S = Math.min(r.width, r.height);
+      const a1 = clamp(bigAcross * k, ACROSS_MIN, ACROSS_MAX); if (a1 === bigAcross) return;
+      const dx = (clientX === undefined ? r.width / 2 : clientX - r.left) - r.width / 2, dy = (clientY === undefined ? r.height / 2 : clientY - r.top) - r.height / 2;
+      const dm = (bigAcross - a1) / S;   // metres per pixel lost (or gained): the point under the pointer stays put
+      view = { lat:view.lat - dy * dm / 111320, lon:view.lon + dx * dm / (111320 * Math.cos(view.lat * RAD)) };
+      bigAcross = a1;
+      zoomBtns.forEach(b => b.setAttribute('aria-pressed', String(Math.abs(+b.dataset.across - bigAcross) < 1)));
+      cancelAnimationFrame(zoomRaf); zoomRaf = requestAnimationFrame(drawBigMap);
+    };
+    setupMapBig.addEventListener('wheel', ev => {
+      ev.preventDefault();
+      const d = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1);
+      /* a pinch moves in small steps and wants a quicker answer than a scroll */
+      zoomAt(Math.exp(d * (ev.ctrlKey ? 0.012 : 0.0025)), ev.clientX, ev.clientY);
+    }, { passive:false });
+    let gScale = 1;
+    setupMapBig.addEventListener('gesturestart', ev => { ev.preventDefault(); gScale = ev.scale || 1; });
+    setupMapBig.addEventListener('gesturechange', ev => { ev.preventDefault(); const sc = ev.scale || 1; zoomAt(gScale / sc, ev.clientX, ev.clientY); gScale = sc; });
+    setupMapBig.addEventListener('gestureend', ev => ev.preventDefault());
+    /* two fingers on a touch screen: their spread zooms, about the point between them; a pinch never places the site */
+    const touches = new Map(); let pinch = null;
+    setupMapBig.style.touchAction = 'none';
+    const spread = () => { const P = [...touches.values()]; return { d:Math.hypot(P[0].x - P[1].x, P[0].y - P[1].y), x:(P[0].x + P[1].x) / 2, y:(P[0].y + P[1].y) / 2 }; };
+    setupMapBig.addEventListener('pointerdown', ev => { if (ev.pointerType !== 'touch') return; touches.set(ev.pointerId, { x:ev.clientX, y:ev.clientY });
+      if (touches.size === 2) { ev.stopImmediatePropagation(); pd = null; pinch = spread(); } }, true);
+    setupMapBig.addEventListener('pointermove', ev => { if (!touches.has(ev.pointerId)) return; touches.set(ev.pointerId, { x:ev.clientX, y:ev.clientY });
+      if (touches.size === 2 && pinch) { ev.stopImmediatePropagation(); const q = spread(); if (q.d > 10 && pinch.d > 10) zoomAt(pinch.d / q.d, q.x, q.y); pinch = q; } }, true);
+    const touchEnd = ev => { if (!touches.has(ev.pointerId)) return; touches.delete(ev.pointerId);
+      if (pinch) { ev.stopImmediatePropagation(); pd = null; if (!touches.size) pinch = null; } };
+    setupMapBig.addEventListener('pointerup', touchEnd, true);
+    setupMapBig.addEventListener('pointercancel', touchEnd, true);
   }
   if (bigDone) bigDone.addEventListener('click', closeBigMap);
   if (bigClose) bigClose.addEventListener('click', closeBigMap);
@@ -30378,7 +30416,7 @@ Object.assign(STATIC_PT, {
   mapSheetDone: 'Usar esta posição',
   findBtn: 'Procurar',
   ghFind: 'Procurar por morada',
-  mapSheetHint: 'Arraste para explorar, clique para colocar o local — as coordenadas acompanham e a altitude lê-se sozinha. Depois regresse com Usar esta posição.',
+  mapSheetHint: 'Arraste para explorar, aproxime ou afaste com dois dedos (ou a roda), clique para colocar o local — as coordenadas acompanham e a altitude lê-se sozinha. Depois regresse com Usar esta posição.',
   ghCoords: 'Coordenadas',
   ghBuilding: 'O edifício',
   ghClimate: 'O clima que fazem',
