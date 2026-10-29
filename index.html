@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.182.0',
+  version:     '1.183.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24290,6 +24290,9 @@ function vmFromType(k) {
   if (m.icon === 'windmill') { base.kind = 'round'; base.L = base.D = Math.max(m.L, m.D); base.roof.type = 'cone'; base.roof.th = 40; base.roof.mat = rm === 'thatch' ? 'thatch' : 'timber'; }
   const ov = VM_OVR[k];
   if (ov) ov(vm, base);
+  const rv = VM_REVIEW[k];
+  if (rv) rv(vm, vm.vols[0]);
+  vmDedupeEls(vm);
   /* a support structure is drawn in its own form (supGeo), its main body only giving the size and the plan */
   if (T.support) { vm.geo = k; vm.vols = vm.vols.slice(0, 1); vm.row = { n:1 }; vm.els = []; vm.court.on = false; }
   /* the chimney as the icon draws it — or, where the smoke left through the tiles, none and the smoke instead */
@@ -24355,6 +24358,58 @@ function vmFitOpenings(vm) {
   });
   return vm;
 }
+/** One stair or varanda per wall and floor: the model's own one gives way
+    to the one its sources draw (the last added), never both side by side. */
+function vmDedupeEls(vm) {
+  const seen = {}, els = vm.els || [];
+  for (let i = els.length - 1; i >= 0; i--) {
+    const e = els[i]; if (e.t !== 'stair' && e.t !== 'varanda') continue;
+    const key = e.t + ':' + (e.vol || 0) + ':' + (e.face || 'S') + ':' + (e.t === 'varanda' ? (e.kind === 'reentrante' ? 'r' : '') + (e.floor || 0) : '');
+    if (seen[key]) els.splice(i, 1); else seen[key] = true;
+  }
+}
+/** An outside stair up to the first upper door (or varandim) of a wall: its
+    landing in front of that door, the run going off toward the longer end. */
+function vmStairTo(vm, vi, face, o) {
+  const v = vm.vols[vi], len = face === 'S' || face === 'N' ? v.L : v.D;
+  const up = (v.open[face] || []).filter(q => q.fl >= 1 && q.t !== 'w').sort((a, b) => a.fl - b.fl)[0];
+  const at = up ? up.pos : 0.15;
+  vm.els = (vm.els || []).filter(e => !(e.t === 'stair' && (e.vol || 0) === vi && (e.face || 'S') === face));
+  vm.els.push(Object.assign({ t:'stair', vol:vi, face, along:'par', pos:+Math.max(0.02, at - 0.6 / len).toFixed(3), w:1.0, landing:true, porch:false }, o || {}));
+  return vm;
+}
+/* the review against the bibliography (v1.183): what each archetype's own
+   sources describe and its drawing still lacked — stairs to the doors they
+   name, the oven every Azorean house has, bodies where the texts place them */
+const VM_REVIEW = {
+  /* Madeira — «a steep timber stair, or an outside stair and balcony at one end» */
+  'md-doispisos':vm => vmStairTo(vm, 0, 'E', { porch:false }),
+  /* «the upper door, in the gable» — the slope the app draws flat, a stair stands for it */
+  'md-curral':vm => vmStairTo(vm, 0, 'E'),
+  /* the terreiro in front, «closed by a low wall with rendered benches» */
+  'md-elementar':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y - b.D / 2 - 2.2, L:b.L + 1, D:4.4, h:0.8, gate:{ face:'S', pos:0.5, w:1.4 } }; },
+  /* Azores — «every house has its own oven, a masonry dome entered from the kitchen» */
+  'az-abarracada':vm => { vm.els.push(vmOven(0, 'W', 0.6)); },
+  'az-empenafachada':vm => { vm.els.push(vmOven(0, 'E', 0.75)); },
+  'az-mariense':vm => { vm.els.push(vmOven(0, 'E', 0.6)); },
+  'az-flores':vm => { vm.els.push(vmOven(0, 'W', 0.6)); },
+  'az-terceira':vm => { vm.els.push(vmOven(0, 'W', 0.6)); },
+  /* «two two-slope roofs, one behind the other», symmetric window-door-window,
+     the corridor from the front door to the back */
+  'az-integrada':(vm, b) => { const L = 7, D = 3.5, [f, r] = vm.vols;
+    Object.assign(f, { x:0, y:-D / 2, L, D }); Object.assign(r, { x:0, y:D / 2, L, D });
+    f.open = { S:[vmOp('w', 0.22, 0.9, 1.0), vmOp('d', 0.5, 0.9, 2.0), vmOp('w', 0.78, 0.9, 1.0)], N:[], E:[vmOp('w', 0.5, 0.7, 0.9)], W:[] };
+    r.open = { S:[], N:[vmOp('d', 0.5, 0.9, 2.0), vmOp('w', 0.22, 0.7, 0.9)], E:[], W:[vmOp('w', 0.5, 0.7, 0.9)] };
+    vm.els.forEach(e => { if (e.t === 'oven') { e.vol = 1; e.face = 'E'; e.pos = 0.5; } }); },
+  /* Castro Laboreiro: «an outside stone stair without rails, parallel or square to the front, to a landing sometimes porched» */
+  'pt-castro':vm => vmStairTo(vm, 0, 'S', { porch:true, w:1.1 }),
+  /* Sicó: cisterns «often under the outside stair or the landing» */
+  'pt-sico':vm => vmStairTo(vm, 0, 'S', { w:1.1 }),
+  /* Lousã: houses up the slope, «endless rough stairs» to the upper door */
+  'pt-lousa':vm => vmStairTo(vm, 0, 'S', { w:0.9 }),
+  /* Zêzere: «a window, a door up steps and a porch» */
+  'pt-xisto-zezere':vm => vmStairTo(vm, 0, 'S', { porch:true }),
+};
 /* what the sources add to the archetypes the one-bar model could not draw */
 const vmOven = (vol, face, pos) => ({ t:'oven', vol, face, pos, r:0.9 });
 /** A lower body at right angles against a gable of b (side 'W' or 'E'): its ridge across b's, its back flush with b's, standing out in front, a door in its front gable. */
