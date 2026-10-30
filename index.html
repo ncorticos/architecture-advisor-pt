@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.193.0',
+  version:     '1.194.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -22265,6 +22265,19 @@ function vIcon(key, size) {
     return { x, w, lv, z, d, st };
   })() : null;
   /* openings on the south (and east) walls, floor by floor, from the model itself */
+  /* steps to a door above the ground, as the model draws them: timber over stakes or on a timber house, stone on a plinth;
+     the inner, taller step first, so the outer ones — lower and nearer the eye — stand in front of it */
+  const stepCol = rkind === 'piers' || wk === 'timber' ? '#8A6A48' : '#A49D90';
+  const iconSteps = (fc, cu, w0) => {
+    const n = Math.max(2, Math.round(rz / 0.19)), h = rz / n, t = 0.28, sw = w0 + 0.2, u0 = cu - sw / 2, u1 = cu + sw / 2;
+    const Q = (u, d, z) => fc === 'S' ? P(u, -d, z) : P(L + d, u, z), us = fc === 'S' ? u1 : u0;
+    for (let i = 0; i < n - 1; i++) {
+      const d0 = i * t, d1 = (i + 1) * t, zt = -h * (i + 1);
+      face([Q(u0, d0, zt), Q(u1, d0, zt), Q(u1, d1, zt), Q(u0, d1, zt)], stepCol, 0.03);
+      face([Q(u0, d1, -rz), Q(u1, d1, -rz), Q(u1, d1, zt), Q(u0, d1, zt)], vShade(stepCol, 0.8), 0.03);
+      face([Q(us, d0, -rz), Q(us, d1, -rz), Q(us, d1, zt), Q(us, d0, zt)], vShade(stepCol, 0.65), 0.03);
+    }
+  };
   const openings = (fc, len, at) => {
     const o = m.open && m.open[fc];
     if (!o || !o.units || !(o.wwr > 0)) return;
@@ -22294,6 +22307,8 @@ function vIcon(key, size) {
       const fr = 0.13, Q = [at(cx - w / 2 - fr, z0 - (door ? 0 : fr)), at(cx + w / 2 + fr, z0 - (door ? 0 : fr)), at(cx + w / 2 + fr, z1 + fr), at(cx - w / 2 - fr, z1 + fr)];
       face(Q, m.frames || (tex ? vShade(wc, 1.25) : southBar ? barC : vShade(wc, 0.86)), 0.02);
       face(q, door ? dc : '#3E4C57', 0.05);
+      /* a door above the ground gets its steps — unless the porch's deck already reaches it; support structures and bodies on another's roof, as in the model, keep their own way up */
+      if (door && k === 0 && rz >= 0.12 && !T.support && !(rz > 0.5 && rkind !== 'piers') && (fc === 'S' || fc === 'E') && !(fc === 'S' && (R.porch || R.latada) && rkind === 'piers')) iconSteps(fc, cx, w);
       if (door) { line(lerp(q[0], q[1], 0.5), lerp(q[3], q[2], 0.5), 'rgba(0,0,0,.35)', 0.04); line(lerp(q[0], q[3], 0.62), lerp(q[1], q[2], 0.62), 'rgba(0,0,0,.25)', 0.03); }
       if (!door) { line(lerp(q[0], q[1], 0.5), lerp(q[3], q[2], 0.5), 'rgba(255,255,255,.55)', 0.04); line(lerp(q[0], q[3], 0.5), lerp(q[1], q[2], 0.5), 'rgba(255,255,255,.4)', 0.03); }
       line(q[3], q[2], 'rgba(255,255,255,.7)', 0.07);
