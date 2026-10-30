@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.192.0',
+  version:     '1.193.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24416,6 +24416,38 @@ function vmFromType(k) {
   vmDoorsOffStairs(vm);
   return vm;
 }
+/** Steps to every ground-floor door of a raised body that nothing else
+    serves — no entry step, no porch deck in front of it: a door above the
+    ground is always reached. Timber steps over stakes or on a timber house,
+    stone ones on a plinth. Worked out on every drawing, never stored, so a
+    floor the student raises or a door moved on the plan gets its steps too. */
+function vmDoorStepEls(vm) {
+  const out = [];
+  if (vm.geo) return out;   // a support structure keeps its own form and its own way up
+  (vm.vols || []).forEach((v, vi) => {
+    const z0 = v.raise || 0;
+    /* a body raised past half a metre without piers stands on another one's roof (a mirante): its door is reached from inside */
+    if (!v || v.kind !== 'rect' || v._onTop || z0 < 0.12 || (z0 > 0.5 && !v.piers) || !v.open) return;
+    VM_FACES.forEach(f => {
+      if (v._party && v._party[f]) return;
+      const len = f === 'S' || f === 'N' ? v.L : v.D;
+      (v.open[f] || []).filter(o => o.t === 'd' && !(o.fl > 0)).forEach(o => {
+        const c = o.pos * len, mine = (vm.els || []).filter(e => (e.vol || 0) === vi && (e.face || 'S') === f);
+        const served = mine.some(e => {
+          if (e.t === 'stair' && e.entry) { const u0 = (e.pos || 0) * len; return c >= u0 - 0.1 && c <= u0 + (e.w || 1.1) + 0.1; }
+          if (e.t === 'alpendre' && e.deck !== false) { const w = Math.min(e.w || 6, v.L), u0 = (e.pos || 0.5) * len - w / 2; return c >= u0 && c <= u0 + w; }
+          return false; });
+        if (served) return;
+        const w = clamp((o.w || 0.9) + 0.2, 0.9, 1.4);
+        out.push({ t:'stair', vol:vi, face:f, along:'perp', pos:+clamp((c - w / 2) / len, 0, 1 - w / len).toFixed(4), w, landing:false, porch:false,
+          entry:true, timber:!!v.piers || v.wall.mat === 'timber', auto:true });
+      });
+    });
+  });
+  return out;
+}
+/** The elements as drawn: the student's own, then the steps their raised doors need. */
+const vmElsDrawn = vm => (vm.els || []).concat(vmDoorStepEls(vm));
 /** The archetype's openings kept off the walls behind them: a door or a
     window never lands on a body's corner, on the joint with another body
     or on a partition between rooms — it always opens into a room. A face
@@ -24791,6 +24823,8 @@ function vmVolFaces(v, opts) {
     if (v.piers) { const nx = Math.max(2, Math.round(v.L / 1.5)); for (let i = 0; i <= nx; i++) { const px = x0 + i * (v.L - 0.25) / nx; [y0, y1 - 0.25].forEach(py => {
         /* under the floor: painted before the body's walls, so a pier and its cap never show through them */
         push([[px, py, 0], [px + 0.25, py, 0], [px + 0.25, py, z0], [px, py, z0]], '#8E8A80', { under:true }); push([[px + 0.25, py, 0], [px + 0.25, py + 0.25, 0], [px + 0.25, py + 0.25, z0], [px + 0.25, py, z0]], '#77736A', { under:true });
+        /* its other two sides, for a model turned to be seen from behind */
+        push([[px + 0.25, py + 0.25, 0], [px, py + 0.25, 0], [px, py + 0.25, z0], [px + 0.25, py + 0.25, z0]], '#77736A', { under:true }); push([[px, py + 0.25, 0], [px, py, 0], [px, py, z0], [px, py + 0.25, z0]], '#8E8A80', { under:true });
         push([[px - 0.12, py - 0.12, z0 - 0.05], [px + 0.37, py - 0.12, z0 - 0.05], [px + 0.37, py + 0.37, z0 - 0.05], [px - 0.12, py + 0.37, z0 - 0.05]], '#9A968C', { top:true, under:true }); }); } }
     else if (v.kind === 'rect') { push([[x0, y0, 0], [x1, y0, 0], [x1, y0, z0], [x0, y0, z0]], '#8E8A80'); push([[x1, y0, 0], [x1, y1, 0], [x1, y1, z0], [x1, y0, z0]], '#77736A'); }
   }
@@ -25005,7 +25039,7 @@ function vmElFaces(vm, vs) {
     push([[x, y, z], [X, y, z], [X, y, Z], [x, y, Z]], c, o); push([[X, y, z], [X, Y, z], [X, Y, Z], [X, y, Z]], vmShade(c, 0.82), o);
     push([[X, Y, z], [x, Y, z], [x, Y, Z], [X, Y, Z]], vmShade(c, 0.7), o); push([[x, Y, z], [x, y, z], [x, y, Z], [x, Y, Z]], vmShade(c, 0.9), o);
     push([[x, y, Z], [X, y, Z], [X, Y, Z], [x, Y, Z]], vmShade(c, 1.06), o); };
-  (vm.els || []).forEach((E, ei) => vs.filter(v => v._i === E.vol).forEach(v => {
+  vmElsDrawn(vm).forEach((E, ei) => vs.filter(v => v._i === E.vol).forEach(v => {
     const wc = vmWallC(v), z0 = v.raise || 0, H = z0 + vmH(v), x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = v.x + v.L / 2, y1 = v.y + v.D / 2;
     const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
     /* a point on a face: u along it (west→east, south→north), d out of it */
@@ -25288,7 +25322,7 @@ function vmPlanSVG(vm, w, opts) {
   o.push(...ops);
   /* elements */
   const chimTop = [];
-  (vm.els || []).forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
+  vmElsDrawn(vm).forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
     const x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
     const at = (u, d) => f === 'S' ? [x0 + u, y0 - d] : f === 'N' ? [x0 + u, y0 + v.D + d] : f === 'E' ? [x0 + v.L + d, y0 + u] : [x0 - d, y0 + u];
     if (E.t === 'chimney') { const p = P(x0 + (E.u === undefined ? 0.75 : E.u) * v.L - 0.35, y0 + (E.v === undefined ? 0.5 : E.v) * v.D + 0.3);
