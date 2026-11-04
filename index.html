@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.195.0',
+  version:     '1.196.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -25294,6 +25294,110 @@ function vmIsoSVG(vm, w, opts) {
   const vb = [x0 - pad, y0 - pad, W + 2 * pad, H + 2 * pad].map(v => +v.toFixed(2)).join(' '), h = Math.round(w * (H + 2 * pad) / (W + 2 * pad));
   return '<svg xmlns="http://www.w3.org/2000/svg" class="vmiso" viewBox="' + vb + '" width="' + w + '" height="' + h + '">' + (opts.bg ? '<rect x="' + (x0 - pad) + '" y="' + (y0 - pad) + '" width="' + (W + 2 * pad) + '" height="' + (H + 2 * pad) + '" fill="' + opts.bg + '"/>' : '') + out.join('') + '</svg>';
 }
+/** The isometric opened: true while the model is drawn cut at sill height on the floor picked for rooms. */
+let VM_CUT = false;
+/** The model cut 1.2 m over floor k and seen from above, as an SVG string: the walls in section, the floor,
+    the rooms with their partitions, and the bathroom fittings in three dimensions. Turned and tilted as the
+    isometric; the roofs, the upper floors and the elements are left off. Painted body by body, the farthest
+    first; in each, its walls seen from inside, then what stands on the floor by the depth of its footprint,
+    then its walls seen from outside. */
+function vmCutSVG(vm, rooms, w, k, only) {
+  const RT = vmTurn(vm), V = VM_VIEW, out = [], all = [], HC = 1.2;
+  const dot = (n, a) => n[0] * a[0] + n[1] * a[1] + n[2] * a[2], seen = n => dot(n, V) > 1e-6;
+  const fxy = P => P.reduce((a, p) => a + p[0] * V[0] + p[1] * V[1], 0) / P.length;
+  const draw = (P0, fill, o) => { o = o || {}; const P = P0.map(RT), n = o.n ? RT([o.n[0], o.n[1], 0]).map((x, i) => i < 2 ? x - RT([0, 0, 0])[i] : o.n[2]) : vmNorm(P);
+    if (o.cull && !seen(n)) return; const Q = P.map(vmIso); Q.forEach(p => all.push(p));
+    /* st 'same': stroked in its own colour, closing the hairline between a wall's pieces */
+    const f = o.flat ? fill : vmLit(fill, n); out.push('<polygon points="' + vmPts(Q) + '" fill="' + f + '" stroke="' + (o.st === 'same' ? f : o.st || 'rgba(0,0,0,.35)') + '" stroke-width="' + (o.st === 'same' ? 0.02 : o.sw || 0.025) + '" stroke-linejoin="round"/>'); };
+  const ell = (q, z) => q.map(p => [p[0], p[1], z]);
+  /* a box on the floor, its near faces only; footprint x0..x1, y0..y1, from z0 to z1 */
+  const box = (x0, y0, x1, y1, z0, z1, fill, extra, st) => ({ k:fxy([[x0, y0, 0], [x1, y1, 0]].map(RT)), go:() => {
+    const S = [[[x0, y0], [x1, y0], [0, -1]], [[x1, y0], [x1, y1], [1, 0]], [[x1, y1], [x0, y1], [0, 1]], [[x0, y1], [x0, y0], [-1, 0]]];
+    S.forEach(([a, b, nn]) => draw([[a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], [a[0], a[1], z1]], fill, { n:[nn[0], nn[1], 0], cull:true, sw:0.015, st }));
+    draw([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], fill, { n:[0, 0, 1], sw:0.015, st }); if (extra) extra(); } });
+  const vs = vmAllVols(vm).filter(v => !v._r), floorOf = v => (v.raise > 0.5 && !v.piers ? v.raise : (v.raise || 0)) + k * v.fh;
+  /* each body's outline (outer, inner by the wall's thickness), anticlockwise */
+  const ring = (v, d) => { if (v.kind === 'rect') { const a = v.L / 2 - d, b = v.D / 2 - d; return [[v.x - a, v.y - b], [v.x + a, v.y - b], [v.x + a, v.y + b], [v.x - a, v.y + b]]; }
+    return Array.from({ length:32 }, (_, i) => { const t = i / 32 * 2 * Math.PI; return [v.x + (v.L / 2 - d) * Math.cos(t), v.y + (v.D / 2 - d) * Math.sin(t)]; }); };
+  const inBody = (v, x, y) => v.kind === 'rect' ? Math.abs(x - v.x) <= v.L / 2 + 1e-6 && Math.abs(y - v.y) <= v.D / 2 + 1e-6 : ((x - v.x) / (v.L / 2)) ** 2 + ((y - v.y) / (v.D / 2)) ** 2 <= 1.0001;
+  /* a close-up of one room: its floor, low walls round it 0.12 m thick, what stands in it */
+  if (only) { const U = []; roomU(only, 0, HC, U, () => false, 0.06, true); U.sort((a, b) => a.k - b.k).forEach(u => u.go()); return frame(); }
+  /* the ground shadow, as the isometric */
+  const bb = vmBBox(vm), sh = [[bb[0] - 0.5, bb[1] - 0.5, 0], [bb[2] + 1, bb[1] - 0.5, 0], [bb[2] + 1, bb[3] + 1, 0], [bb[0] - 0.5, bb[3] + 1, 0]].map(RT).map(vmIso);
+  out.push('<polygon points="' + vmPts(sh) + '" fill="rgba(0,0,0,.08)"/>'); sh.forEach(p => all.push(p));
+  const bodies = vs.map(v => { const O = ring(v, 0); return { v, k:fxy(O.map(p => RT([p[0], p[1], 0]))) }; }).sort((a, b) => a.k - b.k);
+  bodies.forEach(({ v }) => {
+    const O = ring(v, 0), t = Math.min(vmWallT(v), Math.min(v.L, v.D) / 4), I = ring(v, t), base = v.raise > 0.5 && !v.piers ? v.raise : v.piers ? Math.max(0, (v.raise || 0) - 0.15) : 0, wc = vmWallC(v), n = O.length;
+    const side = (A, z0, z1, fill, out1) => A.forEach((a, i) => { const b = A[(i + 1) % A.length], mx = (a[0] + b[0]) / 2 - v.x, my = (a[1] + b[1]) / 2 - v.y, nn = v.kind === 'rect' ? [Math.sign(Math.round((b[1] - a[1]) * 1e3)), -Math.sign(Math.round((b[0] - a[0]) * 1e3))] : [mx / (v.L / 2) ** 2, my / (v.D / 2) ** 2];
+      const s = out1 ? 1 : -1; draw([[a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], [a[0], a[1], z1]], fill, { n:[s * nn[0], s * nn[1], 0], cull:true }); });
+    /* a body without this floor: whole, closed by a flat top */
+    if (v.fl <= k) { const top = (v.raise || 0) + vmH(v); side(O, base, top, wc, true); draw(ell(O, top), '#B9B1A4', { n:[0, 0, 1] }); return; }
+    const zf = floorOf(v), zc = zf + Math.min(HC, v.fh - 0.05);
+    if (v.piers && k === 0) { [[O[0][0], O[0][1]], [O[1][0] - 0.25, O[1][1]], [O[2][0] - 0.25, O[2][1] - 0.25], [O[3][0], O[3][1] - 0.25]].slice(0, v.kind === 'rect' ? 4 : 0).forEach(([px, py]) => box(px, py, px + 0.25, py + 0.25, 0, base, '#8E8A80').go()); }
+    if (zf - base > 0.01) side(O, base, zf, wc, true);
+    draw(ell(I, zf), '#E6DFD0', { n:[0, 0, 1] });
+    /* the wall's segments, at most 0.6 m long, each knowing whether it is seen from inside or from outside */
+    const segs = [];
+    for (let i = 0; i < n; i++) { const a = O[i], b = O[(i + 1) % n], ai = I[i], bi = I[(i + 1) % n], m = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.6));
+      for (let j = 0; j < m; j++) { const L = (p, q, u) => [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u], u0 = j / m, u1 = (j + 1) / m;
+        segs.push([L(a, b, u0), L(a, b, u1), L(ai, bi, u0), L(ai, bi, u1)]); } }
+    const nOut = s => { const c = [(s[0][0] + s[1][0]) / 2, (s[0][1] + s[1][1]) / 2], ci = [(s[2][0] + s[3][0]) / 2, (s[2][1] + s[3][1]) / 2], d = Math.hypot(c[0] - ci[0], c[1] - ci[1]) || 1; return [(c[0] - ci[0]) / d, (c[1] - ci[1]) / d, 0]; };
+    const farSeg = s => { const nn = nOut(s), P = RT([nn[0], nn[1], 0]), Z = RT([0, 0, 0]); return (P[0] - Z[0]) * V[0] + (P[1] - Z[1]) * V[1] < 0; };
+    const wallSeg = s => { const nn = nOut(s), far = farSeg(s);
+      /* the faces stroked in their own colour, so the wall's 0.6 m pieces read as one */
+      if (far) draw([[s[3][0], s[3][1], zf], [s[2][0], s[2][1], zf], [s[2][0], s[2][1], zc], [s[3][0], s[3][1], zc]], wc, { n:[-nn[0], -nn[1], 0], st:'same' });
+      else draw([[s[0][0], s[0][1], zf], [s[1][0], s[1][1], zf], [s[1][0], s[1][1], zc], [s[0][0], s[0][1], zc]], wc, { n:nn, st:'same' });
+      /* the cut, dark as a section */
+      draw([[s[0][0], s[0][1], zc], [s[1][0], s[1][1], zc], [s[3][0], s[3][1], zc], [s[2][0], s[2][1], zc]], '#4A443D', { n:[0, 0, 1], flat:true, sw:0.01, st:'#4A443D' }); };
+    const segK = s => fxy([s[0], s[1], s[2], s[3]].map(p => RT([p[0], p[1], 0])));
+    segs.filter(farSeg).sort((a, b) => segK(a) - segK(b)).forEach(wallSeg);
+    /* what stands on this floor in this body: the rooms (their floor, their partitions) and the bathrooms' fittings */
+    const mine = (rooms || []).filter(q => q.fl === k && inBody(v, q.x, q.y)), U = [];
+    mine.forEach(q => roomU(q, zf, zc, U, (ax, ay, bx, by) => v.kind === 'rect' && (ax === bx ? Math.abs(Math.abs(ax - v.x) - v.L / 2) < t + 0.2 : Math.abs(Math.abs(ay - v.y) - v.D / 2) < t + 0.2), 0.04));
+    U.sort((a, b) => a.k - b.k).forEach(u => u.go());
+    segs.filter(s => !farSeg(s)).sort((a, b) => segK(a) - segK(b)).forEach(wallSeg);
+  });
+  return frame();
+  /* a room's floor, its partitions (pt either side of its edge, or outside it when out), and a bathroom's fittings, as units to paint by depth */
+  function roomU(q, zf, zc, U, skip, pt, out1) { const z = zf + 0.004; { const x0 = q.x - q.w / 2, x1 = q.x + q.w / 2, y0 = q.y - q.d / 2, y1 = q.y + q.d / 2;
+      draw([[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]], q.wc ? '#CFDFE3' : '#DCE4DC', { n:[0, 0, 1], st:'rgba(46,74,66,.45)', sw:0.015 });
+      /* partitions 0.08 m thick, cut as the walls, where the room's side is not the body's own wall */
+      const ph = zc;
+      [[x0, y0, x1, y0], [x1, y0, x1, y1], [x0, y1, x1, y1], [x0, y0, x0, y1]].forEach(([ax, ay, bx, by]) => {
+        if (skip(ax, ay, bx, by)) return;
+        /* outside the room's edge (a close-up's walls), or across it (a partition between rooms) */
+        /* a close-up: the two walls nearest the eye kept low, so they do not hide the room; the long ones run over the corners */
+        let hh = ph;
+        if (out1) { const nn = ax === bx ? [ax === x0 ? -1 : 1, 0] : [0, ay === y0 ? -1 : 1], P = RT([nn[0], nn[1], 0]), Z = RT([0, 0, 0]);
+          if ((P[0] - Z[0]) * V[0] + (P[1] - Z[1]) * V[1] > 0) hh = zf + 0.12;
+          if (ax === bx) { ax += ax === x0 ? -pt : pt; bx = ax; } else { ay += ay === y0 ? -pt : pt; by = ay; ax -= 2 * pt; bx += 2 * pt; } }
+        const L = Math.hypot(bx - ax, by - ay), m = Math.max(1, Math.ceil(L / 0.5));
+        for (let j = 0; j < m; j++) { const u0 = j / m, u1 = (j + 1) / m, px0 = ax + (bx - ax) * u0, px1 = ax + (bx - ax) * u1, py0 = ay + (by - ay) * u0, py1 = ay + (by - ay) * u1;
+          const b = ax === bx ? box(px0 - pt, py0, px0 + pt, py1, zf, hh, '#EDE8DE', null, 'same') : box(px0, py0 - pt, px1, py0 + pt, zf, hh, '#EDE8DE', null, 'same');
+          const go = b.go; b.go = () => { go(); const T = ax === bx ? [[px0 - pt, py0], [px0 + pt, py0], [px0 + pt, py1], [px0 - pt, py1]] : [[px0, py0 - pt], [px1, py0 - pt], [px1, py0 + pt], [px0, py0 + pt]]; draw(ell(T, hh + 0.002), '#4A443D', { n:[0, 0, 1], flat:true, sw:0.01, st:'#4A443D' }); };
+          U.push(b); } });
+      if (!q.wc || !VM_WC[q.wc]) return;
+      const W = '#FAFAF8', wx = x0 + 0.1, bx = x0 + 0.65;
+      /* WC: the cistern against the wall, the bowl before it, the seat on top */
+      U.push(box(wx, y1 - 0.18, wx + 0.38, y1, zf, zf + 0.8, W));
+      U.push(box(wx + 0.03, y1 - 0.66, wx + 0.35, y1 - 0.18, zf, zf + 0.4, W, () => { const c = [wx + 0.19, y1 - 0.43], E = Array.from({ length:16 }, (_, i) => { const a = i / 16 * 2 * Math.PI; return [c[0] + 0.12 * Math.cos(a), c[1] + 0.17 * Math.sin(a), zf + 0.402]; }); draw(E, '#C9D3D6', { n:[0, 0, 1], flat:true, sw:0.012 }); }));
+      /* basin: the pedestal, the bowl's slab, its hollow */
+      U.push(box(bx + 0.2, y1 - 0.2, bx + 0.35, y1, zf, zf + 0.78, W));
+      U.push(box(bx, y1 - 0.45, bx + 0.55, y1, zf + 0.7, zf + 0.85, W, () => { const c = [bx + 0.275, y1 - 0.24], E = Array.from({ length:16 }, (_, i) => { const a = i / 16 * 2 * Math.PI; return [c[0] + 0.2 * Math.cos(a), c[1] + 0.14 * Math.sin(a), zf + 0.852]; }); draw(E, '#C9D3D6', { n:[0, 0, 1], flat:true, sw:0.012 }); }));
+      if (q.wc === 'shower') { const sx = x1 - 0.8;
+        U.push(box(sx, y1 - 0.8, x1, y1, zf, zf + 0.06, W, () => { const c = [sx + 0.4, y1 - 0.4]; draw([[c[0] - 0.04, c[1] - 0.04, zf + 0.062], [c[0] + 0.04, c[1] - 0.04, zf + 0.062], [c[0] + 0.04, c[1] + 0.04, zf + 0.062], [c[0] - 0.04, c[1] + 0.04, zf + 0.062]], '#7F8C90', { n:[0, 0, 1], flat:true, sw:0.01 }); }));
+        /* its glass screen on the open side */
+        U.push({ k:fxy([[sx, y1 - 0.8, 0], [sx, y1, 0]].map(RT)) + 0.01, go:() => draw([[sx, y1 - 0.8, zf + 0.06], [sx, y1 - 0.25, zf + 0.06], [sx, y1 - 0.25, zf + 1.9 > zc ? zc : zf + 1.9], [sx, y1 - 0.8, zf + 1.9 > zc ? zc : zf + 1.9]], 'rgba(170,205,220,.35)', { n:[-1, 0, 0], flat:true, st:'rgba(90,130,150,.6)', sw:0.012 }) }); }
+      if (q.wc === 'bath') { const ax = x1 - 0.7, ay = y1 - Math.min(1.7, q.d);
+        U.push(box(ax, ay, x1, y1, zf, zf + 0.55, W, () => { const r = 0.08, T = [[ax + r, ay + r], [x1 - r, ay + r], [x1 - r, y1 - r], [ax + r, y1 - r]]; draw(ell(T, zf + 0.552), '#C9D3D6', { n:[0, 0, 1], flat:true, sw:0.012 }); })); }
+    } }
+  function frame() {
+  if (!all.length) return '<svg xmlns="http://www.w3.org/2000/svg" class="vmiso"></svg>';
+  const xs = all.map(p => p[0]), ys = all.map(p => p[1]), x0 = Math.min(...xs), y0 = Math.min(...ys), W = Math.max(...xs) - x0, H = Math.max(...ys) - y0, pad = 0.6;
+  const vb = [x0 - pad, y0 - pad, W + 2 * pad, H + 2 * pad].map(v => +v.toFixed(2)).join(' '), h = Math.round(w * (H + 2 * pad) / (W + 2 * pad));
+  return '<svg xmlns="http://www.w3.org/2000/svg" class="vmiso" viewBox="' + vb + '" width="' + w + '" height="' + h + '">' + out.join('') + '</svg>';
+  }
+}
 /** The plan: bodies, walls by their thickness, openings, the elements' marks, the rooms, north and a scale. */
 /* The bathroom kits a student adds to the plan, with indicative sizes (m): a minimum
    room with a basin and a WC, one with a shower tray, one with a bath. Fittings at
@@ -26162,7 +26266,19 @@ function buildModeller(host) {
     ib.appendChild(el('button', { type:'button', class:'btn small', text:'⤒', title:VMT('Look from higher up', 'Ver de mais alto'), onclick:() => tilt(10) }));
     ib.appendChild(el('button', { type:'button', class:'btn small', text:'⤓', title:VMT('Look from lower down', 'Ver de mais baixo'), onclick:() => tilt(-10) }));
     if (VM_AZ || Math.abs(VM_EL - 35.26) > 0.5) ib.appendChild(el('button', { type:'button', class:'btn small', text:VMT('Back to the isometric', 'Voltar à isométrica'), onclick:() => { VM_AZ = 0; VM_EL = 35.26; vmSetView(); drawViews(); } }));
-    isoBox.insertAdjacentHTML('beforeend', vmIsoSVG(M, 760));
+    /* opened: the model cut at sill height on the floor picked for rooms, to see the rooms and the bathroom fittings */
+    ib.appendChild(el('button', { type:'button', class:'btn small' + (VM_CUT ? ' solid' : ''), text:VM_CUT ? VMT('Close the cut', 'Fechar o corte') : VMT('Cut open — see the rooms', 'Abrir em corte — ver as divisões'),
+      title:VMT('Cut the model 1.2 m over the floor picked for rooms (click a plan to pick another) and show the rooms and the bathroom fittings', 'Cortar o modelo a 1,2 m do piso escolhido para as divisões (clique numa planta para escolher outro) e mostrar as divisões e o equipamento das casas de banho'),
+      onclick:() => { VM_CUT = !VM_CUT; drawViews(); } }));
+    const isoNow = () => VM_CUT ? vmCutSVG(vm(), R.V.rooms, 760, VM_ROOMFL) : vmIsoSVG(vm(), 760);
+    if (VM_CUT) isoBox.appendChild(el('p', { class:'hint', style:'margin:2px 0', text:(VM_ROOMFL ? VMT('Floor ', 'Piso ') + VM_ROOMFL : VMT('Ground floor', 'Piso térreo')) + VMT(', cut 1.2 m above its floor: the walls in section (dark), the rooms and their partitions, the bathroom fittings. Roofs, upper floors, openings and elements are left off.', ', cortado a 1,2 m do pavimento: as paredes em corte (escuro), as divisões e as suas paredes, o equipamento das casas de banho. As coberturas, os pisos de cima, os vãos e os elementos ficam de fora.') }));
+    isoBox.insertAdjacentHTML('beforeend', isoNow());
+    /* each bathroom of that floor drawn close, its fittings at a size that reads */
+    if (VM_CUT) { const wcs = R.V.rooms.filter(q => q.fl === VM_ROOMFL && q.wc && VM_WC[q.wc]);
+      if (wcs.length) { const row = isoBox.appendChild(el('div', { style:'display:flex;flex-wrap:wrap;gap:10px;margin-top:6px' }));
+        wcs.forEach(q => { const K = VM_WC[q.wc], f = row.appendChild(el('div', { style:'flex:0 1 230px;text-align:center' }));
+          f.insertAdjacentHTML('beforeend', vmCutSVG(M, null, 220, 0, q).replace('class="vmiso"', 'class="vmwc3d" style="max-width:100%;height:auto"'));
+          f.appendChild(el('p', { class:'vmcap', style:'margin:0', text:VL(q.n) + ' — ' + VMT(K.en, K.pt).replace(/^[^(]*\(|\)$/g, '') + ' · ' + fmt(q.w, 2) + ' × ' + fmt(q.d, 2) + ' m' })); }); } }
     { const sv = isoBox.querySelector('svg.vmiso'); if (sv) { let x0 = null, a0 = 0; sv.style.cursor = 'grab'; sv.style.touchAction = 'none';
       let y0 = 0, e0 = VM_EL;
       sv.addEventListener('pointerdown', ev => { x0 = ev.clientX; a0 = VM_AZ; y0 = ev.clientY; e0 = VM_EL; try { sv.setPointerCapture(ev.pointerId); } catch (e) {} });
@@ -26170,7 +26286,7 @@ function buildModeller(host) {
       sv.addEventListener('pointermove', ev => { if (x0 === null) return; const a = Math.round(a0 + (ev.clientX - x0) * 0.5), e = Math.max(5, Math.min(90, Math.round(e0 + (ev.clientY - y0) * 0.4)));
         if (a !== VM_AZ || e !== Math.round(VM_EL)) { VM_AZ = ((a % 360) + 360) % 360; if (e !== Math.round(VM_EL)) { VM_EL = e; vmSetView(); }
         /* turned degree by degree; the frame only ever grows while dragging, so the model does not jump in size */
-        const nw = vmIsoSVG(vm(), 760), vb = (nw.match(/viewBox="([^"]+)"/) || [])[1];
+        const nw = isoNow(), vb = (nw.match(/viewBox="([^"]+)"/) || [])[1];
         if (vb) { const n = vb.split(' ').map(Number), o = (sv.getAttribute('viewBox') || vb).split(' ').map(Number), X0 = Math.min(n[0], o[0]), Y0 = Math.min(n[1], o[1]), X1 = Math.max(n[0] + n[2], o[0] + o[2]), Y1 = Math.max(n[1] + n[3], o[1] + o[3]);
           sv.setAttribute('viewBox', [X0, Y0, X1 - X0, Y1 - Y0].map(v => +v.toFixed(2)).join(' ')); sv.setAttribute('height', Math.round(760 * (Y1 - Y0) / (X1 - X0))); } sv.innerHTML = nw.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } });
       const end = () => { if (x0 !== null) { x0 = null; drawViews(); } }; sv.addEventListener('pointerup', end); sv.addEventListener('pointercancel', end); } }
@@ -26266,7 +26382,7 @@ function buildModeller(host) {
         if (op) { VM_OPSEL = op; VM_ROOMSEL = null; drag = { kind:'op', v, vi:+vi, f, op, p:pt(ev) }; svg.setPointerCapture(ev.pointerId); ev.preventDefault();
           const PLs = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:R.V.rooms.filter(r => r.fl === fl) }); svg.innerHTML = PLs.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); return; }
       }
-      if (VM_ROOMFL !== fl) { VM_ROOMFL = fl; svg.closest('.vmplans') && svg.closest('.vmplans').querySelectorAll('.vmplan1').forEach((d, i) => d.classList.toggle('on', i === fl)); drawEditor(); }
+      if (VM_ROOMFL !== fl) { VM_ROOMFL = fl; svg.closest('.vmplans') && svg.closest('.vmplans').querySelectorAll('.vmplan1').forEach((d, i) => d.classList.toggle('on', i === fl)); drawEditor(); if (VM_CUT) svg._flc = true; }
       const t = ev.target, p = pt(ev), M = vm(), rooms = R.V.rooms.filter(q => q.fl === fl);
       if (t.dataset.court !== undefined) { const c = M.court, ci = +t.dataset.court, sx = ci === 1 || ci === 2 ? 1 : -1, sy = ci >= 2 ? 1 : -1;
         drag = { kind:'court', c, p, fx:c.x - sx * c.L / 2, fy:c.y - sy * c.D / 2, cx:c.x + sx * c.L / 2, cy:c.y + sy * c.D / 2 }; }
@@ -26295,7 +26411,8 @@ function buildModeller(host) {
       svg.innerHTML = PL2.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
     });
     /* a click that did not move leaves the plan as it is, so a double-click still finds its room or its opening */
-    const up = () => { if (drag) { const mv = drag.moved; drag = null; if (mv) { drawEditor(); drawViews(); } } };
+    /* the cut isometric follows the floor a click on a plan picks */
+    const up = () => { const fc = svg._flc; svg._flc = false; if (drag) { const mv = drag.moved; drag = null; if (mv) { drawEditor(); drawViews(); return; } } if (fc) drawViews(); };
     svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
     svg.addEventListener('dblclick', ev => {
       /* a room renamed in place: the student's own word for it */
@@ -26364,8 +26481,8 @@ function buildModeller(host) {
     /* the bathroom, in three kits, sized to hold its fittings */
     Object.keys(VM_WC).forEach(k => { const K = VM_WC[k]; rb.appendChild(el('button', { type:'button', text:'+ ' + VMT(K.en, K.pt), onclick:() => {
       const v = vm().vols[0]; R.V.rooms.push({ n:{ en:'Bathroom', pt:'Casa de banho' }, x:v.x, y:v.y, w:K.w, d:K.d, fl:VM_ROOMFL, wc:k }); drawViews(); } })); });
-    rb.appendChild(el('p', { class:'hint', style:'margin:2px 0 4px', text:VMT('Each bathroom is drawn with its fittings and ≈ 0.6–0.7 m clear in front of each: an indicative layout, not a legal minimum — check the RGEU, and DL 163/2006 if it must be accessible (1.5 m turning circle). Change the kit in the table.',
-      'Cada casa de banho é desenhada com o equipamento e ≈ 0,6–0,7 m livres à frente de cada peça: uma organização indicativa, não um mínimo legal — confirme no RGEU, e no DL 163/2006 se tiver de ser acessível (círculo de rotação de 1,5 m). Mude o equipamento na tabela.') }));
+    rb.appendChild(el('p', { class:'hint', style:'margin:2px 0 4px', text:VMT('Each bathroom is drawn with its fittings and ≈ 0.6–0.7 m clear in front of each: an indicative layout, not a legal minimum — check the RGEU, and DL 163/2006 if it must be accessible (1.5 m turning circle). Change the kit in the table; see it in 3D with «Cut open» over the isometric.',
+      'Cada casa de banho é desenhada com o equipamento e ≈ 0,6–0,7 m livres à frente de cada peça: uma organização indicativa, não um mínimo legal — confirme no RGEU, e no DL 163/2006 se tiver de ser acessível (círculo de rotação de 1,5 m). Mude o equipamento na tabela; veja-o em 3D com «Abrir em corte», sobre a isométrica.') }));
     rb.appendChild(el('button', { type:'button', text:VMT('Remove the last room', 'Remover a última divisão'), onclick:() => { R.V.rooms.pop(); drawViews(); } }));
     rb.appendChild(el('button', { type:'button', text:VMT('Rooms of the type', 'Divisões do tipo'), onclick:() => { R.V.rooms = vmDefaultRooms(vm()); drawViews(); } }));
   }
