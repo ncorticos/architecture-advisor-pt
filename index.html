@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.198.0',
+  version:     '1.199.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6052,7 +6052,7 @@ function unitRects(sg, w, G, H0) {
       const eu = unitFloor(u, kk);
       const vv = f === 'C' ? spanVC(u, r.sill, r.head, w.base, w.ceil) : eu.door ? doorSpanV(u, head, kk, G.fh) : unitSpanV(u, r.sill, head, kk, G.fh);
       const v1 = f === 'C' ? vv[1] : Math.min(vv[1], H0);
-      if (v1 - vv[0] >= 0.1) out.push({ a:sp.a, b:sp.b, v0:vv[0], v1, door:!!eu.door, k:kk });
+      if (v1 - vv[0] >= 0.1) out.push({ a:sp.a, b:sp.b, v0:vv[0], v1, door:!!eu.door, rail:!!eu.rail, k:kk });
     });
   });
   return out;
@@ -20127,7 +20127,7 @@ function vernApply(scope) {
   const R = vernRead();
   if (!R) return;
   const m = R.T.model, all = scope === 'all';
-  if (all) { R.V.bodyStudy = {}; R.V.work = 0; }
+  if (all) { R.V.bodyStudy = {}; R.V.work = 0; R.V.vm = null; R.V.rooms = null; }
   if (all || scope === 'site') {
     MASS.L = m.L; MASS.D = m.D; MASS.fl = m.fl; MASS.fh = m.fh; MASS.rot = m.rot;
     MASS.form = m.form; MASS.wing = m.wing ? Object.assign({}, m.wing) : null;
@@ -20205,6 +20205,7 @@ function vernApply(scope) {
   /* a model may pick its materials by place (a function of the site) */
   if (all || scope === 'visualization') { RENDER_PROMPT = VL(typeof m.render === 'function' ? m.render(STATE.site || {}) : m.render);
     const dr = vDress(R.type); RENDER_DRESS = { barra:dr ? dr.barra : null, frames:dr ? dr.frames : null }; }
+  if (all) { try { studyBase(R); } catch (e) { console.error(e); } }
   mountApp(STATE.site, null, STATE.tab, true, true);
   toast(VL({ en:'Model applied: ', pt:'Modelo aplicado: ' }) + VL(R.T.name));
 }
@@ -26099,6 +26100,7 @@ function vmPassToStudy(vm, wi) {
   vmRidgeToRoof(v, true);
   vmChimToRoof(vm, wi);
   toast(wi ? VMT('Now working on: ', 'Agora a trabalhar: ') + VL(v.name) : VMT('The main body is now the study’s massing — the other tabs measure it.', 'O corpo principal passou a ser a volumetria do estudo — os outros separadores medem-no.'));
+  try { studyBase(vernRead()); } catch (e) { console.error(e); }
   refreshAll();
 }
 /** The study's roof takes the ridge of a modeller body: a gable part's ridge runs along its longer side unless the part is
@@ -26148,8 +26150,132 @@ function vmChimToRoof(vm, wi) {
   ROOF.zones.forEach(z => { delete z.chim; });
   ROOF.zones[zi].chim = { on:true, fam:vmChimFamOf(E, R), picked:true, x:+((fu - 0.5) * MASS.L).toFixed(2), y:+((fv - 0.5) * MASS.D).toFixed(2) };
 }
+/* ---------------------------------------------------------------- one model in every tab
+   Draw the model holds the building as bodies (vm); the measuring tabs hold the body worked on as MASS, ROOF, OPEN.
+   On leaving a tab each side is compared, part by part, with what both held at the last crossing, and what changed goes
+   over to the other side — so the model a tab opens on is always the one the student just left. */
+/** How many of the model's bodies are the parts of one roof (a model whose roof is in parts draws one body per part). */
+function syncParts(R, vm) {
+  const z = R.T.model.roof && R.T.model.roof.zones;
+  return z && z.length > 1 && !(R.V.work > 0) && ROOF.zones && ROOF.zones.length === z.length && vm.vols.length >= z.length ? z.length : 1;
+}
+/** A face's openings as the measuring tabs draw them: storey, kind, size and place along the wall, west to east or south to north. */
+function syncRects(f) {
+  if ((MASS.form || 'rect') !== 'rect' || (MASS.patio && MASS.patio.on)) return null;
+  const NS = f === 'S' || f === 'N', len = NS ? MASS.L : MASS.D, out = [];
+  planModel(MASS).segs.filter(q => !q.step && (q.face || segFace(q)) === f).forEach(sg => {
+    const wn = segWindow(sg, MASS), i = NS ? 0 : 1, dir = (sg.b[i] - sg.a[i]) / (sg.len || 1), a0 = sg.a[i] + len / 2;
+    if (wn) unitRects(sg, wn, MASS, Infinity).forEach(q => out.push({ t:q.door ? 'd' : q.rail ? 'v' : 'w', fl:q.k, pos:+((a0 + dir * (q.a + q.b) / 2) / len).toFixed(3), w:+(q.b - q.a).toFixed(2), h:+(q.v1 - q.v0).toFixed(2) }));
+  });
+  return out.sort((p, q) => p.fl - q.fl || p.pos - q.pos);
+}
+function syncVmSide(R, vm) {
+  const wi = Math.min(R.V.work || 0, vm.vols.length - 1), vs = vm.vols.slice(wi, wi + syncParts(R, vm)), v = vs[0], els = vm.els || [], open = {};
+  VM_FACES.forEach(f => { open[f] = JSON.stringify(vs.map(q => (q.open && q.open[f]) || [])); });
+  return { dims:JSON.stringify([+vs.reduce((a, q) => a + q.L, 0).toFixed(2), v.D, v.fl, v.fh, v.raise || 0]),
+    roof:JSON.stringify(vs.map(q => [q.roof.type, q.roof.th, q.roof.bei || 0, q.roof.ridge || ''])), open,
+    els:JSON.stringify(els.filter(e => (e.t === 'varanda' || e.t === 'stair') && (e.vol || 0) === wi)),
+    chim:JSON.stringify(els.filter(e => e.t === 'chimney' && (e.vol || 0) === wi).map(e => [e.u, e.v, e.kind])),
+    mat:JSON.stringify([v.wall.mat, v.roof.mat, v.wall.barra || '', v.wall.frames || '']) };
+}
+function syncStudySide() {
+  const zs = ROOF.zones && ROOF.zones.length ? ROOF.zones : [{ n:ROOF.n, th:ROOF.th, bei:ROOF.bei }], open = {}, look = parseRenderPrompt(RENDER_PROMPT || '');
+  VM_FACES.forEach(f => { open[f] = JSON.stringify(syncRects(f)); });
+  return { dims:JSON.stringify([MASS.L, MASS.D, MASS.fl, MASS.fh, MASS.raise && MASS.raise.on ? MASS.raise.h : 0]),
+    roof:JSON.stringify(zs.map(z => [z.n, z.th, z.bei && z.bei.on !== false ? z.bei.d || 0 : 0])), open, balc:JSON.stringify(MASS.balc || []),
+    chim:JSON.stringify(zs.map(z => z.chim && z.chim.on !== false ? [z.chim.x, z.chim.y, z.chim.fam] : null)),
+    mat:JSON.stringify([look.wall ? look.wall.key : '', look.roof ? look.roof.key : '']) };
+}
+/** Both sides as they now are: the next crossing is measured from here. */
+function studyBase(R) {
+  const vm = R.V.vm && R.V.vm.type === R.type ? R.V.vm : vmRead().vm;
+  R.V.sync = { type:R.type, wi:Math.min(R.V.work || 0, vm.vols.length - 1), a:syncVmSide(R, vm), b:syncStudySide() };
+}
+/** The balcony a varanda of the drawing is in the Plan tab, and back: both stand at the same place on the same wall. */
+function syncBalcOf(E, hasStair) {
+  const f = E.face || 'S', NS = f === 'S' || f === 'N', len = NS ? MASS.L : MASS.D, c = ((E.pos === undefined ? 0.5 : E.pos) - 0.5) * len, inn = E.kind === 'reentrante';
+  const b = { f, x:NS ? c : (f === 'E' ? 1 : -1) * MASS.L / 2, y:NS ? (f === 'N' ? 1 : -1) * MASS.D / 2 : c, mode:inn ? 'in' : 'out', w:Math.min(E.w || 4, Math.floor(len * 10) / 10), d:inn ? 1.5 : E.kind === 'sacada' ? 0.5 : 1.2, lv:(E.floor || 0) + 1, corner:0 };
+  if (hasStair && !inn) b.stair = { w:STAIR_W };
+  return b;
+}
+function syncVaranda(b, wi, old) {
+  const NS = b.f === 'S' || b.f === 'N', len = NS ? MASS.L : MASS.D, was = (old || []).find(e => e.t === 'varanda' && (e.face || 'S') === b.f && (e.floor || 0) === (b.lv || 1) - 1);
+  return Object.assign({}, was, { t:'varanda', vol:wi, face:b.f, kind:b.mode === 'in' ? 'reentrante' : was && was.kind !== 'reentrante' ? was.kind : 'corrida', pos:+clamp(((NS ? b.x : b.y) + len / 2) / len, 0.02, 0.98).toFixed(3), w:b.w, floor:Math.max(0, (b.lv || 1) - 1) });
+}
+/** Words of a finish in the image brief: the wall's or the roof's phrase of it replaced by the drawing's material. */
+function syncPromptMat(rx, list, key, noun) {
+  const o = list.find(q => q.key === key); if (!o) return;
+  RENDER_PROMPT = [o.words[0] + ' ' + noun].concat((RENDER_PROMPT || '').split(',').map(q => q.trim()).filter(q => q && !rx.test(q))).join(', ').slice(0, 500);
+}
+/** Carry what changed since the last crossing to the other side. True when anything went over. */
+function studySync() {
+  if (!isPopular() || !MASS || !ROOF || !OPEN) return false;
+  let R = null; try { R = vernRead(); } catch (e) { return false; }
+  if (!R || !R.T || R.T.support) return false;
+  const vm = R.V.vm && R.V.vm.type === R.type ? R.V.vm : vmRead().vm, S = R.V.sync;
+  const wi = Math.min(R.V.work || 0, vm.vols.length - 1);
+  if (!S || S.type !== R.type || S.wi !== wi) { studyBase(R); return false; }
+  const a = syncVmSide(R, vm), b = syncStudySide(), np = syncParts(R, vm), vs = vm.vols.slice(wi, wi + np), v = vs[0];
+  const A = k => a[k] !== S.a[k], B = k => b[k] !== S.b[k], Af = f => a.open[f] !== S.a.open[f], Bf = f => b.open[f] !== S.b.open[f];
+  const aOpen = VM_FACES.filter(Af), bOpen = VM_FACES.filter(Bf);
+  if (!['dims', 'roof', 'chim', 'mat'].some(k => A(k) || B(k)) && !A('els') && !B('balc') && !aOpen.length && !bOpen.length) return false;
+  const zs = () => (ROOF.zones && ROOF.zones.length ? ROOF.zones : null);
+  const RT = { flat:0, shed:1, gable:2, ground:2, hip:3, pyramid:3, tesoura:3, cone:3, dome:3 };
+  /* the drawing to the measuring tabs */
+  if (A('dims')) { MASS.L = +vs.reduce((t, q) => t + q.L, 0).toFixed(2); MASS.D = v.D; MASS.fl = v.fl; MASS.fh = Math.max(2.0, v.fh);
+    MASS.raise = v.raise > 0 ? { on:true, h:v.raise, kind:(MASS.raise && MASS.raise.kind) || 'plinth' } : Object.assign({ h:0.9, kind:'plinth' }, MASS.raise, { on:false });
+    fixWing(MASS); fixPatio(MASS); }
+  if (A('roof')) { const z = zs(); if (z) z.forEach((q, i) => { const w = vs[Math.min(i, vs.length - 1)], n = RT[w.roof.type];
+      if (n !== undefined) { q.n = n; q.th = n === 0 ? 0 : Math.min(60, w.roof.type === 'dome' ? 35 : w.roof.th); }
+      if (q.bei || w.roof.bei > 0) q.bei = Object.assign({ ends:true }, q.bei, { on:w.roof.bei > 0, d:w.roof.bei || 0 }); });
+    else { const n = RT[v.roof.type]; if (n !== undefined) { ROOF.n = n; ROOF.th = n === 0 ? 0 : Math.min(60, v.roof.th); } }
+    if (!ROOF.zones || ROOF.zones.length === 1) vmRidgeToRoof(v, true); }
+  if (A('dims') || aOpen.length) (A('dims') ? VM_FACES : aOpen).forEach(f => {
+    const P = { L:MASS.L, D:MASS.D, fl:MASS.fl, fh:MASS.fh, roof:np > 1 ? { zones:ROOF.zones } : {}, open:{}, balc:0 };
+    const u = vernOpenUnits(f, np > 1 ? vm : { vols:[v] }, P), o = OPEN[f] || {}; if (!u) return;
+    OPEN[f] = Object.assign(u, { ovD:o.ovD || 0, ovN:o.ovN || 1, ovL:o.ovL || 0, ovR:o.ovR || 0, finD:o.finD || 0, finN:o.finN || 0, finSide:o.finSide || 'both' }); });
+  if (A('els')) { const els = vm.els.filter(e => (e.vol || 0) === wi);
+    MASS.balc = els.filter(e => e.t === 'varanda' && (e.floor || 0) < MASS.fl).map(e => syncBalcOf(e, els.some(q => q.t === 'stair' && (q.face || 'S') === (e.face || 'S')))); }
+  if (A('chim')) { if (vm.els.some(e => e.t === 'chimney' && (e.vol || 0) === wi)) vmChimToRoof(vm, wi); else if (ROOF.zones) ROOF.zones.forEach(z => { delete z.chim; }); }
+  if (A('mat')) { const was = JSON.parse(S.a.mat);
+    if (was[0] !== v.wall.mat) syncPromptMat(/\b(walls?|paredes?)\b/i, RENDER_WALLS, v.wall.mat, 'walls');
+    if (was[1] !== v.roof.mat) syncPromptMat(/\b(roofs?|telhados?|coberturas?)\b/i, RENDER_ROOFS, v.roof.mat, 'roof');
+    RENDER_DRESS = { barra:v.wall.barra || null, frames:v.wall.frames || null }; }
+  /* the measuring tabs to the drawing, what the drawing did not change itself */
+  if (B('dims') && !A('dims')) { const sum = vs.reduce((t, q) => t + q.L, 0), k = sum > 0 ? MASS.L / sum : 1;
+    vs.forEach(q => { if (vs.length > 1) { q.L *= k; q.x *= k; } else q.L = MASS.L; q.D = q.kind === 'round' ? q.L : MASS.D; q.fl = MASS.fl; q.fh = MASS.fh; q.raise = MASS.raise && MASS.raise.on ? MASS.raise.h : 0; }); }
+  if (B('roof') && !A('roof')) { const z = zs() || [{ n:ROOF.n, th:ROOF.th, bei:ROOF.bei }];
+    vs.forEach((q, i) => { const c = z[Math.min(i, z.length - 1)];
+      if (!['cone', 'dome', 'pyramid', 'tesoura', 'ground'].includes(q.roof.type)) { q.roof.type = ['flat', 'shed', 'gable', 'hip'][c.n] || q.roof.type; q.roof.th = c.n === 0 ? 0 : c.th; }
+      if (c.bei) q.roof.bei = c.bei.on === false ? 0 : c.bei.d || 0; }); }
+  if ((B('dims') && !A('dims')) || bOpen.length) (B('dims') && !A('dims') ? VM_FACES : bOpen).filter(f => !aOpen.includes(f)).forEach(f => {
+    const rs = syncRects(f), NS = f === 'S' || f === 'N'; if (!rs) return;
+    /* a long terrace of more openings than a wall of the tabs holds keeps the drawing's own */
+    const most = Math.max(0, ...Array.from({ length:v.fl }, (_, k) => [].concat(...vs.map(q => (q.open && q.open[f]) || [])).filter(o => o.fl === k).length)); if (most > 6) return;
+    const old = vs.map(q => (q.open && q.open[f]) || []);
+    vs.forEach(q => { q.open = q.open || {}; q.open[f] = []; });
+    rs.forEach(o => { const q = vs.length === 1 ? vs[0] : !NS ? (f === 'E' ? vs[vs.length - 1] : vs[0]) : vs.find(w => o.pos * MASS.L - MASS.L / 2 < w.x + w.L / 2) || vs[vs.length - 1];
+      const pos = +clamp(vs.length > 1 && NS ? (o.pos * MASS.L - MASS.L / 2 - (q.x - q.L / 2)) / q.L : o.pos, 0.02, 0.98).toFixed(4), was = old[vs.indexOf(q)].find(e => e.fl === o.fl && e.t === o.t && Math.abs(e.pos - pos) * (NS ? q.L : q.D) < 0.3);
+      q.open[f].push(Object.assign({}, was, { t:o.t, pos, w:o.w, h:o.h, fl:o.fl })); }); });
+  if (B('balc') && !A('els')) { const was = vm.els.filter(e => (e.vol || 0) === wi), gone = JSON.parse(S.b.balc).filter(q => q.stair && !(MASS.balc || []).some(c => c.f === q.f && c.stair)).map(q => q.f);
+    vm.els = vm.els.filter(e => !((e.vol || 0) === wi && (e.t === 'varanda' || (e.t === 'stair' && gone.includes(e.face || 'S')))));
+    (MASS.balc || []).forEach(c => { const E = syncVaranda(c, wi, was); vm.els.push(E);
+      if (c.stair && !vm.els.some(e => e.t === 'stair' && (e.vol || 0) === wi && (e.face || 'S') === c.f)) vm.els.push({ t:'stair', vol:wi, face:c.f, along:'par', pos:+Math.max(0.02, E.pos - c.w / 2 / ((c.f === 'S' || c.f === 'N') ? MASS.L : MASS.D)).toFixed(3), w:c.stair.w || 1, landing:false }); }); }
+  if ((B('dims') && !A('dims')) || bOpen.length) vm.els.forEach(e => { if (e.t === 'stair' && e.toDoor && (e.vol || 0) === wi) e.pos = vmStairPos(v, e.face || 'S'); });
+  if (B('chim') && !A('chim')) { const z = zs() || [], i = z.findIndex(q => q.chim && q.chim.on !== false), c = i >= 0 ? z[i].chim : null;
+    const E = vm.els.find(e => e.t === 'chimney' && (e.vol || 0) === wi);
+    if (!c) { if (E) vm.els.splice(vm.els.indexOf(E), 1); }
+    else { const u = +clamp(c.x / MASS.L + 0.5, 0.05, 0.95).toFixed(3), w = +clamp(c.y / MASS.D + 0.5, 0.05, 0.95).toFixed(3);
+      if (E) { E.u = u; E.v = w; } else vm.els.push({ t:'chimney', vol:wi, kind:{ rendilhada:'alg', alentejana:'ale', arca:'box', saloia:'sal', maos:'az', granito:'gran', xisto:'gran', basalto:'gran' }[c.fam] || 'box', u, v:w, h:1.2, wall:v.wall.mat }); } }
+  if (B('mat') && !A('mat')) { const k = JSON.parse(b.mat), was = JSON.parse(S.b.mat);
+    if (k[0] !== was[0] && VM_WALL[k[0]]) { v.wall.mat = k[0]; delete v.wall.c; delete v.wall.t; }
+    if (k[1] !== was[1] && VM_ROOFMAT[k[1]]) v.roof.mat = k[1]; }
+  studyBase(R);
+  return true;
+}
 /** The body the other tabs work on: picked from the model's bodies, the rest staying as glass around it. */
 function vmWorkOn(i) {
+  studySync();
   const R = vernRead(); if (!R) return; const vm = R.V.vm || (R.V.vm = vmFromType(R.type));
   const prev = Math.min(R.V.work || 0, vm.vols.length - 1), next = Math.max(0, Math.min(i, vm.vols.length - 1));
   /* each building keeps what the student set on it in the tabs — its plan, roof and pitch, its openings — and
@@ -26164,7 +26290,7 @@ function vmWorkOn(i) {
   }
   R.V.work = next;
   const put = (T, S) => { Object.keys(T).forEach(k => delete T[k]); Object.assign(T, S); };
-  if (keep[next] && prev !== next) { const S = JSON.parse(JSON.stringify(keep[next])); put(MASS, S.MASS); put(ROOF, S.ROOF); put(OPEN, S.OPEN);
+  if (keep[next] && prev !== next) { const S = JSON.parse(JSON.stringify(keep[next])); put(MASS, S.MASS); put(ROOF, S.ROOF); put(OPEN, S.OPEN); studyBase(R);
     toast(VMT('Now working on: ', 'Agora a trabalhar: ') + VL(vm.vols[next].name)); refreshAll(); return; }
   /* first time on this building: its plan and roof from the model, and its own openings, one by one */
   const v = vm.vols[next];
@@ -26358,7 +26484,6 @@ function buildModeller(host) {
   const vm = () => R.V.vm;
 
   top.appendChild(el('button', { type:'button', text:VMT('Start again from the archetype', 'Recomeçar do arquétipo'), onclick:() => { R.V.vm = vmFromType(R.type); R.V.rooms = vmDefaultRooms(R.V.vm); VM_SEL = 0; vmChanged(true); } }));
-  top.appendChild(el('button', { type:'button', text:VMT('Hand the main body to the study', 'Passar o corpo principal ao estudo'), title:VMT('The other tabs then measure it (sun, roof, openings, ventilation).', 'Os outros separadores passam a medi-lo (sol, cobertura, vãos, ventilação).'), onclick:() => vmPassToStudy(vm()) }));
   const dl = (txt, name, type) => download(new Blob([txt], { type }), slugify(sitePrefix() + name) + (type.indexOf('svg') >= 0 ? '.svg' : '.dxf'));
   top.appendChild(el('button', { type:'button', text:'SVG — ' + VMT('isometric', 'isométrica'), onclick:() => dl(vmIsoSVG(vm(), 1200, { bg:'#ffffff' }), 'modelo-isometrica', 'image/svg+xml') }));
   top.appendChild(el('button', { type:'button', text:'SVG — ' + VMT('plan', 'planta'), onclick:() => dl(vmPlanSVG(vm(), 1200, { rooms:R.V.rooms.filter(q => q.fl === VM_ROOMFL) }).svg, 'modelo-planta', 'image/svg+xml') }));
@@ -28991,6 +29116,7 @@ function cadDownload(kind) {
 /** The Export 3D menu under the tab bar: one line per format, the tools
     each opens in, and what the model is. */
 function toggleCadMenu(ev) {
+  try { if (studySync()) refreshAll(); } catch (e) { console.error(e); }
   const old = $('#cadMenu');
   if (old) { old.remove(); return; }
   const sv = $('#saveMenu');
@@ -29204,6 +29330,7 @@ function collectConstructionHandoff() {
    carries the same hand-off for later. */
 const CA_URL = 'https://ncorticos.github.io/construction-advisor-pt/';
 function continueToConstruction() {
+  try { if (studySync()) refreshAll(); } catch (e) { console.error(e); }
   const r = collectConstructionHandoff();
   if (!r.ok) { toast('Open a study first — set the site, then continue'); return; }
   /* the study itself rides along, so Construction Advisor can send the
@@ -29370,6 +29497,7 @@ function applyStudy(o) {
   if (o.mesh) STATE.note = t('Saved with a 3D mesh — re-import the model file to see it again.');
 }
 function toggleSaveMenu(ev) {
+  try { if (studySync()) refreshAll(); } catch (e) { console.error(e); }
   const old = $('#saveMenu');
   if (old) { old.remove(); return; }
   const cm = $('#cadMenu');
@@ -30764,6 +30892,9 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
   if (keepScroll) { window.scrollTo(0, scrollY0); requestAnimationFrame(() => window.scrollTo(0, scrollY0)); setTimeout(() => window.scrollTo(0, scrollY0), 200); }
 
   function activate(key) {
+    /* every tab opens on the model the student just left: what changed crosses over, and the pages are drawn again on it */
+    if (STATE.tab !== key) { let moved = false; try { moved = studySync(); } catch (err) { console.error(err); }
+      if (moved) { mountApp(STATE.site, null, key, true); return; } }
     STATE.tab = key;
     TABS.forEach(tab => {
       const on = tab.key === key;
