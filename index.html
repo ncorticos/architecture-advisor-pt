@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.199.0',
+  version:     '1.200.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -5868,6 +5868,7 @@ function faceUnits(f) {
 }
 /** Share of the specified glass actually built (switched-on units). */
 function glassShare(f) {
+  if (OPEN[f] && OPEN[f].bandM > 0) return 1;   // the WWR is what is built
   return faceUnits(f).reduce((a, w) => a + (w.on ? w.frac : 0), 0);
 }
 /** Absolute spans of one wall's glass [u0,u1] per unit, in order: every
@@ -6007,7 +6008,7 @@ function glassSpans(f, u0, u1, segLen, k) {
 }
 function segWindow(sg, G) {
   const f = sg.face || segFace(sg), o = OPEN && OPEN[f];
-  if (!o || !(o.wwr > 0) || sg.len < 1.5) return null;
+  if (!o || !(o.wwr > 0 || o.bandM > 0) || sg.len < 1.5) return null;
   if (sg.step) {
     /* a roof step wall (clerestory): one band from the lower roof up, sized
        to the sub-run's own lowest section so the glass never outgrows it.
@@ -6029,15 +6030,45 @@ function segWindow(sg, G) {
     const hAvail = ceil - base;
     if (o.sillZ + 0.3 > hAvail) return null;
     const head = Math.min(o.headZ, hAvail), h = Math.max(0.3, head - o.sillZ);
-    const w = Math.min(sg.len * 0.92, o.wwr * sg.len * hAvail / Math.max(h, 0.3));
-    const rows = [{ sill:base + o.sillZ, head:base + head }];
-    return { f:'C', w, h, sill:o.sillZ, head, uc:sg.len / 2, n:1, rows, area:w * h, glass:o.wwr * sg.len * hAvail, base, ceil };
+    const w = o.bandM > 0 ? o.bandM : Math.min(sg.len * 0.92, o.wwr * sg.len * hAvail / Math.max(h, 0.3));
+    const rows = [{ sill:base + o.sillZ, head:base + head }], glass = o.wwr * sg.len * hAvail;
+    return { f:'C', w, h, sill:o.sillZ, head, uc:sg.len / 2, n:1, rows, area:o.bandM > 0 ? glass : w * h, glass, base, ceil };
   }
   const n = Math.max(1, Math.round(G.fl || 1)), H0 = n * G.fh;
   const head = n > 1 ? Math.max(o.sillZ + 0.3, Math.min(o.headZ, G.fh - 0.1)) : o.headZ, h = Math.max(0.3, head - o.sillZ);
-  const w = Math.min(sg.len * 0.92, o.wwr * sg.len * H0 / (n * h));
+  const w = o.bandM > 0 ? o.bandM : Math.min(sg.len * 0.92, o.wwr * sg.len * H0 / (n * h));
   const zR = raiseH(MASS), rows = Array.from({ length:n }, (_, k) => ({ sill:zR + k * G.fh + o.sillZ, head:zR + k * G.fh + head }));
-  return { f, w, h, sill:o.sillZ, head, uc:sg.len / 2, n, rows, area:n * w * h, glass:o.wwr * sg.len * H0 };
+  return { f, w, h, sill:o.sillZ, head, uc:sg.len / 2, n, rows, area:o.bandM > 0 ? o.wwr * sg.len * H0 : n * w * h, glass:o.wwr * sg.len * H0 };
+}
+/** Does a wall's own run start on the viewer's right, seen from outside? */
+const uStartsRight = sg => (sg.b[0] - sg.a[0]) * sg.n[1] - (sg.b[1] - sg.a[1]) * sg.n[0] > 0;
+/** Openings are set in metres. A side's units are laid along a band of fixed length (bandM) instead of one the WWR, sill and
+    head stretch, so a window keeps its size and its distance from the wall's middle whatever else changes — and the WWR is
+    what the student built, read back, never an input. A side still in shares (an archetype's, an older study's) is
+    turned over here with every opening staying where it stands. */
+function openBandToMetres(o, f, w, len) {
+  const band = +(len * 0.92).toFixed(3), a0 = w.uc - w.w / 2, b0 = w.uc - band / 2, k = w.w / band;
+  faceUnits(f).forEach(u => { const P = isFinite(+u.pos) ? +u.pos : 0.5, O = isFinite(+u.off) ? +u.off : 0;
+    const turn = e => { if (isFinite(+e.frac)) e.frac = +e.frac * k;
+      if ('pos' in e || 'off' in e || e === u) { const c = a0 + (isFinite(+e.pos) ? +e.pos : P) * w.w + (isFinite(+e.off) ? +e.off : O); e.pos = (c - b0) / band; e.off = 0; } };
+    (u.floors || []).forEach(F => { if (F && typeof F === 'object') turn(F); });
+    turn(u); });
+  o.bandM = band;
+}
+function openMetres() {
+  if (!MASS || !OPEN) return;
+  const pl = planModel(MASS), n = Math.max(1, Math.round(MASS.fl || 1));
+  ['S', 'N', 'E', 'W'].forEach(f => { const o = OPEN[f]; if (!o) return;
+    const segs = pl.segs.filter(sg => !sg.step && segFace(sg) === f); if (!segs.length) return;
+    const ref = segs.reduce((a, q) => q.len > a.len ? q : a, segs[0]);
+    if (!(o.bandM > 0)) { const w = o.wwr > 0 ? segWindow(ref, MASS) : null; if (!w) return; openBandToMetres(o, f, w, ref.len); }
+    let wall = 0, built = 0;
+    segs.forEach(sg => { wall += sg.len * n * MASS.fh; const wn = segWindow(sg, MASS); if (!wn) return;
+      /* a brick panel is no glass, nor a popular house's timber door */
+      const R = unitRects(sg, wn, MASS, Infinity).filter(q => !(faceUnits(f)[q.ui] && unitFloor(faceUnits(f)[q.ui], q.k).gel) && !(q.door && isPopular()));
+      for (let k = 0; k < n; k++) { const iv = R.filter(q => q.k === k), xs = [...new Set(iv.flatMap(q => [q.a, q.b]))].sort((p, q) => p - q);
+        for (let i = 0; i + 1 < xs.length; i++) { const m = (xs[i] + xs[i + 1]) / 2; built += (xs[i + 1] - xs[i]) * iv.reduce((h, q) => m >= q.a && m <= q.b ? Math.max(h, q.v1 - q.v0) : h, 0); } } });
+    if (wall > 0) o.wwr = Math.max(0.001, built / wall); });
 }
 /** The model's own openings on a wall, one rect per unit and storey
     ({a, b, v0, v1, door}) — the same windows as Openings, never a band.
@@ -6052,7 +6083,7 @@ function unitRects(sg, w, G, H0) {
       const eu = unitFloor(u, kk);
       const vv = f === 'C' ? spanVC(u, r.sill, r.head, w.base, w.ceil) : eu.door ? doorSpanV(u, head, kk, G.fh) : unitSpanV(u, r.sill, head, kk, G.fh);
       const v1 = f === 'C' ? vv[1] : Math.min(vv[1], H0);
-      if (v1 - vv[0] >= 0.1) out.push({ a:sp.a, b:sp.b, v0:vv[0], v1, door:!!eu.door, rail:!!eu.rail, k:kk });
+      if (v1 - vv[0] >= 0.1) out.push({ a:sp.a, b:sp.b, v0:vv[0], v1, door:!!eu.door, rail:!!eu.rail, k:kk, ui:sp.ui });
     });
   });
   return out;
@@ -11904,8 +11935,9 @@ function buildOpenings(host) {
   /** Turn the camera to the side under study: square to it in an
       elevation, over it in a plan, else to its corner view. */
   const turnTo = f => { OCAM.az = OCAM.el < 5 ? SQ[f] : CORNER[f]; if (openCam) openCam.sync(); };
-  const cWWR = rangeCtl('Window-to-wall ratio', 0, 80, 1, Math.round(OPEN[curFace].wwr * 100),
-    v => { OPEN[curFace].wwr = v / 100; refreshOpenings(); }, v => fmt(v, 0) + '%');
+  const wwrOut = el('span', { class:'tv' });
+  wwrOut.style.fontFamily = MONO; wwrOut.style.fontSize = '11px';
+  const cWWR = el('div', { class:'ctl' }, [el('label', { text:'Window-to-wall ratio', title:t('The result of the openings as you size them below') }), el('span', { class:'rv' }, [wwrOut])]);
   const cSill = rangeCtl('Sill height', 0, 1.8, 0.05, OPEN[curFace].sillZ,
     v => { OPEN[curFace].sillZ = v; if (OPEN[curFace].headZ <= v + 0.3) { OPEN[curFace].headZ = v + 0.3; syncCtl(cHead, OPEN[curFace].headZ, w => fmt(w, 2) + ' m'); } refreshOpenings(); }, v => fmt(v, 2) + ' m');
   const cHead = rangeCtl('Head height', 1.2, 3.0, 0.05, OPEN[curFace].headZ,
@@ -11983,20 +12015,23 @@ function buildOpenings(host) {
       const e = unitFloor(u, FL), top = Math.min(B.r.head, h0());
       const sp = glassSpans(curFace, B.w.uc - B.w.w / 2, B.w.uc + B.w.w / 2, B.sg.len, FL).filter(q => q.ui === i && q.b - q.a > 0.05)[0];
       const vv = e.door ? doorSpanV(u, top, FL, G.fh) : unitSpanV(u, B.r.sill, top, FL, G.fh);
-      return { W:sp ? sp.b - sp.a : e.frac * B.w.w, H:vv[1] - vv[0], sill:vv[0] - zFloor, band:B.w.w, door:!!e.door, z0:vv[0] };
+      return { W:sp ? sp.b - sp.a : e.frac * B.w.w, H:vv[1] - vv[0], sill:vv[0] - zFloor, band:B.w.w, door:!!e.door, z0:vv[0], a:sp ? sp.a : 0, len:B.sg.len, left:uStartsRight(B.sg) };
     };
+    /* width and place along the wall, in metres: written back to the unit's anchor on the band, the corner seen from outside */
+    const setPlace = (u, a, W) => { const B = bandNow(); if (!B) return; const F = WV(u), aa = clamp(a, 0, Math.max(0, B.sg.len - W));
+      F.frac = W / Math.max(0.3, B.w.w); F.pos = (aa + W / 2 - (B.w.uc - B.w.w / 2)) / Math.max(0.3, B.w.w); F.off = 0; OPEN[curFace].laid = true; };
+    const edgeOf = (d, v) => d.left ? d.len - v - d.W : v, cornerOf = d => d.left ? d.len - d.a - d.W : d.a;
     const txtN = x => document.createTextNode(x);
     const numIn = (val, lo, hi, set) => el('input', { type:'number', min:lo, max:hi, step:0.05, value:+val.toFixed(2), inputmode:'decimal',
       onchange:e => { const v = parseFloat(String(e.target.value).replace(',', '.')); if (!isFinite(v)) { buildUnitUI(); return; } set(v); OPEN[curFace].laid = true; buildUnitUI(); refreshOpenings(); } });
     const dimsRow = (u, i) => {
       const d = dimsOf(u, i);
       if (!d || !EV(u).on) return null;
-      const wMax = 0.95 * d.band;
+      const wIn = numIn(d.W, 0.3, +d.len.toFixed(2), v => { const W = clamp(v, 0.3, d.len); setPlace(u, d.left ? d.a + d.W - W : d.a, W); }), xIn = numIn(cornerOf(d), 0, +(d.len - d.W).toFixed(2), v => setPlace(u, edgeOf(d, clamp(v, 0, d.len - d.W)), d.W));
+      wIn.dataset.k = 'w'; xIn.dataset.k = 'x';
       const kids = [
-        el('label', null, [txtN(t('Width')), numIn(d.W, 0.3, +wMax.toFixed(2), v => {
-          if (v > wMax + 1e-6) toast(t('At most') + ' ' + fmt(wMax, 2) + ' m — ' + t('raise the window-to-wall ratio for a wider opening'));
-          WV(u).frac = clamp(clamp(v, 0.3, wMax) / Math.max(0.3, d.band), 0.03, 0.95);
-        }), txtN('m')]),
+        el('label', null, [txtN(t('Width')), wIn, txtN('m')]),
+        el('label', null, [txtN(t('From the left corner')), xIn, txtN('m')]),
         el('label', null, [txtN(t('Height')), numIn(d.H, 0.3, +(d.door ? G.fh - 0.1 : maxTop - zFloor).toFixed(2), v => {
           if (d.door) { WV(u).ht = +clamp(v, 0.3, Math.max(0.3, G.fh - 0.1)).toFixed(2); WV(u).up = 0; return; }
           /* a window taller than the room above its sill lowers the sill to fit */
@@ -12047,24 +12082,16 @@ function buildOpenings(host) {
           if (EV(u).door) { WV(u).up = 0; WV(u).gel = false; OPEN[curFace].laid = true; }
           buildUnitUI(); refreshOpenings();
         } });
-      const sh = rangeCtl('Share', 5, 95, 1, Math.round(EV(u).frac * 100), v => {
-        const us = faceUnits(curFace), w = us[i];
-        if (!w) { buildUnitUI(); return; }
-        const nw = clamp(v / 100, 0.05, 0.95);
-        WV(w).frac = nw;
-        OPEN[curFace].laid = true;
-        updateTexts(); refreshOpenings();
-      }, v => fmt(v, 0) + '%');
-      /* every window stands on its own anchor: sliding it along the wall
-         moves nothing else — the drag's black node does the same */
-      const ps = rangeCtl('Position', 0, 100, 1, Math.round(clamp(isFinite(EV(u).pos) ? EV(u).pos : 0.5, 0, 1) * 100), v => {
-        const us = faceUnits(curFace), w = us[i];
-        if (!w) { buildUnitUI(); return; }
-        WV(w).pos = clamp(v / 100, 0, 1);
-        WV(w).off = 0;
-        OPEN[curFace].laid = true;
-        updateTexts(); refreshOpenings();
-      }, v => fmt(v, 0) + '%');
+      /* the same two numbers on sliders, in metres: the typed boxes above follow */
+      const d0 = EV(u).on ? dimsOf(u, i) : null, mfmt = v => fmt(v, 2) + ' m';
+      const typed = (k, v) => { const q = unitBox.querySelectorAll('[data-k="' + k + '"]')[i]; if (q) q.value = +v.toFixed(2); };
+      const sh = d0 ? rangeCtl('Width', 0.3, Math.max(0.3, +d0.len.toFixed(2)), 0.05, +Math.min(d0.W, d0.len).toFixed(2), v => {
+        const d = dimsOf(u, i); if (!d) return; setPlace(u, d.left ? d.a + d.W - v : d.a, v); typed('w', v); updateTexts(); refreshOpenings();
+      }, mfmt) : null;
+      /* every window stands on its own anchor: sliding it along the wall moves nothing else — the drag's black node does the same */
+      const ps = d0 ? rangeCtl('From the left corner', 0, Math.max(0.05, +d0.len.toFixed(2)), 0.05, +cornerOf(d0).toFixed(2), v => {
+        const d = dimsOf(u, i); if (!d) return; setPlace(u, edgeOf(d, clamp(v, 0, d.len - d.W)), d.W); typed('x', v); updateTexts(); refreshOpenings();
+      }, mfmt) : null;
       /* a lone window resizes too: shrinking it frees wall to compose with */
       const r = { m:el('div', { class:'hint' }) };
       const mvL = el('button', { class:'btn small', text:'\u2039', title:t('Move window to the previous face'), 'aria-label':t('Move window to the previous face'), onclick:() => stepFace(i, -1) });
@@ -12077,8 +12104,8 @@ function buildOpenings(host) {
       unitBox.appendChild(line);
       const dm = dimsRow(u, i);
       if (dm) unitBox.appendChild(dm);
-      unitBox.appendChild(sh);
-      unitBox.appendChild(ps);
+      if (sh) unitBox.appendChild(sh);
+      if (ps) unitBox.appendChild(ps);
     });
     const minus = el('button', { class:'btn small', text:'\u2212', title:t('One window fewer'), 'aria-label':t('One window fewer'), onclick:() => {
       const us = faceUnits(curFace);
@@ -12147,14 +12174,14 @@ function buildOpenings(host) {
       clerRead.textContent = '';
       return;
     }
-    const cCwwr = rangeCtl('Window-to-wall ratio', 0, 80, 1, Math.round(o.wwr * 100),
-      v => { o.wwr = v / 100; refreshOpenings(); }, v => fmt(v, 0) + '%');
+    const cl0 = stepWinList(Mod(), h0(), RF)[0];
+    if (cl0 && !(o.bandM > 0)) openBandToMetres(o, 'C', cl0.w, cl0.sg.len);
     const cCsill = rangeCtl('Sill height', 0, 1.8, 0.05, o.sillZ,
       v => { o.sillZ = v; if (o.headZ <= v + 0.3) { o.headZ = v + 0.3; syncCtl(cChead, o.headZ, w => fmt(w, 2) + ' m'); } refreshOpenings(); }, v => fmt(v, 2) + ' m');
     const cChead = rangeCtl('Head height', 1.2, 3.0, 0.05, o.headZ,
       v => { o.headZ = Math.max(v, o.sillZ + 0.3); refreshOpenings(); }, v => fmt(v, 2) + ' m');
-    clerBox.appendChild(controls([cCwwr, cCsill, cChead]));
-    clerBox._sync = () => { syncCtl(cCwwr, Math.round(o.wwr * 100), v => fmt(v, 0) + '%'); syncCtl(cCsill, o.sillZ, v => fmt(v, 2) + ' m'); syncCtl(cChead, o.headZ, v => fmt(v, 2) + ' m'); };
+    clerBox.appendChild(controls([cCsill, cChead]));
+    clerBox._sync = () => { syncCtl(cCsill, o.sillZ, v => fmt(v, 2) + ' m'); syncCtl(cChead, o.headZ, v => fmt(v, 2) + ' m'); };
     const rows = [];
     /* each opening's size typed, as on the sides: width along the step wall,
        height, and for a window its sill above the lower roof — read off the
@@ -12168,12 +12195,11 @@ function buildOpenings(host) {
       const w = cw0.w, r = w.rows[0], H = Math.max(0.3, w.ceil - w.base);
       const sp = glassSpans('C', w.uc - w.w / 2, w.uc + w.w / 2, cw0.sg.len, 0).filter(q => q.ui === i && q.b - q.a > 0.05)[0];
       const vv = spanVC(u, r.sill, r.head, w.base, w.ceil), W = sp ? sp.b - sp.a : u.frac * w.w, Hh = vv[1] - vv[0], sill = vv[0] - w.base;
-      const wMax = 0.95 * w.w;
+      const L = cw0.sg.len;
       const kids = [
-        el('label', null, [txtC(t('Width')), numC(W, 0.3, +wMax.toFixed(2), v => {
-          if (v > wMax + 1e-6) toast(t('At most') + ' ' + fmt(wMax, 2) + ' m — ' + t('raise the window-to-wall ratio for a wider opening'));
-          u.frac = clamp(clamp(v, 0.3, wMax) / Math.max(0.3, w.w), 0.05, 0.95);
-        }), txtC('m')]),
+        el('label', null, [txtC(t('Width')), numC(W, 0.3, +L.toFixed(2), v => { u.frac = clamp(v, 0.3, L) / Math.max(0.3, w.w); }), txtC('m')]),
+        el('label', null, [txtC(t('From the left corner')), numC(uStartsRight(cw0.sg) ? L - (sp ? sp.b : W) : (sp ? sp.a : 0), 0, +Math.max(0, L - W).toFixed(2), v => {
+          const a = clamp(uStartsRight(cw0.sg) ? L - v - W : v, 0, Math.max(0, L - W)); u.pos = (a + W / 2 - (w.uc - w.w / 2)) / Math.max(0.3, w.w); u.off = 0; }), txtC('m')]),
         el('label', null, [txtC(t('Height')), numC(Hh, 0.3, +Math.max(0.3, H - (u.door ? 0.05 : 0)).toFixed(2), v => {
           if (u.door) { u.ht = +clamp(v, 0.3, Math.max(0.3, H - 0.05)).toFixed(2); return; }
           /* taller than the wall above its sill: the sill comes down to fit */
@@ -12194,19 +12220,11 @@ function buildOpenings(host) {
       const dor = el('button', { class:'btn small' + (u.door ? ' solid' : ''), text:t('door'), title:t('A glazed door onto the lower roof'),
         'aria-pressed':String(!!u.door), onclick:() => { u.door = !u.door; if (u.door) { u.gel = false; u.up = 0; } buildClerUI(); refreshOpenings(); } });
       const del = el('button', { class:'btn small', text:'×', title:t('Remove this opening'), 'aria-label':t('Remove this opening'), onclick:() => { faceUnits('C').splice(i, 1); buildClerUI(); refreshOpenings(); } });
-      const sh = rangeCtl('Share', 5, 95, 1, Math.round(clamp(isFinite(u.frac) ? u.frac : 1, 0, 1) * 100), v => {
-        u.frac = clamp(v / 100, 0.05, 0.95); updateClerTexts(); refreshOpenings();
-      }, v => fmt(v, 0) + '%');
-      const ps = rangeCtl('Position', 0, 100, 1, Math.round(clamp(isFinite(u.pos) ? u.pos : 0.5, 0, 1) * 100), v => {
-        u.pos = clamp(v / 100, 0, 1); u.off = 0; updateClerTexts(); refreshOpenings();
-      }, v => fmt(v, 0) + '%');
       const r = { m:el('div', { class:'hint' }) };
       rows.push(r);
       clerBox.appendChild(el('div', { class:'urow' }, [chk, dor, gel, del, r.m]));
       const cd = clerDims(u, i);
       if (cd) clerBox.appendChild(cd);
-      clerBox.appendChild(sh);
-      clerBox.appendChild(ps);
     });
     const minus = el('button', { class:'btn small', text:'−', title:t('One opening fewer'), 'aria-label':t('One opening fewer'), onclick:() => {
       const us = faceUnits('C');
@@ -12310,7 +12328,7 @@ function buildOpenings(host) {
     segSet(cFace, curFace);
     buildUnitUI();
     const o = OPEN[curFace];
-    syncCtl(cWWR, Math.round(o.wwr * 100), v => fmt(v, 0) + '%');
+    wwrOut.textContent = fmt(o.wwr * 100, 0) + '%';
     syncCtl(cSill, o.sillZ, v => fmt(v, 2) + ' m');
     syncCtl(cHead, o.headZ, v => fmt(v, 2) + ' m');
     syncCtl(cOvD, o.ovD, v => fmt(v, 2) + ' m');
@@ -12639,7 +12657,10 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
   }
 
   function refreshOpenings() {
+    openMetres();
+    if (OPEN.C && OPEN.C.bandM > 0) { const fc = facadeNumbers('C'); if (fc.wall > 0) OPEN.C.wwr = Math.max(0.001, fc.eff); }
     const o = OPEN[curFace];
+    wwrOut.textContent = fmt(o.wwr * 100, 0) + '%';
     const [lo, hi] = wwrRange(curFace);
     const side = t(faceName[curFace]) + ' (' + faceDir(curFace) + ') · ';
     if (o.wwr < lo) { pillWWR.className = 'pill empty'; pillWWR.textContent = side + t('Below the recommended range'); }
@@ -13189,7 +13210,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
         /* a selected window's bottom corner sets its length alone, on its own floor */
         const sp0 = glassSpans(curFace, wh.w.uc - wh.w.w / 2, wh.w.uc + wh.w.w / 2, len, selK).filter(s => s.ui === o.sel && s.on && s.b - s.a > 0.05)[0];
         const a0 = sp0 ? sp0.a : wh.w.uc - wh.w.w / 2;
-        unitFloorW(selU, selK).frac = clamp((clamp(inv.u, a0 + 0.3, len) - a0) / Math.max(0.3, wh.w.w), 0.03, 0.95);
+        unitFloorW(selU, selK).frac = (clamp(inv.u, a0 + 0.3, len) - a0) / Math.max(0.3, wh.w.w);
         OPEN[curFace].laid = true;
         buildUnitUI(); refreshOpenings();
         return;
@@ -13200,8 +13221,7 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       } else {
         const hNow = segWindow(wh.sg, G).h;   // hold the height and sill — this handle only sets the length
         const w = clamp(Math.abs(inv.u - len / 2) * 2, 0.6, len * 0.92);
-        o.wwr = clamp((w * hNow) / (len * per), 0.05, 0.8);
-        syncCtl(cWWR, Math.round(o.wwr * 100), v => fmt(v, 0) + '%');
+        o.bandM = w;
       }
     } else if (kind === 'winmove') {
       drag.moved = true; drag.px = clientX; drag.py = clientY;
@@ -26188,6 +26208,7 @@ function syncStudySide() {
 }
 /** Both sides as they now are: the next crossing is measured from here. */
 function studyBase(R) {
+  openMetres();
   const vm = R.V.vm && R.V.vm.type === R.type ? R.V.vm : vmRead().vm;
   R.V.sync = { type:R.type, wi:Math.min(R.V.work || 0, vm.vols.length - 1), a:syncVmSide(R, vm), b:syncStudySide() };
 }
@@ -29410,7 +29431,8 @@ function applyStudy(o) {
     const s = o.open && o.open[f];
     if (!s || typeof s !== 'object') return;
     const d = OPEN[f];
-    if (isFinite(+s.wwr)) d.wwr = clamp(+s.wwr, 0.02, 0.9);
+    if (isFinite(+s.wwr)) d.wwr = clamp(+s.wwr, 0.001, 0.9);
+    if (+s.bandM > 0) d.bandM = +s.bandM; else delete d.bandM;
     if (isFinite(+s.sillZ)) d.sillZ = +s.sillZ;
     if (isFinite(+s.headZ)) d.headZ = +s.headZ;
     if (d.headZ < d.sillZ + 0.3) d.headZ = d.sillZ + 0.3;
@@ -30895,6 +30917,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
     /* every tab opens on the model the student just left: what changed crosses over, and the pages are drawn again on it */
     if (STATE.tab !== key) { let moved = false; try { moved = studySync(); } catch (err) { console.error(err); }
       if (moved) { mountApp(STATE.site, null, key, true); return; } }
+    try { openMetres(); } catch (err) { console.error(err); }
     STATE.tab = key;
     TABS.forEach(tab => {
       const on = tab.key === key;
@@ -32141,6 +32164,8 @@ Object.assign(PT, {
   "Shading fit /100": "Ajuste do sombreamento /100",
   "Windows": "Janelas",
   "Share": "Quota",
+  "From the left corner": "Do canto esquerdo",
+  "The result of the openings as you size them below": "O resultado dos vãos conforme os dimensiona abaixo",
   "Position": "Posição",
   "Built": "Construído",
   "of wall": "da parede",
