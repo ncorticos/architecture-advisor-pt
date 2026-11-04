@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.194.0',
+  version:     '1.195.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -25295,6 +25295,31 @@ function vmIsoSVG(vm, w, opts) {
   return '<svg xmlns="http://www.w3.org/2000/svg" class="vmiso" viewBox="' + vb + '" width="' + w + '" height="' + h + '">' + (opts.bg ? '<rect x="' + (x0 - pad) + '" y="' + (y0 - pad) + '" width="' + (W + 2 * pad) + '" height="' + (H + 2 * pad) + '" fill="' + opts.bg + '"/>' : '') + out.join('') + '</svg>';
 }
 /** The plan: bodies, walls by their thickness, openings, the elements' marks, the rooms, north and a scale. */
+/* The bathroom kits a student adds to the plan, with indicative sizes (m): a minimum
+   room with a basin and a WC, one with a shower tray, one with a bath. Fittings at
+   their common catalogue sizes, 0.6–0.7 m clear in front of each — a first layout to
+   test, not a regulatory minimum (check the RGEU and DL 163/2006 for accessibility). */
+const VM_WC = {
+  min:{ en:'Bathroom (basin + WC)', pt:'Casa de banho (lavatório + sanita)', w:1.5, d:1.4 },
+  shower:{ en:'Bathroom (basin, WC, shower)', pt:'Casa de banho (lavatório, sanita, duche)', w:2.1, d:1.6 },
+  bath:{ en:'Bathroom (basin, WC, bath)', pt:'Casa de banho (lavatório, sanita, banheira)', w:2.2, d:1.8 }
+};
+/** The fittings of a bathroom room on the plan, in its own corner of the plan transform P (s px per m):
+    the WC and the basin along its north wall from the west, the shower tray in the north-east
+    corner or the bath along the east wall. */
+function vmWcSVG(q, P, s) {
+  const o = [], x0 = q.x - q.w / 2, y1 = q.y + q.d / 2, x1 = q.x + q.w / 2, y0 = q.y - q.d / 2, st = ' fill="#FFFFFF" stroke="#5F7F8C" stroke-width="1" pointer-events="none"';
+  const R = (ax, ay, bx, by, rx) => { const a = P(ax, ay), b = P(bx, by); o.push('<rect x="' + Math.min(+a[0], +b[0]) + '" y="' + Math.min(+a[1], +b[1]) + '" width="' + Math.abs(b[0] - a[0]).toFixed(1) + '" height="' + Math.abs(b[1] - a[1]).toFixed(1) + '" rx="' + ((rx || 0) * s).toFixed(1) + '"' + st + '/>'); };
+  const E = (cx, cy, rx, ry) => { const c = P(cx, cy); o.push('<ellipse cx="' + c[0] + '" cy="' + c[1] + '" rx="' + (rx * s).toFixed(1) + '" ry="' + (ry * s).toFixed(1) + '"' + st + '/>'); };
+  const L = (ax, ay, bx, by) => { const a = P(ax, ay), b = P(bx, by); o.push('<line x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '" stroke="#5F7F8C" stroke-width="0.8" pointer-events="none"/>'); };
+  /* WC: cistern against the wall, the bowl before it */
+  const wx = x0 + 0.1; R(wx, y1, wx + 0.38, y1 - 0.18, 0.03); E(wx + 0.19, y1 - 0.18 - 0.24, 0.18, 0.24);
+  /* basin: the counter edge and its bowl */
+  const bx = x0 + 0.65; R(bx, y1, bx + 0.55, y1 - 0.45, 0.06); E(bx + 0.275, y1 - 0.24, 0.2, 0.15);
+  if (q.wc === 'shower') { const sx = x1 - 0.8; R(sx, y1, x1, y1 - 0.8); L(sx, y1, x1, y1 - 0.8); L(x1, y1, sx, y1 - 0.8); E(sx + 0.4, y1 - 0.4, 0.04, 0.04); }
+  if (q.wc === 'bath') { const ax = x1 - 0.7, ay = y1 - Math.min(1.7, q.d); R(ax, y1, x1, ay, 0.04); R(ax + 0.07, y1 - 0.07, x1 - 0.07, ay + 0.07, 0.25); E(ax + 0.35, y1 - 0.2, 0.03, 0.03); }
+  return o.join('');
+}
 function vmPlanSVG(vm, w, opts) {
   opts = opts || {};
   const vs = vmAllVols(vm), bb = vmBBox(vm), pad = 2.5, X0 = bb[0] - pad, Y1 = bb[3] + pad, Wm = bb[2] - bb[0] + 2 * pad, Hm = bb[3] - bb[1] + 2 * pad, s = w / Wm, h = Math.round(Hm * s);
@@ -25357,8 +25382,11 @@ function vmPlanSVG(vm, w, opts) {
   /* rooms */
   (opts.rooms || []).forEach((q, i) => { const a = P(q.x - q.w / 2, q.y + q.d / 2);
     o.push('<rect data-room="' + i + '" x="' + a[0] + '" y="' + a[1] + '" width="' + (q.w * s).toFixed(1) + '" height="' + (q.d * s).toFixed(1) + '" fill="' + (q.bad ? 'rgba(217,140,140,.35)' : 'rgba(127,179,163,.28)') + '" stroke="' + (q === VM_ROOMSEL ? '#B5772A' : q.bad ? '#B55' : '#4E8A78') + '" stroke-width="' + (q === VM_ROOMSEL ? 3 : 1) + '"' + (q === VM_ROOMSEL ? ' stroke-dasharray="6 3"' : '') + ' style="cursor:move"/>');
+    if (q.wc && VM_WC[q.wc]) o.push(vmWcSVG(q, P, s));
     /* name and area kept inside their room: the type shrinks to the room's width and height */
-    const c = P(q.x, q.y), nm = VL(q.n), fs = Math.max(6, Math.min(10, q.w * s / Math.max(4, nm.length * 0.6), q.d * s / 2.6));
+    /* a bathroom's name sits in the floor left clear of its fittings: below the wall row, beside the bath */
+    const wcK = q.wc && VM_WC[q.wc], lx = wcK && q.wc === 'bath' ? q.x - 0.35 : q.x, ly = wcK ? (q.y - q.d / 2 + q.y + q.d / 2 - 0.7) / 2 : q.y;
+    const c = P(lx, ly), nm = VL(q.n), fs = Math.max(6, Math.min(10, (wcK && q.wc === 'bath' ? q.w - 0.7 : q.w) * s / Math.max(4, nm.length * 0.6), (wcK ? q.d - 0.7 : q.d) * s / 2.6));
     o.push('<text x="' + c[0] + '" y="' + (+c[1] - fs * 0.15).toFixed(1) + '" font-size="' + fs.toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + nm.replace(/&/g, '&amp;') + '</text>');
     o.push('<text x="' + c[0] + '" y="' + (+c[1] + fs * 1.05).toFixed(1) + '" font-size="' + (fs * 0.9).toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + fmt(q.w * q.d, 1) + ' m²</text>');
     const h2 = P(q.x + q.w / 2, q.y - q.d / 2); o.push('<rect data-roomsize="' + i + '" x="' + (+h2[0] - 5) + '" y="' + (+h2[1] - 5) + '" width="9" height="9" fill="#4E8A78" style="cursor:nwse-resize"/>'); });
@@ -26319,6 +26347,11 @@ function buildModeller(host) {
     rt.querySelectorAll('tbody tr').forEach((tr, i) => { const q = R.V.rooms[i], td = tr.firstChild; if (!q || !td) return; td.textContent = '';
       td.appendChild(el('input', { type:'text', value:VL(q.n), class:'vmroomname', title:VMT('Rename the room', 'Mudar o nome da divisão'), style:'width:100%; min-width:9em; font:inherit; border:1px solid var(--line); border-radius:6px; padding:2px 6px',
         onchange:e => { const v = e.target.value.trim(); if (v) { q.n = { en:v, pt:v }; drawViews(); } } }));
+      /* a bathroom's kit, changed in place: the fittings follow, the room keeps its name and size */
+      if (q.wc) { const sel = el('select', { title:VMT('Bathroom fittings', 'Equipamento da casa de banho'), style:'margin-top:3px;width:100%;font:inherit;font-size:12px',
+          onchange:e => { if (!VM_WC[e.target.value]) return; q.wc = e.target.value; drawViews(); } });
+        Object.keys(VM_WC).forEach(k => sel.appendChild(el('option', { value:k, text:VMT({ min:'basin + WC', shower:'basin, WC, shower', bath:'basin, WC, bath' }[k], { min:'lavatório + sanita', shower:'lavatório, sanita, duche', bath:'lavatório, sanita, banheira' }[k]), selected:q.wc === k ? 'selected' : null })));
+        td.appendChild(sel); }
       const last = tr.lastChild; if (last) last.appendChild(el('button', { type:'button', class:'vmdel', text:'✕', title:VMT('Remove this room', 'Apagar esta divisão'), style:'margin-left:6px;border:0;background:none;color:#9f2420;cursor:pointer;font:inherit', onclick:() => { R.V.rooms.splice(R.V.rooms.indexOf(q), 1); if (VM_ROOMSEL === q) VM_ROOMSEL = null; drawViews(); } })); });
     metBox.appendChild(rt);
     metBox.appendChild(el('p', { class:'hint', html:VMT('Click a room or an opening on the plan and press Delete to remove it, or use ✕ in the table. Rename a room in the table or by double-clicking it on the plan. <b>Casa de fora</b> is the Portuguese vernacular name of the entrance room — the room entered straight from outside, the house’s parlour and passage, with chests and cupboards and no fixed use, giving on the kitchen and the bedrooms (Inquérito à Arquitectura Popular). <b>Room</b> is a room of free use.',
@@ -26328,6 +26361,11 @@ function buildModeller(host) {
     const rb = side.appendChild(el('div', { class:'vmbtns' }));
     const addRoom = (en, pt) => { const v = vm().vols[0]; R.V.rooms.push({ n:{ en, pt }, x:v.x, y:v.y, w:3, d:3, fl:VM_ROOMFL }); drawViews(); };
     [['Kitchen', 'Cozinha'], ['Bedroom', 'Quarto'], ['Casa de fora (entrance room)', 'Casa de fora (sala de entrada)'], ['Hall (sala)', 'Sala'], ['Store (loja)', 'Loja'], ['Byre (corte)', 'Corte'], ['Wine cellar', 'Adega'], ['Alcove', 'Alcova']].forEach(([en, pt]) => rb.appendChild(el('button', { type:'button', text:'+ ' + VMT(en, pt), onclick:() => addRoom(en, pt) })));
+    /* the bathroom, in three kits, sized to hold its fittings */
+    Object.keys(VM_WC).forEach(k => { const K = VM_WC[k]; rb.appendChild(el('button', { type:'button', text:'+ ' + VMT(K.en, K.pt), onclick:() => {
+      const v = vm().vols[0]; R.V.rooms.push({ n:{ en:'Bathroom', pt:'Casa de banho' }, x:v.x, y:v.y, w:K.w, d:K.d, fl:VM_ROOMFL, wc:k }); drawViews(); } })); });
+    rb.appendChild(el('p', { class:'hint', style:'margin:2px 0 4px', text:VMT('Each bathroom is drawn with its fittings and ≈ 0.6–0.7 m clear in front of each: an indicative layout, not a legal minimum — check the RGEU, and DL 163/2006 if it must be accessible (1.5 m turning circle). Change the kit in the table.',
+      'Cada casa de banho é desenhada com o equipamento e ≈ 0,6–0,7 m livres à frente de cada peça: uma organização indicativa, não um mínimo legal — confirme no RGEU, e no DL 163/2006 se tiver de ser acessível (círculo de rotação de 1,5 m). Mude o equipamento na tabela.') }));
     rb.appendChild(el('button', { type:'button', text:VMT('Remove the last room', 'Remover a última divisão'), onclick:() => { R.V.rooms.pop(); drawViews(); } }));
     rb.appendChild(el('button', { type:'button', text:VMT('Rooms of the type', 'Divisões do tipo'), onclick:() => { R.V.rooms = vmDefaultRooms(vm()); drawViews(); } }));
   }
