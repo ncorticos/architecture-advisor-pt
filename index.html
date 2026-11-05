@@ -982,7 +982,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.200.0',
+  version:     '1.201.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -24705,6 +24705,61 @@ function vmFromType(k) {
   vmDoorsOffStairs(vm);
   return vm;
 }
+/* ---------------------------------------------------------------- platforms of the houses on stakes
+   The access of a palheiro or an avieira house is a timber platform: the varanda, balcão or passadiço by which it is entered.
+   On these models alone the student sets each one in metres — its wall, length, depth, height and place along the wall — lays
+   several at different heights, and joins them to each other and to the ground by stairs of a chosen number of steps. */
+const VM_DECK_TYPES = ['pt-palheiro', 'pt-costa-nova', 'pt-avieiro'];
+const VM_OUT = { S:[0, -1], N:[0, 1], E:[1, 0], W:[-1, 0] }, VM_BACK = { S:'N', N:'S', E:'W', W:'E' };
+const vmDecks = vm => (vm.els || []).filter(e => e.t === 'deck');
+/** The platform in plan: its rectangle in world metres and its height over the ground. */
+function vmDeckRect(v, E) {
+  const f = E.face || 'S', a = E.a || 0, w = E.w || 3, d = E.d || 1.2, x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = v.x + v.L / 2, y1 = v.y + v.D / 2;
+  const R = f === 'S' ? [x0 + a, y0 - d, x0 + a + w, y0] : f === 'N' ? [x0 + a, y1, x0 + a + w, y1 + d] : f === 'E' ? [x1, y0 + a, x1 + d, y0 + a + w] : [x0 - d, y0 + a, x0, y0 + a + w];
+  return { x0:R[0], y0:R[1], x1:R[2], y1:R[3], z:E.z, f };
+}
+/** The riser count a stair takes unless the student has set it. */
+const vmDeckAutoN = dz => Math.max(2, Math.round(Math.abs(dz) / 0.18));
+/** One stair of a platform: the treads from its edge to the ground or to the platform it joins, and whether its foot lands there. */
+function vmDeckStair(vm, v, E, S) {
+  const R = vmDeckRect(v, E), side = S.side || 'E', o = VM_OUT[side], T = S.to && S.to !== 'ground' ? vmDecks(vm).find(q => q.id === S.to) : null;
+  const tv = T ? (vm.vols[T.vol || 0] || v) : null, TR = T ? vmDeckRect(tv, T) : null, z1 = TR ? TR.z : 0, dz = z1 - R.z, n = Math.round(S.n) >= 2 ? Math.round(S.n) : vmDeckAutoN(dz), rise = dz / n, tr = 0.28, sw = S.w || 1;
+  const NS = side === 'S' || side === 'N', e0 = NS ? R.x0 : R.y0, eL = NS ? R.x1 - R.x0 : R.y1 - R.y0, at = clamp(S.at || 0, 0, Math.max(0, eL - sw)), ex = side === 'E' ? R.x1 : side === 'W' ? R.x0 : e0 + at, ey = side === 'S' ? R.y0 : side === 'N' ? R.y1 : e0 + at;
+  /* a tread i: its near edge i runs out from the platform, its top one riser nearer the far level */
+  const treads = []; for (let i = 0; i < n - 1; i++) { const a = i * tr, b = a + tr; treads.push({ p:NS ? [ex, ey + o[1] * a] : [ex + o[0] * a, ey], q:NS ? [ex + sw, ey + o[1] * b] : [ex + o[0] * b, ey + sw], z:R.z + (i + 1) * rise }); }
+  const run = (n - 1) * tr, foot = NS ? [ex + sw / 2, ey + o[1] * run] : [ex + o[0] * run, ey + sw / 2];
+  const lands = !TR || (foot[0] >= TR.x0 - 0.35 && foot[0] <= TR.x1 + 0.35 && foot[1] >= TR.y0 - 0.35 && foot[1] <= TR.y1 + 0.35);
+  return { treads, n, rise, tr, run, side, sw, at, ex, ey, o, NS, foot, lands, z0:R.z, z1, target:T };
+}
+/** A stair sent to another platform leaves by a side from which its foot can land there, where there is one. */
+function vmDeckAim(vm, v, E, S) {
+  const T = vmDecks(vm).find(q => q.id === S.to); if (!T) return;
+  const R = vmDeckRect(v, E), TR = vmDeckRect(vm.vols[T.vol || 0] || v, T), sw = S.w || 1, back = VM_BACK[E.face || 'S'];
+  for (const side of ['S', 'E', 'N', 'W'].filter(q => q !== back)) { const NS = side === 'S' || side === 'N', lo = NS ? R.x0 : R.y0, hi = NS ? R.x1 : R.y1, tl = NS ? TR.x0 : TR.y0, th = NS ? TR.x1 : TR.y1;
+    const at = clamp(((Math.max(lo, tl) + Math.min(hi, th)) / 2) - sw / 2 - lo, 0, Math.max(0, hi - lo - sw)), C = Object.assign({}, S, { side, at });
+    if (Math.min(hi, th) > Math.max(lo, tl) && vmDeckStair(vm, v, E, C).lands) { S.side = side; S.at = +at.toFixed(2); return; } }
+}
+/** Everything a platform covers in plan, its stairs too: for the frame of the drawings. */
+function vmDeckExtents(vm) {
+  const out = [];
+  vmDecks(vm).forEach(E => { const v = vm.vols[E.vol || 0]; if (!v) return; const R = vmDeckRect(v, E); out.push([R.x0, R.y0, R.x1, R.y1]);
+    (E.stairs || []).forEach(S => { const D = vmDeckStair(vm, v, E, S); out.push([Math.min(D.ex, D.foot[0]) - 0.2, Math.min(D.ey, D.foot[1]) - 0.2, Math.max(D.ex, D.foot[0]) + (D.NS ? D.sw : 0) + 0.2, Math.max(D.ey, D.foot[1]) + (D.NS ? 0 : D.sw) + 0.2]); }); });
+  return out;
+}
+/** An archetype's porch on these houses becomes its first platform, with its stair to the ground. */
+function vmPorchToDeck(vm, b) {
+  const P = vm.els.findIndex(e => e.t === 'alpendre'); if (P < 0) return;
+  const E = vm.els[P], w = Math.min(E.w || 6, b.L), a = clamp((E.pos === undefined ? 0.5 : E.pos) * b.L - w / 2, 0, b.L - w);
+  vm.els[P] = { t:'deck', id:'d1', vol:E.vol || 0, face:E.face || 'S', a:+a.toFixed(2), w:+w.toFixed(2), d:E.d || 2.2, z:b.raise || 0.8, guard:true, roof:true, stairs:[{ side:'E', at:0, w:1, to:'ground' }] };
+}
+/** The roofed platform the measuring tabs know as their canopy: moved, resized or taken away with it. */
+function vmDeckCanopy(vm, wi) {
+  if (!VM_DECK_TYPES.includes(vm.type) || !ROOF.zones || !ROOF.zones.length) return;
+  ROOF.zones.forEach(z => { delete z.canopy; });
+  const v = vm.vols[wi], E = vmDecks(vm).find(q => q.roof && (q.vol || 0) === wi); if (!v || !E) return;
+  const R = vmDeckRect(v, E), f = E.face || 'S', NS = f === 'S' || f === 'N';
+  ROOF.zones[0].canopy = { f, x:NS ? +((R.x0 + R.x1) / 2 - v.x).toFixed(2) : (f === 'E' ? v.L / 2 : -v.L / 2), y:NS ? (f === 'N' ? v.D / 2 : -v.D / 2) : +((R.y0 + R.y1) / 2 - v.y).toFixed(2), w:+Math.min(8, E.w || 3).toFixed(1), d:+clamp(E.d || 1.2, 0.6, 4).toFixed(2), p:0, drop:0.15 };
+}
 /** Steps to every ground-floor door of a raised body that nothing else
     serves — no entry step, no porch deck in front of it: a door above the
     ground is always reached. Timber steps over stakes or on a timber house,
@@ -24725,6 +24780,7 @@ function vmDoorStepEls(vm) {
         const served = mine.some(e => {
           if (e.t === 'stair' && e.entry) { const u0 = (e.pos || 0) * len; return c >= u0 - 0.1 && c <= u0 + (e.w || 1.1) + 0.1; }
           if (e.t === 'alpendre' && e.deck !== false) { const w = Math.min(e.w || 6, v.L), u0 = (e.pos || 0.5) * len - w / 2; return c >= u0 && c <= u0 + w; }
+          if (e.t === 'deck') return Math.abs((e.z || 0) - z0) < 0.3 && c >= (e.a || 0) && c <= (e.a || 0) + (e.w || 3);
           return false; });
         if (served) return;
         const w = clamp((o.w || 0.9) + 0.2, 0.9, 1.4);
@@ -24919,6 +24975,9 @@ const VM_REVIEW = {
     vm.court = { on:true, x:b.x, y:b.y - b.D / 2 - 2, L:b.L + 1, D:4, h:0.9, open:'N', gate:{ face:'S', pos:0.5, w:1.2 } }; },
   /* Minho: the quinteiro in front, closed to the road by a high wall and its portal */
   'pt-minho':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y - b.D / 2 - 4, L:b.L + 2, D:8, h:2.0, open:'N', gate:{ face:'S', pos:0.8, w:2.8 } }; },
+  /* the houses on stakes: the porch is a platform the student can move, and more can be added */
+  'pt-palheiro':(vm, b) => vmPorchToDeck(vm, b),
+  'pt-avieiro':(vm, b) => vmPorchToDeck(vm, b),
   /* town houses: the medieval casa corrente's «yard or garden behind», Angra's «kitchen and garden behind» */
   'pt-casa-corrente':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 3, L:b.L, D:6, h:2.0, open:'S', gate:{ face:'N', pos:0.5, w:1.0 } }; },
   'az-angra':(vm, b) => { vm.court = { on:true, x:b.x, y:b.y + b.D / 2 + 4, L:b.L, D:8, h:2.0, open:'S', gate:{ face:'N', pos:0.5, w:1.0 } }; },
@@ -25008,6 +25067,7 @@ function vmBBox(vm) {
   let b = [Infinity, Infinity, -Infinity, -Infinity];
   vs.forEach(v => { b = [Math.min(b[0], v.x - v.L / 2), Math.min(b[1], v.y - v.D / 2), Math.max(b[2], v.x + v.L / 2), Math.max(b[3], v.y + v.D / 2)]; });
   if (vm.court && vm.court.on) { const c = vm.court; b = [Math.min(b[0], c.x - c.L / 2), Math.min(b[1], c.y - c.D / 2), Math.max(b[2], c.x + c.L / 2), Math.max(b[3], c.y + c.D / 2)]; }
+  vmDeckExtents(vm).forEach(q => { b = [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.max(b[2], q[2]), Math.max(b[3], q[3])]; });
   return b;
 }
 
@@ -25379,6 +25439,40 @@ function vmElFaces(vm, vs) {
       if (E.landing) { const [px, py] = at(u0, 0); if (f === 'S') box(px, py - w, top - 0.18, 1.2, w, 0.18, stone, o); else if (f === 'E') box(px, py, top - 0.18, w, 1.2, 0.18, stone, o); else if (f === 'N') box(px, py, top - 0.18, 1.2, w, 0.18, stone, o); else box(px - w, py, top - 0.18, w, 1.2, 0.18, stone, o);
         if (E.porch && f === 'S') { [[px, py - w], [px + 1.1, py - w]].forEach(q => box(q[0], q[1], top, 0.1, 0.1, 2.0, '#6E4B2E', o));
           push([[px - 0.1, py - w - 0.2, top + 2.0], [px + 1.3, py - w - 0.2, top + 2.0], [px + 1.3, py, top + 2.4], [px - 0.1, py, top + 2.4]], (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c, o); } }
+      return;
+    }
+    if (E.t === 'deck') {
+      const R = vmDeckRect(v, E), z = R.z, wood = '#8A6240', dk = vmShade(wood, 0.8), back = VM_BACK[f];
+      box(R.x0, R.y0, z - 0.12, R.x1 - R.x0, R.y1 - R.y0, 0.12, wood, o);
+      const across = f === 'S' || f === 'N', dl = across ? R.y1 - R.y0 : R.x1 - R.x0;
+      for (let t = 0.3; t < dl - 0.05; t += 0.3) push(across ? [[R.x0, R.y0 + t, z + 0.002], [R.x1, R.y0 + t, z + 0.002], [R.x1, R.y0 + t + 0.012, z + 0.002], [R.x0, R.y0 + t + 0.012, z + 0.002]] : [[R.x0 + t, R.y0, z + 0.002], [R.x0 + t + 0.012, R.y0, z + 0.002], [R.x0 + t + 0.012, R.y1, z + 0.002], [R.x0 + t, R.y1, z + 0.002]], vmShade(wood, 0.7), o);
+      /* posts to the ground along the outer edge, at least every 1.6 m */
+      const outEdge = f === 'S' ? [[R.x0, R.y0], [R.x1, R.y0]] : f === 'N' ? [[R.x0, R.y1 - 0.12], [R.x1, R.y1 - 0.12]] : f === 'E' ? [[R.x1 - 0.12, R.y0], [R.x1 - 0.12, R.y1]] : [[R.x0, R.y0], [R.x0, R.y1]];
+      const edgeL = Math.hypot(outEdge[1][0] - outEdge[0][0], outEdge[1][1] - outEdge[0][1]), np = Math.max(1, Math.ceil(edgeL / 1.6));
+      for (let i = 0; i <= np; i++) { const t = i / np, a = across ? 0.12 : 0, b = across ? 0 : 0.12, px = outEdge[0][0] + (outEdge[1][0] - outEdge[0][0] - a) * t, py = outEdge[0][1] + (outEdge[1][1] - outEdge[0][1] - b) * t; box(px, py, 0, 0.12, 0.12, z - 0.12, dk, o); }
+      /* the guard round its open sides: not the wall's, nor across a stair or where another platform meets it */
+      const stairsD = (E.stairs || []).map(S => vmDeckStair(vm, v, E, S));
+      if (E.guard !== false) ['S', 'N', 'E', 'W'].filter(s => s !== back).forEach(s => {
+        const NS = s === 'S' || s === 'N', lo = NS ? R.x0 : R.y0, hi = NS ? R.x1 : R.y1, fix = s === 'S' ? R.y0 : s === 'N' ? R.y1 : s === 'E' ? R.x1 : R.x0, gaps = [];
+        stairsD.filter(D => D.side === s).forEach(D => gaps.push([lo + D.at, lo + D.at + D.sw]));
+        vmDecks(vm).filter(q => q !== E && (q.vol || 0) === (E.vol || 0)).forEach(q => { const T = vmDeckRect(v, q);
+          if (Math.abs((s === 'S' ? T.y1 : s === 'N' ? T.y0 : s === 'E' ? T.x0 : T.x1) - fix) < 0.15) gaps.push([NS ? T.x0 : T.y0, NS ? T.x1 : T.y1]); });
+        gaps.sort((p, q) => p[0] - q[0]); let c = lo; const runs = [];
+        gaps.forEach(g => { if (g[0] > c + 0.05) runs.push([c, Math.min(g[0], hi)]); c = Math.max(c, g[1]); }); if (hi > c + 0.05) runs.push([c, hi]);
+        runs.forEach(r => { const pt = t => NS ? [t, fix] : [fix, t], A = pt(r[0]), B = pt(r[1]);
+          push([[A[0], A[1], z + 0.86], [B[0], B[1], z + 0.86], [B[0], B[1], z + 0.92], [A[0], A[1], z + 0.92]], vmShade(wood, 0.85), o);
+          const k = Math.max(1, Math.round((r[1] - r[0]) / 0.5)); for (let i = 0; i <= k; i++) { const q = pt(r[0] + (r[1] - r[0]) * i / k); box(q[0] - 0.02, q[1] - 0.02, z, 0.04, 0.04, 0.86, vmShade(wood, 0.9), o); } }); });
+      /* its stairs: the treads, two strings and a handrail */
+      stairsD.forEach(D => { D.treads.forEach(t => box(Math.min(t.p[0], t.q[0]), Math.min(t.p[1], t.q[1]), t.z - 0.04, Math.abs(t.q[0] - t.p[0]), Math.abs(t.q[1] - t.p[1]), 0.04, wood, o));
+        const hi = Math.max(D.z0, D.z1);
+        [0, D.sw].forEach(off => { const pa = D.NS ? [D.ex + off, D.ey] : [D.ex, D.ey + off], pb = D.NS ? [D.ex + off, D.ey + D.o[1] * D.run] : [D.ex + D.o[0] * D.run, D.ey + off];
+          push([[pa[0], pa[1], D.z0], [pb[0], pb[1], D.z1 + 0.14], [pb[0], pb[1], D.z1], [pa[0], pa[1], D.z0 - 0.28]], vmShade(wood, 0.75), o);
+          push([[pa[0], pa[1], D.z0 + 0.9], [pb[0], pb[1], D.z1 + 0.9], [pb[0], pb[1], D.z1 + 0.84], [pa[0], pa[1], D.z0 + 0.84]], vmShade(wood, 0.85), o); }); });
+      /* covered: the telheiro from the wall on two posts, under the eave where the wall carries one */
+      if (E.roof) { const rr = v.roof, tht = (rr.th || 0) * Math.PI / 180, alongX = rr.ridge === 'x' || (rr.ridge !== 'y' && v.L >= v.D), under = rr.type !== 'flat' && !(rr.type === 'gable' && (across ? !alongX : alongX));
+        const d = E.d || 1.2, eaveS = under ? (rr.bei || 0) * Math.tan(tht) : 0, eOver = eaveS > 0 ? Math.min(rr.bei || 0, d - 0.3) : 0, run = d + 0.2 - eOver, zTop = Math.max(H - eaveS - 0.05, z + 2.2), zOut = clamp(zTop - run * Math.tan(15 * Math.PI / 180), Math.min(zTop, z + 2.1), zTop), zPost = zOut + (zTop - zOut) * 0.2 / run;
+        const a = E.a || 0, w = E.w || 3; [a + 0.05, a + w - 0.2].forEach(u => { const q = at(u, d); box(q[0] - (f === 'E' ? 0.15 : 0), q[1] - (f === 'N' ? 0.15 : 0), z, 0.15, 0.15, zPost - z, wood, o); });
+        push([[...at(a - 0.2, d + 0.2), zOut], [...at(a + w + 0.2, d + 0.2), zOut], [...at(a + w + 0.2, eOver), zTop], [...at(a - 0.2, eOver), zTop]], (VM_ROOFMAT[v.roof.mat] || VM_ROOFMAT.tile).c, o); }
       return;
     }
     if (E.t === 'varanda') {
@@ -25755,6 +25849,11 @@ function vmPlanSVG(vm, w, opts) {
     if (E.t === 'varanda' || E.t === 'alpendre' || E.t === 'latada') { const w = E.w || 4, d = E.t === 'varanda' ? (E.kind === 'reentrante' ? -1 : E.kind === 'sacada' ? 0.5 : 1.1) : (E.d || 2.4), u0 = (E.pos || 0.5) * len - w / 2;
       const A = P(...at(u0, Math.max(0, d))), B = P(...at(u0 + w, Math.min(0, d)));
       o.push('<rect x="' + Math.min(A[0], B[0]) + '" y="' + Math.min(A[1], B[1]) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="none" stroke="#8A6A48" stroke-width="1.2" stroke-dasharray="4 3"/>'); }
+    if (E.t === 'deck') { const R = vmDeckRect(v, E), A = P(R.x0, R.y1), B = P(R.x1, R.y0), c = P((R.x0 + R.x1) / 2, (R.y0 + R.y1) / 2), no = vmDecks(vm).indexOf(E) + 1;
+      o.push('<rect x="' + A[0] + '" y="' + A[1] + '" width="' + (+B[0] - +A[0]).toFixed(1) + '" height="' + (+B[1] - +A[1]).toFixed(1) + '" fill="rgba(138,98,64,.22)" stroke="#6E4B2E" stroke-width="1.2"' + (E.roof ? ' stroke-dasharray="5 3"' : '') + '/>');
+      o.push('<text x="' + c[0] + '" y="' + (+c[1] + 3) + '" font-size="9" text-anchor="middle" fill="#4A321C" font-family="sans-serif" pointer-events="none">P' + no + ' +' + fmt(E.z || 0, 2) + '</text>');
+      (E.stairs || []).forEach(S => vmDeckStair(vm, v, E, S).treads.forEach(t => { const a = P(Math.min(t.p[0], t.q[0]), Math.max(t.p[1], t.q[1])), b = P(Math.max(t.p[0], t.q[0]), Math.min(t.p[1], t.q[1]));
+        o.push('<rect x="' + a[0] + '" y="' + a[1] + '" width="' + (+b[0] - +a[0]).toFixed(1) + '" height="' + (+b[1] - +a[1]).toFixed(1) + '" fill="none" stroke="#6E4B2E" stroke-width="1"/>'); })); }
     if (E.t === 'oven') { const r = E.r || 0.9, p = P(...at((E.pos || 0.5) * len, r * 0.6)); o.push('<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (r * s).toFixed(1) + '" fill="#E7DFD0" stroke="#3A3530" stroke-width="1.5"/>'); }
   }));
   /* rooms */
@@ -25783,7 +25882,8 @@ function vmElevSVG(vm, face, w, opts) {
   const vs = vmAllVols(vm), across = face === 'S' || face === 'N', bb = vmBBox(vm);
   const u = v => across ? (face === 'S' ? v.x : -v.x) : (face === 'E' ? v.y : -v.y), half = v => across ? v.L / 2 : v.D / 2;
   const depth = v => face === 'S' ? -v.y : face === 'N' ? v.y : face === 'E' ? v.x : -v.x;
-  const umin = Math.min(...vs.map(v => u(v) - half(v))) - 2, umax = Math.max(...vs.map(v => u(v) + half(v))) + 2;
+  const uXY = (x, y) => across ? (face === 'S' ? x : -x) : (face === 'E' ? y : -y), dkX = vmDeckExtents(vm).flatMap(q => [uXY(q[0], q[1]), uXY(q[2], q[3])]);
+  const umin = Math.min(...vs.map(v => u(v) - half(v)), ...dkX) - 2, umax = Math.max(...vs.map(v => u(v) + half(v)), ...dkX) + 2;
   const zmax = Math.max(...vs.map(v => (v.raise || 0) + vmH(v) + vmRoofRise(v))) + 1.5, s = w / (umax - umin), h = Math.round((zmax + 0.8) * s);
   const P = (uu, z) => [((uu - umin) * s).toFixed(1), (h - (z + 0.6) * s).toFixed(1)], o = [];
   o.push('<rect width="' + w + '" height="' + h + '" fill="' + (opts.bg || '#FBFAF7') + '"/>');
@@ -25815,6 +25915,13 @@ function vmElevSVG(vm, face, w, opts) {
     const zb = H + vmRoofAt(v, x, y) - 0.2, zt = zb + (E.h || 1.2) + 0.2, ww = E.kind === 'ale' ? 1.2 : E.kind === 'esp' ? 1.8 : E.kind === 'rib' ? 1.4 : E.kind === 'gran' ? 0.7 : 0.6;
     o.push('<polygon points="' + [[uu - ww / 2, zb], [uu + ww / 2, zb], [uu + ww / 2, zt], [uu - ww / 2, zt]].map(p => P(p[0], p[1]).join(',')).join(' ') + '" fill="#F2EFE6" stroke="#3A3530" stroke-width="1"/>'); }));
   o.push('<text x="10" y="16" font-family="sans-serif" font-size="12" fill="#3A3530">' + VL({ en:{ S:'South', E:'East', N:'North', W:'West' }[face] + ' elevation', pt:'Alçado ' + { S:'sul', E:'nascente', N:'norte', W:'poente' }[face] }) + '</text>');
+  /* the platforms and their stairs, in front of the walls */
+  vmDecks(vm).forEach(E => { const v = vm.vols[E.vol || 0]; if (!v) return; const R = vmDeckRect(v, E), a = Math.min(uXY(R.x0, R.y0), uXY(R.x1, R.y1)), b = Math.max(uXY(R.x0, R.y0), uXY(R.x1, R.y1)), z = R.z;
+    const pl = (pts, f, st) => o.push('<polygon points="' + pts.map(q => P(q[0], q[1]).join(',')).join(' ') + '" fill="' + f + '" stroke="' + (st || '#4A321C') + '" stroke-width="1"/>');
+    pl([[a, z - 0.12], [b, z - 0.12], [b, z], [a, z]], '#8A6240');
+    if (E.guard !== false) pl([[a, z], [b, z], [b, z + 0.9], [a, z + 0.9]], 'rgba(110,80,50,.22)');
+    const np = Math.max(1, Math.ceil((b - a) / 1.6)); for (let i = 0; i <= np; i++) { const t = a + (b - a - 0.12) * i / np; pl([[t, 0], [t + 0.12, 0], [t + 0.12, z - 0.12], [t, z - 0.12]], '#6E4B2E'); }
+    (E.stairs || []).forEach(S => { const D = vmDeckStair(vm, v, E, S); D.treads.forEach(t => { const c0 = uXY(t.p[0], t.p[1]), c1 = uXY(t.q[0], t.q[1]); pl([[Math.min(c0, c1), t.z - 0.04], [Math.max(c0, c1), t.z - 0.04], [Math.max(c0, c1), t.z], [Math.min(c0, c1), t.z]], '#8A6240'); }); }); });
   return '<svg xmlns="http://www.w3.org/2000/svg" class="vmelev" data-s="' + s.toFixed(4) + '" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '">' + o.join('') + '</svg>';
 }
 /** A plan and the south elevation as DXF (R12, lines and circles), metres. */
@@ -25896,6 +26003,8 @@ function vmDXF(vm) {
   vs.forEach(v => { const ring = vmRing(v, 0, 0).map(p => [p[0], p[1]]), Wt = vmWallT(v);
     poly(ring, 'PLAN_WALL_OUT'); poly(vmRing(v, -Wt, 0).map(p => [p[0], p[1]]), 'PLAN_WALL_IN'); });
   if (vm.court && vm.court.on) poly(vmRing(Object.assign({ kind:'rect' }, vm.court), 0, 0).map(p => [p[0], p[1]]), 'PLAN_COURT');
+  vmDecks(vm).forEach(E => { const v = vm.vols[E.vol || 0]; if (!v) return; const R = vmDeckRect(v, E); poly([[R.x0, R.y0], [R.x1, R.y0], [R.x1, R.y1], [R.x0, R.y1]], 'PLAN_PLATFORM');
+    (E.stairs || []).forEach(S => vmDeckStair(vm, v, E, S).treads.forEach(t => poly([[t.p[0], t.p[1]], [t.q[0], t.p[1]], [t.q[0], t.q[1]], [t.p[0], t.q[1]]], 'PLAN_PLATFORM_STAIR'))); });
   ((STATE.vern && STATE.vern.rooms) || []).forEach(q => poly([[q.x - q.w / 2, q.y - q.d / 2], [q.x + q.w / 2, q.y - q.d / 2], [q.x + q.w / 2, q.y + q.d / 2], [q.x - q.w / 2, q.y + q.d / 2]], 'PLAN_ROOMS'));
   /* the south elevation, drawn below the plan */
   const bb = vmBBox(vm), dy = bb[1] - 6;
@@ -25964,6 +26073,11 @@ function vmSel(label, opts, get, set, rebuild) {
   const s = el('select', { onchange:e => { set(e.target.value); vmChanged(rebuild); } });
   opts.forEach(([v, l]) => s.appendChild(el('option', { value:v, text:l, selected:String(get()) === String(v) ? 'selected' : null })));
   return el('label', null, [document.createTextNode(label), s]);
+}
+/** A number whose change also redraws the editor: its readings depend on it. */
+function vmNumR(label, get, set, lo, hi, step) {
+  return el('label', null, [document.createTextNode(label), el('input', { type:'number', min:lo, max:hi, step:step || 0.1, value:+(+get()).toFixed(2),
+    onchange:e => { const v = clamp(+e.target.value, lo, hi); if (isFinite(v)) { set(v); vmChanged(true); } } })]);
 }
 /** The compact forms, for a line of a table: no label, the header names the column. */
 function vmNumC(get, set, lo, hi, step) {
@@ -26194,7 +26308,7 @@ function syncVmSide(R, vm) {
   VM_FACES.forEach(f => { open[f] = JSON.stringify(vs.map(q => (q.open && q.open[f]) || [])); });
   return { dims:JSON.stringify([+vs.reduce((a, q) => a + q.L, 0).toFixed(2), v.D, v.fl, v.fh, v.raise || 0]),
     roof:JSON.stringify(vs.map(q => [q.roof.type, q.roof.th, q.roof.bei || 0, q.roof.ridge || ''])), open,
-    els:JSON.stringify(els.filter(e => (e.t === 'varanda' || e.t === 'stair') && (e.vol || 0) === wi)),
+    els:JSON.stringify(els.filter(e => (e.t === 'varanda' || e.t === 'stair' || e.t === 'deck') && (e.vol || 0) === wi)),
     chim:JSON.stringify(els.filter(e => e.t === 'chimney' && (e.vol || 0) === wi).map(e => [e.u, e.v, e.kind])),
     mat:JSON.stringify([v.wall.mat, v.roof.mat, v.wall.barra || '', v.wall.frames || '']) };
 }
@@ -26256,7 +26370,8 @@ function studySync() {
     const u = vernOpenUnits(f, np > 1 ? vm : { vols:[v] }, P), o = OPEN[f] || {}; if (!u) return;
     OPEN[f] = Object.assign(u, { ovD:o.ovD || 0, ovN:o.ovN || 1, ovL:o.ovL || 0, ovR:o.ovR || 0, finD:o.finD || 0, finN:o.finN || 0, finSide:o.finSide || 'both' }); });
   if (A('els')) { const els = vm.els.filter(e => (e.vol || 0) === wi);
-    MASS.balc = els.filter(e => e.t === 'varanda' && (e.floor || 0) < MASS.fl).map(e => syncBalcOf(e, els.some(q => q.t === 'stair' && (q.face || 'S') === (e.face || 'S')))); }
+    MASS.balc = els.filter(e => e.t === 'varanda' && (e.floor || 0) < MASS.fl).map(e => syncBalcOf(e, els.some(q => q.t === 'stair' && (q.face || 'S') === (e.face || 'S'))));
+    vmDeckCanopy(vm, wi); }
   if (A('chim')) { if (vm.els.some(e => e.t === 'chimney' && (e.vol || 0) === wi)) vmChimToRoof(vm, wi); else if (ROOF.zones) ROOF.zones.forEach(z => { delete z.chim; }); }
   if (A('mat')) { const was = JSON.parse(S.a.mat);
     if (was[0] !== v.wall.mat) syncPromptMat(/\b(walls?|paredes?)\b/i, RENDER_WALLS, v.wall.mat, 'walls');
@@ -26596,7 +26711,7 @@ function buildModeller(host) {
     ed.appendChild(el('h4', { class:'vmparts', text:VMT('Parts of the house', 'Elementos da casa') }));
     const volOpts = M.vols.map((q, i) => [i, VL(q.name)]);
     (M.els || []).forEach((E, i) => {
-      const title = E.t === 'chimney' ? VMT('Chimney', 'Chaminé') : E.t === 'stair' ? VMT('Outside stair', 'Escada exterior') : E.t === 'varanda' ? VMT('Varanda', 'Varanda') : E.t === 'oven' ? VMT('Projecting oven', 'Forno saliente') : E.t === 'latada' ? VMT('Vine pergola', 'Latada') : VMT('Porch', 'Alpendre');
+      const title = E.t === 'chimney' ? VMT('Chimney', 'Chaminé') : E.t === 'stair' ? VMT('Outside stair', 'Escada exterior') : E.t === 'varanda' ? VMT('Varanda', 'Varanda') : E.t === 'oven' ? VMT('Projecting oven', 'Forno saliente') : E.t === 'latada' ? VMT('Vine pergola', 'Latada') : E.t === 'deck' ? VMT('Platform ', 'Plataforma ') + (vmDecks(M).indexOf(E) + 1) : VMT('Porch', 'Alpendre');
       /* closed to one line — what, on which body and face — and opened by a click; the last one added opens by itself */
       const fo = vmFaceOpts().find(q => q[0] === (E.face || 'S')), vo = volOpts.find(q => +q[0] === +E.vol);
       const det = ed.appendChild(el('details', { class:'vmeld' })); if (VM_ELOPEN.has(E)) det.open = true;
@@ -26604,7 +26719,7 @@ function buildModeller(host) {
       det.appendChild(el('summary', null, [el('b', { text:title }), el('span', { text:' · ' + (vo ? vo[1] : '') + (E.t !== 'chimney' && fo ? ' · ' + fo[1] : '') })]));
       const row = det.appendChild(el('div', { class:'vmrow' }));
       row.appendChild(vmSel(VMT('Body', 'Corpo'), volOpts, () => E.vol, x => { E.vol = +x; }));
-      if (E.t !== 'chimney') row.appendChild(vmSel(VMT('Face', 'Fachada'), vmFaceOpts(), () => E.face || 'S', x => { E.face = x; }));
+      if (E.t !== 'chimney') row.appendChild(vmSel(VMT('Face', 'Fachada'), vmFaceOpts(), () => E.face || 'S', x => { E.face = x; if (E.t === 'deck') (E.stairs || []).forEach(S => { if (S.side === VM_BACK[x]) S.side = x; }); }, E.t === 'deck'));
       if (E.t === 'chimney') { row.appendChild(vmSel(VMT('Kind', 'Tipo'), Object.keys(VM_CHIM).map(k => [k, VL(VM_CHIM[k])]), () => E.kind, x => { E.kind = x; }, true));
         { row.appendChild(vmNum(VMT('Along (0–1)', 'Ao longo (0–1)'), () => E.u, x => { E.u = x; }, 0, 0.95, 0.05)); row.appendChild(vmNum(VMT('Across (0–1)', 'Na profundidade (0–1)'), () => E.v, x => { E.v = x; }, 0, 0.95, 0.05)); row.appendChild(vmNum(VMT('Height (m)', 'Altura (m)'), () => E.h || 1.2, x => { E.h = x; }, 0.3, 4, 0.1)); } }
       if (E.t === 'stair') { row.appendChild(vmSel(VMT('Run', 'Lanço'), [['par', VMT('along the wall', 'encostado à parede')], ['perp', VMT('out from the wall', 'perpendicular à parede')]], () => E.along, x => { E.along = x; }));
@@ -26614,6 +26729,28 @@ function buildModeller(host) {
       if (E.t === 'varanda') { row.appendChild(vmSel(VMT('Kind', 'Tipo'), Object.keys(VM_VAR).map(k => [k, VL(VM_VAR[k])]), () => E.kind, x => { E.kind = x; }));
         row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 1, 0.05)); row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 0.8, 20, 0.1));
         row.appendChild(vmNum(VMT('Storey (0 = ground)', 'Piso (0 = térreo)'), () => E.floor || 0, x => { E.floor = Math.round(x); }, 0, 3, 1)); }
+      if (E.t === 'deck') { const wv = M.vols[E.vol || 0] || M.vols[0], fE = E.face || 'S', wl = fE === 'S' || fE === 'N' ? wv.L : wv.D, corner = fE === 'S' || fE === 'N' ? VMT('west', 'poente') : VMT('south', 'sul');
+        row.appendChild(vmNumR(VMT('Height over the ground (m)', 'Altura ao chão (m)'), () => E.z, x => { E.z = x; }, 0.15, 6, 0.05));
+        row.appendChild(vmNumR(VMT('Length along the wall (m)', 'Comprimento ao longo da parede (m)'), () => E.w, x => { E.w = x; }, 0.6, 60, 0.1));
+        row.appendChild(vmNumR(VMT('Depth (m)', 'Profundidade (m)'), () => E.d, x => { E.d = x; }, 0.6, 8, 0.1));
+        row.appendChild(vmNumR(VMT('From the ', 'Desde o canto a ') + corner + VMT(' corner (m)', ' (m)'), () => E.a, x => { E.a = x; }, -30, 60, 0.1));
+        row.appendChild(el('button', { type:'button', text:VMT('All along the wall', 'A toda a parede'), onclick:() => { E.a = 0; E.w = +wl.toFixed(2); vmChanged(true); } }));
+        row.appendChild(vmChk(VMT('guard', 'guarda'), () => E.guard !== false, x => { E.guard = x; }));
+        row.appendChild(vmChk(VMT('roof over it', 'coberta'), () => !!E.roof, x => { E.roof = x; }));
+        const sb = det.appendChild(el('div', { class:'vmdeckst' }));
+        const others = vmDecks(M).filter(q => q !== E), sides = ['S', 'E', 'N', 'W'].filter(q => q !== VM_BACK[fE]);
+        (E.stairs || []).forEach((S, si) => { const D = vmDeckStair(M, wv, E, S), rw = sb.appendChild(el('div', { class:'vmrow' })), Z = (D.z1 - D.z0);
+          rw.appendChild(el('b', { text:VMT('Stair ', 'Escada ') + (si + 1), style:'align-self:center' }));
+          rw.appendChild(vmSel(VMT('Leaves by the side', 'Sai pelo lado'), vmFaceOpts().filter(q => sides.includes(q[0])), () => S.side, x => { S.side = x; S.at = 0; }, true));
+          rw.appendChild(vmNumR(VMT('Along that side (m)', 'Ao longo desse lado (m)'), () => D.at, x => { S.at = x; }, 0, 60, 0.1));
+          rw.appendChild(vmNumR(VMT('Width (m)', 'Largura (m)'), () => S.w || 1, x => { S.w = x; }, 0.6, 3, 0.1));
+          rw.appendChild(vmSel(VMT('Goes to', 'Vai até'), [['ground', VMT('the ground', 'ao chão')]].concat(others.map(q => [q.id, VMT('platform ', 'plataforma ') + (vmDecks(M).indexOf(q) + 1)])), () => S.to || 'ground', x => { S.to = x; delete S.n; vmDeckAim(M, wv, E, S); }, true));
+          rw.appendChild(vmNumR(VMT('Number of steps', 'Número de degraus'), () => D.n, x => { S.n = Math.round(x); }, 2, 40, 1));
+          rw.appendChild(el('button', { type:'button', class:'x', text:'✕', title:VMT('Remove this stair', 'Remover esta escada'), onclick:() => { E.stairs.splice(si, 1); vmChanged(true); } }));
+          const steep = Math.abs(D.rise) > 0.21, noteTxt = fmt(Math.abs(Z), 2) + ' m · ' + VMT('riser ', 'espelho ') + fmt(Math.abs(D.rise), 3) + ' m · ' + VMT('going ', 'cobertor ') + fmt(D.tr, 2) + ' m · ' + VMT('run ', 'lanço ') + fmt(D.run, 2) + ' m'
+            + (steep ? ' — ' + VMT('steep: more steps', 'íngreme: mais degraus') : '') + (D.lands ? '' : ' — ' + VMT('its foot does not reach that platform: move the stair or the platform', 'o pé não chega a essa plataforma: mude a escada ou a plataforma'));
+          sb.appendChild(el('div', { class:'hint', text:noteTxt, style:(steep || !D.lands) ? 'color:var(--c2)' : '' })); });
+        sb.appendChild(el('button', { type:'button', text:'+ ' + VMT('stair', 'escada'), onclick:() => { (E.stairs = E.stairs || []).push({ side:sides.find(q => !E.stairs.some(S => S.side === q)) || sides[0], at:0, w:1, to:'ground' }); vmChanged(true); } })); }
       if (E.t === 'oven') { row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 1, 0.05)); row.appendChild(vmNum(VMT('Radius (m)', 'Raio (m)'), () => E.r || 0.9, x => { E.r = x; }, 0.5, 2, 0.1)); }
       if (E.t === 'alpendre' || E.t === 'latada') { row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 1, 20, 0.5)); row.appendChild(vmNum(VMT('Depth (m)', 'Profundidade (m)'), () => E.d, x => { E.d = x; }, 1, 6, 0.1)); }
       if (E.t === 'alpendre') { row.appendChild(vmChk(VMT('timber deck (raised floor)', 'deck de madeira (piso elevado)'), () => E.deck !== false, x => { E.deck = x; }));
@@ -26627,6 +26764,10 @@ function buildModeller(host) {
     eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('varanda', 'varanda'), onclick:() => addEl({ t:'varanda', face:'S', kind:'corrida', pos:0.5, w:4, floor:1 }) }));
     eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('oven', 'forno'), onclick:() => addEl({ t:'oven', face:'E', pos:0.5, r:0.9 }) }));
     eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('porch', 'alpendre'), onclick:() => addEl({ t:'alpendre', face:'S', pos:0.5, w:6, d:2.2 }) }));
+    if (VM_DECK_TYPES.includes(M.type)) eb.appendChild(el('button', { type:'button', class:'pri', text:'+ ' + VMT('platform (varanda, balcão, walkway)', 'plataforma (varanda, balcão, passadiço)'), onclick:() => {
+      const ds = vmDecks(M), wv = M.vols[VM_SEL] || M.vols[0], f = ['S', 'E', 'W', 'N'].find(q => !ds.some(d => (d.face || 'S') === q && (d.vol || 0) === VM_SEL)) || 'S', wl = f === 'S' || f === 'N' ? wv.L : wv.D;
+      let id = 1; while (ds.some(d => d.id === 'd' + id)) id++;
+      addEl({ t:'deck', id:'d' + id, face:f, a:0, w:+wl.toFixed(2), d:1.2, z:wv.raise || 0.8, guard:true, roof:false, stairs:[{ side:f === 'S' || f === 'N' ? 'E' : 'S', at:0, w:1, to:'ground' }] }); } }));
     eb.appendChild(el('button', { type:'button', text:'+ ' + VMT('vine pergola', 'latada'), onclick:() => addEl({ t:'latada', face:'S', pos:0.5, w:6, d:3 }) }));
     /* courtyard and row */
     ed.appendChild(el('h4', { text:VMT('Courtyard and row', 'Pátio e banda') }));
