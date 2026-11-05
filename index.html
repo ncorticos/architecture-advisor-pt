@@ -192,6 +192,7 @@ table.data tr.total td{border-top:1px solid var(--line); font-weight:600; color:
 }
 .pill.ok{background:#eaf3dd; color:#3f6212}
 .pill.empty{background:#f1f2ef; color:#7b838b}
+.pill.warn{background:#fdf1d3; color:#8a5a06}
 .pill.bad{background:#fbe6e6; color:#9f2420}
 table.inv td:nth-child(2){text-align:left}
 table.inv td:last-child{text-align:left; font-family:var(--sans); color:var(--muted); white-space:normal; min-width:280px}
@@ -982,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.201.0',
+  version:     '1.202.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -3547,6 +3548,31 @@ function solarEval(G, RF, S, C, tech) {
   }
   return { sol:spec, kind, fld, az, tilt, opt, best, plane:tp.year, perM2, n, area, out, kit,
     kWp:T === 'pv' ? area * kind.eff : null, ratio:best.y > 0 ? perM2 / best.y : 0, measured:hm.measured };
+}
+/* What the house can use, from its size, so that a field far beyond it shows as such. A teaching yardstick, not an
+   energy audit: one person per 30 m² of floor, two to eight (the regulation's dwelling counts bedrooms plus one); electricity
+   1 000 kWh a year plus 625 per person — the app's 3 500 kWh for a home of four; hot water by the REH's own convention, as for
+   the thermosiphon kit, 40 L a person a day heated by 35 K. Up to 1.3 times the electricity is fine, past twice is red; heat
+   has 1.5 and 2.2, since a collector's year counts summer heat a house does not all draw, and that heat cannot be sent anywhere. Commerce and services, and the
+   support structures, have no such yardstick and are not judged. */
+const SOL_BANDS = { pv:[1.3, 2], thermal:[1.5, 2.2] };
+function houseNeed(G) {
+  const S = STATE.site; if (!G || (S && S.use === 'cs')) return null;
+  let A = 0;
+  if (isPopular()) { let R = null; try { R = vernRead(); } catch (e) { R = null; }
+    if (R && R.T && R.T.support) return null;
+    const vm = R && R.V && R.V.vm; if (vm && vm.vols) vm.vols.forEach(v => { A += (v.kind === 'round' ? Math.PI * v.L * v.L / 4 : v.L * v.D) * (v.fl || 1); }); }
+  if (!(A > 0)) { const pl = planModel(G); A = (isFinite(pl.area) && pl.area > 0 ? pl.area : G.L * G.D) * Math.max(1, Math.round(G.fl || 1)); }
+  /* a building of several dwellings has no ceiling of one household */
+  const flats = isPopular() && ['pt-pombalino', 'pt-gaioleiro', 'pt-lisboa-patio', 'pt-vila-operaria'].includes((STATE.vern || {}).type);
+  const people = flats ? Math.max(2, Math.round(A / 30)) : clamp(Math.round(A / 30), 2, 8);
+  return { area:A, people, pv:1000 + 625 * people, thermal:people * SOLAR_KIT.lPerson * 4.186 * SOLAR_KIT.dT / 3600 * 365 };
+}
+/** A field's year against that need: the share, and green, yellow or red. Null where it is not judged. */
+function solSizing(tech, kwh, G) {
+  const T = tech === 'pv' ? 'pv' : 'thermal', n = houseNeed(G); if (!n || !(kwh > 0)) return null;
+  const r = kwh / n[T], [a, b] = SOL_BANDS[T];
+  return Object.assign({}, n, { need:n[T], r, level:r > b ? 'bad' : r > a ? 'warn' : 'ok', col:r > b ? '#DC2626' : r > a ? '#D97706' : '#16A34A', limit:a });
 }
 /** The Roof tab's PV electricity, recomputed anywhere (Ventilation combines
     it with wind): null where no PV fits or the site is missing. */
@@ -9850,6 +9876,17 @@ function buildRoof(host) {
   /** A house's yearly share, rule of thumb: about 3 500 kWh of electricity,
       about 2 000 kWh of hot water at 50 °C. */
   const solHomes = (tech, kwh) => '≈ ' + fmt(kwh / (tech === 'pv' ? 3500 : 2000), 1) + ' ' + t('homes');
+  /** The worse of two badge colours: a well-pitched field that is far too big is still too big. */
+  const solWorse = (c1, c2) => [ '#DC2626', '#D97706', '#16A34A' ].find(q => q === c1 || q === c2) || c1;
+  /** The field against what this house uses, in words, with how many modules would do. */
+  const solNeedWords = (tech, sn, Z) => {
+    const loc = LANG === 'pt' ? 'pt-PT' : 'en-GB', N = v => Math.round(v).toLocaleString(loc), md = sn.fld.md.w * sn.fld.md.h;
+    const enough = Math.max(1, Math.floor(Z.limit * Z.need / Math.max(1, sn.out / Math.max(1, sn.n))));
+    return t('House of') + ' ' + N(Z.area) + ' m² ≈ ' + Z.people + ' ' + t('people') + ' · ' + t(tech === 'pv' ? 'electricity' : 'hot water') + ' ≈ ' + N(Z.need) + ' kWh/' + t('year') + ' · ' + t('this field') + ' ' + Math.round(Z.r * 100) + ' %'
+      + (Z.level === 'ok' ? ' — ' + t('suited to the house')
+        : ' — ' + t(Z.level === 'bad' ? (tech === 'pv' ? 'far more than the house uses: reduce the field' : 'far more than the house uses: the extra heat is lost, and overheats the collectors in summer') : (tech === 'pv' ? 'more than the house uses' : 'more heat than the house draws'))
+          + ' · ' + t('about') + ' ' + enough + ' ' + t(enough === 1 ? (tech === 'pv' ? 'module is enough' : 'collector is enough') : (tech === 'pv' ? 'modules are enough' : 'collectors are enough')) + ' (' + fmt(enough * md, 1) + ' m²)');
+  };
   const nearestIdeal = th => [{ a:idealW, k:'winter' }, { a:idealS, k:'summer' }, { a:idealB, k:'year-round' }]
     .reduce((p, q) => Math.abs(q.a - th) < Math.abs(p.a - th) ? q : p);
   SCORES.roof = () => {
@@ -9863,6 +9900,7 @@ function buildRoof(host) {
       if (sn) Object.assign(o, { [L + ' collection']:t === 'pv' ? 'PV panels' : 'thermal collectors', [L + ' collector area (m²)']:+sn.area.toFixed(1),
         [L + ' sun on plane (kWh/m²·year)']:Math.round(sn.plane), [L + ' collector pitch (°)']:sn.tilt,
         [t === 'pv' ? 'PV electricity (kWh/year)' : 'Useful heat (kWh/year)']:Math.round(sn.out),
+        [L + ' share of the house use (%)']:(q => q ? Math.round(q.r * 100) : null)(solSizing(t, sn.out, G)),
         [L + ' irradiation']:sn.measured ? 'ERA5 1991–2020 (Open-Meteo)' : 'estimate, clearness 0.55' });
     });
     return o;
@@ -10978,7 +11016,7 @@ if (F.chim || F.par) {
          phone-width canvas */
       const bw = narrow ? Math.min(100, (W - 16) / 3) : 84, bh = narrow ? 46 : 52;
       const badge = (i, value, col, caption) => {
-        const bx = narrow ? 4 + (i % 3) * (bw + 4) : W - 92, by = narrow ? 4 + Math.floor(i / 3) * (bh + 4) : 6 + i * 58;
+        const bx = narrow ? 4 + (i % 3) * (bw + 4) : i >= 6 ? W - 92 - (bw + 6) : W - 92, by = narrow ? 4 + Math.floor(i / 3) * (bh + 4) : 6 + (i >= 6 ? i - 3 : i) * 58;
         ctx.fillStyle = '#fff';
         ctx.fillRect(bx, by, bw, bh);
         stroke(ctx, col, 1.5); ctx.strokeRect(bx, by, bw, bh);
@@ -11000,9 +11038,12 @@ if (F.chim || F.par) {
         const sn = solarNowFor(tech);
         if (!sn) return;
         const rt = solRate(sn);
-        badge(bi, rt === null ? null : Math.round(sn.out).toLocaleString(LANG === 'pt' ? 'pt-PT' : 'en-GB'), solRateCol(rt), t(cap));
+        /* each number takes the worse of how well the field faces the sun and how far it is past the house's need */
+        const Zs = rt === null ? null : solSizing(tech, sn.out, G), szCol = Zs ? solWorse(solRateCol(rt), Zs.col) : solRateCol(rt);
+        badge(bi, rt === null ? null : Math.round(sn.out).toLocaleString(LANG === 'pt' ? 'pt-PT' : 'en-GB'), szCol, t(cap));
         /* the PV's peak power, as the licence and the self-consumption rules count it */
-        if (tech === 'pv') badge(5, rt === null ? null : fmt(sn.kWp, 2), solRateCol(rt), t('PV peak · kWp'));
+        if (tech === 'pv') badge(5, rt === null ? null : fmt(sn.kWp, 2), szCol, t('PV peak · kWp'));
+        if (Zs) badge(tech === 'pv' ? 7 : 8, Math.round(Zs.r * 100) + ' %', Zs.col, t(tech === 'pv' ? 'PV · of house use' : 'Heat · of house use'));
         /* a kit's share of the hot water it serves */
         if (sn.kit) badge(6, Math.round(sn.kit.frac * 100) + ' %', sn.kit.frac >= 0.7 ? '#16A34A' : sn.kit.frac >= 0.5 ? '#D97706' : '#DC2626', t('Solar fraction · hot water'));
       });
@@ -11224,13 +11265,17 @@ if (F.chim || F.par) {
   function refreshSolar() {
     syncField();
     const parts = [];
-    let anyFit = false, anyOn = false;
+    let anyFit = false, anyOn = false, worstSize = null;
     [['pv', 'PV panels'], ['thermal', 'Thermal collectors']].forEach(([tech, nm]) => {
       const sn = solarNowFor(tech);
       if (!sn) return;
       anyOn = true;
       const what = t(nm), pmc = solCtl[tech] && solCtl[tech].pmH;
       if (pmc) pmc.textContent = solValues(tech, sn);
+      const Zn = sn.fld && sn.fld.fits ? solSizing(tech, sn.out, G) : null;
+      if (pmc) { if (!pmc._need) { pmc._need = el('p', { class:'hint' }); pmc.after(pmc._need); }
+        pmc._need.textContent = Zn ? solNeedWords(tech, sn, Zn) : ''; pmc._need.style.color = Zn && Zn.level !== 'ok' ? Zn.col : ''; pmc._need.style.fontWeight = Zn && Zn.level !== 'ok' ? '600' : ''; }
+      if (Zn && (worstSize === null || Zn.level === 'bad' || worstSize === 'ok')) worstSize = Zn.level;
       const facing = COMPASS8[Math.round(sn.az / 45) % 8];
       if (!sn.fld || !sn.fld.fits) {
         if (sn.fld && sn.fld.noTank) { parts.push(what + ' — ' + t('no room for the tank above the collectors: move the kit down the roof or toward its middle')); return; }
@@ -11243,7 +11288,8 @@ if (F.chim || F.par) {
         : fl.free ? t('racked on a metal frame at') + ' ' + sn.tilt + '° ' + t('facing') + ' ' + facing + (fl.auto ? ' (' + t('no slope faces the main facade') + ')' : RF.n === 0 ? ' ' + t('on the flat roof') : '')
         : t('on the slope at') + ' ' + sn.tilt + '° ' + t('facing') + ' ' + facing;
       const rt = solRate(sn), pct = rt === null ? '' : ' · ' + solRateWord(rt) + ' ' + Math.round(rt * 100) + '% ' + t('of the best here');
-      const homes = rt === null ? '' : ' · ' + solHomes(tech, sn.out);
+      const Zp = rt === null ? null : solSizing(tech, sn.out, G);
+      const homes = rt === null ? '' : ' · ' + (Zp ? Math.round(Zp.r * 100) + ' % ' + t('of the house’s use') : solHomes(tech, sn.out));
       const cap = fl.capped ? ' · ' + t('capped at a house roof') : '';
       const loc = LANG === 'pt' ? 'pt-PT' : 'en-GB', yr = Math.round(sn.out).toLocaleString(loc) + ' kWh/' + t('year') + (tech === 'pv' ? ' · ' + fmt(sn.kWp, 2) + ' kWp' : '')
         + (sn.kit ? ' ' + t('used') + ' · ' + t('tank') + ' ' + sn.kit.V + ' L · ' + t('solar fraction') + ' ' + Math.round(sn.kit.frac * 100) + ' %' : '');
@@ -11253,7 +11299,7 @@ if (F.chim || F.par) {
     if (!anyOn) { pillSolar.className = 'pill empty'; pillSolar.textContent = t('No collectors — switch a collector on left of the model'); return; }
     ['pv', 'thermal'].forEach(tech => { const c = solCtl[tech]; if (c && c.pmH && !solarNowFor(tech)) c.pmH.textContent = ''; });
     if (solarOverlap()) parts.push(t('fields overlap — drag a field aside'));
-    pillSolar.className = 'pill ' + (anyFit ? 'ok' : 'bad');
+    pillSolar.className = 'pill ' + (!anyFit ? 'bad' : worstSize === 'bad' ? 'bad' : worstSize === 'warn' ? 'warn' : 'ok');
     pillSolar.textContent = parts.join(' · ');
   }
   function solarCsvRows() {
@@ -11270,6 +11316,7 @@ if (F.chim || F.par) {
         [nm + ' sun at optimum (kWh/m²·year)', Math.round(sn.opt.plane)], [nm + ' share of optimum (%)', Math.round(100 * sn.ratio)],
         [nm + ' performance', solRateWord(solRate(sn)) + ' ' + Math.round(100 * clamp(sn.ratio, 0, 1)) + '% of optimum'],
         [nm + ' homes covered (rule of thumb)', +((sn.out || 0) / (t === 'pv' ? 3500 : 2000)).toFixed(1)],
+        ...(q => q ? [['House floor area (m²)', Math.round(q.area)], ['House people (1 per 30 m², rule of thumb)', q.people], [nm + ' house use (kWh/year, rule of thumb)', Math.round(q.need)], [nm + ' share of the house use (%)', Math.round(q.r * 100)]] : [])(solSizing(t, sn.out, G)),
         [nm + ' capped at a house roof', !!(sn.fld && sn.fld.capped)],
         [t === 'pv' ? 'PV peak power (kWp)' : nm + ' gross area (m²)', t === 'pv' ? +sn.kWp.toFixed(2) : +sn.area.toFixed(2)],
         [t === 'pv' ? 'PV electricity (kWh/year)' : 'Useful heat at 50 °C (kWh/year)', Math.round(sn.out)],
@@ -16648,8 +16695,8 @@ function buildVentilation(host) {
     ventBadge(2, tct ? fmt(tct.kwh, 0) : null, !tct ? null : (tTot > TURB_HOME_KWH ? 'bad' : tct.hubMean < 3 ? 'bad' : tct.hubMean < 4.5 ? 'empty' : 'ok'), 'kWh/yr · turbine', null);
     /* the Roof tab's collectors beside it, their year's output: PV (with its peak power) and heat */
     { const pvB = pvAnnualKwh(), thB = thAnnualKwh(), loc = LANG === 'pt' ? 'pt-PT' : 'en-GB';
-      if (ROOF && ROOF.sol && ROOF.sol.pv && ROOF.sol.pv.on) ventBadge(3, pvB ? Math.round(pvB.kwh).toLocaleString(loc) : null, pvB ? 'ok' : null, pvB ? t('kWh/yr · PV') + ' ' + fmt(pvB.kwp, 1) + ' kWp' : t('kWh/yr · PV'), null);
-      if (ROOF && ROOF.sol && ROOF.sol.th && ROOF.sol.th.on) ventBadge(4, thB ? Math.round(thB.kwh).toLocaleString(loc) : null, thB ? 'ok' : null, t('kWh/yr · heat'), null); }
+      if (ROOF && ROOF.sol && ROOF.sol.pv && ROOF.sol.pv.on) ventBadge(3, pvB ? Math.round(pvB.kwh).toLocaleString(loc) : null, pvB ? (q => !q || q.level === 'ok' ? 'ok' : q.level === 'bad' ? 'bad' : 'empty')(solSizing('pv', pvB.kwh, G)) : null, pvB ? t('kWh/yr · PV') + ' ' + fmt(pvB.kwp, 1) + ' kWp' : t('kWh/yr · PV'), null);
+      if (ROOF && ROOF.sol && ROOF.sol.th && ROOF.sol.th.on) ventBadge(4, thB ? Math.round(thB.kwh).toLocaleString(loc) : null, thB ? (q => !q || q.level === 'ok' ? 'ok' : q.level === 'bad' ? 'bad' : 'empty')(solSizing('thermal', thB.kwh, G)) : null, t('kWh/yr · heat'), null); }
     if (shadowTag) {
       const desk = labelDesk(ctx, W, H);
       const boxPts = [];
@@ -32908,6 +32955,12 @@ Object.assign(PT, {
   "flat on the wall": "rente à parede", "Kind": "Tipo", "at": "a", "peak": "pico", "of useful heat": "de calor útil",
   "on the facade facing": "na fachada virada a", "on brackets at": "em consolas a", "racked on a metal frame at": "em estrutura metálica a",
   "no slope faces the main facade": "nenhuma vertente virada para a fachada principal", "on the flat roof": "na cobertura plana", "of the best here": "do melhor aqui",
+  "House of": "Casa de", "people": "pessoas", "hot water": "água quente", "this field": "este campo", "suited to the house": "adequado à casa",
+  "far more than the house uses: reduce the field": "muito acima do que a casa consome: reduza o campo",
+  "far more than the house uses: the extra heat is lost, and overheats the collectors in summer": "muito acima do que a casa consome: o calor a mais perde-se e sobreaquece os coletores no verão",
+  "more than the house uses": "acima do que a casa consome", "more heat than the house draws": "mais calor do que a casa gasta", "about": "cerca de",
+  "module is enough": "módulo basta", "collector is enough": "coletor basta", "modules are enough": "módulos bastam", "collectors are enough": "coletores bastam", "of the house’s use": "do consumo da casa",
+  "PV · of house use": "FV · do consumo", "Heat · of house use": "Calor · do consumo",
   "PV peak · kWp": "FV pico · kWp", "kWh/yr · PV": "kWh/ano · FV", "kWh/yr · heat": "kWh/ano · calor",
   "no room on that facade under the eave: lower it, tilt it more, or put it on the roof": "não cabe nessa fachada sob o beirado: baixe-o, incline-o mais ou ponha-o na cobertura",
   "no room on the roof for a rack here: move it, or tilt it less": "não cabe aqui uma estrutura na cobertura: mova-a ou incline-a menos",
