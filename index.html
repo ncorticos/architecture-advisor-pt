@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.202.0',
+  version:     '1.203.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -12047,9 +12047,12 @@ function buildOpenings(host) {
         r.m.textContent = fmt(qw, 2) + ' m · ' + fmt(qa, 2) + ' m² · '
           + (!eu.on ? '–' : String(Math.round(100 * (clamp(2 * H / Math.max(1, depth), 0, 1) + clamp(qw / 2.4, 0, 1)) / 2)))
           + (eu.on && eu.door ? ' · ' + t('door') : eu.on && eu.gel ? ' · ' + t('brick ventilation') : '')
-          + (eu.on ? ' · ' + t('sill') + ' ' + fmt(sillEff, 2) + ' m' : '');
+          + (eu.on ? ' · ' + t('sill') + ' ' + fmt(sillEff, 2) + ' m' : '') + shareTxt(eu.on ? dimsOf(us[i], i) : null);
       });
     };
+    /* share and position read back from the metres, never set: the width as a share of the wall,
+       the opening's middle as a share of the way from the left corner seen from outside */
+    const shareTxt = d => !d || !(d.len > 0) ? '' : ' · ' + t('Share') + ' ' + Math.round(100 * d.W / d.len) + ' % · ' + t('Position') + ' ' + Math.round(100 * clamp((cornerOf(d) + d.W / 2) / d.len, 0, 1)) + ' %';
     /* each opening's own size, typed: width along the wall, height, and
        for a window its sill above its own floor — read from the model as
        built, written back to the same share, height and sill the drag sets */
@@ -12299,6 +12302,10 @@ function buildOpenings(host) {
       r.m.textContent = fmt(q.w, 2) + ' m · ' + fmt(q.area, 2) + ' m²'
         + (u.on && u.door ? ' · ' + t('door') : u.on && u.gel ? ' · ' + t('brick ventilation') : '')
         + (u.on ? ' · ' + t('sill') + ' ' + fmt(sillEff, 2) + ' m' : '');
+      /* share and position of the first step wall, read back from the metres */
+      if (u.on && cw.length) { const w = cw[0].w, L = cw[0].sg.len, sp = glassSpans('C', w.uc - w.w / 2, w.uc + w.w / 2, L, 0).filter(q2 => q2.ui === i && q2.b - q2.a > 0.05)[0];
+        if (sp && L > 0) { const a = uStartsRight(cw[0].sg) ? L - sp.b : sp.a, W = sp.b - sp.a;
+          r.m.textContent += ' · ' + t('Share') + ' ' + Math.round(100 * W / L) + ' % · ' + t('Position') + ' ' + Math.round(100 * clamp((a + W / 2) / L, 0, 1)) + ' %'; } }
     });
   }
   function refreshClerestory() {
