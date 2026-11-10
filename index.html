@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.203.0',
+  version:     '1.204.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -3710,31 +3710,39 @@ function collectPlane(M) {
     and stays 0.3 m inside the footprint. O is the field's front middle: a
     quarter of the largest block in from its centre toward the facing, moved
     by the student's dx (across) and dy (back). */
-function solarRack(G, M, sol, md, lat, auto) {
-  const g = md.gap, az = solAz(sol, lat), tilt = solTilt(sol, lat), beta = tilt * RAD, mg = 0.3;
+function solarRack(G, M, sol, md, lat, auto, opt) {
+  /* opt.slope: laid flush on that slope instead — facing its own way at its own pitch, rows touching, a hand above the
+     tiles, every module on that one plane */
+  const sp = opt && opt.slope, g = md.gap, az = sp ? sp.az : solAz(sol, lat), tilt = sp ? Math.round(sp.th) : solTilt(sol, lat), beta = tilt * RAD, mg = 0.3;
   const nF = planDir(G.rot, az), eF = [-nF[1], nF[0]], bk = [-nF[0], -nF[1]];
   const bx = M.pl.boxes.reduce((p, q) => (q[2] - q[0]) * (q[3] - q[1]) > (p[2] - p[0]) * (p[3] - p[1]) ? q : p);
-  /* from a quarter of the block toward the way it faces: on a gable, the slope that faces it */
+  /* from a quarter of the block toward the way it faces: on a gable, the slope that faces it; flush, from 0.4 m above
+     the slope's lowest edge, on the line of its largest piece's middle */
   const ext = Math.abs(nF[0]) * (bx[2] - bx[0]) + Math.abs(nF[1]) * (bx[3] - bx[1]), fw = ext / 4;
-  const dx = sol.dx || 0, dy = sol.dy || 0, O = [(bx[0] + bx[2]) / 2 + fw * nF[0] + dx * eF[0] + dy * bk[0], (bx[1] + bx[3]) / 2 + fw * nF[1] + dx * eF[1] + dy * bk[1]];
+  const dx = sol.dx || 0, dy = sol.dy || 0;
+  let O0 = [(bx[0] + bx[2]) / 2 + fw * nF[0], (bx[1] + bx[3]) / 2 + fw * nF[1]];
+  if (sp) { const pc = sp.pieces.reduce((p, q) => q.area > p.area ? q : p), c0 = pc.centroid, lo = Math.max(...pc.poly.map(q => (q[0] - c0[0]) * nF[0] + (q[1] - c0[1]) * nF[1]));
+    O0 = [c0[0] + (lo - 0.4) * nF[0], c0[1] + (lo - 0.4) * nF[1]]; }
+  const O = [O0[0] + dx * eF[0] + dy * bk[0], O0[1] + dx * eF[1] + dy * bk[1]];
   const altMin = Math.max(5, 90 - Math.abs(lat) - 23.44) * RAD, run = md.h * Math.cos(beta), rise = md.h * Math.sin(beta);
-  const row = run + rise / Math.tan(altMin) + 0.1;
+  const row = sp ? run + g * Math.cos(beta) : run + rise / Math.tan(altMin) + 0.1;
   const PP = (u, sv) => [O[0] + u * eF[0] + sv * bk[0], O[1] + u * eF[1] + sv * bk[1]];
-  const zr = (u, sv) => { const p = PP(u, sv); return M.pl.inside(p[0], p[1]) ? M.zAt(p[0], p[1]) : null; };
+  const onSlope = p => !sp || sp.pieces.some(pc => inPoly(p[0], p[1], pc.poly));
+  const zr = (u, sv) => { const p = PP(u, sv); return M.pl.inside(p[0], p[1]) && onSlope(p) ? M.zAt(p[0], p[1]) : null; };
   const lay = (c, r) => {
     const W = c * md.w + (c - 1) * g, D = (r - 1) * row + run, mods = [];
     for (let j = 0; j < r; j++) for (let i = 0; i < c; i++) {
       const u0 = -W / 2 + i * (md.w + g), u1 = u0 + md.w, s0 = j * row, s1 = s0 + run;
       if ([[u0 - mg, s0 - mg], [u1 + mg, s0 - mg], [u1 + mg, s1 + mg], [u0 - mg, s1 + mg], [(u0 + u1) / 2, (s0 + s1) / 2]].some(q => zr(q[0], q[1]) === null)) return null;
       const f0 = zr(u0, s0), f1 = zr(u1, s0), b1 = zr(u1, s1), b0 = zr(u0, s1), mid = zr((u0 + u1) / 2, (s0 + s1) / 2);
-      const zf = Math.max(f0 + 0.2, f1 + 0.2, b0 + 0.15 - rise, b1 + 0.15 - rise, mid + 0.15 - rise / 2);
+      const cf = sp ? 0.05 : 0.2, cb = sp ? 0.05 : 0.15, zf = Math.max(f0 + cf, f1 + cf, b0 + cb - rise, b1 + cb - rise, mid + cb - rise / 2);
       if (Math.max(zf - f0, zf - f1, zf + rise - b0, zf + rise - b1) > 3) return null;   // a frame taller than 3 m is no rack
       const a = PP(u0, s0), b = PP(u1, s0), cc = PP(u1, s1), d = PP(u0, s1);
       mods.push({ i, j, q:[[a[0], a[1], zf], [b[0], b[1], zf], [cc[0], cc[1], zf + rise], [d[0], d[1], zf + rise]] });
     }
     return { W, D, mods };
   };
-  const lim = sol.tech === 'pv' ? [12, 6] : [8, 4], none = { fits:false, free:true, racked:true, auto, maxC:0, maxR:0, c:0, r:0, mods:[], md, az, tilt };
+  const lim = sol.tech === 'pv' ? [12, 6] : [8, 4], none = { fits:false, free:true, racked:!sp, slope:sp ? { az:sp.az, th:sp.th } : null, auto, maxC:0, maxR:0, c:0, r:0, mods:[], md, az, tilt };
   let maxC = 0; for (let c = 1; c <= lim[0]; c++) { if (lay(c, 1)) maxC = c; else break; }
   if (!maxC) return none;
   let maxR = 0; for (let r = 1; r <= lim[1]; r++) { if (lay(1, r)) maxR = r; else break; }
@@ -3746,7 +3754,7 @@ function solarRack(G, M, sol, md, lat, auto) {
   if (!L) return none;
   const at = (i, j) => L.mods.find(m => m.i === i && m.j === j), m00 = at(0, 0), m10 = at(c - 1, 0), m11 = at(c - 1, r - 1), m01 = at(0, r - 1);
   const zc = L.mods.reduce((acc, m) => acc + (m.q[0][2] + m.q[2][2]) / 2, 0) / L.mods.length, cm = PP(0, L.D / 2);
-  return { fits:true, free:true, racked:true, flat:false, auto, capped, c, r, maxC, maxR, md, beta, th:beta, tilt, az, row, run, W:L.W, xc:0, s0:0, sTop:L.D, O, eF, bk,
+  return { fits:true, free:true, racked:!sp, slope:sp ? { az:sp.az, th:sp.th, main:!!sp.main } : null, pn:sp ? sp.n : null, flat:false, auto, capped, c, r, maxC, maxR, md, beta, th:beta, tilt, az, row, run, W:L.W, xc:0, s0:0, sTop:L.D, O, eF, bk,
     mods:L.mods, handle:m11.q[2], center:[cm[0], cm[1], zc], zc, corners3:[m00.q[0], m10.q[1], m11.q[2], m01.q[3]] };
 }
 /** A field on a facade: the outer wall facing nearest the equator (or the
@@ -3796,6 +3804,7 @@ function fixSolFields(s) {
     dev:clamp(Math.round(numOr(q && q.dev, 0)), -90, 90),
     tilt:(q && q.tilt !== null && q.tilt !== undefined && isFinite(+q.tilt)) ? clamp(Math.round(+q.tilt), 0, 90) : null,
     ftilt:clamp(Math.round(numOr(q && q.ftilt, 70)), 10, 90),
+    slope:(q && q.slope !== null && q.slope !== undefined && isFinite(+q.slope)) ? ((Math.round(+q.slope) % 360) + 360) % 360 : null,
     dx:(q && isFinite(+q.dx)) ? +q.dx : 0, dy:(q && isFinite(+q.dy)) ? +q.dy : 0 });
   if (s.pv || s.th) return { pv:nz(s.pv, 4, 2, 'pv'), th:nz(s.th, 2, 1, 'th'), sel:(s && (s.sel === 'pv' || s.sel === 'th')) ? s.sel : null };
   const t = (s.tech === 'pv' || s.tech === 'thermal') ? s.tech : 'none';
@@ -3806,10 +3815,15 @@ function fixSolFields(s) {
   };
 }
 function solStudy(s) {
+  const placed = tech => { try { const E = solarEval(MASS, ROOF, STATE.site, STATE.clim, tech); if (!E || !E.fld) return null;
+    const f = E.fld; return f.fits ? { placedColumns:f.c, placedRows:f.r, cutBack:f.c * f.r < (E.sol.cols || 0) * (E.kit ? 1 : (E.sol.rows || 0)) || !!f.capped,
+      mounting:f.facade ? 'facade' : f.slope ? 'flush on the slope' : f.racked ? 'racked' : 'flush on the slope', facingAzimuth:Math.round(E.az), tilt:E.tilt,
+      peakKWp:E.kWp !== null ? +E.kWp.toFixed(2) : null, kWhPerYear:Math.round(E.out) } : { placedColumns:0, placedRows:0, cutBack:true, fits:false }; } catch (e) { return null; } };
   const out = {};
-  const how = q => ({ mount:q.mount === 'facade' ? 'facade' : q.pmode === 'roof' ? 'flush on the slope' : 'racked', facing_deviation_deg:q.dev || 0, tilt_deg:q.tilt, facade_tilt_deg:q.ftilt });
-  if (s && s.pv && s.pv.on) out.pv = Object.assign({ technology:(s.pv.kind === 'poly' ? 'polycrystalline' : 'monocrystalline') + ' photovoltaic panels', columns:s.pv.cols, rows:s.pv.rows, dx:s.pv.dx, dy:s.pv.dy }, how(s.pv));
-  if (s && s.th && s.th.on) out.th = Object.assign({ technology:(s.th.kind === 'tube' ? 'evacuated-tube' : 'flat-plate') + ' thermal collectors', columns:s.th.cols, rows:s.th.rows, dx:s.th.dx, dy:s.th.dy }, how(s.th));
+  const how = q => ({ mount:q.mount === 'facade' ? 'facade' : q.pmode === 'roof' ? 'flush on the slope' : 'racked', facing_deviation_deg:q.dev || 0, tilt_deg:q.tilt, facade_tilt_deg:q.ftilt, slope_facing_deg:q.slope });
+  /* columns and rows are what was asked; placed* what the roof took — they differ where the field was cut back */
+  if (s && s.pv && s.pv.on) out.pv = Object.assign({ technology:(s.pv.kind === 'poly' ? 'polycrystalline' : 'monocrystalline') + ' photovoltaic panels', columns:s.pv.cols, rows:s.pv.rows, dx:s.pv.dx, dy:s.pv.dy }, how(s.pv), placed('pv') || {});
+  if (s && s.th && s.th.on) out.th = Object.assign({ technology:(s.th.kind === 'thermo' ? 'thermosiphon kit with tank' : s.th.kind === 'tube' ? 'evacuated-tube' : 'flat-plate') + ' thermal collectors', columns:s.th.cols, rows:s.th.rows, dx:s.th.dx, dy:s.th.dy }, how(s.th), placed('thermal') || {});
   return Object.keys(out).length ? out : null;
 }
 function solarField(G, RF, lat, optTilt, spec) {
@@ -3833,6 +3847,27 @@ function solarField(G, RF, lat, optTilt, spec) {
   const legs = fld.facade ? [] : [[a, ca.zr], [b, cb.zr]].map(([p, zr]) => [[p[0], p[1], p[2] - cv], [p[0], p[1], zr]]);
   return Object.assign({}, fld, { kit:true, tank:{ a, b, r:cv, V, legs } });
 }
+/** The roof's pitched slopes a field can be laid on, each once: the way it faces (compass bearing), its pitch, its
+    area, its pieces, its outward normal, and whether it is the one facing the main facade. North-facing ones last. */
+function solSlopes(G, M) {
+  const by = {};
+  M.pieces.forEach(pc => { if (!(pc.f && pc.f.th > 1)) return; (by[pc.key] = by[pc.key] || []).push(pc); });
+  const brg = (x, y) => { const a = (G.rot - 180) * RAD, X = x * Math.cos(a) + y * Math.sin(a), Y = -x * Math.sin(a) + y * Math.cos(a); return Math.round(((Math.atan2(X, Y) / RAD) % 360 + 360) % 360); };
+  const cp = collectPlane(M);
+  return Object.keys(by).map(k => { const f = by[k][0].f, th = f.th, area = by[k].reduce((a, pc) => a + pc.area, 0) / Math.cos(th * RAD);
+    const n = [-f.a * Math.sin(th * RAD), -f.b * Math.sin(th * RAD), Math.cos(th * RAD)];
+    return { key:k, az:brg(-f.a, -f.b), th, area, pieces:by[k], n, main:!!(cp && cp.key === k) }; })
+    .sort((p, q) => q.area - p.area);
+}
+/** The slope a field laid «On the slope» takes: the one the student picked (by the way it faces), else the one facing
+    the main facade, else the one facing nearest the equator — the larger of two as near. */
+function solSlopeFor(G, M, sol, lat) {
+  const L = solSlopes(G, M); if (!L.length) return null;
+  const dA = (p, q) => Math.abs(((p - q) % 360 + 540) % 360 - 180), eq = lat >= 0 ? 180 : 0;
+  if (isFinite(+sol.slope) && sol.slope !== null) { const hit = L.filter(q => dA(q.az, +sol.slope) <= 22.5); if (hit.length) return hit[0]; }
+  const main = L.find(q => q.main); if (main) return main;
+  return L.slice().sort((p, q) => dA(p.az, eq) - dA(q.az, eq) || q.area - p.area)[0];
+}
 function solarFieldCore(G, RF, lat, optTilt, spec) {
   const sol = spec;
   if (!sol || !sol.on) return null;
@@ -3842,7 +3877,12 @@ function solarFieldCore(G, RF, lat, optTilt, spec) {
      turns it) on a flat roof, on any slope, and wherever no slope faces the
      main facade; flush only on that slope, when the student lays it there */
   if (sol.mount === 'facade') return solarFacade(G, M, sol, md, lat);
-  if (flat || sol.pmode !== 'roof' || !cp) return solarRack(G, M, sol, md, lat, !flat && !cp && sol.pmode === 'roof');
+  if (flat || sol.pmode !== 'roof') return solarRack(G, M, sol, md, lat, false);
+  /* «On the slope»: the slope facing the main facade keeps its own layout; any other slope — picked, or the only ones
+     there are when the ridge runs front to back — is laid flush the same way, facing where it faces */
+  const pick = solSlopeFor(G, M, sol, lat);
+  if (!pick) return solarRack(G, M, sol, md, lat, true);
+  if (!(pick.main && cp)) return solarRack(G, M, sol, md, lat, false, { slope:pick });
   const key = flat ? 'flat' : cp.key;
   const onPlane = (x, y) => { const r0 = M.at(x, y); return !!r0 && r0.key === key; };
   /** The runs along x where a band of the plan, ya to yb, lies wholly on the plane, each cut by mg. */
@@ -10670,7 +10710,7 @@ function buildRoof(host) {
   };
   /** Is the collector field in view? A slope's field faces the main facade
       with the roof's pitch; racked rows on a flat roof are seen from above. */
-  const fieldSeen = (A, fl) => fl.flat || fl.free ? A.se > 0.05 : fl.facade ? camSees(A, fl.n[0], fl.n[1], 0) : camSees(A, 0, -Math.sin(fl.th), Math.cos(fl.th));
+  const fieldSeen = (A, fl) => fl.pn ? camSees(A, fl.pn[0], fl.pn[1], fl.pn[2]) : fl.flat || fl.free ? A.se > 0.05 : fl.facade ? camSees(A, fl.n[0], fl.n[1], 0) : camSees(A, 0, -Math.sin(fl.th), Math.cos(fl.th));
   /** Scale and centre so the plan, the roof and the gauge's steepest ray fit
       beside the badges, whichever way the camera turns. */
   const roofFrame = (W, H) => {
@@ -11238,7 +11278,15 @@ if (F.chim || F.par) {
     solBox.appendChild(el('div', { class:'rgroup' }, [tgl, cc, cr]));
     more.appendChild(kd); more.appendChild(mt);
     if (o.mount === 'facade') more.appendChild(ft);
-    else { more.appendChild(pm); if (o.pmode !== 'roof') { more.appendChild(fc); more.appendChild(tl); if (o.tilt !== null && o.tilt !== undefined) more.appendChild(tlBtn); } }
+    else { more.appendChild(pm); if (o.pmode !== 'roof') { more.appendChild(fc); more.appendChild(tl); if (o.tilt !== null && o.tilt !== undefined) more.appendChild(tlBtn); }
+      else if (RF.n !== 0) {
+        /* «On the slope»: any of the roof's slopes, named by the way it faces and its pitch */
+        const Ls = solSlopes(G, roofModel(G, RF)), cur = solSlopeFor(G, roofModel(G, RF), o, lat);
+        if (Ls.length) { const sel = el('select', { 'aria-label':t('Slope'), style:'font:inherit;font-size:12px;max-width:100%',
+            onchange:e => { RF.sol[key].slope = +e.target.value; RF.sol[key].dx = 0; RF.sol[key].dy = 0; redo(); } });
+          Ls.forEach(q => sel.appendChild(el('option', { value:q.az, text:t('faces') + ' ' + COMPASS8[Math.round(q.az / 45) % 8] + ' (' + q.az + '°) · ' + fmt(q.th, 0) + '° · ' + fmt(q.area, 0) + ' m²' + (q.main ? ' · ' + t('main facade') : ''),
+            selected:cur && cur.key === q.key ? 'selected' : null })));
+          more.appendChild(el('div', { class:'ctl' }, [el('label', { text:t('Slope') }), sel])); } } }
     solBox.appendChild(more);
     solBox.appendChild(pmH);
   });
@@ -11285,12 +11333,16 @@ if (F.chim || F.par) {
       anyFit = true;
       const fl = sn.fld;
       const where = fl.facade ? t('on the facade facing') + ' ' + facing + ', ' + t('on brackets at') + ' ' + sn.tilt + '°'
+        : fl.slope ? t('on the slope at') + ' ' + sn.tilt + '° ' + t('facing') + ' ' + facing + (!fl.slope.main && !collectPlane(roofModel(G, RF)) ? ' (' + t('no slope faces the main facade') + ')' : '')
         : fl.free ? t('racked on a metal frame at') + ' ' + sn.tilt + '° ' + t('facing') + ' ' + facing + (fl.auto ? ' (' + t('no slope faces the main facade') + ')' : RF.n === 0 ? ' ' + t('on the flat roof') : '')
         : t('on the slope at') + ' ' + sn.tilt + '° ' + t('facing') + ' ' + facing;
       const rt = solRate(sn), pct = rt === null ? '' : ' · ' + solRateWord(rt) + ' ' + Math.round(rt * 100) + '% ' + t('of the best here');
       const Zp = rt === null ? null : solSizing(tech, sn.out, G);
       const homes = rt === null ? '' : ' · ' + (Zp ? Math.round(Zp.r * 100) + ' % ' + t('of the house’s use') : solHomes(tech, sn.out));
-      const cap = fl.capped ? ' · ' + t('capped at a house roof') : '';
+      /* a field smaller than asked says so, and by how much */
+      const askC = sn.kit ? Math.min(2, sn.sol.cols || 1) : sn.sol.cols, askR = sn.kit ? 1 : sn.sol.rows;
+      const cap = (fl.capped ? ' · ' + t('capped at a house roof') : '')
+        + (!fl.capped && (fl.c < askC || fl.r < askR) ? ' · ' + t('cut back from') + ' ' + askC + ' × ' + askR + ' ' + t('to') + ' ' + fl.c + ' × ' + fl.r + ': ' + t('no room for more here') : '');
       const loc = LANG === 'pt' ? 'pt-PT' : 'en-GB', yr = Math.round(sn.out).toLocaleString(loc) + ' kWh/' + t('year') + (tech === 'pv' ? ' · ' + fmt(sn.kWp, 2) + ' kWp' : '')
         + (sn.kit ? ' ' + t('used') + ' · ' + t('tank') + ' ' + sn.kit.V + ' L · ' + t('solar fraction') + ' ' + Math.round(sn.kit.frac * 100) + ' %' : '');
       parts.push(what + ' ' + where + ' · ' + yr + ' · ' + fmt(sn.plane, 0) + ' kWh/m²·' + t('year on the plane') + pct + homes + cap
@@ -11332,7 +11384,7 @@ if (F.chim || F.par) {
   solarRedraw = () => { roofDraw(); };
   host._refresh = () => { roofCam.sync(); refreshRoof(); buildCanopyUI(); benchStage(stage); };   // a canopy may have been made by a balcony on Site   // the plan may have changed on Site since this tab was built
   host.appendChild(hint('roof-solar',
-    'Choose <b>PV panels</b> and/or <b>thermal collectors</b> left of the model — one of each, or both together: electricity and heat share the slope — then size each field — by its columns and rows, or by dragging the amber point at its corner across the roof. Laid <b>On the slope</b>, the modules lie flush on the largest roof plane facing the main facade, whatever the plan’s wings, recesses or patio do to it — rows from 0.4 m above its lowest edge, kept 0.3 m inside it, clear of ridges, hips and valleys — so they face the direction set on Site; <b>racked</b> — the default, and the way on a flat roof or where no slope faces the main facade — they stand on metal frames facing the equator at the tilt set beside them (the latitude unless changed), each row spaced so the 21 December noon sun clears the row in front. The sun on the collector plane is read from the site’s own horizontal irradiation — daily shortwave radiation 1991–2020 from the ERA5 reanalysis (Hersbach et al., 2020), via Open-Meteo — carried onto the tilted plane month by month with the method of Duffie &amp; Beckman: the Erbs, Klein &amp; Duffie monthly split into beam and diffuse, the beam ratio over each month’s mean day (Klein), the isotropic sky and 20 % ground reflection. The pitch’s share of the best yield is the one pitch score on the model. PV: modules of about 20 % efficiency (0.20 kWp per m²) and a performance ratio of 0.80 (IEC 61724-1) give the electricity. Thermal: a flat-plate collector read by the EN ISO 9806 efficiency curve with typical coefficients (η0 0.78, a1 3.5, a2 0.015) at a 50 °C mean fluid against each month’s air temperature gives the heat it can collect — more than a house draws in summer, so a real system’s solar fraction is lower. A real module’s or collector’s datasheet replaces these figures. Without the site’s data the numbers rest on an assumed clearness index of 0.55 and say so. Fields stay inside a house roof — about 40 m² of PV, 20 m² of thermal — so the kilowatts stay ones a household could use; bigger asks are cut back and say so. Each field earns a rating against the best pitch — <b>good</b> from 90 %, <b>fair</b> from 70 %, <b>poor</b> below — in green, yellow and red, with the yearly kilowatt-hours and about how many homes’ share that is.'));
+    'Choose <b>PV panels</b> and/or <b>thermal collectors</b> left of the model — one of each, or both together: electricity and heat share the slope — then size each field — by its columns and rows, or by dragging the amber point at its corner across the roof. Laid <b>On the slope</b>, the modules lie flush on a slope picked beside the field — any of the roof\u2019s slopes, each named by the way it faces and its pitch; unless picked, the largest roof plane facing the main facade (where the ridge runs front to back and none does, the slope facing nearest the equator) — whatever the plan’s wings, recesses or patio do to it — rows from 0.4 m above its lowest edge, kept 0.3 m inside it, clear of ridges, hips and valleys — so they face the direction set on Site; <b>racked</b> — the default, and the way on a flat roof or where no slope faces the main facade — they stand on metal frames facing the equator at the tilt set beside them (the latitude unless changed), each row spaced so the 21 December noon sun clears the row in front. The sun on the collector plane is read from the site’s own horizontal irradiation — daily shortwave radiation 1991–2020 from the ERA5 reanalysis (Hersbach et al., 2020), via Open-Meteo — carried onto the tilted plane month by month with the method of Duffie &amp; Beckman: the Erbs, Klein &amp; Duffie monthly split into beam and diffuse, the beam ratio over each month’s mean day (Klein), the isotropic sky and 20 % ground reflection. The pitch’s share of the best yield is the one pitch score on the model. PV: modules of about 20 % efficiency (0.20 kWp per m²) and a performance ratio of 0.80 (IEC 61724-1) give the electricity. Thermal: a flat-plate collector read by the EN ISO 9806 efficiency curve with typical coefficients (η0 0.78, a1 3.5, a2 0.015) at a 50 °C mean fluid against each month’s air temperature gives the heat it can collect — more than a house draws in summer, so a real system’s solar fraction is lower. A real module’s or collector’s datasheet replaces these figures. Without the site’s data the numbers rest on an assumed clearness index of 0.55 and say so. Fields stay inside a house roof — about 40 m² of PV, 20 m² of thermal — so the kilowatts stay ones a household could use; bigger asks are cut back and say so. Each field earns a rating against the best pitch — <b>good</b> from 90 %, <b>fair</b> from 70 %, <b>poor</b> below — in green, yellow and red, with the yearly kilowatt-hours and about how many homes’ share that is.'));
   host.appendChild(hint('roof-solar-mount',
     '<b>Where and how the collectors sit.</b> Each field — PV, thermal, or both — can be <b>mounted on the roof</b> or <b>on a facade</b>. On the roof it is racked on a metal frame by default: it faces the equator (true south here in the northern hemisphere) whatever way the slopes run — on a slope turned east or west, on the back slope, on a flat roof — tilted to the latitude; turn it with <b>Facing</b> (east is −, west +) and pitch it with <b>Tilt</b> to see what each degree costs or gains, or lay it <b>On the slope</b> facing the main facade. On a facade it hangs on brackets on the outer wall facing nearest the equator, under the eave, tilted out from the horizontal (90° lies flat on the wall) — the wall\u2019s own orientation is the one it gets, and windows or doors behind it are not checked. <b>Kind</b> sets the values: PV monocrystalline about 20 % or polycrystalline about 16 % (kWp per m² is that efficiency at the 1 000 W/m² of the standard test, IEC 61215), performance ratio 0.80; thermal flat plate (η0 0.78, a1 3.5 W/m²K, a2 0.015 W/m²K²) or evacuated tube (η0 0.55, a1 1.2, a2 0.008, on the gross area), read at 50 °C by EN ISO 9806 — or a <b>thermosiphon kit</b>: one or two flat-plate collectors in a single row with a horizontal tank above their top edge (150 L on 2 m², 300 L on 4 m²), the warmed water rising into it with no pump. A kit is read against the hot water it serves: one tank a day, 40 L a person heated by 35 K (the REH convention — check the regulation in force); what the collectors catch beyond each month\u2019s draw is lost, so its badge gives the heat used and the <b>solar fraction</b> — the share of that hot water the sun provides. These are typical catalogue values — a real datasheet replaces them. The badges give the year\u2019s <b>PV kWh</b>, <b>heat kWh</b> and the PV\u2019s <b>peak power in kWp</b> — the installed power the licensing and self-consumption rules count — and the line under each field gives its values, its specific yield (kWh/kWp·year) and its share of the best a collector of that kind could do here, facing the equator at its best tilt.'));
   refreshRoof();
@@ -29485,8 +29537,13 @@ function collectConstructionHandoff() {
   const rwArea = skyF + Object.keys(skyO).reduce((a, k) => a + skyO[k], 0);
   /* roof slopes by true facing (downhill direction); flat pieces bucket F */
   const roofO = caZero8(); let roofF = 0, roofArea = 0;
+  /* only the roof over the plan goes on: the eaves past the walls are outside the envelope (sampled on a 10 cm grid) */
+  const overPlan = pc => { const P = pc.poly, xs = P.map(q => q[0]), ys = P.map(q => q[1]), st = 0.1; let n = 0, m = 0;
+    for (let x = Math.min(...xs) + st / 2; x < Math.max(...xs); x += st) for (let y = Math.min(...ys) + st / 2; y < Math.max(...ys); y += st)
+      if (inPoly(x, y, P)) { m++; if (Mm.pl.inside(x, y)) n++; }
+    return m ? n / m : 1; };
   Mm.pieces.forEach(pc => {
-    const t = (pc.f && pc.f.t) || 0, a = (pc.area || 0) * Math.sqrt(1 + t * t);
+    const t = (pc.f && pc.f.t) || 0, a = (pc.area || 0) * overPlan(pc) * Math.sqrt(1 + t * t);
     roofArea += a;
     if (t < 0.02 || !pc.f) roofF += a;
     else roofO[slopeCompass(-pc.f.a, -pc.f.b, G.rot)] += a;
@@ -30957,6 +31014,9 @@ function initSetup() {
       lat.value = S.lat; lon.value = S.lon; fire(lat); fire(lon);
       alt.value = S.alt; fire(alt); altDirty = false;
       setMethod(S.method === 'popular' ? 'popular' : 'olgyay');
+      /* the use and the type of intervention come back with the study, and go on to Construction Advisor as saved */
+      if (S.use && [...use.options].some(op => op.value === S.use)) use.value = S.use;
+      opBtns.forEach(x => x.setAttribute('aria-pressed', x.dataset.op === (S.operation === 'renovation' ? 'renovation' : 'new') ? 'true' : 'false'));
       refresh();
       if (!climComplete(readNormals())) {
         IMPORT.note = t('That study’s normals are incomplete — check the boxes before going on.');
@@ -31071,14 +31131,16 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
   OPEN.S.wwr = 0.35;   // a defensible start, not a recommendation — the badge judges it live
   OPEN.N.wwr = 0.05;   // north starts at the low end of its band
   OPEN.C.wwr = 0.30;   // clerestory: high glass earns its keep as daylight, shaded by the upper roof
+  /* the defaults first, then the study over them: set after it, they wiped the sunspace, roof windows and turbine
+     it had restored — and on a page just loaded, still null, they broke the restore halfway */
+  SUNSP = { on:false, face:'S', depth:2.2, widthFrac:0.6 };
+  RWIN = { size:'78x140', cw:0.78, ch:1.40, per:{}, s:0, n:0, e:0, w:0, sF:0.5, nF:0.5, eF:0.35, wF:0.35, fX:0 };
+  TURB = { on:false, diam:2.0, hub:9, x:16, y:10 };
   if (STUDY) {
     try { applyStudy(STUDY); }
     catch (err) { console.error(err); STATE.note = t('That study could not be fully restored — starting from the defaults.'); }
     STUDY = null;
   }
-  SUNSP = { on:false, face:'S', depth:2.2, widthFrac:0.6 };
-  RWIN = { size:'78x140', cw:0.78, ch:1.40, per:{}, s:0, n:0, e:0, w:0, sF:0.5, nF:0.5, eF:0.35, wF:0.35, fX:0 };
-  TURB = { on:false, diam:2.0, hub:9, x:16, y:10 };
   }
   const app = $('#app');
   app.innerHTML = '';
@@ -32748,7 +32810,7 @@ Object.assign(PT_HINT, {
   'sce-src':
     'A zona é a do Manual SCE (Despacho n.º 6476-H/2021, §5.3): a região a partir do concelho (Anexo II), os seus valores de referência (Tabelas 9 e 10) corrigidos para a altitude que indicou (Eq. 2), e os limiares das Tabelas 7 e 8. O regulamento não lê nem a estação nem as coordenadas — corrija a altitude para a do edifício, e veja na escala quão perto de uma fronteira ele fica. As intenções e os sistemas passivos são de Gonçalves e Mariz Graça (2004), cujos nomes de zona o regulamento manteve enquanto os limiares por detrás deles mudaram; o entorno leva as mesmas intenções para o lote. Nada disto é uma exigência: os limites estão na Portaria n.º 138-I/2021, e o Construction Advisor dá-os.',
   'roof-solar':
-    'Escolha <b>painéis fotovoltaicos</b> ou <b>colectores térmicos</b> à esquerda do modelo e dimensione o campo — pelas colunas e filas, ou arrastando o ponto âmbar no seu canto sobre a cobertura. <b>Na vertente</b>, os módulos assentam no maior plano da cobertura virado para a fachada principal, seja o que for que as alas, os recuos ou o pátio da planta lhe façam — filas a partir de 0,4 m acima do seu bordo mais baixo, 0,3 m para dentro dele, livres de cumeeiras, rincões e larós — pelo que ficam virados para a orientação definida no separador Local; <b>em estrutura</b> — por omissão, e sempre numa cobertura plana ou onde nenhuma vertente esteja virada para a fachada principal — ficam sobre estruturas metálicas viradas para o equador, à inclinação escolhida ao lado (a latitude, se não a mudar), cada fila espaçada para que o sol do meio-dia de 21 de Dezembro passe por cima da fila da frente. O sol no plano dos colectores é lido da irradiação horizontal do próprio local — radiação de onda curta diária 1991–2020 da reanálise ERA5 (Hersbach et al., 2020), via Open-Meteo — levada para o plano inclinado mês a mês pelo método de Duffie &amp; Beckman: a separação mensal em directa e difusa de Erbs, Klein &amp; Duffie, a razão da directa no dia médio de cada mês (Klein), o céu isotrópico e 20 % de reflexão do solo. A parte da melhor produção que a inclinação dá é a única pontuação da inclinação no modelo. FV: módulos de cerca de 20 % de rendimento (0,20 kWp por m²) e um índice de desempenho de 0,80 (IEC 61724-1) dão a electricidade. Térmico: um colector plano lido pela curva de rendimento da EN ISO 9806 com coeficientes típicos (η0 0,78, a1 3,5, a2 0,015), a uma temperatura média do fluido de 50 °C contra a temperatura do ar de cada mês, dá o calor que consegue captar — mais do que uma casa consome no verão, pelo que a fracção solar de um sistema real é menor. A ficha técnica de um módulo ou colector real substitui estes valores. Sem os dados do local, os números assentam num índice de limpidez assumido de 0,55 e dizem-no. Os campos ficam dentro de um telhado de casa — cerca de 40 m² de FV, 20 m² de térmico — para que os quilowatts sejam os que um agregado poderia usar; pedidos maiores são cortados e dizem-no. Cada campo ganha uma classificação contra a melhor inclinação — <b>boa</b> desde 90 %, <b>razoável</b> desde 70 %, <b>fraca</b> abaixo — a verde, amarelo e vermelho, com os quilowatts-hora anuais e a parte de quantas casas que isso é.',
+    'Escolha <b>painéis fotovoltaicos</b> ou <b>colectores térmicos</b> à esquerda do modelo e dimensione o campo — pelas colunas e filas, ou arrastando o ponto âmbar no seu canto sobre a cobertura. <b>Na vertente</b>, os módulos assentam rentes numa vertente escolhida ao lado do campo — qualquer das vertentes da cobertura, cada uma nomeada pela orientação e pela inclinação; se nenhuma for escolhida, o maior plano virado para a fachada principal (onde a cumeeira corre da frente para trás e nenhum o está, a vertente mais virada ao equador) — seja o que for que as alas, os recuos ou o pátio da planta lhe façam — filas a partir de 0,4 m acima do seu bordo mais baixo, 0,3 m para dentro dele, livres de cumeeiras, rincões e larós — pelo que ficam virados para a orientação definida no separador Local; <b>em estrutura</b> — por omissão, e sempre numa cobertura plana ou onde nenhuma vertente esteja virada para a fachada principal — ficam sobre estruturas metálicas viradas para o equador, à inclinação escolhida ao lado (a latitude, se não a mudar), cada fila espaçada para que o sol do meio-dia de 21 de Dezembro passe por cima da fila da frente. O sol no plano dos colectores é lido da irradiação horizontal do próprio local — radiação de onda curta diária 1991–2020 da reanálise ERA5 (Hersbach et al., 2020), via Open-Meteo — levada para o plano inclinado mês a mês pelo método de Duffie &amp; Beckman: a separação mensal em directa e difusa de Erbs, Klein &amp; Duffie, a razão da directa no dia médio de cada mês (Klein), o céu isotrópico e 20 % de reflexão do solo. A parte da melhor produção que a inclinação dá é a única pontuação da inclinação no modelo. FV: módulos de cerca de 20 % de rendimento (0,20 kWp por m²) e um índice de desempenho de 0,80 (IEC 61724-1) dão a electricidade. Térmico: um colector plano lido pela curva de rendimento da EN ISO 9806 com coeficientes típicos (η0 0,78, a1 3,5, a2 0,015), a uma temperatura média do fluido de 50 °C contra a temperatura do ar de cada mês, dá o calor que consegue captar — mais do que uma casa consome no verão, pelo que a fracção solar de um sistema real é menor. A ficha técnica de um módulo ou colector real substitui estes valores. Sem os dados do local, os números assentam num índice de limpidez assumido de 0,55 e dizem-no. Os campos ficam dentro de um telhado de casa — cerca de 40 m² de FV, 20 m² de térmico — para que os quilowatts sejam os que um agregado poderia usar; pedidos maiores são cortados e dizem-no. Cada campo ganha uma classificação contra a melhor inclinação — <b>boa</b> desde 90 %, <b>razoável</b> desde 70 %, <b>fraca</b> abaixo — a verde, amarelo e vermelho, com os quilowatts-hora anuais e a parte de quantas casas que isso é.',
   'vent-form':
     'As duas leituras por baixo do modelo qualificam a <b>forma</b> desenhada no Local — a barra, a sua quebra, o seu pátio — para o ar, seja o que for que se plante à volta. <b>Verão</b>: cada meio metro de piso olha ao longo dos dois eixos da planta até à primeira parede de cada lado. Com janelas nas duas paredes opostas a não mais de cinco alturas de piso uma da outra (aqui %1 m) pode ter ventilação cruzada; não sendo assim, a menos de 2,5 alturas de piso (%2 m) de uma parede com janela é unilateral; para lá das duas fica fora do alcance da ventilação natural. As profundidades de 5 × e 2,5 × são as regras práticas do CIBSE AM10, lidas nas paredes da planta e não em compartimentos. Uma barra estreita, uma ala, um recuo ou um pátio trazem piso para dentro do alcance; uma planta quadrada funda deixa o meio de fora. A leitura diz também se os percursos cruzados seguem o vento de Junho a Agosto ou o atravessam. <b>Inverno</b>: o vento de Dezembro a Fevereiro é levado a todas as paredes voltadas para ele, e uma parede conta como abrigada onde uma linha de volta ao vento encontra outra parte do edifício — as paredes interiores de um pátio, o sotavento de uma ala. A leitura é a parte de todo o vidro que fica de frente para esse vento sem abrigo: 15 % ou menos lê-se como fechada, acima de 35 % como aberta (cortes didácticos desta aplicação). A forma entra nas duas classificações: o sotavento do próprio edifício corta o vento de inverno nas paredes que abriga, e a classificação de verão só lê um percurso cruzado que alcance pelo menos um quarto do piso.',
   'vent-scores':
@@ -32972,6 +33034,7 @@ Object.assign(PT, {
   "no room on that facade under the eave: lower it, tilt it more, or put it on the roof": "não cabe nessa fachada sob o beirado: baixe-o, incline-o mais ou ponha-o na cobertura",
   "no room on the roof for a rack here: move it, or tilt it less": "não cabe aqui uma estrutura na cobertura: mova-a ou incline-a menos",
   "Flat — no pitch to judge; racked collectors take the tilt set beside them": "Plana — sem inclinação a avaliar; os colectores em estrutura tomam a inclinação escolhida ao lado",
+  "main facade": "fachada principal", "cut back from": "reduzido de", "to": "para", "no room for more here": "não cabe mais aqui",
   "flat plate": "colector plano", "tank": "depósito", "people at": "pessoas a", "hot-water need": "necessidade de AQS", "collected": "captado", "used": "aproveitado",
   "solar fraction": "fracção solar", "months fully solar": "meses só com solar", "Solar fraction · hot water": "Fracção solar · AQS",
   "no room for the tank above the collectors: move the kit down the roof or toward its middle": "não há lugar para o depósito acima dos colectores: desça o kit na cobertura ou aproxime-o do meio"
