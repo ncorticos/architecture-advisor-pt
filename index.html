@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.204.0',
+  version:     '1.205.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -3717,11 +3717,17 @@ function solarRack(G, M, sol, md, lat, auto, opt) {
   const nF = planDir(G.rot, az), eF = [-nF[1], nF[0]], bk = [-nF[0], -nF[1]];
   const bx = M.pl.boxes.reduce((p, q) => (q[2] - q[0]) * (q[3] - q[1]) > (p[2] - p[0]) * (p[3] - p[1]) ? q : p);
   /* from a quarter of the block toward the way it faces: on a gable, the slope that faces it; flush, from 0.4 m above
-     the slope's lowest edge, on the line of its largest piece's middle */
+     the slope's lowest edge over the wall — the wall line, not the eave's edge: an eave is no place for a module, and
+     measured from its edge the first row's margin fell outside the walls, so no module fitted on an eaved slope —
+     on the line of its largest piece's middle */
   const ext = Math.abs(nF[0]) * (bx[2] - bx[0]) + Math.abs(nF[1]) * (bx[3] - bx[1]), fw = ext / 4;
   const dx = sol.dx || 0, dy = sol.dy || 0;
   let O0 = [(bx[0] + bx[2]) / 2 + fw * nF[0], (bx[1] + bx[3]) / 2 + fw * nF[1]];
-  if (sp) { const pc = sp.pieces.reduce((p, q) => q.area > p.area ? q : p), c0 = pc.centroid, lo = Math.max(...pc.poly.map(q => (q[0] - c0[0]) * nF[0] + (q[1] - c0[1]) * nF[1]));
+  if (sp) { const pc = sp.pieces.reduce((p, q) => q.area > p.area ? q : p), c0 = pc.centroid;
+    let lo = Math.max(...pc.poly.map(q => (q[0] - c0[0]) * nF[0] + (q[1] - c0[1]) * nF[1]));
+    if (M.pl.inside(c0[0], c0[1])) { let d = 0; const st = 0.02;
+      while (d + st <= lo && M.pl.inside(c0[0] + (d + st) * nF[0], c0[1] + (d + st) * nF[1])) d += st;
+      lo = Math.min(lo, d); }
     O0 = [c0[0] + (lo - 0.4) * nF[0], c0[1] + (lo - 0.4) * nF[1]]; }
   const O = [O0[0] + dx * eF[0] + dy * bk[0], O0[1] + dx * eF[1] + dy * bk[1]];
   const altMin = Math.max(5, 90 - Math.abs(lat) - 23.44) * RAD, run = md.h * Math.cos(beta), rise = md.h * Math.sin(beta);
@@ -29566,7 +29572,7 @@ function collectConstructionHandoff() {
   const rO = o => { const r = {}; CA_COMPASS8.forEach(c => { r[c] = r2(o[c] || 0); }); return r; };
   const payload = {
     app:'Construction Advisor PT', version:CA_HANDOFF_VERSION, savedAt:new Date().toISOString(),
-    site:{ conc:S.place || S.nuts, nuts:S.nuts, alt:S.alt, use:S.use === 'cs' ? 'cs' : 'hab', operation:S.operation === 'renovation' ? 'renovation' : 'new' },
+    site:{ conc:S.place || S.nuts, nuts:nutsOfPlace(S.place, S.nuts), alt:S.alt, use:S.use === 'cs' ? 'cs' : 'hab', operation:S.operation === 'renovation' ? 'renovation' : 'new' },
     state:{
       FLR_STATE:{ area:r2(footprint), perim:r2(perim) },
       BUDGET_STATE:{
@@ -30659,7 +30665,7 @@ function initSetup() {
 
   conc.addEventListener('input', () => {
     const v = conc.value.trim();
-    const hit = Object.keys(CONCELHOS).find(c => c.toLowerCase() === v.toLowerCase());
+    const hit = CONC_BY_PLAIN[plainName(v)] || null;   // «Lousa», «lousã» and «Lousã» are the same municipality
     if (hit) {
       const regs = CONCELHOS[hit];
       /* If the place belongs to the region the student already chose, keep it;
@@ -31007,7 +31013,7 @@ function initSetup() {
       STUDY = o;
       const S = o.site, C = o.clim, fire = n => { try { n.dispatchEvent(new Event('input', { bubbles:true })); } catch (e) {} };
       conc.value = S.place || '';
-      if (NUTS_LIST.indexOf(S.nuts) >= 0) sel.value = S.nuts;
+      { const n = nutsOfPlace(S.place, S.nuts); if (NUTS_LIST.indexOf(n) >= 0) { sel.value = n; fillConc(n); } }
       C.t.forEach((v, i) => { inputs.t[i].value = v === null || v === undefined ? '' : v; fire(inputs.t[i]); });
       C.p.forEach((v, i) => { inputs.p[i].value = v === null || v === undefined ? '' : v; fire(inputs.p[i]); });
       srcInp.value = C.source || '';
@@ -31103,6 +31109,7 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
   else for (const k in KEEP) delete KEEP[k];
   KEEPERS.length = 0;
   const scrollY0 = window.scrollY || 0;
+  if (site && site.place) { const n = nutsOfPlace(site.place, site.nuts); if (n !== site.nuts) site = Object.assign({}, site, { nuts:n }); }
   STATE.site = site;
   TABS.length = 0; tabsFor(site).forEach(x => TABS.push(x));
   if (clim) STATE.clim = Object.assign({}, clim, { k: koppen(clim.t, clim.p, site.lat < 0) });
@@ -31217,6 +31224,10 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
 const plainName = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 const CONC_BY_PLAIN = (() => { const m = {}; Object.keys(CONCELHOS).forEach(k => { m[plainName(k)] = k; }); return m; })();
 const islandOf = lo => lo > -10.5 ? 'mainland' : lo < -20 ? 'azores' : 'madeira';
+/** The region a site's place belongs to: when the place is a municipality (its accents and capitals aside) and the region
+    carried is not one of its own — a name typed without its accents, a study saved before — its own region; else the
+    region as carried. Lousã is the Pinhal Interior Norte whatever region was left on the list. */
+const nutsOfPlace = (place, nuts) => { const c = CONC_BY_PLAIN[plainName(place)]; return c && CONCELHOS[c].length && CONCELHOS[c].indexOf(nuts) < 0 ? CONCELHOS[c][0] : nuts; };
 /** The municipality an OpenStreetMap address names, and its region; a name
     two regions share goes to the one whose main town is nearer. */
 function regionFromAddress(ad, la, lo) {
