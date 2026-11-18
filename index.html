@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.206.0',
+  version:     '1.206.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -27123,7 +27123,10 @@ function buildModeller(host) {
         const vi = inside >= 0 ? inside : (drag.E.vol || 0), v = vols[vi]; drag.E.vol = vi;
         drag.E.u = +clamp((wx - (v.x - v.L / 2)) / v.L, 0.05, 0.95).toFixed(3); drag.E.v = +clamp((wy - (v.y - v.D / 2)) / v.D, 0.05, 0.95).toFixed(3); }
       else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
-      else if (drag.kind === 'el') { const E = drag.E, v = drag.v, W = elWall(p, v);
+      else if (drag.kind === 'el') { const E = drag.E, v = drag.v, cur = E.face || 'S', [wx, wy] = toW(p), x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = x0 + v.L, y1 = y0 + v.D;
+        /* it stays on its face while the pointer is inside the body or in front of that face; only past the corner does it turn */
+        const inFront = cur === 'S' ? wy < y0 + 1 : cur === 'N' ? wy > y1 - 1 : cur === 'E' ? wx > x1 - 1 : wx < x0 + 1, inside = wx > x0 && wx < x1 && wy > y0 && wy < y1;   // 1 m past the corner before it turns
+        const W = inside || inFront ? elWall(p, v, cur) : elWall(p, v);
         if (W) { const was = E.face || 'S'; elFace(E, W.f);
           const sp = elSpan(E, v), wd = sp.b - sp.a, len = W.len, a = Math.round(clamp(W.u - drag.off, 0, Math.max(0, len - wd)) * 20) / 20;
           if (E.t === 'deck') E.a = +a.toFixed(2);
