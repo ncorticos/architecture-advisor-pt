@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.205.0',
+  version:     '1.206.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -25210,6 +25210,24 @@ function vmRoofArea(v) {
 }
 function vmOpenArea(v, f) { return (v.open[f] || []).filter(o => o.fl < v.fl).reduce((a, o) => a + o.w * o.h, 0); }
 /** The model's numbers, body by body and in all. */
+/** A recessed varanda's depth into its body, m: what the student set, 1.5 m by default (the loggia the study tabs carry). */
+const vmRecD = E => clamp(+E.d || 1.5, 0.6, 4);
+/** The recesses cut out of the floors: each recessed varanda as a plan rectangle on its storey,
+    open to the outside — its floor is not floor area, its air is not heated volume. */
+function vmRecesses(vm) {
+  const out = [];
+  (vm.els || []).forEach(E => { if (E.t !== 'varanda' || E.kind !== 'reentrante') return;
+    const v = vm.vols[E.vol || 0]; if (!v || v.kind !== 'rect') return;
+    const f = E.face || 'S', NS = f === 'S' || f === 'N', len = NS ? v.L : v.D, w = Math.max(0.4, Math.min(E.w || 4, len - 0.4));
+    const d = Math.min(vmRecD(E), (NS ? v.D : v.L) - 0.6), u0 = clamp((E.pos === undefined ? 0.5 : E.pos) * len - w / 2, 0, len - w), x0 = v.x - v.L / 2, y0 = v.y - v.D / 2;
+    const R = f === 'S' ? [x0 + u0, y0, x0 + u0 + w, y0 + d] : f === 'N' ? [x0 + u0, y0 + v.D - d, x0 + u0 + w, y0 + v.D]
+      : f === 'E' ? [x0 + v.L - d, y0 + u0, x0 + v.L, y0 + u0 + w] : [x0, y0 + u0, x0 + d, y0 + u0 + w];
+    if (d > 0.1) out.push({ x0:R[0], y0:R[1], x1:R[2], y1:R[3], fl:E.floor || 0, vol:E.vol || 0, w, d, f, E }); });
+  return out;
+}
+/** A room's floor area with any recess on its storey taken out of it. */
+const vmRoomArea = (vm, q) => Math.max(0, q.w * q.d - (vm ? vmRecesses(vm) : []).filter(r => r.fl === q.fl).reduce((a, r) =>
+  a + Math.max(0, Math.min(q.x + q.w / 2, r.x1) - Math.max(q.x - q.w / 2, r.x0)) * Math.max(0, Math.min(q.y + q.d / 2, r.y1) - Math.max(q.y - q.d / 2, r.y0)), 0));
 function vmMetrics(vm) {
   const vs = vmAllVols(vm);
   let foot = 0, floor = 0, wall = 0, glaze = 0, door = 0, roof = 0, vol = 0, party = 0, massW = 0;
@@ -25223,7 +25241,12 @@ function vmMetrics(vm) {
     vol += A * H + (v.roof.type === 'flat' ? 0 : A * vmRoofRise(v) / (['cone', 'pyramid'].indexOf(v.roof.type) >= 0 ? 3 : v.roof.type === 'dome' ? 1.5 : 2));
     const W = VM_WALL[v.wall.mat] || VM_WALL.whitewash; massW += wa * vmWallT(v) * W.rho;
   });
-  const env = wall + roof + foot, main = vm.vols[0] || vmVol(), bb = vmBBox(vm);
+  /* a recessed varanda is outside: its floor leaves the floor area, its air the volume; its back wall replaces the
+     front it was cut from and its two cheeks are new wall, its floor and soffit new envelope where they face the outside */
+  let recA = 0;
+  vmRecesses(vm).forEach(r => { const v = vm.vols[r.vol], A = r.w * r.d; floor -= A; vol -= A * v.fh; wall += 2 * r.d * v.fh;
+    recA += A + (r.fl > 0 ? A : 0); });
+  const env = wall + roof + foot + recA, main = vm.vols[0] || vmVol(), bb = vmBBox(vm);
   const earthRoof = vm.vols.some(v => v.roof.mat === 'earth' || v.roof.type === 'dome');
   return { n:vs.length, foot, floor, wall, glaze, door, roof, vol, env, sv:vol > 0 ? env / vol : 0, glazePct:wall > 0 ? 100 * glaze / wall : 0,
     ratio:main.L / main.D, fl:main.fl, H:vmH(main) + vmRoofRise(main), party, massW:wall > 0 ? massW / wall : 0, earthRoof,
@@ -25909,6 +25932,7 @@ function vmPlanSVG(vm, w, opts) {
   const vs = vmAllVols(vm), bb = vmBBox(vm), pad = 2.5, X0 = bb[0] - pad, Y1 = bb[3] + pad, Wm = bb[2] - bb[0] + 2 * pad, Hm = bb[3] - bb[1] + 2 * pad, s = w / Wm, h = Math.round(Hm * s);
   const P = (x, y) => [((x - X0) * s).toFixed(1), ((Y1 - y) * s).toFixed(1)], o = [];
   o.push('<rect width="' + w + '" height="' + h + '" fill="' + (opts.bg || '#FBFAF7') + '"/>');
+  o.push('<defs><pattern id="vmrec" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#C9B89C" stroke-width="1.2"/></pattern></defs>');
   const c = vm.court, courtH = [];
   if (c && c.on) { const a = P(c.x - c.L / 2, c.y + c.D / 2); o.push('<rect x="' + a[0] + '" y="' + a[1] + '" width="' + (c.L * s).toFixed(1) + '" height="' + (c.D * s).toFixed(1) + '" fill="#F1EDE3" stroke="#8A8274" stroke-width="' + (0.4 * s).toFixed(1) + '" stroke-dasharray="' + (c.gate ? '' : '') + '"/>');
     /* its four corners, dragged to grow or shrink the yard */
@@ -25945,25 +25969,43 @@ function vmPlanSVG(vm, w, opts) {
   });
   o.push(...ops);
   /* elements */
-  const chimTop = [];
+  const chimTop = [], elTop = [];
   vmElsDrawn(vm).forEach(E => vs.filter(v => v._i === E.vol && !v._r).forEach(v => {
     const x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
     const at = (u, d) => f === 'S' ? [x0 + u, y0 - d] : f === 'N' ? [x0 + u, y0 + v.D + d] : f === 'E' ? [x0 + v.L + d, y0 + u] : [x0 - d, y0 + u];
+    /* v1.206: stairs, varandas, porches, pergolas and platforms are picked on the plan — dragged along their wall or round
+       a corner onto another face, the square ends widening them; drawn over the rooms so they can always be caught */
+    const ei = (vm.els || []).indexOf(E), canDrag = !opts.noLabels && ei >= 0 && v.kind === 'rect';
+    const hit = (pts, title) => { if (!canDrag || !pts.length) return; const xs = pts.map(q => +q[0]), ys = pts.map(q => +q[1]), a0 = Math.min(...xs), a1 = Math.max(...xs), b0 = Math.min(...ys), b1 = Math.max(...ys);
+      elTop.push('<rect data-el="' + ei + '" x="' + (a0 - 2).toFixed(1) + '" y="' + (b0 - 2).toFixed(1) + '" width="' + (a1 - a0 + 4).toFixed(1) + '" height="' + (b1 - b0 + 4).toFixed(1) + '" fill="rgba(181,119,42,.07)" stroke="rgba(181,119,42,.55)" stroke-width="0.8" stroke-dasharray="2 2" style="cursor:move"><title>' + title + '</title></rect>'); };
+    const ends = (ua, ub, dm) => { if (!canDrag) return; [ua, ub].forEach((u, k) => { const q = P(...at(u, dm));
+      elTop.push('<rect data-elw="' + ei + ':' + k + '" x="' + (+q[0] - 5).toFixed(1) + '" y="' + (+q[1] - 5).toFixed(1) + '" width="10" height="10" fill="#B5772A" stroke="#fff" stroke-width="1.5" style="cursor:' + (f === 'S' || f === 'N' ? 'ew' : 'ns') + '-resize"><title>' + VMT('Drag to widen or narrow it', 'Arraste para alargar ou estreitar') + '</title></rect>'); }); };
+    const tMove = VMT('Drag it along the wall, or round a corner onto another façade', 'Arraste ao longo da parede, ou contorne a esquina para outra fachada');
     if (E.t === 'chimney') { const p = P(x0 + (E.u === undefined ? 0.75 : E.u) * v.L - 0.35, y0 + (E.v === undefined ? 0.5 : E.v) * v.D + 0.3);
       chimTop.push('<rect data-chim="' + vm.els.indexOf(E) + '" x="' + p[0] + '" y="' + p[1] + '" width="' + (0.7 * s).toFixed(1) + '" height="' + (0.6 * s).toFixed(1) + '" fill="#6B645A" stroke="#3A342E" stroke-width="1" style="cursor:move"><title>' + VMT('Chimney — drag it where you want it', 'Chaminé — arraste-a para onde a quiser') + '</title></rect>'); }
     if (E.t === 'stair' && E.along !== 'perp') {
       /* the same treads the isometric draws: each its outline, so the run, its corner landing and its turn read on the plan */
-      vmStairRuns(vm, v, E, (v.raise || 0) + v.fh).treads.forEach(r => { const A = P(...at(r.ua, r.da)), B = P(...at(r.ub, r.db));
-        o.push('<rect x="' + Math.min(A[0], B[0]).toFixed(1) + '" y="' + Math.min(A[1], B[1]).toFixed(1) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="' + (r.landing ? '#E2DCCF' : 'none') + '" stroke="#6B645A" stroke-width="1"/>'); }); }
+      const sp = [];
+      vmStairRuns(vm, v, E, (v.raise || 0) + v.fh).treads.forEach(r => { const A = P(...at(r.ua, r.da)), B = P(...at(r.ub, r.db)); sp.push(A, B);
+        o.push('<rect x="' + Math.min(A[0], B[0]).toFixed(1) + '" y="' + Math.min(A[1], B[1]).toFixed(1) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="' + (r.landing ? '#E2DCCF' : 'none') + '" stroke="#6B645A" stroke-width="1"/>'); });
+      hit(sp, VMT('Outside stair — ', 'Escada exterior — ') + tMove); }
     else if (E.t === 'stair') { const w = E.w || 1.1, n = E.entry ? Math.max(2, Math.round((v.raise || 0) / 0.19)) : 8, u0 = (E.pos || 0.1) * len;
       for (let i = 0; i <= n; i++) { const [ax, ay] = E.along === 'perp' ? at(u0, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, 0); const [bx, by] = E.along === 'perp' ? at(u0 + w, i * 0.3) : at(u0 + (E.landing ? 1.2 : 0) + i * 0.3, w);
-        const A = P(ax, ay), B = P(bx, by); o.push('<line x1="' + A[0] + '" y1="' + A[1] + '" x2="' + B[0] + '" y2="' + B[1] + '" stroke="#6B645A" stroke-width="1"/>'); } }
-    if (E.t === 'varanda' || E.t === 'alpendre' || E.t === 'latada') { const w = E.w || 4, d = E.t === 'varanda' ? (E.kind === 'reentrante' ? -1 : E.kind === 'sacada' ? 0.5 : 1.1) : (E.d || 2.4), u0 = (E.pos || 0.5) * len - w / 2;
+        const A = P(ax, ay), B = P(bx, by); o.push('<line x1="' + A[0] + '" y1="' + A[1] + '" x2="' + B[0] + '" y2="' + B[1] + '" stroke="#6B645A" stroke-width="1"/>'); }
+      hit([P(...at(u0, 0)), P(...at(u0 + w, E.along === 'perp' ? n * 0.3 : w)), P(...at(u0 + (E.along === 'perp' ? 0 : (E.landing ? 1.2 : 0) + n * 0.3), 0))], VMT('Outside stair — ', 'Escada exterior — ') + tMove); }
+    if (E.t === 'varanda' || E.t === 'alpendre' || E.t === 'latada') { const rec = E.t === 'varanda' && E.kind === 'reentrante', w = E.w || 4, d = E.t === 'varanda' ? (rec ? -vmRecD(E) : E.kind === 'sacada' ? 0.5 : 1.1) : (E.d || 2.4), u0 = (E.pos === undefined ? 0.5 : E.pos) * len - w / 2;
       const A = P(...at(u0, Math.max(0, d))), B = P(...at(u0 + w, Math.min(0, d)));
-      o.push('<rect x="' + Math.min(A[0], B[0]) + '" y="' + Math.min(A[1], B[1]) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="none" stroke="#8A6A48" stroke-width="1.2" stroke-dasharray="4 3"/>'); }
+      /* a recess on this plan's storey is open air cut out of the body: drawn as outside, its back wall drawn in */
+      const here = rec && (E.floor || 0) === (opts.fl || 0);
+      if (here) { o.push('<rect x="' + Math.min(A[0], B[0]) + '" y="' + Math.min(A[1], B[1]) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="' + (opts.bg || '#FBFAF7') + '" stroke="none"/>');
+        const K = P(...at(u0, d)), Q = P(...at(u0 + w, d)); o.push('<line x1="' + K[0] + '" y1="' + K[1] + '" x2="' + Q[0] + '" y2="' + Q[1] + '" stroke="#3A3530" stroke-width="' + Math.max(1.5, vmWallT(v) * s).toFixed(1) + '"/>'); }
+      o.push('<rect x="' + Math.min(A[0], B[0]) + '" y="' + Math.min(A[1], B[1]) + '" width="' + Math.abs(B[0] - A[0]).toFixed(1) + '" height="' + Math.abs(B[1] - A[1]).toFixed(1) + '" fill="' + (here ? 'url(#vmrec)' : 'none') + '" stroke="#8A6A48" stroke-width="1.2" stroke-dasharray="4 3"/>');
+      hit([A, B], (rec ? VMT('Recessed varanda — open air, out of the floor area: ', 'Varanda reentrante — ar exterior, fora da área de pavimento: ') : E.t === 'alpendre' ? VMT('Porch — ', 'Alpendre — ') : E.t === 'latada' ? VMT('Vine pergola — ', 'Latada — ') : VMT('Varanda — ', 'Varanda — ')) + tMove);
+      ends(u0, u0 + w, d / 2); }
     if (E.t === 'deck') { const R = vmDeckRect(v, E), A = P(R.x0, R.y1), B = P(R.x1, R.y0), c = P((R.x0 + R.x1) / 2, (R.y0 + R.y1) / 2), no = vmDecks(vm).indexOf(E) + 1;
       o.push('<rect x="' + A[0] + '" y="' + A[1] + '" width="' + (+B[0] - +A[0]).toFixed(1) + '" height="' + (+B[1] - +A[1]).toFixed(1) + '" fill="rgba(138,98,64,.22)" stroke="#6E4B2E" stroke-width="1.2"' + (E.roof ? ' stroke-dasharray="5 3"' : '') + '/>');
       o.push('<text x="' + c[0] + '" y="' + (+c[1] + 3) + '" font-size="9" text-anchor="middle" fill="#4A321C" font-family="sans-serif" pointer-events="none">P' + no + ' +' + fmt(E.z || 0, 2) + '</text>');
+      hit([A, B], VMT('Platform — ', 'Plataforma — ') + tMove); ends(E.a || 0, (E.a || 0) + (E.w || 3), (E.d || 2.2) / 2);
       (E.stairs || []).forEach(S => vmDeckStair(vm, v, E, S).treads.forEach(t => { const a = P(Math.min(t.p[0], t.q[0]), Math.max(t.p[1], t.q[1])), b = P(Math.max(t.p[0], t.q[0]), Math.min(t.p[1], t.q[1]));
         o.push('<rect x="' + a[0] + '" y="' + a[1] + '" width="' + (+b[0] - +a[0]).toFixed(1) + '" height="' + (+b[1] - +a[1]).toFixed(1) + '" fill="none" stroke="#6E4B2E" stroke-width="1"/>'); })); }
     if (E.t === 'oven') { const r = E.r || 0.9, p = P(...at((E.pos || 0.5) * len, r * 0.6)); o.push('<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (r * s).toFixed(1) + '" fill="#E7DFD0" stroke="#3A3530" stroke-width="1.5"/>'); }
@@ -25977,8 +26019,9 @@ function vmPlanSVG(vm, w, opts) {
     const wcK = q.wc && VM_WC[q.wc], lx = wcK && q.wc === 'bath' ? q.x - 0.35 : q.x, ly = wcK ? (q.y - q.d / 2 + q.y + q.d / 2 - 0.7) / 2 : q.y;
     const c = P(lx, ly), nm = VL(q.n), fs = Math.max(6, Math.min(10, (wcK && q.wc === 'bath' ? q.w - 0.7 : q.w) * s / Math.max(4, nm.length * 0.6), (wcK ? q.d - 0.7 : q.d) * s / 2.6));
     o.push('<text x="' + c[0] + '" y="' + (+c[1] - fs * 0.15).toFixed(1) + '" font-size="' + fs.toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + nm.replace(/&/g, '&amp;') + '</text>');
-    o.push('<text x="' + c[0] + '" y="' + (+c[1] + fs * 1.05).toFixed(1) + '" font-size="' + (fs * 0.9).toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + fmt(q.w * q.d, 1) + ' m²</text>');
+    o.push('<text x="' + c[0] + '" y="' + (+c[1] + fs * 1.05).toFixed(1) + '" font-size="' + (fs * 0.9).toFixed(1) + '" text-anchor="middle" fill="#2E4A42" font-family="sans-serif" pointer-events="none">' + fmt(vmRoomArea(vm, q), 1) + ' m²</text>');
     const h2 = P(q.x + q.w / 2, q.y - q.d / 2); o.push('<rect data-roomsize="' + i + '" x="' + (+h2[0] - 5) + '" y="' + (+h2[1] - 5) + '" width="9" height="9" fill="#4E8A78" style="cursor:nwse-resize"/>'); });
+  o.push(...elTop);
   o.push(...courtH);
   /* the chimneys over the rooms, so they can always be picked and dragged */
   o.push(...chimTop);
@@ -26333,7 +26376,7 @@ function vmRoomChecks(vm, rooms) {
     q.bad = !q.inVol || q.over;
   });
   const kitchen = rooms.some(q => /cozinha|kitchen/i.test(VL(q.n)));
-  return { kitchen, ok:rooms.filter(q => !q.bad).length, n:rooms.length, area:rooms.reduce((a, q) => a + q.w * q.d, 0) };
+  return { kitchen, ok:rooms.filter(q => !q.bad).length, n:rooms.length, area:rooms.reduce((a, q) => a + vmRoomArea(vm, q), 0) };
 }
 function vmPassToStudy(vm, wi) {
   const v = vm.vols[wi || 0];
@@ -26441,13 +26484,13 @@ function studyBase(R) {
 /** The balcony a varanda of the drawing is in the Plan tab, and back: both stand at the same place on the same wall. */
 function syncBalcOf(E, hasStair) {
   const f = E.face || 'S', NS = f === 'S' || f === 'N', len = NS ? MASS.L : MASS.D, c = ((E.pos === undefined ? 0.5 : E.pos) - 0.5) * len, inn = E.kind === 'reentrante';
-  const b = { f, x:NS ? c : (f === 'E' ? 1 : -1) * MASS.L / 2, y:NS ? (f === 'N' ? 1 : -1) * MASS.D / 2 : c, mode:inn ? 'in' : 'out', w:Math.min(E.w || 4, Math.floor(len * 10) / 10), d:inn ? 1.5 : E.kind === 'sacada' ? 0.5 : 1.2, lv:(E.floor || 0) + 1, corner:0 };
+  const b = { f, x:NS ? c : (f === 'E' ? 1 : -1) * MASS.L / 2, y:NS ? (f === 'N' ? 1 : -1) * MASS.D / 2 : c, mode:inn ? 'in' : 'out', w:Math.min(E.w || 4, Math.floor(len * 10) / 10), d:inn ? vmRecD(E) : E.kind === 'sacada' ? 0.5 : 1.2, lv:(E.floor || 0) + 1, corner:0 };
   if (hasStair && !inn) b.stair = { w:STAIR_W };
   return b;
 }
 function syncVaranda(b, wi, old) {
   const NS = b.f === 'S' || b.f === 'N', len = NS ? MASS.L : MASS.D, was = (old || []).find(e => e.t === 'varanda' && (e.face || 'S') === b.f && (e.floor || 0) === (b.lv || 1) - 1);
-  return Object.assign({}, was, { t:'varanda', vol:wi, face:b.f, kind:b.mode === 'in' ? 'reentrante' : was && was.kind !== 'reentrante' ? was.kind : 'corrida', pos:+clamp(((NS ? b.x : b.y) + len / 2) / len, 0.02, 0.98).toFixed(3), w:b.w, floor:Math.max(0, (b.lv || 1) - 1) });
+  return Object.assign({}, was, { t:'varanda', vol:wi, face:b.f, kind:b.mode === 'in' ? 'reentrante' : was && was.kind !== 'reentrante' ? was.kind : 'corrida', pos:+clamp(((NS ? b.x : b.y) + len / 2) / len, 0.02, 0.98).toFixed(3), w:b.w, floor:Math.max(0, (b.lv || 1) - 1) }, b.mode === 'in' && +b.d > 0 ? { d:+b.d } : {});
 }
 /** Words of a finish in the image brief: the wall's or the roof's phrase of it replaced by the drawing's material. */
 function syncPromptMat(rx, list, key, noun) {
@@ -26836,11 +26879,15 @@ function buildModeller(host) {
         { row.appendChild(vmNum(VMT('Along (0–1)', 'Ao longo (0–1)'), () => E.u, x => { E.u = x; }, 0, 0.95, 0.05)); row.appendChild(vmNum(VMT('Across (0–1)', 'Na profundidade (0–1)'), () => E.v, x => { E.v = x; }, 0, 0.95, 0.05)); row.appendChild(vmNum(VMT('Height (m)', 'Altura (m)'), () => E.h || 1.2, x => { E.h = x; }, 0.3, 4, 0.1)); } }
       if (E.t === 'stair') { row.appendChild(vmSel(VMT('Run', 'Lanço'), [['par', VMT('along the wall', 'encostado à parede')], ['perp', VMT('out from the wall', 'perpendicular à parede')]], () => E.along, x => { E.along = x; }));
         row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 0.9, 0.05)); row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 0.7, 2, 0.1));
+        { const NS = (E.face || 'S') === 'S' || (E.face || 'S') === 'N';
+          row.appendChild(vmSel(VMT('Flight goes toward', 'O lanço vai para'), [['1', NS ? VMT('east', 'nascente') : VMT('north', 'norte')], ['-1', NS ? VMT('west', 'poente') : VMT('south', 'sul')]], () => String(E.dir === -1 ? -1 : 1), x => { E.dir = +x === -1 ? -1 : 1; E.toDoor = false; })); }
         row.appendChild(vmNum(VMT('Floors served', 'Pisos servidos'), () => E.flights || 1, x => { E.flights = Math.round(x); }, 1, 6, 1));
         row.appendChild(vmChk(VMT('landing', 'patamar'), () => !!E.landing, x => { E.landing = x; })); row.appendChild(vmChk(VMT('porch over the landing', 'alpendre no patamar'), () => !!E.porch, x => { E.porch = x; })); }
       if (E.t === 'varanda') { row.appendChild(vmSel(VMT('Kind', 'Tipo'), Object.keys(VM_VAR).map(k => [k, VL(VM_VAR[k])]), () => E.kind, x => { E.kind = x; }));
         row.appendChild(vmNum(VMT('Position (0–1)', 'Posição (0–1)'), () => E.pos, x => { E.pos = x; }, 0, 1, 0.05)); row.appendChild(vmNum(VMT('Width (m)', 'Largura (m)'), () => E.w, x => { E.w = x; }, 0.8, 20, 0.1));
-        row.appendChild(vmNum(VMT('Storey (0 = ground)', 'Piso (0 = térreo)'), () => E.floor || 0, x => { E.floor = Math.round(x); }, 0, 3, 1)); }
+        row.appendChild(vmNum(VMT('Storey (0 = ground)', 'Piso (0 = térreo)'), () => E.floor || 0, x => { E.floor = Math.round(x); }, 0, 3, 1));
+        if (E.kind === 'reentrante') { row.appendChild(vmNum(VMT('Depth into the body (m)', 'Profundidade para dentro do corpo (m)'), () => vmRecD(E), x => { E.d = x; }, 0.6, 4, 0.1));
+          const r = vmRecesses(M).find(q => q.E === E); if (r) row.appendChild(el('span', { class:'hint', style:'align-self:center', text:VMT('Open air: ', 'Ar exterior: ') + fmt(r.w * r.d, 1) + ' m² ' + VMT('out of the floor area of storey ', 'fora da área de pavimento do piso ') + r.fl })); } }
       if (E.t === 'deck') { const wv = M.vols[E.vol || 0] || M.vols[0], fE = E.face || 'S', wl = fE === 'S' || fE === 'N' ? wv.L : wv.D, corner = fE === 'S' || fE === 'N' ? VMT('west', 'poente') : VMT('south', 'sul');
         row.appendChild(vmNumR(VMT('Height over the ground (m)', 'Altura ao chão (m)'), () => E.z, x => { E.z = x; }, 0.15, 6, 0.05));
         row.appendChild(vmNumR(VMT('Length along the wall (m)', 'Comprimento ao longo da parede (m)'), () => E.w, x => { E.w = x; }, 0.6, 60, 0.1));
@@ -27015,6 +27062,22 @@ function buildModeller(host) {
           if (onlyFace && f !== onlyFace) return; const d = Math.hypot(x - px, y - py); if (!best || d < best.d) best = { vi:i, v, f, t, d }; }); });
       return best; };
     const pt = ev => { const b = svg.getBoundingClientRect(); return [(ev.clientX - b.left) * PL.w / b.width, (ev.clientY - b.top) * PL.h / b.height]; };
+    /* the wall of one body nearest the pointer, whatever floor this plan shows: face, metres along it, wall length */
+    const elWall = (q, v, onlyFace) => { const [x, y] = toW(q), x0 = v.x - v.L / 2, y0 = v.y - v.D / 2, x1 = x0 + v.L, y1 = y0 + v.D; let best = null;
+      [['S', clamp(x, x0, x1), y0, x - x0, v.L], ['N', clamp(x, x0, x1), y1, x - x0, v.L], ['W', x0, clamp(y, y0, y1), y - y0, v.D], ['E', x1, clamp(y, y0, y1), y - y0, v.D]].forEach(([f, px, py, u, len]) => {
+        if (onlyFace && f !== onlyFace) return; const d = Math.hypot(x - px, y - py); if (!best || d < best.d) best = { f, u, len, d }; });
+      return best; };
+    /* an element's span along its wall, m — a stair's whole flight with its landing, the rest their width */
+    const elSpan = (E, v) => { const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D;
+      if (E.t === 'deck') return { len, a:E.a || 0, b:(E.a || 0) + (E.w || 3) };
+      if (E.t === 'stair') { const u0 = (E.pos || 0) * len; return { len, a:u0, b:u0 + (E.w || 1.1) }; }
+      const w = E.w || 4, c = (E.pos === undefined ? 0.5 : E.pos) * len; return { len, a:c - w / 2, b:c + w / 2 }; };
+    /* a stair's upper door — the first door or varandim above the ground on its wall, at its landing — goes where the stair goes */
+    const stairDoor = (E, v) => { const f = E.face || 'S', len = f === 'S' || f === 'N' ? v.L : v.D, u0 = (E.pos || 0) * len, lw = E.landing ? 1.2 : (E.w || 1.1);
+      const ds = (v.open[f] || []).filter(q => q.fl >= 1 && q.t !== 'w').map(q => ({ q, c:q.pos * len })).filter(o => o.c >= u0 - 0.6 && o.c <= u0 + lw + 0.6).sort((a, b) => a.q.fl - b.q.fl);
+      return ds.length ? { q:ds[0].q, off:ds[0].c - u0 } : null; };
+    /* a new face for an element: a platform's stairs that left by the face it now stands against turn with it */
+    const elFace = (E, nf) => { if ((E.face || 'S') === nf) return; if (E.t === 'deck') (E.stairs || []).forEach(S => { if (S.side === VM_BACK[nf]) S.side = nf; }); E.face = nf; };
     svg.addEventListener('pointerdown', ev => {
       if (VM_ARM) {
         const W = wallAt(pt(ev));
@@ -27042,6 +27105,10 @@ function buildModeller(host) {
       else if (t.dataset.room !== undefined) { const q = rooms[+t.dataset.room]; VM_ROOMSEL = q; VM_OPSEL = null; drag = { kind:'room', q, p, x0:q.x, y0:q.y };
         if (!drag.moved) { const PLs = vmPlanSVG(vm(), 520, { sel:VM_SEL, fl, rooms:R.V.rooms.filter(r => r.fl === fl) }); svg.innerHTML = PLs.svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, ''); } }
       else if (t.dataset.chim !== undefined) { const E = (M.els || [])[+t.dataset.chim]; if (E) drag = { kind:'chim', E, p }; }
+      else if (t.dataset.el !== undefined) { const E = (M.els || [])[+t.dataset.el], v = E && M.vols[E.vol || 0];
+        if (E && v) { const W = elWall(p, v, E.face || 'S'), sp = elSpan(E, v); drag = { kind:'el', E, v, p, off:W.u - sp.a, door:E.t === 'stair' ? stairDoor(E, v) : null }; } }
+      else if (t.dataset.elw !== undefined) { const [i, k] = t.dataset.elw.split(':'), E = (M.els || [])[+i], v = E && M.vols[E.vol || 0];
+        if (E && v) { const sp = elSpan(E, v); drag = { kind:'elw', E, v, p, end:+k, a:sp.a, b:sp.b }; } }
       else if (t.dataset.vol !== undefined) { const i = +t.dataset.vol, v = M.vols[i]; VM_SEL = i; drag = { kind:'vol', v, p, x0:v.x, y0:v.y }; }
       if (drag) { svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
     });
@@ -27056,6 +27123,21 @@ function buildModeller(host) {
         const vi = inside >= 0 ? inside : (drag.E.vol || 0), v = vols[vi]; drag.E.vol = vi;
         drag.E.u = +clamp((wx - (v.x - v.L / 2)) / v.L, 0.05, 0.95).toFixed(3); drag.E.v = +clamp((wy - (v.y - v.D / 2)) / v.D, 0.05, 0.95).toFixed(3); }
       else if (drag.kind === 'room') { drag.q.x = drag.x0 + dx; drag.q.y = drag.y0 + dy; }
+      else if (drag.kind === 'el') { const E = drag.E, v = drag.v, W = elWall(p, v);
+        if (W) { const was = E.face || 'S'; elFace(E, W.f);
+          const sp = elSpan(E, v), wd = sp.b - sp.a, len = W.len, a = Math.round(clamp(W.u - drag.off, 0, Math.max(0, len - wd)) * 20) / 20;
+          if (E.t === 'deck') E.a = +a.toFixed(2);
+          else if (E.t === 'stair') { E.pos = +(a / len).toFixed(4); E.toDoor = false; }
+          else E.pos = +((a + wd / 2) / len).toFixed(4);
+          /* the landing's door follows: along the same wall, or onto the new one at the same floor */
+          const dq = drag.door; if (dq) { const q = dq.q, src = Object.keys(v.open).find(k => (v.open[k] || []).indexOf(q) >= 0);
+            if (src && src !== W.f) { v.open[src].splice(v.open[src].indexOf(q), 1); (v.open[W.f] = v.open[W.f] || []).push(q); }
+            q.pos = +clamp((a + dq.off) / len, q.w / 2 / len + 0.02, 1 - q.w / 2 / len - 0.02).toFixed(4); }
+          if (was !== W.f) drag.faceChanged = true; } }
+      else if (drag.kind === 'elw') { const E = drag.E, v = drag.v, W = elWall(p, v, E.face || 'S');
+        if (W) { const len = W.len, u = Math.round(clamp(W.u, 0, len) * 20) / 20, mn = 0.8;
+          const a = drag.end ? drag.a : Math.min(u, drag.b - mn), b = drag.end ? Math.max(u, drag.a + mn) : drag.b, wd = +(b - a).toFixed(2);
+          if (E.t === 'deck') { E.a = +a.toFixed(2); E.w = wd; } else { E.w = wd; E.pos = +((a + b) / 2 / len).toFixed(4); } } }
       else if (drag.kind === 'court') { /* the opposite corner stays; the yard keeps at least 2 m a side */
         const nx = drag.cx + dx, ny = drag.cy + dy, c = drag.c; if (Math.abs(nx - drag.fx) >= 2) { c.L = Math.abs(nx - drag.fx); c.x = (nx + drag.fx) / 2; } if (Math.abs(ny - drag.fy) >= 2) { c.D = Math.abs(ny - drag.fy); c.y = (ny + drag.fy) / 2; } }
       else { drag.q.w = Math.max(1, drag.w0 + dx); drag.q.d = Math.max(1, drag.d0 - dy); }
@@ -27064,7 +27146,9 @@ function buildModeller(host) {
     });
     /* a click that did not move leaves the plan as it is, so a double-click still finds its room or its opening */
     /* the cut isometric follows the floor a click on a plan picks */
-    const up = () => { const fc = svg._flc; svg._flc = false; if (drag) { const mv = drag.moved; drag = null; if (mv) { drawEditor(); drawViews(); return; } } if (fc) drawViews(); };
+    const up = () => { const fc = svg._flc; svg._flc = false; if (drag) { const mv = drag.moved, k = drag.kind; drag = null;
+        if (mv && (k === 'el' || k === 'elw')) { vmChanged(true); return; }
+        if (mv) { drawEditor(); drawViews(); return; } } if (fc) drawViews(); };
     svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
     svg.addEventListener('dblclick', ev => {
       /* a room renamed in place: the student's own word for it */
@@ -27111,7 +27195,7 @@ function buildModeller(host) {
     const rc = vmRoomChecks(M, R.V.rooms);
     metBox.appendChild(section(VMT('Rooms', 'Divisões'), rc.ok + ' / ' + rc.n + ' ' + VMT('placed well', 'bem colocadas')));
     metBox.appendChild(el('p', { class:'hint', text:VMT('Move and size the rooms on the plan (the square handle sizes them); pick the floor above the plan. A room must sit inside a body that has that floor, without overlapping another.', 'Mova e dimensione as divisões na planta (o quadrado no canto dimensiona-as); escolha o piso por cima da planta. Uma divisão tem de ficar dentro de um corpo que tenha esse piso, sem sobrepor outra.') }));
-    const rt = dataTable([VMT('Room', 'Divisão'), VMT('Floor', 'Piso'), VMT('Area', 'Área'), ''], R.V.rooms.map(q => [VL(q.n), q.fl === 0 ? VMT('ground', 'térreo') : String(q.fl), fmt(q.w * q.d, 1) + ' m²', q.bad ? '<span class="vmno">' + (q.inVol ? VMT('overlaps', 'sobrepõe') : VMT('outside the body', 'fora do corpo')) + '</span>' : '<span class="vmok">✓</span>']), [0]);
+    const rt = dataTable([VMT('Room', 'Divisão'), VMT('Floor', 'Piso'), VMT('Area', 'Área'), ''], R.V.rooms.map(q => [VL(q.n), q.fl === 0 ? VMT('ground', 'térreo') : String(q.fl), fmt(vmRoomArea(M, q), 1) + ' m²', q.bad ? '<span class="vmno">' + (q.inVol ? VMT('overlaps', 'sobrepõe') : VMT('outside the body', 'fora do corpo')) + '</span>' : '<span class="vmok">✓</span>']), [0]);
     /* each room's name editable in the table, as on the plan (double-click a room there) */
     rt.querySelectorAll('tbody tr').forEach((tr, i) => { const q = R.V.rooms[i], td = tr.firstChild; if (!q || !td) return; td.textContent = '';
       td.appendChild(el('input', { type:'text', value:VL(q.n), class:'vmroomname', title:VMT('Rename the room', 'Mudar o nome da divisão'), style:'width:100%; min-width:9em; font:inherit; border:1px solid var(--line); border-radius:6px; padding:2px 6px',
@@ -27228,7 +27312,7 @@ async function vmExportReport(format) {
     const checks = T.feats.filter(f => f.get).map(f => { const o = vOk(f); return [VL(f.label), typeof f.model === 'string' ? f.model : VL(f.model), vVal(f, o.v), o.ok ? '✓' : '✗', VERN_SRC[f.src] ? VERN_SRC[f.src].tag : '']; });
     if (checks.length) sl.push(head(VMT('The archetype’s checklist', 'A lista de verificação do arquétipo'), VMT('On the study’s tabs', 'Nos separadores do estudo')).concat([tbl(0.6, 1.7, [3.8, 3.4, 2.0, 0.8, 2.2], [[VMT('Check', 'Verificação'), VMT('Model', 'Modelo'), VMT('Yours', 'O seu'), '', VMT('Source', 'Fonte')]].concat(checks.slice(0, 14)), 0.33)]));
     sl.push(head(VMT('From the house to the climate', 'Da casa ao clima'), VMT('Olgyay’s optimum, the archetype and yours', 'O óptimo de Olgyay, o arquétipo e o seu') + ' · ' + O.code).concat([tbl(0.6, 1.7, [4.4, 2.8, 2.6, 2.4], [['', 'Olgyay', VMT('Archetype', 'Arquétipo'), VMT('Yours', 'O seu')]].concat(O.rows), 0.4), text(0.6, 3.9, 12, 3, O.notes, 12)]));
-    sl.push(head(VMT('Rooms', 'Divisões'), rc.ok + ' / ' + rc.n + ' ' + VMT('placed well', 'bem colocadas')).concat([tbl(0.6, 1.7, [4.4, 2.0, 2.4, 3.2], [[VMT('Room', 'Divisão'), VMT('Floor', 'Piso'), VMT('Area', 'Área'), '']].concat(R.V.rooms.slice(0, 14).map(q => [VL(q.n), q.fl === 0 ? VMT('ground', 'térreo') : q.fl, fmt(q.w * q.d, 1) + ' m²', q.bad ? (q.inVol ? VMT('overlaps', 'sobrepõe') : VMT('outside the body', 'fora do corpo')) : '✓'])), 0.34)]));
+    sl.push(head(VMT('Rooms', 'Divisões'), rc.ok + ' / ' + rc.n + ' ' + VMT('placed well', 'bem colocadas')).concat([tbl(0.6, 1.7, [4.4, 2.0, 2.4, 3.2], [[VMT('Room', 'Divisão'), VMT('Floor', 'Piso'), VMT('Area', 'Área'), '']].concat(R.V.rooms.slice(0, 14).map(q => [VL(q.n), q.fl === 0 ? VMT('ground', 'térreo') : q.fl, fmt(vmRoomArea(M, q), 1) + ' m²', q.bad ? (q.inVol ? VMT('overlaps', 'sobrepõe') : VMT('outside the body', 'fora do corpo')) : '✓'])), 0.34)]));
     const bib = ARCH_BIB.filter(g => g.types && g.types.indexOf(R.type) >= 0).reduce((a, g) => a.concat(g.refs), []).map(r => r.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&'));
     if (bib.length) sl.push(head(VMT('Sources', 'Fontes'), VMT('Archetypes bibliography (APA 7)', 'Bibliografia dos arquétipos (APA 7)')).concat([text(0.6, 1.7, 12.1, 5.6, bib.slice(0, 12), 10)]));
     const blob = E.build(sl);
