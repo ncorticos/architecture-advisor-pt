@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.208.0',
+  version:     '1.208.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -29063,7 +29063,9 @@ function buildSurfaces(host, kind) {
   benchStage(stage);
   const cam = SF.cam[kind];
   let panel = null;
-  const sets = () => SF.sel.compare ? [{ name:t('Winter'), months:SEAS.winter }, { name:t('Summer'), months:SEAS.summer }] : [{ name:t(T.title), months:SF.sel.months }];
+  if (!Array.isArray(SF.sel.monthsB) || !SF.sel.monthsB.length) SF.sel.monthsB = SEAS.summer.slice();
+  const setName = ms => { const k = ms.slice().sort((a, b) => a - b).join(','); return k === SEAS.winter.slice().sort((a, b) => a - b).join(',') ? t('Winter') : k === SEAS.summer.slice().sort((a, b) => a - b).join(',') ? t('Summer') : ms.length === 12 ? t('Year') : ms.map(m => MON3[m]).join(' '); };
+  const sets = () => SF.sel.compare ? [{ name:'A · ' + setName(SF.sel.months), months:SF.sel.months }, { name:'B · ' + setName(SF.sel.monthsB), months:SF.sel.monthsB }] : [{ name:t(T.title), months:SF.sel.months }];
   let surrTxt = () => {};
   const redraw = () => { if (panel) panel.draw(); readings(); surrTxt(); };
   /* re-read when the site's ERA5 figures arrive */
@@ -29071,15 +29073,23 @@ function buildSurfaces(host, kind) {
   sfClimFor(S, () => { Object.keys(SF_DAY_CACHE).forEach(k => delete SF_DAY_CACHE[k]); redraw(); });
 
   /* left: when */
-  rail.appendChild(el('div', { class:'gh', text:t('Months') }));
-  const mBox = rail.appendChild(el('div', { class:'seg', style:'flex-wrap:wrap' }));
-  const mBtns = MON3.map((mn, i) => mBox.appendChild(el('button', { type:'button', text:mn, 'aria-pressed':String(SF.sel.months.includes(i)), onclick:() => {
-    const ms = SF.sel.months, k = ms.indexOf(i); if (k >= 0 && ms.length > 1) ms.splice(k, 1); else if (k < 0) ms.push(i); ms.sort((a, b) => a - b);
-    SF.sel.compare = false; paint(); redraw(); } })));
-  const sBox = rail.appendChild(el('div', { class:'seg', style:'margin-top:6px;flex-wrap:wrap' }));
-  [['Winter', () => SEAS.winter], ['Summer', () => SEAS.summer], ['Year', () => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]].forEach(([nm, fn]) =>
-    sBox.appendChild(el('button', { type:'button', text:t(nm), onclick:() => { SF.sel.months = fn().slice(); SF.sel.compare = false; paint(); redraw(); } })));
-  const cmp = rail.appendChild(checkCtl(t('Winter and summer side by side'), SF.sel.compare, v => { SF.sel.compare = v; redraw(); }));
+  /* one month picker per model: the left (A) always, the right (B) when two models stand side by side */
+  const picker = (key, title) => {
+    const box = el('div');
+    const head = box.appendChild(el('div', { class:'gh', text:title }));
+    const mBox = box.appendChild(el('div', { class:'seg', style:'flex-wrap:wrap' }));
+    const btns = MON3.map((mn, i) => mBox.appendChild(el('button', { type:'button', text:mn, onclick:() => {
+      const ms = SF.sel[key], k = ms.indexOf(i); if (k >= 0 && ms.length > 1) ms.splice(k, 1); else if (k < 0) ms.push(i); ms.sort((a, b) => a - b); paint(); redraw(); } })));
+    const sBox = box.appendChild(el('div', { class:'seg', style:'margin-top:6px;flex-wrap:wrap' }));
+    [['Winter', () => SEAS.winter], ['Summer', () => SEAS.summer], ['Year', () => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]].forEach(([nm, fn]) =>
+      sBox.appendChild(el('button', { type:'button', text:t(nm), onclick:() => { SF.sel[key] = fn().slice(); paint(); redraw(); } })));
+    return { box, head, paint:() => btns.forEach((b, i) => b.setAttribute('aria-pressed', String(SF.sel[key].includes(i)))) };
+  };
+  const pA = picker('months', t('Months')), pB = picker('monthsB', t('Months') + ' — B');
+  rail.appendChild(pA.box);
+  const cmp = rail.appendChild(checkCtl(t('Two models side by side (A | B)'), SF.sel.compare, v => { SF.sel.compare = v; paint(); redraw(); }));
+  rail.appendChild(pB.box);
+  rail.appendChild(el('button', { class:'btn small', type:'button', style:'margin:4px 0 8px', text:t('A winter | B summer'), onclick:() => { SF.sel.months = SEAS.winter.slice(); SF.sel.monthsB = SEAS.summer.slice(); SF.sel.compare = true; paint(); redraw(); } }));
   rail.appendChild(checkCtl(t('Surroundings: neighbouring buildings and the ground'), SF.sel.surr !== false, v => { SF.sel.surr = v; redraw(); }));
   const surrLine = rail.appendChild(el('p', { class:'hint', style:'margin:2px 0 6px' }));
   surrTxt = () => { const tr = sfTerrain(), nbN = SF_ENV ? SF_ENV.nbs.length : 0;
@@ -29090,7 +29100,9 @@ function buildSurfaces(host, kind) {
   rail.appendChild(el('div', { class:'gh', text:t('Hour') }));
   const modeSeg = rail.appendChild(segCtl(t('Reading'), [{ value:'hour', label:t('At the hour') }, { value:'day', label:kind === 'noise' ? 'L_den' : t('Whole day') }], SF.sel.mode, v => { SF.sel.mode = v; redraw(); }));
   rail.appendChild(rangeCtl(t('Solar time'), 0, 23, 1, SF.sel.h, v => { SF.sel.h = v; if (SF.sel.mode !== 'hour') { SF.sel.mode = 'hour'; modeSeg.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-pressed', String(i === 0))); } redraw(); }, v => String(v).padStart(2, '0') + ':30'));
-  function paint() { mBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(SF.sel.months.includes(i)))); const c = cmp.querySelector('input'); if (c) c.checked = SF.sel.compare; }
+  function paint() { pA.paint(); pB.paint(); pA.head.textContent = t('Months') + (SF.sel.compare ? ' — A' : ''); pB.box.style.display = SF.sel.compare ? '' : 'none';
+    const c = cmp.querySelector('input'); if (c) c.checked = SF.sel.compare; }
+  paint();
 
   /* left, on Noise: the sources */
   if (kind === 'noise') {
@@ -29147,7 +29159,7 @@ function buildSurfaces(host, kind) {
     const sets0 = sets(), mode = SF.sel.mode;
     sets0.forEach(set => {
       const R = rows(set.months);
-      out.appendChild(el('div', { class:'gh', text:set.name + ' · ' + set.months.map(m => MON3[m]).join(' ') }));
+      out.appendChild(el('div', { class:'gh', text:SF.sel.compare ? set.name + (/^[AB] · [A-Z][a-z]{2}( |$)/.test(set.name) ? '' : ' · ' + set.months.map(m => MON3[m]).join(' ')) : set.name + ' · ' + set.months.map(m => MON3[m]).join(' ') }));
       let head, body;
       if (kind === 'rad') {
         const days = set.months.reduce((a, m) => a + MONTH_DAYS[m], 0);
@@ -30329,7 +30341,8 @@ function applyStudy(o) {
   const fin = (v, d) => isFinite(+v) ? +v : d;
   /* the four surface tabs: the months and hour read, and the noise sources the student kept */
   if (o.surf && typeof o.surf === 'object') { try {
-    if (o.surf.sel && Array.isArray(o.surf.sel.months) && o.surf.sel.months.length) SF.sel = Object.assign({}, SF.sel, { months:o.surf.sel.months.filter(m => m >= 0 && m < 12).map(Number), h:clamp(fin(o.surf.sel.h, 12), 0, 23), mode:o.surf.sel.mode === 'day' ? 'day' : 'hour', compare:!!o.surf.sel.compare });
+    if (o.surf.sel && Array.isArray(o.surf.sel.months) && o.surf.sel.months.length) SF.sel = Object.assign({}, SF.sel, { months:o.surf.sel.months.filter(m => m >= 0 && m < 12).map(Number), h:clamp(fin(o.surf.sel.h, 12), 0, 23), mode:o.surf.sel.mode === 'day' ? 'day' : 'hour', compare:!!o.surf.sel.compare,
+      monthsB:Array.isArray(o.surf.sel.monthsB) && o.surf.sel.monthsB.length ? o.surf.sel.monthsB.filter(m => m >= 0 && m < 12).map(Number) : null });
     if (o.surf.noise && Array.isArray(o.surf.noise.src)) SF.noise = Object.assign({}, SF.noise, o.surf.noise, { src:o.surf.noise.src.filter(q => q && SF_NOISE_KIND[q.kind]).slice(0, 40) });
   } catch (e) { console.error(e); } }
   const M0 = o.mass || {};
@@ -33348,6 +33361,8 @@ Object.assign(PT, {
   "Summer": "Verão",
   "Ventilation": "Ventilação",
   "Solar radiation": "Radiação solar",
+  "Two models side by side (A | B)": "Dois modelos lado a lado (A | B)",
+  "A winter | B summer": "A inverno | B verão",
   "Surroundings: neighbouring buildings and the ground": "Envolvente: edifícios vizinhos e o terreno",
   "Neighbouring buildings are switched off on Environmental.": "Os edifícios vizinhos estão desligados em Ambiente.",
   "Reading the neighbouring buildings…": "A ler os edifícios vizinhos…",
