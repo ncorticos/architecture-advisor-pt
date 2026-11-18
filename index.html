@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.206.1',
+  version:     '1.207.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -23275,6 +23275,10 @@ function tabsFor(S) {
     { key:'roof', label:'Roof and covering', build:popular('roof', buildRoof) },
     { key:'openings', label:'Openings', build:popular('openings', buildOpenings) },
     { key:'ventilation', label:'Passive systems', build:popular('ventilation', buildVentilation) },
+    { key:'sunrad', label:'Solar radiation', build:buildSurfRad },
+    { key:'outtemp', label:'Outdoor temperature', build:buildSurfTemp },
+    { key:'daylight', label:'Daylight', build:buildSurfLight },
+    { key:'noise', label:'Noise', build:buildSurfNoise },
     { key:'visualization', label:'Materials and image', build:popular('visualization', buildRender) }
   ];
 }
@@ -28597,12 +28601,470 @@ function supFaces(w) {
     const k = Math.abs(nz) > 0.9 ? 1.02 : 0.74 + 0.26 * Math.max(Math.abs(nx * 0.6 - ny * 0.8), nz > 0 ? nz : 0);
     return { pts, fill:f.fill.charAt(0) === '#' ? supShade(f.fill, k) : f.fill, roof:!!f.roof, lit:true, thin:!!f.thin, ground:!!f.ground }; });
 }
+/* ============================================== 7g. THE SURFACES: SUN, HEAT, LIGHT, NOISE ==
+   Four tabs that read the building as Ventilation reads it — the one model of Site, Roof and
+   Openings — and colour every wall and roof plane by what reaches it: the sun's irradiance, the
+   sol-air temperature, the daylight illuminance, the sound level. Each reads the months and the
+   hour chosen (or the whole day), and sets winter and summer side by side on request.
+   Methods, each named on its page:
+   · sun — the monthly mean day (Duffie & Beckman 2013, ch. 2): the site's daily global irradiation
+     (ERA5 1991–2020 via Open-Meteo, or 0.55 × extraterrestrial while it is missing) split into beam
+     and diffuse by Erbs, Klein & Duffie (1982), spread over the hours by Collares-Pereira & Rabl
+     (1979), carried onto each plane with the isotropic sky and ground albedo 0.2;
+   · heat — the month's mean air temperature from the normals, its day swung over the ERA5 daily
+     range with the ASHRAE hourly profile, and each surface's sol-air temperature
+     T + α·I/h_o − ε·ΔR/h_o (ASHRAE Fundamentals), h_o = 17 W/(m²·K), ε·ΔR/h_o = 3.9 K on the horizontal;
+   · light — the same irradiance times a luminous efficacy, 105 lm/W for the beam and 120 lm/W for
+     the diffuse sky (typical values; Littlefair 1985);
+   · noise — sources from OpenStreetMap or placed by hand, each with a reference level, spread by
+     geometric divergence (3 dB per doubling from a line, 6 dB from a point; ISO 9613-2) with air
+     absorption, screened by the building on its far faces; day, evening and night combined into
+     L_den as Directive 2002/49/EC defines it and read against the Portuguese RGR (DL 9/2007).
+   The default levels, the hourly emission profiles, the screening and the wind-noise relation are
+   this application's teaching values and are labelled as such. */
+const SF = {
+  sel:{ months:null, h:12, mode:'hour', compare:false },
+  cam:{ rad:{ az:225, el:32 }, temp:{ az:225, el:32 }, light:{ az:225, el:32 }, noise:{ az:225, el:40 } },
+  noise:{ ctx:'suburban', zone:'mixed', src:[], status:'', fetched:'' }
+};
+const SF_SEASON = lat => lat < 0 ? { winter:[5, 6, 7], summer:[11, 0, 1] } : { winter:[11, 0, 1], summer:[5, 6, 7] };
+/* the ASHRAE fraction of the daily range below the day's maximum, hour by hour (hour ending 1 … 24) */
+const SF_ASHRAE = [0.87, 0.92, 0.96, 0.99, 1.00, 0.98, 0.93, 0.84, 0.71, 0.56, 0.39, 0.23, 0.11, 0.03, 0.00, 0.03, 0.10, 0.21, 0.34, 0.47, 0.58, 0.68, 0.76, 0.82];
+const SF_ASHRAE_MEAN = SF_ASHRAE.reduce((a, b) => a + b, 0) / 24;
+/** The site's daily temperature range and windiest-hour speed, month by month: ERA5 1991–2020
+    via Open-Meteo, fetched once per site — only the coordinates leave the browser. */
+const SF_CLIM = {};
+function sfClimFor(site, onReady) {
+  const key = site.lat.toFixed(2) + ',' + site.lon.toFixed(2);
+  if (SF_CLIM[key]) return SF_CLIM[key];
+  const rec = SF_CLIM[key] = { pending:true, dr:null, wmax:null };
+  const ctrl = {};
+  try { if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ctrl.signal = AbortSignal.timeout(60000); } catch (e) {}
+  fetch('https://archive-api.open-meteo.com/v1/archive?latitude=' + site.lat.toFixed(3) + '&longitude=' + site.lon.toFixed(3)
+    + '&start_date=1991-01-01&end_date=2020-12-31&daily=temperature_2m_max,temperature_2m_min,wind_speed_10m_max&wind_speed_unit=ms&timezone=auto', ctrl)
+    .then(r => r.json())
+    .then(j => {
+      const d = j && j.daily, tt = d && d.time;
+      if (!Array.isArray(tt) || tt.length < 3000) throw new Error('clim');
+      const acc = Array.from({ length:12 }, () => [0, 0, 0, 0]);
+      tt.forEach((ds, i) => { const m = +String(ds).slice(5, 7) - 1, a = d.temperature_2m_max[i], b = d.temperature_2m_min[i], w = d.wind_speed_10m_max[i];
+        if (!(m >= 0 && m < 12)) return;
+        if (isFinite(a) && isFinite(b) && a !== null && b !== null) { acc[m][0] += a - b; acc[m][1]++; }
+        if (isFinite(w) && w !== null) { acc[m][2] += w; acc[m][3]++; } });
+      if (acc.some(a => a[1] < 100)) throw new Error('clim');
+      rec.dr = acc.map(a => a[0] / a[1]); rec.wmax = acc.map(a => a[3] ? a[2] / a[3] : null);
+      rec.src = 'ERA5 1991–2020 (Open-Meteo)';
+    })
+    .catch(() => { rec.failed = true; })
+    .then(() => { rec.pending = false; if (onReady) onReady(); });
+  return rec;
+}
+/** One month's mean day, hour by hour in solar time (centred on h + 0.5): the sun's vector
+    [east, north, up], the horizontal global and diffuse irradiance (W/m²), the air temperature. */
+const SF_DAY_CACHE = {};
+function sfDay(m) {
+  const S = STATE.site, C = STATE.clim, lat = S.lat, f = lat * RAD;
+  const hm = horizontalMonths(S), cr = sfClimFor(S), key = [S.lat, S.lon, m, hm.measured, !!cr.dr, C.t[m]].join('|');
+  if (SF_DAY_CACHE[key]) return SF_DAY_CACHE[key];
+  const sm = solarMonth(lat, m), ws = sm.ws, d = sm.d, H = hm.H[m], KT = clamp(H / Math.max(0.01, sm.H0), 0, 0.9);
+  const wsd = ws / RAD, Hd = H * (wsd <= 81.4 ? 1.391 - 3.560 * KT + 4.189 * KT * KT - 2.137 * KT ** 3 : 1.311 - 3.022 * KT + 3.427 * KT * KT - 1.821 * KT ** 3);
+  const a = 0.409 + 0.5016 * Math.sin(ws - Math.PI / 3), b = 0.6609 - 0.4767 * Math.sin(ws - Math.PI / 3), den = Math.sin(ws) - ws * Math.cos(ws);
+  const dr = cr.dr ? cr.dr[m] : 8, Tm = C.t[m], hrs = [];
+  for (let h = 0; h < 24; h++) {
+    const w = (h + 0.5 - 12) * 15 * RAD, cw = Math.cos(w);
+    const s = [-Math.cos(d) * Math.sin(w), Math.cos(f) * Math.sin(d) - Math.sin(f) * Math.cos(d) * cw, Math.sin(f) * Math.sin(d) + Math.cos(f) * Math.cos(d) * cw];
+    let gh = 0, dh = 0;
+    if (cw > Math.cos(ws) && den > 1e-6) {
+      const rt = Math.PI / 24 * (a + b * cw) * (cw - Math.cos(ws)) / den, rd = Math.PI / 24 * (cw - Math.cos(ws)) / den;
+      gh = Math.max(0, rt * H * 1e6 / 3600); dh = Math.min(gh, Math.max(0, rd * Hd * 1e6 / 3600));
+    }
+    const dni = s[2] > 0.035 ? (gh - dh) / s[2] : 0;
+    /* hour h + 0.5 sits between the profile's hour-ending h and h + 1 */
+    const fr = (SF_ASHRAE[(h + 23) % 24] + SF_ASHRAE[h]) / 2;
+    hrs.push({ s, gh, dh:s[2] > 0.035 ? dh : gh, dni, T:Tm + dr * (SF_ASHRAE_MEAN - fr) });
+  }
+  return SF_DAY_CACHE[key] = { hrs, dr, drMeasured:!!cr.dr, wmax:cr.wmax ? cr.wmax[m] : null, Hmeasured:hm.measured };
+}
+/** Irradiance on a plane with unit normal n (world: east, north, up), W/m², split. */
+function sfPlaneIrr(hr, n) {
+  const cosT = hr.s[0] * n[0] + hr.s[1] * n[1] + hr.s[2] * n[2], beam = hr.dni * Math.max(0, cosT);
+  const sky = hr.dh * (1 + n[2]) / 2, gnd = hr.gh * 0.2 * (1 - n[2]) / 2;
+  return { tot:beam + sky + gnd, beam, dif:sky + gnd };
+}
+/* ---- the model's faces, in the world as turned on Site ---- */
+function sfFaces() {
+  const G = MASS, RF = ROOF, M = roofModel(G, RF), b = (G.rot - 180) * RAD, cb = Math.cos(b), sb = Math.sin(b);
+  const toW = (x, y) => [x * cb + y * sb, -x * sb + y * cb], z0 = raiseBottom(G), out = [];
+  const wallF = finishOf(G.col), roofF = finishOf(RF && RF.col);
+  const aW = wallF ? FINISH_ALPHA[wallF.cls] : 0.5, aR = roofF ? FINISH_ALPHA[roofF.cls] : 0.65;
+  const azOf = (x, y) => ((Math.atan2(x, y) / RAD) + 360) % 360;
+  M.walls.forEach(wl => {
+    const sg = wl.sg, n = toW(sg.n[0], sg.n[1]);
+    const P = (u, z) => { const w = toW(sg.a[0] + (sg.b[0] - sg.a[0]) * u / sg.len, sg.a[1] + (sg.b[1] - sg.a[1]) * u / sg.len); return [w[0], w[1], z]; };
+    const uz = [[0, z0], [sg.len, z0]].concat(wl.prof.slice().reverse().map(q => [q[0], q[1]]));
+    let ar = 0; uz.forEach((q, i) => { const r = uz[(i + 1) % uz.length]; ar += q[0] * r[1] - r[0] * q[1]; });
+    const wn = segWindow(sg, G), R = wn ? unitRects(sg, wn, G, M.H0) : [];
+    out.push({ kind:'wall', sg, face:segFace(sg), pts:uz.map(q => P(q[0], q[1])), n:[n[0], n[1], 0], tilt:90, az:azOf(n[0], n[1]),
+      area:Math.abs(ar) / 2, winArea:R.reduce((a2, q) => a2 + (q.b - q.a) * (q.v1 - q.v0), 0), wins:R.map(q => [P(q.a, q.v0), P(q.b, q.v0), P(q.b, q.v1), P(q.a, q.v1)]), alpha:aW,
+      c:P(sg.len / 2, (z0 + wl.prof.reduce((a2, q) => Math.max(a2, q[1]), 0)) / 2) });
+  });
+  M.pieces.forEach(pc => {
+    const f = pc.f, nh = toW(-f.t * f.a, -f.t * f.b), L = Math.hypot(nh[0], nh[1], 1), n = [nh[0] / L, nh[1] / L, 1 / L];
+    let pa = 0; pc.poly.forEach((q, i) => { const r = pc.poly[(i + 1) % pc.poly.length]; pa += q[0] * r[1] - r[0] * q[1]; });
+    const pts = pc.poly.map(q => { const w = toW(q[0], q[1]); return [w[0], w[1], M.zOf(f, q[0], q[1])]; });
+    const c = pts.reduce((a2, q) => [a2[0] + q[0] / pts.length, a2[1] + q[1] / pts.length, a2[2] + q[2] / pts.length], [0, 0, 0]);
+    out.push({ kind:'roof', pc, pts, n, tilt:Math.acos(clamp(n[2], -1, 1)) / RAD, az:Math.hypot(nh[0], nh[1]) > 1e-6 ? azOf(nh[0], nh[1]) : null, area:Math.abs(pa) / 2 * L, winArea:0, wins:[], alpha:aR, c });
+  });
+  return { faces:out, M, wallF, roofF, aW, aR };
+}
+const sfDirName = az => az === null ? t('flat') : COMPASS8[Math.round(az / 45) % 8];
+
+/* ---- noise ---- */
+/* reference levels, dB(A), as L_Aeq over the day at the reference distance d0 (m): this application's
+   teaching values, of the order measured beside such sources — not a regulation, not a prediction */
+const SF_NOISE_KIND = {
+  motorway:{ L:76, d0:10, line:true, prof:'road', en:'Motorway', pt:'Autoestrada' },
+  trunk:{ L:73, d0:10, line:true, prof:'road', en:'Trunk road', pt:'Via rápida / IP' },
+  primary:{ L:70, d0:10, line:true, prof:'road', en:'Primary road', pt:'Estrada principal' },
+  secondary:{ L:66, d0:10, line:true, prof:'road', en:'Secondary road', pt:'Estrada secundária' },
+  tertiary:{ L:62, d0:10, line:true, prof:'road', en:'Tertiary road', pt:'Estrada local' },
+  street:{ L:56, d0:10, line:true, prof:'road', en:'Residential street', pt:'Rua residencial' },
+  rail:{ L:66, d0:25, line:true, prof:'rail', en:'Railway', pt:'Via-férrea' },
+  tram:{ L:62, d0:10, line:true, prof:'road', en:'Tram or metro', pt:'Elétrico ou metro' },
+  airport:{ L:72, d0:1000, line:false, prof:'air', en:'Airport', pt:'Aeroporto' },
+  airfield:{ L:58, d0:500, line:false, prof:'day', en:'Airfield', pt:'Aeródromo' },
+  industry:{ L:62, d0:20, line:false, prof:'ind', en:'Industrial area', pt:'Zona industrial' }
+};
+const SF_NOISE_CTX = { rural:{ L:38, en:'Rural', pt:'Rural' }, suburban:{ L:45, en:'Suburban', pt:'Suburbano' }, urban:{ L:52, en:'Urban', pt:'Urbano' }, centre:{ L:58, en:'Dense centre', pt:'Centro denso' } };
+/* RGR, DL 9/2007, art. 11: limits at the receiver, dB(A) */
+const SF_RGR = { mixed:{ den:65, n:55, en:'Mixed zone', pt:'Zona mista' }, sensitive:{ den:55, n:45, en:'Sensitive zone', pt:'Zona sensível' },
+  unclassified:{ den:63, n:53, en:'Not yet classified', pt:'Zona não classificada' } };
+/* the hour's emission against the day's level, dB — teaching profiles */
+const SF_PROF = {
+  road:[-10, -11, -12, -12, -10, -7, -3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, -2, -3, -5, -7],
+  rail:[-8, -12, -12, -12, -8, -4, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -2, -3, -4, -6],
+  air:[-15, -20, -20, -20, -15, -6, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -3, -8],
+  day:[-40, -40, -40, -40, -40, -40, -20, -3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -3, -10, -30, -40, -40, -40],
+  ind:[-6, -6, -6, -6, -6, -6, -3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -4, -5, -6, -6, -6],
+  bg:[-8, -9, -10, -10, -8, -5, -2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -2, -3, -4, -6]
+};
+const dbSum = arr => { const s = arr.reduce((a, L) => a + Math.pow(10, L / 10), 0); return s > 0 ? 10 * Math.log10(s) : -Infinity; };
+/** One source's level at the building, before the face it meets: L_day at its distance. */
+function sfSrcLevel(o) {
+  const K = SF_NOISE_KIND[o.kind]; if (!K) return -Infinity;
+  const L0 = isFinite(+o.L) ? +o.L : K.L, dd = Math.max(K.d0, +o.d || K.d0);
+  return L0 - (K.line ? 10 : 20) * Math.log10(dd / K.d0) - 0.005 * (dd - K.d0);
+}
+/** The wind's own noise on the facades: about 2 dB per m/s above a 25 dB floor — an indicative teaching relation. */
+const sfWindNoise = v => v > 0 ? 25 + 2.2 * v : -Infinity;
+/** The level on one face at one hour (dB(A)): each source weighed by how squarely the face looks at it,
+    a face turned away keeping a tenth (−10 dB) of what it would get, the roof −3 dB; the background and the wind added. */
+function sfFaceNoise(face, h, m) {
+  const N = SF.noise, list = [];
+  N.src.forEach(o => { if (o.on === false) return; const K = SF_NOISE_KIND[o.kind]; if (!K) return;
+    const bz = (+o.brg || 0) * RAD, dir = [Math.sin(bz), Math.cos(bz)];
+    const c = face.kind === 'roof' ? (face.n[2] > 0.95 ? 0 : face.n[0] * dir[0] + face.n[1] * dir[1]) : face.n[0] * dir[0] + face.n[1] * dir[1];
+    const k = face.kind === 'roof' && face.n[2] > 0.95 ? 0.5 : Math.max(0.1, (1 + c) / 2);
+    list.push(sfSrcLevel(o) + SF_PROF[K.prof][h] + 10 * Math.log10(k)); });
+  const bg = SF_NOISE_CTX[N.ctx] || SF_NOISE_CTX.suburban; list.push(bg.L + SF_PROF.bg[h]);
+  const day = sfDay(m); if (day.wmax !== null && N.wind !== false) list.push(sfWindNoise(day.wmax * 0.6));
+  return dbSum(list);
+}
+/** L_day (07–19), L_evening (19–23), L_night (23–07) and L_den, Directive 2002/49/EC. */
+function sfFaceDen(face, months) {
+  const per = (h0, h1) => { const arr = []; months.forEach(m => { for (let h = h0; h !== h1; h = (h + 1) % 24) arr.push(sfFaceNoise(face, h, m)); });
+    return 10 * Math.log10(arr.reduce((a, L) => a + Math.pow(10, L / 10), 0) / arr.length); };
+  const Ld = per(7, 19), Le = per(19, 23), Ln = per(23, 7);
+  return { Ld, Le, Ln, Lden:10 * Math.log10((12 * Math.pow(10, Ld / 10) + 4 * Math.pow(10, (Le + 5) / 10) + 8 * Math.pow(10, (Ln + 10) / 10)) / 24) };
+}
+/** OpenStreetMap through the Overpass API: roads, railways, airports and industrial land around the plot.
+    Only the plot's coordinates leave the browser. Each feature keeps its nearest point: distance and bearing. */
+async function sfFetchNoise(onDone) {
+  const N = SF.noise, pp = ENV.plot || STATE.site, la = pp.lat, lo = pp.lon;
+  N.status = VMT('Asking OpenStreetMap…', 'A consultar o OpenStreetMap…'); onDone();
+  const q = '[out:json][timeout:40];('
+    + 'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street|motorway_link|trunk_link|primary_link)$"](around:1200,' + la + ',' + lo + ');'
+    + 'way["railway"~"^(rail|light_rail|tram|subway)$"](around:2000,' + la + ',' + lo + ');'
+    + 'way["landuse"="industrial"](around:1500,' + la + ',' + lo + ');'
+    + 'nwr["aeroway"="aerodrome"](around:15000,' + la + ',' + lo + ');'
+    + ');out tags geom;';
+  try {
+    const r = await fetch('https://overpass-api.de/api/interpreter', { method:'POST', body:'data=' + encodeURIComponent(q), headers:{ 'Content-Type':'application/x-www-form-urlencoded' } });
+    const j = await r.json(), kx = 111320 * Math.cos(la * RAD), ky = 110540, best = {};
+    (j.elements || []).forEach(e => {
+      const tg = e.tags || {}, hw = tg.highway, rw = tg.railway;
+      const kind = hw ? (/^motorway/.test(hw) ? 'motorway' : /^trunk/.test(hw) ? 'trunk' : /^primary/.test(hw) ? 'primary' : hw === 'secondary' ? 'secondary' : hw === 'tertiary' ? 'tertiary' : 'street')
+        : rw ? (rw === 'rail' ? 'rail' : 'tram') : tg.aeroway === 'aerodrome' ? (tg.iata || tg.aerodrome === 'international' ? 'airport' : 'airfield') : tg.landuse === 'industrial' ? 'industry' : null;
+      if (!kind) return;
+      const pts = [];
+      if (e.type === 'node') pts.push([e.lon, e.lat]);
+      (e.geometry || []).forEach(g => pts.push([g.lon, g.lat]));
+      (e.members || []).forEach(mb => (mb.geometry || []).forEach(g => pts.push([g.lon, g.lat])));
+      if (e.bounds && !pts.length) pts.push([(e.bounds.minlon + e.bounds.maxlon) / 2, (e.bounds.minlat + e.bounds.maxlat) / 2]);
+      if (!pts.length) return;
+      const xy = pts.map(p => [(p[0] - lo) * kx, (p[1] - la) * ky]);
+      let bd = Infinity, bp = xy[0];
+      const near = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy, tt = L2 > 0 ? clamp(-(a[0] * dx + a[1] * dy) / L2, 0, 1) : 0, p = [a[0] + dx * tt, a[1] + dy * tt], d = Math.hypot(p[0], p[1]); if (d < bd) { bd = d; bp = p; } };
+      if (xy.length === 1) near(xy[0], xy[0]); else for (let i = 1; i < xy.length; i++) near(xy[i - 1], xy[i]);
+      const name = tg.name || tg.ref || '', key = kind + '|' + (name || e.id);
+      if (!best[key] || bd < best[key].d) best[key] = { kind, name, d:Math.round(Math.max(1, bd)), brg:Math.round(((Math.atan2(bp[0], bp[1]) / RAD) + 360) % 360), on:true, osm:true };
+    });
+    /* the strongest few at the plot: every street of a town would only bury the ones that matter */
+    const got = Object.values(best).sort((p, q2) => sfSrcLevel(q2) - sfSrcLevel(p)).slice(0, 14);
+    N.src = N.src.filter(o => !o.osm).concat(got);
+    N.fetched = new Date().toISOString().slice(0, 10);
+    N.status = got.length ? VMT(got.length + ' sources from OpenStreetMap — check and correct them below.', got.length + ' fontes do OpenStreetMap — verifique-as e corrija abaixo.')
+      : VMT('OpenStreetMap shows no roads, railways, airports or industry near the plot.', 'O OpenStreetMap não mostra estradas, vias-férreas, aeroportos ou indústria perto da parcela.');
+  } catch (e) { N.status = VMT('OpenStreetMap could not be reached — add the sources by hand.', 'Não foi possível consultar o OpenStreetMap — acrescente as fontes à mão.'); }
+  onDone();
+}
+
+/* ---- colour ---- */
+const SF_RAMP = {
+  rad:[[0, '#1E2A5A'], [0.25, '#3B5BA9'], [0.5, '#4FA3A5'], [0.7, '#E7C547'], [0.88, '#F08A24'], [1, '#C8321E']],
+  light:[[0, '#20232A'], [0.3, '#5E5A73'], [0.6, '#C9B458'], [0.85, '#F3E58A'], [1, '#FFFBE6']],
+  temp:[[0, '#2B4C9B'], [0.3, '#7FB2E0'], [0.5, '#F2F0E6'], [0.7, '#F2B36B'], [0.85, '#E0612F'], [1, '#9E1B1B']],
+  noise:[[0, '#3E8E41'], [0.2, '#9BCB5A'], [0.4, '#F0E14A'], [0.55, '#F2A33A'], [0.7, '#E2462F'], [0.85, '#A51F55'], [1, '#4B2C83']]
+};
+function sfColour(kind, f) {
+  const R = SF_RAMP[kind], x = clamp(f, 0, 1);
+  for (let i = 1; i < R.length; i++) if (x <= R[i][0]) {
+    const a = R[i - 1], b = R[i], k = (x - a[0]) / Math.max(1e-9, b[0] - a[0]), ca = parseInt(a[1].slice(1), 16), cb2 = parseInt(b[1].slice(1), 16);
+    const ch = s => Math.round(((ca >> s) & 255) + (((cb2 >> s) & 255) - ((ca >> s) & 255)) * k);
+    return 'rgb(' + ch(16) + ',' + ch(8) + ',' + ch(0) + ')';
+  }
+  return R[R.length - 1][1];
+}
+/* what each tab reads, at an hour or over the day, for one face and a set of months */
+const SF_TAB = {
+  rad:{ title:'Solar radiation', unitH:'W/m²', unitD:'kWh/m²·day', rangeH:[0, 900], rangeD:[0, 7],
+    val(fc, months, h, mode) { if (mode === 'day') return months.reduce((a, m) => a + sfDay(m).hrs.reduce((s, hr) => s + sfPlaneIrr(hr, fc.n).tot, 0), 0) / months.length / 1000;
+      return months.reduce((a, m) => a + sfPlaneIrr(sfDay(m).hrs[h], fc.n).tot, 0) / months.length; } },
+  temp:{ title:'Outdoor temperature', unitH:'°C', unitD:'°C peak', rangeH:[-5, 55], rangeD:[-5, 55],
+    sa(fc, hr) { return hr.T + fc.alpha * sfPlaneIrr(hr, fc.n).tot / 17 - 3.9 * Math.max(0, fc.n[2]); },
+    val(fc, months, h, mode) { if (mode === 'day') return months.reduce((a, m) => a + Math.max(...sfDay(m).hrs.map(hr => this.sa(fc, hr))), 0) / months.length;
+      return months.reduce((a, m) => a + this.sa(fc, sfDay(m).hrs[h]), 0) / months.length; } },
+  light:{ title:'Daylight', unitH:'klx', unitD:'klx·h/day', rangeH:[0, 100], rangeD:[0, 600],
+    lux(fc, hr) { const q = sfPlaneIrr(hr, fc.n); return (105 * q.beam + 120 * q.dif) / 1000; },
+    val(fc, months, h, mode) { if (mode === 'day') return months.reduce((a, m) => a + sfDay(m).hrs.reduce((s, hr) => s + this.lux(fc, hr), 0), 0) / months.length;
+      return months.reduce((a, m) => a + this.lux(fc, sfDay(m).hrs[h]), 0) / months.length; } },
+  noise:{ title:'Noise', unitH:'dB(A)', unitD:'dB(A) L_den', rangeH:[35, 80], rangeD:[35, 80],
+    val(fc, months, h, mode) { if (mode === 'day') return sfFaceDen(fc, months).Lden;
+      return 10 * Math.log10(months.reduce((a, m) => a + Math.pow(10, sfFaceNoise(fc, h, m) / 10), 0) / months.length); } }
+};
+
+/** The model drawn in false colour, once or twice side by side (winter | summer). */
+function sfRender(ctx, W, H, kind, sets, cam) {
+  const T = SF_TAB[kind], mode = SF.sel.mode, h = Math.floor(SF.sel.h) % 24, F0 = sfFaces(), faces = F0.faces;
+  const rng = mode === 'day' ? T.rangeD : T.rangeH, legendH = 46;
+  const A = camAxes(cam, 8), reach = faces.reduce((a, f) => Math.max(a, ...f.pts.map(q => Math.hypot(q[0], q[1]))), 4), Rg = reach * 1.7;
+  const Hmax = faces.reduce((a, f) => Math.max(a, ...f.pts.map(q => q[2])), 3);
+  camPersp(A, Rg, 0, 0, Hmax / 2);
+  const cols = sets.length, cw = W / cols;
+  /* the scale that fits the ground disc and the model into one column */
+  const probe = [];
+  for (let a = 0; a < 360; a += 15) probe.push(camUV(A, Rg * Math.sin(a * RAD), Rg * Math.cos(a * RAD), 0));
+  faces.forEach(f => f.pts.forEach(q => probe.push(camUV(A, q[0], q[1], q[2]))));
+  const u0 = Math.min(...probe.map(p => p[0])), u1 = Math.max(...probe.map(p => p[0])), v0 = Math.min(...probe.map(p => p[1])), v1 = Math.max(...probe.map(p => p[1]));
+  const sc = Math.min((cw - 24) / (u1 - u0), (H - legendH - 46) / (v1 - v0));
+  sets.forEach((set, ci) => {
+    const ox = ci * cw + (cw - (u1 - u0) * sc) / 2 - u0 * sc, oy = 34 + (v1 * sc);
+    const pt = (x, y, z) => { const q = camUV(A, x, y, z); return [ox + q[0] * sc, oy - q[1] * sc]; };
+    /* the ground and its compass */
+    ctx.beginPath(); for (let a = 0; a <= 360; a += 5) { const q = pt(Rg * Math.sin(a * RAD), Rg * Math.cos(a * RAD), 0); a ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }
+    ctx.closePath(); ctx.fillStyle = '#EEF0EA'; ctx.fill(); stroke(ctx, '#D5D8D0', 1); ctx.stroke();
+    ['N', 'E', 'S', 'W'].forEach((c2, i) => { const a = i * 90, q = pt((Rg + 0.9) * Math.sin(a * RAD), (Rg + 0.9) * Math.cos(a * RAD), 0);
+      label(ctx, COMPASS8[i * 2], q[0], q[1], c2 === 'N' ? CH.ink : CH.muted, F(11, '700'), 'center', 'middle'); });
+    /* the sun at the hour, or the noise sources' bearings */
+    const m0 = set.months[0], hr = sfDay(m0).hrs[h];
+    if (kind !== 'noise' && mode !== 'day' && hr.s[2] > 0.02) {
+      const az = Math.atan2(hr.s[0], hr.s[1]), q = pt(Rg * 0.92 * Math.sin(az), Rg * 0.92 * Math.cos(az), 0);
+      ctx.fillStyle = '#F59E0B'; ctx.beginPath(); ctx.arc(q[0], q[1], 7, 0, 6.284); ctx.fill();
+      label(ctx, fmt(Math.asin(hr.s[2]) / RAD, 0) + '°', q[0], q[1] - 12, '#B45309', F(10, '700'), 'center', 'middle');
+    }
+    if (kind === 'noise') SF.noise.src.filter(o => o.on !== false).forEach(o => {
+      const bz = (+o.brg || 0) * RAD, a = pt(Rg * 0.98 * Math.sin(bz), Rg * 0.98 * Math.cos(bz), 0), b2 = pt(reach * 1.05 * Math.sin(bz), reach * 1.05 * Math.cos(bz), 0);
+      const lv = sfSrcLevel(o); stroke(ctx, sfColour('noise', (lv - 35) / 45), 2.2, [5, 4]); seg(ctx, a[0], a[1], b2[0], b2[1]); ctx.setLineDash([]);
+      label(ctx, (VL(SF_NOISE_KIND[o.kind]) || o.kind).slice(0, 18) + ' ' + fmt(o.d, 0) + ' m', a[0], a[1] - 9, '#3A3530', F(9.5, '600'), 'center', 'middle'); });
+    /* the faces, back to front, roofs over the walls they meet */
+    const vis = faces.filter(f => camSees(A, f.n[0], f.n[1], f.n[2]));
+    const dep = f => f.pts.reduce((a, q) => a + camDepth(A, q[0], q[1], q[2]), 0) / f.pts.length;
+    vis.sort((p, q) => (p.kind === 'roof' && q.kind === 'wall' ? 1 : p.kind === 'wall' && q.kind === 'roof' ? -1 : 0) || dep(q) - dep(p));
+    const scr = vis.map(f => f.pts.map(q => pt(q[0], q[1], q[2]))), labs = [];
+    vis.forEach((f, fi) => {
+      const v = T.val(f, set.months, h, mode); f._v = v;
+      ctx.beginPath(); f.pts.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath();
+      ctx.fillStyle = sfColour(kind, (v - rng[0]) / (rng[1] - rng[0])); ctx.fill(); stroke(ctx, '#2A2622', 1.1); ctx.stroke();
+      f.wins.forEach(w => { ctx.beginPath(); w.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath(); stroke(ctx, 'rgba(255,255,255,.9)', 1.4); ctx.stroke(); });
+      if (f.area > 3) labs.push({ fi, c:pt(f.c[0], f.c[1], f.c[2]), txt:fmt(v, (kind === 'rad' && mode === 'day') || kind === 'temp' ? 1 : 0) });
+    });
+    labs.forEach(L => { if (scr.some((P, j) => j > L.fi && inPoly(L.c[0], L.c[1], P))) return;
+      ctx.font = F(10.5, '700'); const tw = ctx.measureText(L.txt).width; ctx.fillStyle = 'rgba(255,255,255,.82)'; ctx.fillRect(L.c[0] - tw / 2 - 3, L.c[1] - 8, tw + 6, 15);
+      label(ctx, L.txt, L.c[0], L.c[1], '#1F1B17', F(10.5, '700'), 'center', 'middle'); });
+    label(ctx, set.name, ci * cw + 12, 18, CH.ink, F(12, '700'), 'left', 'middle');
+    label(ctx, set.months.map(m => MON3[m]).join(' ') + (mode === 'day' ? ' · ' + t('whole day') : ' · ' + String(h).padStart(2, '0') + ':30 ' + t('solar time')), ci * cw + 12, H - legendH - 8, CH.muted, F(10.5), 'left', 'middle');
+  });
+  /* the legend */
+  const lx = 16, ly = H - legendH + 10, lw = W - 32;
+  for (let i = 0; i < 100; i++) { ctx.fillStyle = sfColour(kind, i / 99); ctx.fillRect(lx + lw * i / 100, ly, lw / 100 + 1, 10); }
+  for (let k = 0; k <= 5; k++) { const x = lx + lw * k / 5, v = rng[0] + (rng[1] - rng[0]) * k / 5; seg(ctx, x, ly + 10, x, ly + 14); label(ctx, fmt(v, 0), x, ly + 23, CH.muted, F(10), k === 0 ? 'left' : k === 5 ? 'right' : 'center', 'middle'); }
+  label(ctx, t(mode === 'day' ? T.unitD : T.unitH), W / 2, ly + 34, CH.ink, F(10.5, '600'), 'center', 'middle');
+}
+
+/** The four tabs share one page builder. */
+function buildSurfaces(host, kind) {
+  const S = STATE.site, C = STATE.clim, G = MASS;
+  if (!S || !C || !G) { host.appendChild(el('p', { text:t('Define the site first — go to the Site tab.') })); return; }
+  const T = SF_TAB[kind], SEAS = SF_SEASON(S.lat);
+  if (!SF.sel.months) SF.sel.months = SEAS.winter.slice();
+  const heads = {
+    rad:['Solar radiation', 'The sun on every wall and roof plane: irradiance at the hour, or the day’s total, for the months chosen — winter and summer side by side.'],
+    temp:['Outdoor temperature', 'The air temperature at the hour and the sol-air temperature each surface reaches from the sun it absorbs and its colour.'],
+    light:['Daylight', 'The daylight falling on each wall and roof plane: illuminance at the hour, or the day’s light exposure.'],
+    noise:['Noise', 'The sound reaching each face from roads, railways, airports, industry, the town and the wind — at the hour, or as L_den over the day.']
+  };
+  pageHead(host, heads[kind][0], heads[kind][1]);
+  const bench = host.appendChild(el('div', { class:'bench vent' }));
+  const rail = bench.appendChild(el('div', { class:'rail' }));
+  const stage = bench.appendChild(el('div', { class:'stage' }));
+  const props = bench.appendChild(el('div', { class:'props' }));
+  benchStage(stage);
+  const cam = SF.cam[kind];
+  let panel = null;
+  const sets = () => SF.sel.compare ? [{ name:t('Winter'), months:SEAS.winter }, { name:t('Summer'), months:SEAS.summer }] : [{ name:t(T.title), months:SF.sel.months }];
+  const redraw = () => { if (panel) panel.draw(); readings(); };
+  /* re-read when the site's ERA5 figures arrive */
+  radiationFor(S, () => { Object.keys(SF_DAY_CACHE).forEach(k => delete SF_DAY_CACHE[k]); redraw(); });
+  sfClimFor(S, () => { Object.keys(SF_DAY_CACHE).forEach(k => delete SF_DAY_CACHE[k]); redraw(); });
+
+  /* left: when */
+  rail.appendChild(el('div', { class:'gh', text:t('Months') }));
+  const mBox = rail.appendChild(el('div', { class:'seg', style:'flex-wrap:wrap' }));
+  const mBtns = MON3.map((mn, i) => mBox.appendChild(el('button', { type:'button', text:mn, 'aria-pressed':String(SF.sel.months.includes(i)), onclick:() => {
+    const ms = SF.sel.months, k = ms.indexOf(i); if (k >= 0 && ms.length > 1) ms.splice(k, 1); else if (k < 0) ms.push(i); ms.sort((a, b) => a - b);
+    SF.sel.compare = false; paint(); redraw(); } })));
+  const sBox = rail.appendChild(el('div', { class:'seg', style:'margin-top:6px;flex-wrap:wrap' }));
+  [['Winter', () => SEAS.winter], ['Summer', () => SEAS.summer], ['Year', () => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]].forEach(([nm, fn]) =>
+    sBox.appendChild(el('button', { type:'button', text:t(nm), onclick:() => { SF.sel.months = fn().slice(); SF.sel.compare = false; paint(); redraw(); } })));
+  const cmp = rail.appendChild(checkCtl(t('Winter and summer side by side'), SF.sel.compare, v => { SF.sel.compare = v; redraw(); }));
+  rail.appendChild(el('div', { class:'gh', text:t('Hour') }));
+  const modeSeg = rail.appendChild(segCtl(t('Reading'), [{ value:'hour', label:t('At the hour') }, { value:'day', label:kind === 'noise' ? 'L_den' : t('Whole day') }], SF.sel.mode, v => { SF.sel.mode = v; redraw(); }));
+  rail.appendChild(rangeCtl(t('Solar time'), 0, 23, 1, SF.sel.h, v => { SF.sel.h = v; if (SF.sel.mode !== 'hour') { SF.sel.mode = 'hour'; modeSeg.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-pressed', String(i === 0))); } redraw(); }, v => String(v).padStart(2, '0') + ':30'));
+  function paint() { mBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(SF.sel.months.includes(i)))); const c = cmp.querySelector('input'); if (c) c.checked = SF.sel.compare; }
+
+  /* left, on Noise: the sources */
+  if (kind === 'noise') {
+    const N = SF.noise;
+    rail.appendChild(el('div', { class:'gh', text:t('Noise sources') }));
+    const st = rail.appendChild(el('p', { class:'hint', text:N.status || '' }));
+    rail.appendChild(el('button', { class:'btn', type:'button', text:t('Fetch roads, railways, airports and industry (OpenStreetMap)'), onclick:() => sfFetchNoise(() => { st.textContent = N.status; listSrc(); redraw(); }) }));
+    rail.appendChild(el('label', { class:'ctl' }, [el('span', { text:t('Surroundings') }), (() => { const s = el('select', { onchange:e => { N.ctx = e.target.value; redraw(); } });
+      Object.keys(SF_NOISE_CTX).forEach(k => s.appendChild(el('option', { value:k, text:VL(SF_NOISE_CTX[k]) + ' · ' + SF_NOISE_CTX[k].L + ' dB', selected:N.ctx === k ? '' : null }))); return s; })()]));
+    rail.appendChild(el('label', { class:'ctl' }, [el('span', { text:t('Zone (RGR)') }), (() => { const s = el('select', { onchange:e => { N.zone = e.target.value; redraw(); } });
+      Object.keys(SF_RGR).forEach(k => s.appendChild(el('option', { value:k, text:VL(SF_RGR[k]) + ' · L_den ≤ ' + SF_RGR[k].den + ', L_n ≤ ' + SF_RGR[k].n, selected:N.zone === k ? '' : null }))); return s; })()]));
+    rail.appendChild(checkCtl(t('Wind noise (windiest hours of the month)'), N.wind !== false, v => { N.wind = v; redraw(); }));
+    const list = rail.appendChild(el('div', { class:'sfsrc' }));
+    function listSrc() {
+      list.innerHTML = '';
+      N.src.forEach((o, i) => {
+        const row = list.appendChild(el('div', { style:'display:grid;grid-template-columns:auto 1fr;gap:3px 6px;border-top:1px solid var(--line);padding:5px 0;font-size:12px' }));
+        row.appendChild(el('input', { type:'checkbox', checked:o.on !== false ? '' : null, onchange:e => { o.on = e.target.checked; redraw(); } }));
+        const sel = el('select', { onchange:e => { o.kind = e.target.value; delete o.L; listSrc(); redraw(); } });
+        Object.keys(SF_NOISE_KIND).forEach(k => sel.appendChild(el('option', { value:k, text:VL(SF_NOISE_KIND[k]), selected:o.kind === k ? '' : null })));
+        row.appendChild(el('div', null, [sel, el('span', { text:o.name ? ' ' + o.name : '', style:'color:var(--muted)' })]));
+        row.appendChild(el('span'));
+        const num = (lb, k, lo, hi, step, def) => el('label', { style:'display:inline-flex;align-items:center;gap:3px;margin-right:6px' }, [document.createTextNode(lb),
+          el('input', { type:'number', min:lo, max:hi, step, value:isFinite(+o[k]) ? +o[k] : def, style:'width:58px', onchange:e => { const v = +String(e.target.value).replace(',', '.'); if (isFinite(v)) { o[k] = clamp(v, lo, hi); redraw(); } } })]);
+        row.appendChild(el('div', null, [num(t('distance m'), 'd', 1, 20000, 5, 50), num(t('bearing °'), 'brg', 0, 359, 5, 180),
+          num('dB(A)', 'L', 30, 100, 1, SF_NOISE_KIND[o.kind] ? SF_NOISE_KIND[o.kind].L : 60),
+          el('button', { class:'x', type:'button', text:'✕', title:t('Remove'), onclick:() => { N.src.splice(i, 1); listSrc(); redraw(); } })]));
+      });
+      list.appendChild(el('button', { class:'btn small', type:'button', text:'+ ' + t('source'), onclick:() => { N.src.push({ kind:'street', d:30, brg:180, on:true }); listSrc(); redraw(); } }));
+    }
+    listSrc();
+  }
+
+  /* middle: the model */
+  camBar(stage, cam, () => G.rot, () => redraw(), null, set => [['S', 'From the south', () => set(270, 30)], ['N', 'From the north', () => set(90, 30)]], 8);
+  panel = makePanel(stage, { title:T.title, note:t('False colour on every wall and roof plane — drag to turn the model'), heightFn:w => Math.round(SF.sel.compare ? Math.max(360, w / 1.9) : w / 1.35),
+    render:(ctx, W, H) => sfRender(ctx, W, H, kind, sets(), cam),
+    csv:() => csvRows(csvOut()) });
+  { const orb = orbitDrag(cam, (az, e) => { cam.az = ((az % 360) + 360) % 360; cam.el = clamp(e, 8, 89.5); panel.draw(); });
+    panel.canvas.addEventListener('pointerdown', ev => { orb.start(ev); panel.canvas.setPointerCapture(ev.pointerId); });
+    panel.canvas.addEventListener('pointermove', ev => orb.move(ev));
+    panel.canvas.addEventListener('pointerup', () => orb.end()); }
+
+  /* right: the readings */
+  const out = props.appendChild(el('div'));
+  function rows(months) {
+    const F0 = sfFaces(), h = Math.floor(SF.sel.h) % 24;
+    return F0.faces.filter(f => f.area > 0.5).map(f => {
+      const name = f.kind === 'wall' ? VMT('Wall', 'Parede') + ' ' + sfDirName(f.az) : VMT('Roof', 'Cobertura') + ' ' + sfDirName(f.az) + (f.az === null ? '' : ' ' + fmt(f.tilt, 0) + '°');
+      return { f, name, vH:T.val(f, months, h, 'hour'), vD:T.val(f, months, h, 'day') }; });
+  }
+  function readings() {
+    out.innerHTML = '';
+    const sets0 = sets(), mode = SF.sel.mode;
+    sets0.forEach(set => {
+      const R = rows(set.months);
+      out.appendChild(el('div', { class:'gh', text:set.name + ' · ' + set.months.map(m => MON3[m]).join(' ') }));
+      let head, body;
+      if (kind === 'rad') {
+        const days = set.months.reduce((a, m) => a + MONTH_DAYS[m], 0);
+        head = [t('Surface'), 'W/m²', 'kWh/m²·d', t('glass kWh')];
+        body = R.map(r => [r.name, fmt(r.vH, 0), fmt(r.vD, 2), r.f.winArea ? fmt(r.vD * r.f.winArea * days, 0) : '—']);
+      } else if (kind === 'temp') {
+        const air = set.months.reduce((a, m) => a + sfDay(m).hrs[Math.floor(SF.sel.h) % 24].T, 0) / set.months.length;
+        out.appendChild(el('p', { class:'hint', html:t('Air at the hour') + ': <b>' + fmt(air, 1) + ' °C</b>' }));
+        head = [t('Surface'), 'α', '°C', t('peak'), 'Δ ' + t('air')];
+        body = R.map(r => [r.name, fmt(r.f.alpha, 2), fmt(r.vH, 1), fmt(r.vD, 1), '+' + fmt(r.vH - air, 1)]);
+      } else if (kind === 'light') {
+        head = [t('Surface'), 'klx', 'klx·h/d', 'h > 10 klx'];
+        body = R.map(r => [r.name, fmt(r.vH, 1), fmt(r.vD, 0), fmt(set.months.reduce((a, m) => a + sfDay(m).hrs.filter(hr => SF_TAB.light.lux(r.f, hr) >= 10).length, 0) / set.months.length, 1)]);
+      } else {
+        const Z = SF_RGR[SF.noise.zone] || SF_RGR.mixed;
+        head = [t('Surface'), 'L_d', 'L_e', 'L_n', 'L_den', 'RGR'];
+        body = R.filter(r => r.f.kind === 'wall').map(r => { const D = sfFaceDen(r.f, set.months), ok = D.Lden <= Z.den && D.Ln <= Z.n;
+          return [r.name, fmt(D.Ld, 0), fmt(D.Le, 0), fmt(D.Ln, 0), fmt(D.Lden, 0), '<span class="pill ' + (ok ? 'ok' : 'bad') + '" title="' + (ok ? t('within') : t('over')) + '">' + (ok ? '✓' : '✗') + '</span>']; });
+      }
+      const tb = out.appendChild(dataTable(head, body, [0])); tb.style.fontSize = '11.5px';
+    });
+    out.appendChild(el('p', { class:'hint', text:{ rad:t('W/m² at the hour · kWh/m² a day · glass kWh: on the windows over the months chosen.'), temp:t('Sol-air °C at the hour · the day’s peak · Δ air: above the air at the hour.'),
+      light:t('klx at the hour · klx·h a day · hours a day over 10 klx.'), noise:t('dB(A) · RGR: L_den and L_n against the zone chosen.') }[kind] }));
+    const d0 = sfDay(SF.sel.months[0]);
+    out.appendChild(el('p', { class:'hint', style:'margin-top:8px', text:(kind === 'rad' || kind === 'light' || kind === 'temp' ? (d0.Hmeasured ? t('Irradiation: ERA5 1991–2020 (Open-Meteo).') : t('Irradiation: estimate, clearness index 0.55, until the ERA5 figures arrive.')) + ' ' : '')
+      + (kind === 'temp' ? (d0.drMeasured ? t('Daily range: ERA5 1991–2020.') : t('Daily range: 8 K assumed until the ERA5 figures arrive.')) + ' ' + (sfFaces().wallF ? '' : t('Wall colour not chosen on Site: α = 0.5 assumed.')) : '') }));
+  }
+  function csvOut() {
+    const R = [['Tab', 'Months', 'Mode', 'Solar hour', 'Surface', 'Area (m²)', 'Tilt (°)', 'Azimuth (°)', 'Value', 'Unit']];
+    sets().forEach(set => rows(set.months).forEach(r => R.push([T.title, set.months.map(m => MON3[m]).join(' '), SF.sel.mode, SF.sel.h, r.name, r.f.area.toFixed(2), r.f.tilt.toFixed(0), r.f.az === null ? '' : r.f.az.toFixed(0),
+      (SF.sel.mode === 'day' ? r.vD : r.vH).toFixed(2), SF.sel.mode === 'day' ? T.unitD : T.unitH])));
+    return R;
+  }
+  readings();
+
+  /* below: what it rests on */
+  const notes = {
+    rad:'Each month’s mean day (Duffie & Beckman 2013, ch. 2): the site’s daily global irradiation on the horizontal — ERA5 1991–2020 via Open-Meteo, or 0.55 × the extraterrestrial value until it arrives — split into beam and diffuse by Erbs, Klein & Duffie (1982), spread over the hours by Collares-Pereira & Rabl (1979), and carried onto each plane with an isotropic sky and a ground albedo of 0.2. The hour is solar time. Neighbours, trees and the building’s own wings cast no shade here — Openings and Environmental draw those. <b>kWh on the glass</b> is the irradiation on the facade’s windows over the months chosen, before the glass’s g-value: what Olgyay asks of the south in winter and of every other face in summer.',
+    temp:'The month’s mean air temperature from the site’s normals, swung over the day by the ERA5 1991–2020 mean daily range with the hourly profile of ASHRAE Fundamentals (2017, ch. 14). Each surface reaches its <b>sol-air temperature</b> T<sub>sa</sub> = T + α·I/h<sub>o</sub> − ε·ΔR/h<sub>o</sub> (ASHRAE, ch. 18): α the absorptance of the colour chosen on Site (light 0.4, medium 0.5, dark 0.8; the roof 0.65 until a colour is chosen on Roof), I the irradiance of the Solar radiation tab, h<sub>o</sub> = 17 W/(m²·K), and 3.9 K lost to the night sky on a horizontal surface, nothing on a vertical one. It is the temperature the outside air would need to drive the same heat into the surface — the reason a dark west wall and a dark roof run hot on a summer afternoon.',
+    light:'The irradiance of the Solar radiation tab turned into daylight with a luminous efficacy of 105 lm/W for the sun’s beam and 120 lm/W for the diffuse sky and the ground’s reflection — typical values (Littlefair 1985); the true efficacy moves with the sky. The figures are on the outside of each surface. What a room receives depends on the window, the glass and the room’s depth: for that, a daylight-factor calculation (EN 17037).',
+    noise:'Each source has a reference level L<sub>Aeq</sub> over the day at a reference distance — this application’s teaching values for its kind, editable — and loses 3 dB per doubling of distance from a road or a railway (a line) and 6 dB from an airport or an industrial area (a point), with 0.005 dB/m of air absorption (geometric divergence, ISO 9613-2). A face looking at the source receives it in full, a side face half (−3 dB), a face turned away a tenth (−10 dB, screened by the building); the roof 3 dB less. The hour follows a teaching profile per kind — roads quieter at night, airports almost silent from midnight to five. The town’s background and the wind of the month’s windiest hours (about 2 dB per m/s, indicative) add on. Over the day the levels combine into L<sub>d</sub>, L<sub>e</sub>, L<sub>n</sub> and <b>L<sub>den</sub></b> as Directive 2002/49/EC defines them, read against the limits of the Regulamento Geral do Ruído (DL 9/2007, art. 11). A screening for a first design pass, not a noise map: for that, the municipal strategic noise maps and an acoustic study.'
+  };
+  host.appendChild(hint('sf-' + kind, notes[kind]));
+}
+const buildSurfRad = host => buildSurfaces(host, 'rad'), buildSurfTemp = host => buildSurfaces(host, 'temp'),
+  buildSurfLight = host => buildSurfaces(host, 'light'), buildSurfNoise = host => buildSurfaces(host, 'noise');
+
 const TABS_OLGYAY = [
   { key:'environment', label:'Environmental', build:buildEnvironment },
   { key:'site', label:'Site', build:buildSite },
   { key:'roof', label:'Roof', build:buildRoof },
   { key:'openings', label:'Openings and Shadowing', build:buildOpenings },
   { key:'ventilation', label:'Ventilation', build:buildVentilation },
+  { key:'sunrad', label:'Solar radiation', build:buildSurfRad },
+  { key:'outtemp', label:'Outdoor temperature', build:buildSurfTemp },
+  { key:'daylight', label:'Daylight', build:buildSurfLight },
+  { key:'noise', label:'Noise', build:buildSurfNoise },
   { key:'visualization', label:'Visualization', build:buildRender }
 ];
 const TABS = TABS_OLGYAY.slice();
@@ -29520,6 +29982,7 @@ function studyJSON() {
       map:ENV.map, view:ENV.view, az:isFinite(+ENV.az) ? +(+ENV.az).toFixed(1) : 225, wide:!!ENV.wide, nb:ENV.nb !== false },
     mass:MASS, roof:ROOF, open:OPEN, sunsp:SUNSP, rwin:RWIN, turb:TURB, veg:SCENE.veg, walls:SCENE.walls, water:SCENE.water, waterAir:SCENE.waterAir || null, stackDT:SCENE.stackDT,
     render:{ prompt:RENDER_PROMPT },
+    surf:{ sel:SF.sel, noise:SF.noise },
     vern:STATE.vern || null,
     mesh:IMPORT.active ? { name:IMPORT.name, L:+IMPORT.L.toFixed(2), D:+IMPORT.D.toFixed(2), H:+IMPORT.H.toFixed(2) } : null,
     readout:JSON.parse(toDecisionsJSON()),
@@ -29715,6 +30178,11 @@ function continueToConstruction() {
     same objects — Ventilation holds them by reference. */
 function applyStudy(o) {
   const fin = (v, d) => isFinite(+v) ? +v : d;
+  /* the four surface tabs: the months and hour read, and the noise sources the student kept */
+  if (o.surf && typeof o.surf === 'object') { try {
+    if (o.surf.sel && Array.isArray(o.surf.sel.months) && o.surf.sel.months.length) SF.sel = Object.assign({}, SF.sel, { months:o.surf.sel.months.filter(m => m >= 0 && m < 12).map(Number), h:clamp(fin(o.surf.sel.h, 12), 0, 23), mode:o.surf.sel.mode === 'day' ? 'day' : 'hour', compare:!!o.surf.sel.compare });
+    if (o.surf.noise && Array.isArray(o.surf.noise.src)) SF.noise = Object.assign({}, SF.noise, o.surf.noise, { src:o.surf.noise.src.filter(q => q && SF_NOISE_KIND[q.kind]).slice(0, 40) });
+  } catch (e) { console.error(e); } }
   const M0 = o.mass || {};
   MASS.L = clamp(Math.round(fin(M0.L, 12) * 2) / 2, 6, L_MAX);
   MASS.D = clamp(Math.round(fin(M0.D, 8) * 2) / 2, 4, 16);
@@ -32730,6 +33198,67 @@ Object.assign(PT, {
   "mean": "média",
   "Summer": "Verão",
   "Ventilation": "Ventilação",
+  "Solar radiation": "Radiação solar",
+  "The sun on every wall and roof plane: irradiance at the hour, or the day’s total, for the months chosen — winter and summer side by side.": "O sol em cada parede e pano de cobertura: irradiância à hora, ou o total do dia, nos meses escolhidos — inverno e verão lado a lado.",
+  "The air temperature at the hour and the sol-air temperature each surface reaches from the sun it absorbs and its colour.": "A temperatura do ar à hora e a temperatura ar-sol que cada superfície atinge com o sol que absorve e a sua cor.",
+  "The daylight falling on each wall and roof plane: illuminance at the hour, or the day’s light exposure.": "A luz natural que cai em cada parede e pano de cobertura: iluminância à hora, ou a exposição luminosa do dia.",
+  "The sound reaching each face from roads, railways, airports, industry, the town and the wind — at the hour, or as L_den over the day.": "O som que chega a cada fachada vindo de estradas, vias-férreas, aeroportos, indústria, da cidade e do vento — à hora, ou como L_den ao longo do dia.",
+  "glass kWh": "kWh vidro",
+  "peak": "pico",
+  "air": "ar",
+  "W/m² at the hour · kWh/m² a day · glass kWh: on the windows over the months chosen.": "W/m² à hora · kWh/m² por dia · kWh vidro: nas janelas ao longo dos meses escolhidos.",
+  "Sol-air °C at the hour · the day’s peak · Δ air: above the air at the hour.": "°C ar-sol à hora · pico do dia · Δ ar: acima do ar à hora.",
+  "klx at the hour · klx·h a day · hours a day over 10 klx.": "klx à hora · klx·h por dia · horas por dia acima de 10 klx.",
+  "dB(A) · RGR: L_den and L_n against the zone chosen.": "dB(A) · RGR: L_den e L_n face à zona escolhida.",
+  "Outdoor temperature": "Temperatura exterior",
+  "Daylight": "Luz natural",
+  "Noise": "Ruído",
+  "Winter": "Inverno",
+  "Year": "Ano",
+  "Months": "Meses",
+  "Hour": "Hora",
+  "Reading": "Leitura",
+  "At the hour": "À hora",
+  "Whole day": "Dia inteiro",
+  "whole day": "dia inteiro",
+  "Winter and summer side by side": "Inverno e verão lado a lado",
+  "solar time": "hora solar",
+  "Noise sources": "Fontes de ruído",
+  "Fetch roads, railways, airports and industry (OpenStreetMap)": "Obter estradas, vias-férreas, aeroportos e indústria (OpenStreetMap)",
+  "Surroundings": "Envolvente",
+  "Zone (RGR)": "Zona (RGR)",
+  "Wind noise (windiest hours of the month)": "Ruído do vento (horas mais ventosas do mês)",
+  "distance m": "distância m",
+  "bearing °": "rumo °",
+  "Remove": "Remover",
+  "source": "fonte",
+  "False colour on every wall and roof plane — drag to turn the model": "Cor falsa em cada parede e pano de cobertura — arraste para rodar o modelo",
+  "From the south": "De sul",
+  "From the north": "De norte",
+  "Surface": "Superfície",
+  "Wall": "Parede",
+  "Roof": "Cobertura",
+  "flat": "plana",
+  "at the hour": "à hora",
+  "day": "dia",
+  "kWh on the glass, period": "kWh no vidro, período",
+  "Air at the hour": "Ar à hora",
+  "day’s peak": "pico do dia",
+  "above the air": "acima do ar",
+  "hours over 10 klx": "horas acima de 10 klx",
+  "RGR": "RGR",
+  "within": "cumpre",
+  "over": "excede",
+  "Irradiation: ERA5 1991–2020 (Open-Meteo).": "Irradiação: ERA5 1991–2020 (Open-Meteo).",
+  "Irradiation: estimate, clearness index 0.55, until the ERA5 figures arrive.": "Irradiação: estimativa, índice de limpidez 0,55, até chegarem os valores ERA5.",
+  "Daily range: ERA5 1991–2020.": "Amplitude diária: ERA5 1991–2020.",
+  "Daily range: 8 K assumed until the ERA5 figures arrive.": "Amplitude diária: 8 K admitidos até chegarem os valores ERA5.",
+  "Wall colour not chosen on Site: α = 0.5 assumed.": "Cor das paredes não escolhida em Implantação: α = 0,5 admitido.",
+  "W/m²": "W/m²",
+  "kWh/m²·day": "kWh/m²·dia",
+  "°C peak": "°C de pico",
+  "klx·h/day": "klx·h/dia",
+  "dB(A) L_den": "dB(A) L_den",
   "Place wall": "Colocar muro",
   "Standard size": "Dimensão normalizada",
   "Skylights": "Clarabóias",
@@ -32903,6 +33432,14 @@ Object.assign(PT, {
 
 /* --- the long captions, keyed by identifier ----------------------------- */
 Object.assign(PT_HINT, {
+  "sf-rad":
+    "O dia médio de cada mês (Duffie & Beckman 2013, cap. 2): a irradiação global diária no plano horizontal do local — ERA5 1991–2020 via Open-Meteo, ou 0,55 × o valor extraterrestre até chegar — separada em directa e difusa por Erbs, Klein & Duffie (1982), repartida pelas horas por Collares-Pereira & Rabl (1979) e levada a cada plano com céu isotrópico e albedo do solo de 0,2. A hora é hora solar. Vizinhos, árvores e as próprias alas do edifício não fazem sombra aqui — Vãos e Ambiente desenham-nas. <b>kWh no vidro</b> é a irradiação sobre as janelas da fachada nos meses escolhidos, antes do factor solar do vidro: o que Olgyay pede ao sul no inverno e a todas as outras fachadas no verão.",
+  "sf-temp":
+    "A temperatura média do ar do mês, das normais do local, oscilando ao longo do dia com a amplitude diária média ERA5 1991–2020 e o perfil horário da ASHRAE Fundamentals (2017, cap. 14). Cada superfície atinge a sua <b>temperatura ar-sol</b> T<sub>sa</sub> = T + α·I/h<sub>o</sub> − ε·ΔR/h<sub>o</sub> (ASHRAE, cap. 18): α a absortância da cor escolhida em Implantação (clara 0,4, média 0,5, escura 0,8; a cobertura 0,65 até escolher uma cor em Cobertura), I a irradiância do separador Radiação solar, h<sub>o</sub> = 17 W/(m²·K), e 3,9 K perdidos para o céu nocturno numa superfície horizontal, nada numa vertical. É a temperatura que o ar exterior precisaria de ter para meter o mesmo calor na superfície — a razão por que uma parede escura a poente e uma cobertura escura aquecem numa tarde de verão.",
+  "sf-light":
+    "A irradiância do separador Radiação solar convertida em luz natural com uma eficácia luminosa de 105 lm/W para o feixe directo e 120 lm/W para o céu difuso e a reflexão do solo — valores típicos (Littlefair 1985); a eficácia real varia com o céu. Os valores são no exterior de cada superfície. O que um compartimento recebe depende da janela, do vidro e da profundidade do compartimento: para isso, um cálculo de factor de luz do dia (EN 17037).",
+  "sf-noise":
+    "Cada fonte tem um nível de referência L<sub>Aeq</sub> diurno a uma distância de referência — valores didácticos desta aplicação para o seu tipo, editáveis — e perde 3 dB por cada duplicação da distância a partir de uma estrada ou via-férrea (uma linha) e 6 dB a partir de um aeroporto ou de uma zona industrial (um ponto), com 0,005 dB/m de absorção atmosférica (divergência geométrica, ISO 9613-2). Uma fachada voltada para a fonte recebe-a por inteiro, uma fachada lateral metade (−3 dB), uma fachada de costas um décimo (−10 dB, protegida pelo edifício); a cobertura 3 dB menos. A hora segue um perfil didáctico por tipo — estradas mais calmas à noite, aeroportos quase em silêncio da meia-noite às cinco. O ruído de fundo da envolvente e o vento das horas mais ventosas do mês (cerca de 2 dB por m/s, indicativo) somam-se. Ao longo do dia os níveis combinam-se em L<sub>d</sub>, L<sub>e</sub>, L<sub>n</sub> e <b>L<sub>den</sub></b> como a Directiva 2002/49/CE os define, lidos contra os limites do Regulamento Geral do Ruído (DL 9/2007, art. 11.º). Uma triagem para uma primeira fase de projecto, não um mapa de ruído: para isso, os mapas estratégicos de ruído municipais e um estudo acústico.",
   'site-balc':
     '<b>Varandas</b>, até seis, cada uma numa parede do contorno. <b>Saliente</b>: uma laje ao nível do pavimento do seu piso, com uma guarda de 1,0 m à volta das arestas livres — a partir do primeiro andar, porque no rés-do-chão seria um terraço; para o piso de baixo é uma pala, e Aberturas e Sombreamento conta-a como tal sobre as janelas que cobre. <b>Reentrante</b>: uma loggia, o volume do piso recuado a partir da parede — no rés-do-chão, um alpendre. A sua janela passa para a parede do fundo, e o tecto e os lados sombreiam-na: Aberturas e Sombreamento conta uma pala ao nível do tecto e uma aleta em cada lado fechado. O volume também muda: uma loggia sai do volume aquecido, e os seus lados, tecto e pavimento passam a envolvente onde o edifício continua para lá deles, pelo que o <b>Factor de forma</b> sobe; uma varanda saliente não altera nenhum dos dois, embora a sua laje seja uma ponte térmica que o factor de forma não vê. No modelo, o <b>ponto redondo</b> de uma varanda desliza-a ao longo da parede mais próxima do ponteiro — passado um canto, muda para a parede seguinte, e perto de qualquer dos topos encosta-se ao canto — e o seu <b>ponto quadrado</b> define a largura ao longo da parede e a profundidade para fora dela. Num canto de onde a parede se afasta, uma varanda saliente dobra-o em L, com a mesma profundidade nas duas fachadas, e uma loggia abre-se para ambas. A coluna da esquerda define o mesmo: saliente ou reentrante, um piso ou todos, a parede para onde está virada, um lado ou qualquer dos cantos, largura e profundidade. Uma loggia mantém pelo menos 1,5 m de edifício atrás de si; uma varanda saliente fica a 0,3 m de qualquer parede que tenha em frente. Todas as vistas 3D as desenham, e a exportação CAD escreve-as — lajes, guardas, e cada loggia recortada nas paredes, no pavimento e na cobertura.',
   'sce-src':
