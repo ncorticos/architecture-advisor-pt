@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.215.0',
+  version:     '1.216.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -6960,10 +6960,10 @@ function camBar(stage, cam, rotFn, redraw, zoomKey, views, elMin) {
     its own factor (kept in this browser), ×1.25 a press, 50–250 %, the
     percentage itself resets. Frames multiply their fitted scale by it, so
     every projection — and every drag handle solved through one — follows. */
-const MODEL_ZOOM = Object.assign({ site:1, roof:1, openings:1, vent:1 }, (() => {
+const MODEL_ZOOM = Object.assign({ site:1, roof:1, openings:1, vent:1, surf:1 }, (() => {
   try {
     const o = JSON.parse(localStorage.getItem('arca-model-zoom') || '{}'), out = {};
-    for (const k of ['site', 'roof', 'openings', 'vent']) if (isFinite(o[k]) && o[k] >= 0.5 && o[k] <= 2.5) out[k] = +o[k];
+    for (const k of ['site', 'roof', 'openings', 'vent', 'surf']) if (isFinite(o[k]) && o[k] >= 0.5 && o[k] <= (k === 'surf' ? 6 : 2.5)) out[k] = +o[k];
     return out;
   } catch (e) { return {}; }
 })());
@@ -6983,7 +6983,7 @@ function zoomCtl(key, redraw) {
 const zoomSave = () => { try { localStorage.setItem('arca-model-zoom', JSON.stringify(MODEL_ZOOM)); } catch (e) {} };
 const ZOOMERS = {};
 function modelZoom(key, f) {
-  MODEL_ZOOM[key] = Math.round(clamp(zoomOf(key) * f, 0.5, 2.5) * 100) / 100;
+  MODEL_ZOOM[key] = Math.round(clamp(zoomOf(key) * f, 0.5, key === 'surf' ? 6 : 2.5) * 100) / 100;
   zoomSave();
   const z = ZOOMERS[key];
   if (z) {
@@ -29484,9 +29484,10 @@ function sfRender(ctx, W, H, kind, sets, cam) {
   const gc = [[-Gd, -Gd], [Gd, -Gd], [Gd, Gd], [-Gd, Gd]].map(([x, y]) => camUV(A, x, y, 0)), c0 = camUV(A, 0, 0, 0);
   const uMax = Math.max(...gc.map(q => Math.abs(q[0] - c0[0]))), gvMin = Math.min(...gc.map(q => q[1])), gvMax = Math.max(...gc.map(q => q[1]));
   const hTop = camUV(A, 0, 0, Math.max(10, Hmax + 1) + 0.45 * Hmax)[1] - c0[1], fTop = 40, fBot = H - legendH - 30;
-  const sc = Math.max(1, Math.min((cw / 2 - 16) / uMax, (fBot - fTop) / ((gvMax - gvMin) + hTop)));
+  /* the zoom of the surface tabs, one for both models side by side: they grow about the house, the frame stays */
+  const sc1 = Math.max(1, Math.min((cw / 2 - 16) / uMax, (fBot - fTop) / ((gvMax - gvMin) + hTop))), sc = sc1 * zoomOf('surf'), yc = fBot + gvMin * sc1 - c0[1] * sc1;
   sets.forEach((set, ci) => {
-    const ox = ci * cw + cw / 2 - c0[0] * sc, oy = fBot + gvMin * sc;
+    const ox = ci * cw + cw / 2 - c0[0] * sc, oy = yc + c0[1] * sc;
     const pt = (x, y, z) => { const q = camUV(A, x, y, z); return [ox + q[0] * sc, oy - q[1] * sc]; };
     /* the ground and its compass */
     ctx.save(); ctx.beginPath(); ctx.rect(ci * cw, 26, cw, H - legendH - 46); ctx.clip();
@@ -29693,10 +29694,11 @@ function buildSurfaces(host, kind) {
   }
 
   /* middle: the model */
-  camBar(stage, cam, () => G.rot, () => redraw(), null, set => [['S', 'From the south', () => set(270, 30)], ['N', 'From the north', () => set(90, 30)]], 8);
+  camBar(stage, cam, () => G.rot, () => redraw(), 'surf', set => [['S', 'From the south', () => set(270, 30)], ['N', 'From the north', () => set(90, 30)]], 8);
   panel = makePanel(stage, { title:T.title, note:t('False colour on every wall and roof plane — drag to turn the model'), heightFn:w => Math.round(SF.sel.compare ? Math.max(360, w / 1.9) : (phoneW(w) ? w * 0.95 + 80 : clamp(Math.min(w * 0.64, roomH() - 262), 340, 660)) + 76),
     render:(ctx, W, H) => sfRender(ctx, W, H, kind, sets(), cam),
     csv:() => csvRows(csvOut()) });
+  zoomGesture(panel.canvas, 'surf');
   { const orb = orbitDrag(cam, (az, e) => { cam.az = ((az % 360) + 360) % 360; cam.el = clamp(e, 8, 89.5); panel.draw(); });
     panel.canvas.addEventListener('pointerdown', ev => { orb.start(ev); panel.canvas.setPointerCapture(ev.pointerId); });
     panel.canvas.addEventListener('pointermove', ev => orb.move(ev));
