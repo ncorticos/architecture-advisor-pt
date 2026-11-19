@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.211.0',
+  version:     '1.212.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -10771,7 +10771,9 @@ function buildRoof(host) {
         const sg = wl.sg;
         if (!seen(sg.n[0], sg.n[1])) return;
         const ux = (sg.b[0] - sg.a[0]) / sg.len, uy = (sg.b[1] - sg.a[1]) / sg.len, P = (u, z) => [sg.a[0] + ux * u, sg.a[1] + uy * u, z];
-        faces.push({ pts:[P(0, raiseBottom(G)), P(sg.len, raiseBottom(G))].concat(wl.prof.slice().reverse().map(q => P(q[0], q[1]))), fill:wallCol(sg.n[1] !== 0), sg });
+        /* the windows and doors set on Openings, on their walls: the shade the roof casts is judged against them */
+        let wins = null; try { const wn = segWindow(sg, G); if (wn) wins = unitRects(sg, wn, G, M.H0).map(q => ({ door:q.door, pts:[P(q.a, q.v0), P(q.b, q.v0), P(q.b, q.v1), P(q.a, q.v1)] })); } catch (e) { wins = null; }
+        faces.push({ pts:[P(0, raiseBottom(G)), P(sg.len, raiseBottom(G))].concat(wl.prof.slice().reverse().map(q => P(q[0], q[1]))), fill:wallCol(sg.n[1] !== 0), sg, wins });
       });
       raiseFaces(G, M.pl.segs).forEach(rf => { if (rf.back || seen(rf.n[0], rf.n[1])) faces.push({ pts:rf.pts, fill:rf.fill, post:1 }); });
       M.steps.forEach(st => {
@@ -10855,7 +10857,9 @@ if (F.chim || F.par) {
             seg(ctx, a[0], a[1], b[0], b[1]); desk.line(a[0], a[1], b[0], b[1]);
           });
           paintRoofWins(ctx, RWS, F.pc, proj);
-        } else { stroke(ctx, CH.ink, 1.4); ctx.stroke(); desk.path(p, true); if (F.sg) balcHoles(ctx, BS.holes.get(F.sg), P3, dep3, sees3); }
+        } else { stroke(ctx, CH.ink, 1.4); ctx.stroke(); desk.path(p, true);
+          if (F.wins) F.wins.forEach(wq => { pathOf(wq.pts); ctx.fillStyle = wq.door ? '#8A6A4A' : 'rgba(219,234,254,.95)'; ctx.fill(); stroke(ctx, wq.door ? '#4A3622' : '#2563EB', 1.1); ctx.stroke(); });
+          if (F.sg) balcHoles(ctx, BS.holes.get(F.sg), P3, dep3, sees3); }
       });
 
       /* the chimney's crown, dragged along the roof */
