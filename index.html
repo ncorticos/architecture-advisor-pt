@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.213.0',
+  version:     '1.214.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -28935,6 +28935,7 @@ function supFaces(w) {
    The default levels, the hourly emission profiles, the screening and the wind-noise relation are
    this application's teaching values and are labelled as such. */
 let SF_GEO = null;
+const SF_MDOY = [17, 47, 75, 105, 135, 162, 198, 228, 258, 288, 318, 344];
 const SF = {
   sel:{ months:null, h:12, mode:'hour', compare:false },
   cam:{ rad:{ az:225, el:32 }, temp:{ az:225, el:32 }, light:{ az:225, el:32 }, noise:{ az:225, el:40 } },
@@ -28995,7 +28996,7 @@ function sfDay(m) {
     const dni = s[2] > 0.035 ? (gh - dh) / s[2] : 0;
     /* hour h + 0.5 sits between the profile's hour-ending h and h + 1 */
     const fr = (SF_ASHRAE[(h + 23) % 24] + SF_ASHRAE[h]) / 2;
-    hrs.push({ s, gh, dh:s[2] > 0.035 ? dh : gh, dni, T:Tm + dr * (SF_ASHRAE_MEAN - fr) });
+    hrs.push({ s, gh, dh:s[2] > 0.035 ? dh : gh, dni, T:Tm + dr * (SF_ASHRAE_MEAN - fr), doy:SF_MDOY[m] });
   }
   return SF_DAY_CACHE[key] = { hrs, dr, drMeasured:!!cr.dr, wmax:cr.wmax ? cr.wmax[m] : null, Hmeasured:hm.measured };
 }
@@ -29070,7 +29071,72 @@ function sfFaces() {
   });
   /* sample points just off each face, for the neighbours' shade: its centre and halfway to each corner */
   out.forEach(f => { f.samp = [f.c].concat(f.pts.map(q => [(q[0] + f.c[0]) / 2, (q[1] + f.c[1]) / 2, (q[2] + f.c[2]) / 2])).map(q => [q[0] + f.n[0] * 0.15, q[1] + f.n[1] * 0.15, q[2] + f.n[2] * 0.15]); });
-  return { faces:out, M, wallF, roofF, aW, aR };
+  /* everything else Passive systems draws, in the same frame: the canopy or pergola with its posts and slats, the balconies,
+     the plinth, the stairs, the chimney and the parapet, the overhangs and fins of Openings, the popular model's other
+     bodies and courtyard wall, the walls and the planting placed on Passive systems — each face read as the walls are,
+     each solid casting its shade (a pergola and a crown letting their share of the sun through) */
+  const prisms = [], W3 = q => { const w = toW(q[0], q[1]); return [w[0], w[1], q[2]]; }, Wn = n => { const w = toW(n[0], n[1]); return [w[0], w[1], n[2]]; };
+  const newell = P => { let x = 0, y = 0, z = 0; P.forEach((a, i) => { const b = P[(i + 1) % P.length]; x += (a[1] - b[1]) * (a[2] + b[2]); y += (a[2] - b[2]) * (a[0] + b[0]); z += (a[0] - b[0]) * (a[1] + b[1]); });
+    const L = Math.hypot(x, y, z); return L > 1e-9 ? [x / L, y / L, z / L] : null; };
+  let pid = 0;
+  const el = (P, nP, o) => { o = o || {}; if (!P || P.length < 3) return; const pts = P.map(W3); let n = nP ? Wn(nP) : newell(pts); if (!n) return;
+    const c = pts.reduce((a2, q) => [a2[0] + q[0] / pts.length, a2[1] + q[1] / pts.length, a2[2] + q[2] / pts.length], [0, 0, 0]);
+    if (!nP) { if (Math.abs(n[2]) > 0.7) { if (n[2] < 0 && !o.under) n = n.map(v => -v); }
+      else if (o.from) { const fw = W3(o.from); if ((c[0] - fw[0]) * n[0] + (c[1] - fw[1]) * n[1] < 0) n = n.map(v => -v); } }
+    let ax = 0, ay = 0, az = 0; pts.forEach((a, i) => { const b = pts[(i + 1) % pts.length]; ax += a[1] * b[2] - a[2] * b[1]; ay += a[2] * b[0] - a[0] * b[2]; az += a[0] * b[1] - a[1] * b[0]; });
+    const area = Math.abs(ax * n[0] + ay * n[1] + az * n[2]) / 2; if (area < 0.005) return;
+    out.push({ kind:'el', pts, n, tilt:Math.acos(clamp(n[2], -1, 1)) / RAD, az:Math.hypot(n[0], n[1]) > 1e-6 ? azOf(n[0], n[1]) : null, area, winArea:0, wins:[], alpha:o.alpha || 0.6, c, bld:'el' + (o.pid || 0), pid:o.pid }); };
+  const prism = (polyPlan, z0, z1, tau) => { const pts = polyPlan.map(q => { const w = toW(q[0], q[1]); return [w[0], w[1]]; }); pid++;
+    prisms.push({ pts, z0, z1, bb:sfBB(pts), nb:-1, el:true, id:pid, tau }); return pid; };
+  const boxEl = (B, o) => boxSides(B).forEach(([q, nn]) => el(q, nn, o));
+  const ctr = P => P.reduce((a2, q) => [a2[0] + q[0] / P.length, a2[1] + q[1] / P.length, (a2[2] || 0) + (q[2] || 0) / P.length], [0, 0, 0]);
+  try { roofCanopies(RF).forEach(({ c }) => { const h = canopySpanFor(M.pl.segs, c, H0of(G), M); if (!h) return;
+    const CP = canopyPts(h), per = isPergola(c), zt = Math.max(h.z0, h.z1), zb = Math.min(h.z0, h.z1) - (per ? 0.2 : CANOPY_THICK);
+    const id = prism(CP.quad.map(q => [q[0], q[1]]), zb, zt, per ? (doy => pergolaTau(c, doy)) : null), from = ctr(CP.quad);
+    if (!per || pergolaTopFill(c)) el(CP.quad, null, { pid:id, alpha:per ? 0.55 : 0.65 });
+    const sl = canopySlab(h); if (sl) [sl.outer, sl.sideA, sl.sideB].forEach(q => el(q, null, { pid:id, from }));
+    const fr = canopyFrame(h); fr.posts.concat(fr.beam ? [fr.beam] : [], fr.slats || []).forEach(B => boxEl(B, { pid:id, alpha:0.7 }));
+    fr.posts.forEach(B => prism([[B[0], B[1]], [B[3], B[1]], [B[3], B[4]], [B[0], B[4]]], B[2], B[5])); }); } catch (e) {}
+  try { balcScene(G).solids.forEach(sl => { el(sl.pts, sl.n, { alpha:0.6 }); }); balcScene(G).solids.filter(sl => sl.kind === 'top').forEach(sl => prism(sl.pts.map(q => [q[0], q[1]]), sl.pts[0][2] - BALC_SLAB, sl.pts[0][2])); } catch (e) {}
+  try { raiseFaces(G, M.pl.segs).forEach(rf => el(rf.pts, rf.n && rf.n.length === 3 ? rf.n : null, { from:[0, 0, 0] })); } catch (e) {}
+  try { stairsOf(MASS).forEach(({ st }) => { const all = []; (st.flights || []).forEach(fl => fl.forEach(f => all.push(...f.pts)));
+    (st.landing || []).forEach(l => { const b = l.box !== undefined ? l.box : l; all.push([b[0], b[1], b[2]], [b[3], b[4], b[5]]); });
+    if (!all.length) return; const xs = all.map(q => q[0]), ys = all.map(q => q[1]), zs = all.map(q => q[2]);
+    const id = prism([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)], [Math.min(...xs), Math.max(...ys)]], 0, Math.max(...zs) * 0.6);
+    (st.flights || []).forEach(fl => fl.forEach(f => el(f.pts, f.nn, { pid:id, alpha:0.55 })));
+    (st.landing || []).forEach(l => { boxEl(l.box !== undefined ? l.box : l, { pid:id, alpha:0.55 }); (l.guards || []).forEach(g => boxEl(g, { pid:id })); }); }); } catch (e) {}
+  try { const cp = []; pushChimPar(cp, M); const chs = cp.filter(q => q.chim), cc = chs.length ? ctr([].concat(...chs.map(q => q.pts))) : null;
+    if (cc) { const xs = [].concat(...chs.map(q => q.pts.map(p => p[0]))), ys = [].concat(...chs.map(q => q.pts.map(p => p[1]))), zs = [].concat(...chs.map(q => q.pts.map(p => p[2])));
+      const id = prism([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)], [Math.min(...xs), Math.max(...ys)]], Math.min(...zs), Math.max(...zs));
+      chs.forEach(q => el(q.pts, null, { pid:id, from:cc, alpha:aW })); }
+    cp.filter(q => q.par).forEach(q => el(q.pts, q.sg && q.kind === 'out' ? [q.sg.n[0], q.sg.n[1], 0] : q.sg && q.kind === 'in' ? [-q.sg.n[0], -q.sg.n[1], 0] : null, { alpha:aW })); } catch (e) {}
+  /* the overhangs and fins of Openings, at each window's head */
+  try { M.pl.segs.forEach(sg => { const w = segWindow(sg, G), o = w && OPEN[w.f]; if (!w || !o) return; const n = sg.n, u0 = w.uc - w.w / 2, u1 = w.uc + w.w / 2;
+    const on = (u, z, d) => [sg.a[0] + (sg.b[0] - sg.a[0]) * u / sg.len + n[0] * d, sg.a[1] + (sg.b[1] - sg.a[1]) * u / sg.len + n[1] * d, z];
+    w.rows.forEach(r => { const v0 = r.sill, v1 = Math.min(r.head, M.H0);
+      if (o.ovD > 0) (o.ovN <= 1 ? [v1] : Array.from({ length:o.ovN }, (_, i) => v0 + (v1 - v0) * i / (o.ovN - 1))).forEach(z => { const q = [on(u0, z, 0), on(u1, z, 0), on(u1, z, o.ovD), on(u0, z, o.ovD)];
+        const id = prism(q.map(p => [p[0], p[1]]), z - 0.05, z); el(q, [0, 0, 1], { pid:id, alpha:0.6 }); });
+      if (o.finN > 0 && o.finD > 0) faceFins(w.f).forEach(tq => { const u = u0 + tq * (u1 - u0), q = [on(u, v0, 0), on(u, v0, o.finD), on(u, v1, o.finD), on(u, v1, 0)];
+        const id = prism([on(u - 0.03, 0, 0), on(u + 0.03, 0, 0), on(u + 0.03, 0, o.finD), on(u - 0.03, 0, o.finD)].map(p => [p[0], p[1]]), v0, v1);
+        const tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len; el(q, [tx, ty, 0], { pid:id }); el(q.slice().reverse(), [-tx, -ty, 0], { pid:id }); }); }); }); } catch (e) {}
+  /* the popular model's other bodies, its varandas and porches, its courtyard wall */
+  try { const CB = vmCompanion(); CB.faces.forEach(q => { const cn = ctr(q.P); let best = null, bd = Infinity;
+      CB.blocks.forEach(B => { const bc = ctr(B.poly.map(p => [p[0], p[1], 0])), d = Math.hypot(bc[0] - cn[0], bc[1] - cn[1]); if (d < bd) { bd = d; best = bc; } });
+      el(q.P, null, { from:best || [0, 0, 0], alpha:q.roof ? aR : aW }); });
+    CB.blocks.forEach(B => prism(B.poly, 0, B.h)); } catch (e) {}
+  /* the walls and the planting set on Passive systems */
+  try { (SCENE.walls || []).forEach(w => { if (w.sup) { supFaces(w).forEach(f => { if (!f.ground) el(f.pts, null, { from:[w.x, w.y, 0] }); }); return; }
+      const hw = w.length / 2, t2 = 0.1, ax = w.along === 'y';
+      const B = ax ? [w.x - t2, w.y - hw, 0, w.x + t2, w.y + hw, w.height] : [w.x - hw, w.y - t2, 0, w.x + hw, w.y + t2, w.height];
+      const id = prism([[B[0], B[1]], [B[3], B[1]], [B[3], B[4]], [B[0], B[4]]], 0, w.height); boxEl(B, { pid:id, alpha:0.55 }); });
+    (SCENE.veg || []).forEach(v => { const H = +v.height || 4, tree = H >= 2.5, r = Math.max(0.6, H * (tree ? 0.32 : 0.45)), za = tree ? H * 0.35 : 0, ring = [];
+      for (let k = 0; k < 8; k++) ring.push([v.x + r * Math.cos(k * Math.PI / 4 + Math.PI / 8), v.y + r * Math.sin(k * Math.PI / 4 + Math.PI / 8)]);
+      const dens = isFinite(+v.density) ? clamp(+v.density, 0.2, 1) : 0.7, id = prism(ring, za, H, () => 1 - 0.85 * dens);
+      ring.forEach((a, k) => { const b = ring[(k + 1) % 8]; el([[a[0], a[1], za], [b[0], b[1], za], [b[0], b[1], H], [a[0], a[1], H]], null, { pid:id, from:[v.x, v.y, 0], alpha:0.75 }); });
+      el(ring.map(q => [q[0], q[1], H]), [0, 0, 1], { pid:id, alpha:0.75 });
+      if (tree) boxEl([v.x - 0.12, v.y - 0.12, 0, v.x + 0.12, v.y + 0.12, za], { pid:id, alpha:0.7 }); }); } catch (e) {}
+  out.forEach(f => { if (f.kind === 'el') f.samp = [f.c].concat(f.pts.map(q => [(q[0] + f.c[0]) / 2, (q[1] + f.c[1]) / 2, (q[2] + f.c[2]) / 2])).map(q => [q[0] + f.n[0] * 0.15, q[1] + f.n[1] * 0.15, q[2] + f.n[2] * 0.15]); });
+  return { faces:out, M, wallF, roofF, aW, aR, prisms };
 }
 const sfDirName = az => az === null ? t('flat') : COMPASS8[Math.round(az / 45) % 8];
 
@@ -29188,7 +29254,9 @@ function sfTerrain(onReady) {
 }
 /** Height of the ground at (x east, y north), m above the plot's centre: bilinear in the grid, 0 where none. */
 function sfGround(x, y) {
-  const r = sfTerrain(), g = r && r.g; if (!g) return 0;
+  /* the relief Passive systems reads (Copernicus DEM through Open-Meteo), where it has been fetched; else Terrarium */
+  const tv = (typeof KEEP !== 'undefined' && KEEP.vent && KEEP.vent.terrainGrid) || EXPORT_TERRAIN;
+  const r = tv ? null : sfTerrain(), g = tv || (r && r.g); if (!g) return 0;
   const c = (g.n - 1) / 2, fi = clamp(x / g.step + c, 0, g.n - 1.001), fj = clamp(y / g.step + c, 0, g.n - 1.001), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j;
   const H = (ii, jj) => g.h[jj * g.n + ii];
   return H(i, j) * (1 - a) * (1 - b) + H(i + 1, j) * a * (1 - b) + H(i, j + 1) * (1 - a) * b + H(i + 1, j + 1) * a * b;
@@ -29199,6 +29267,7 @@ function sfScene(F0, R) {
   const prisms = [];
   F0.faces.filter(f => f.kind === 'roof').forEach(f => { const pts = f.pts.map(q => [q[0], q[1]]), z1 = Math.max(...f.pts.map(q => q[2]));
     prisms.push({ pts, z0:0, z1, bb:sfBB(pts), nb:-1 }); });
+  (F0.prisms || []).forEach(p => prisms.push(p));
   const nbs = [], faces = [];
   if (ENV.nb !== false && NB.list.length) {
     const pp = ENV.plot || { lat:STATE.site.lat, lon:STATE.site.lon }, cl = Math.cos(pp.lat * RAD), mine = prisms.map(p => p.pts);
@@ -29215,11 +29284,11 @@ function sfScene(F0, R) {
       faces.push(sfMk({ kind:'nbroof', nb:k, pts:pts.map(q => [q[0], q[1], z1]), n:[0, 0, 1], area:Math.abs(ar) / 2, alpha:0.6 }));
     });
   }
-  /* the ground: square cells inside the disc, each on the relief, off the buildings' footprints */
+  /* the ground: the square of terrain Passive systems draws round the house, in cells on the relief, off the buildings' footprints */
   const cells = [], st = clamp(R / 45, 0.6, 2);
   for (let x = -R; x < R; x += st) for (let y = -R; y < R; y += st) {
-    const cx = x + st / 2, cy = y + st / 2; if (Math.hypot(cx, cy) > R - st * 0.3) continue;
-    if (prisms.some(p => cx > p.bb[0] && cx < p.bb[2] && cy > p.bb[1] && cy < p.bb[3] && inPoly(cx, cy, p.pts))) continue;
+    const cx = x + st / 2, cy = y + st / 2;
+    if (prisms.some(p => !p.el && cx > p.bb[0] && cx < p.bb[2] && cy > p.bb[1] && cy < p.bb[3] && inPoly(cx, cy, p.pts))) continue;
     const z = [[x, y], [x + st, y], [x + st, y + st], [x, y + st]].map(q => sfGround(q[0], q[1]));
     const gx = ((z[1] + z[2]) - (z[0] + z[3])) / (2 * st), gy = ((z[2] + z[3]) - (z[0] + z[1])) / (2 * st), L = Math.hypot(gx, gy, 1);
     cells.push(sfMk({ kind:'ground', pts:[[x, y, z[0]], [x + st, y, z[1]], [x + st, y + st, z[2]], [x, y + st, z[3]]], n:[-gx / L, -gy / L, 1 / L], area:st * st, alpha:0.7 }));
@@ -29262,17 +29331,26 @@ function sfMk(f) {
   return f;
 }
 /** Is the sun seen from point p? The ray is followed up to each prism's top. */
-function sfSeesSun(p, s, skipNb, skipDesign) {
-  if (s[2] <= 0.02 || !SF_ENV) return s[2] > 0.02;
+const sfSegT = (ax, ay, bx, by, cx, cy, dx, dy) => { const rx = bx - ax, ry = by - ay, sx = dx - cx, sy = dy - cy, den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-12) return -1; const t = ((cx - ax) * sy - (cy - ay) * sx) / den, u = ((cx - ax) * ry - (cy - ay) * rx) / den; return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : -1; };
+/** How much of the sun point p sees, 0–1: the prisms of the design, its canopies, walls and crowns, and the neighbours stop
+    the ray where it meets their sides, top or underside; a pergola or a crown lets its share through on that day. */
+function sfSeesSun(p, s, skipNb, skipDesign, doy, skipId) {
+  if (s[2] <= 0.02 || !SF_ENV) return s[2] > 0.02 ? 1 : 0;
+  let tr = 1;
   for (const P of SF_ENV.prisms) {
-    if ((skipDesign && P.nb < 0) || (skipNb !== undefined && P.nb === skipNb)) continue;
+    if ((skipDesign && P.nb < 0 && !P.el) || (skipNb !== undefined && P.nb === skipNb) || (skipId !== undefined && P.id === skipId)) continue;
     if (p[2] >= P.z1) continue;
     const l = (P.z1 - p[2]) / s[2], qx = p[0] + s[0] * l, qy = p[1] + s[1] * l;
     if (Math.max(p[0], qx) < P.bb[0] || Math.min(p[0], qx) > P.bb[2] || Math.max(p[1], qy) < P.bb[1] || Math.min(p[1], qy) > P.bb[3]) continue;
-    if (inPoly(p[0], p[1], P.pts) && p[2] >= P.z0) return false;
-    const Q = P.pts; for (let i = 0, j = Q.length - 1; i < Q.length; j = i++) if (segCross(p[0], p[1], qx, qy, Q[j][0], Q[j][1], Q[i][0], Q[i][1])) return false;
+    let hit = false;
+    if (p[2] >= P.z0) hit = inPoly(p[0], p[1], P.pts);
+    else { const l0 = (P.z0 - p[2]) / s[2]; hit = inPoly(p[0] + s[0] * l0, p[1] + s[1] * l0, P.pts); }
+    if (!hit) { const Q = P.pts; for (let i = 0, j = Q.length - 1; i < Q.length; j = i++) { const t = sfSegT(p[0], p[1], qx, qy, Q[j][0], Q[j][1], Q[i][0], Q[i][1]);
+      if (t >= 0 && p[2] + (P.z1 - p[2]) * t >= P.z0 - 1e-6) { hit = true; break; } } }
+    if (hit) { tr *= P.tau ? P.tau(doy) : 0; if (tr <= 1e-4) return 0; }
   }
-  return true;
+  return tr;
 }
 /** The share of a face in the sun at an hour, read on its sample points. */
 function sfSunFrac(fc, hr) {
@@ -29283,8 +29361,8 @@ function sfSunFrac(fc, hr) {
 function sfSunFracNow(fc, hr) {
   const pts = fc.samp || [];
   if (!pts.length || !SF_ENV) return 1;
-  const des = fc.kind === 'wall' || fc.kind === 'roof';
-  return pts.filter(p => sfSeesSun(p, hr.s, des ? undefined : fc.nb, des)).length / pts.length;
+  const des = fc.kind === 'wall' || fc.kind === 'roof' || fc.kind === 'el';
+  return pts.reduce((a, p) => a + sfSeesSun(p, hr.s, des ? undefined : fc.nb, des, hr.doy, fc.pid), 0) / pts.length;
 }
 function sfIrr(hr, fc) { const q = sfPlaneIrr(hr, fc.n), k = q.beam > 0 ? sfSunFrac(fc, hr) : 0, gnd = fc.kind === 'ground' || fc.kind === 'nbroof' ? 0 : 1;
   return { tot:q.beam * k + q.dif * (gnd ? 1 : 1), beam:q.beam * k, dif:q.dif }; }
@@ -29352,13 +29430,13 @@ const SF_TAB = {
 /** The model drawn in false colour, once or twice side by side (winter | summer). */
 function sfRender(ctx, W, H, kind, sets, cam) {
   const T = SF_TAB[kind], mode = SF.sel.mode, h = Math.floor(SF.sel.h) % 24;
-  const gKey = JSON.stringify([MASS, ROOF, OPEN]);
+  const gKey = JSON.stringify([MASS, ROOF, OPEN, SCENE.walls, SCENE.veg, vmCompanion().key]);
   if (!SF_GEO || SF_GEO.key !== gKey) { const F1 = sfFaces(); SF_GEO = { key:gKey, F0:F1, cells:new Map(F1.faces.map(f => [f, sfCells(f, 0.5)])), env:null }; }
   const F0 = SF_GEO.F0, faces = F0.faces;
   let rng = mode === 'day' ? T.rangeD : T.rangeH; const legendH = 46;
   const A = camAxes(cam, 8), reach = faces.reduce((a, f) => Math.max(a, ...f.pts.map(q => Math.hypot(q[0], q[1]))), 4), surr = SF.sel.surr !== false;
-  const Rg = surr ? clamp(reach * 2.6, 25, 75) : reach * 1.7;
-  const eKey = [Rg.toFixed(1), NB.list.length, NB.status, ENV.nb, JSON.stringify(ENV.plot || null), (sfTerrain() || {}).pending, !!(sfTerrain() || {}).g].join('|');
+  const Rg = surr ? clamp(reach * 2, 16, 60) : reach * 1.7;
+  const eKey = [Rg.toFixed(1), NB.list.length, NB.status, ENV.nb, JSON.stringify(ENV.plot || null), (sfTerrain() || {}).pending, !!(sfTerrain() || {}).g, !!((typeof KEEP !== 'undefined' && KEEP.vent && KEEP.vent.terrainGrid) || EXPORT_TERRAIN), gKey.length].join('|');
   if (surr && (!SF_GEO.env || SF_GEO.env.key !== eKey)) { const E0 = sfScene(F0, Rg); E0.nbFaces.forEach(f => SF_GEO.cells.set(f, sfCells(f, 1.5))); SF_GEO.env = Object.assign(E0, { key:eKey });
     faces.forEach(f => (SF_GEO.cells.get(f) || []).forEach(c => { delete c._sf; delete c._ng; delete c._vk; })); }
   SF_ENV = surr ? SF_GEO.env : null;
@@ -29381,7 +29459,7 @@ function sfRender(ctx, W, H, kind, sets, cam) {
   const cols = sets.length, cw = W / cols;
   /* the scale that fits the ground disc and the model into one column */
   const probe = [];
-  for (let a = 0; a < 360; a += 15) probe.push(camUV(A, Rg * Math.sin(a * RAD), Rg * Math.cos(a * RAD), 0));
+  [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j]) => probe.push(camUV(A, Rg * i, Rg * j, sfGround(Rg * i * 0.98, Rg * j * 0.98))));
   faces.concat(around).forEach(f => f.pts.forEach(q => probe.push(camUV(A, q[0], q[1], q[2]))));
   const u0 = Math.min(...probe.map(p => p[0])), u1 = Math.max(...probe.map(p => p[0])), v0 = Math.min(...probe.map(p => p[1])), v1 = Math.max(...probe.map(p => p[1]));
   const sc = Math.min((cw - 24) / (u1 - u0), (H - legendH - 46) / (v1 - v0));
@@ -29389,7 +29467,7 @@ function sfRender(ctx, W, H, kind, sets, cam) {
     const ox = ci * cw + (cw - (u1 - u0) * sc) / 2 - u0 * sc, oy = 34 + (v1 * sc);
     const pt = (x, y, z) => { const q = camUV(A, x, y, z); return [ox + q[0] * sc, oy - q[1] * sc]; };
     /* the ground and its compass */
-    ctx.beginPath(); for (let a = 0; a <= 360; a += 5) { const q = pt(Rg * Math.sin(a * RAD), Rg * Math.cos(a * RAD), 0); a ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }
+    ctx.beginPath(); [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j], k) => { const q = pt(Rg * i, Rg * j, sfGround(Rg * i * 0.98, Rg * j * 0.98)); k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
     ctx.closePath(); ctx.fillStyle = '#EEF0EA'; ctx.fill(); stroke(ctx, '#D5D8D0', 1); ctx.stroke();
     /* the ground's cells, back to front, each in its own colour */
     const colOf = v => sfColour(kind, (v - rng[0]) / (rng[1] - rng[0]));
@@ -29432,7 +29510,7 @@ function sfRender(ctx, W, H, kind, sets, cam) {
       stroke(ctx, f.bld ? '#2A2622' : 'rgba(42,38,34,.55)', f.bld ? 1.1 : 0.7); ctx.stroke();
       ctx.globalAlpha = 1;
       f.wins.forEach(w => { ctx.beginPath(); w.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath(); stroke(ctx, 'rgba(255,255,255,.9)', 1.4); ctx.stroke(); });
-      if (f.bld && f.area > 3) labs.push({ fi, c:pt(f.c[0], f.c[1], f.c[2]), txt:fmt(v, (kind === 'rad' && mode === 'day') || kind === 'temp' ? 1 : 0) });
+      if (f.bld && f.kind !== 'el' && f.area > 3) labs.push({ fi, c:pt(f.c[0], f.c[1], f.c[2]), txt:fmt(v, (kind === 'rad' && mode === 'day') || kind === 'temp' ? 1 : 0) });
     });
     labs.forEach(L => { if (scr.some((P, j) => j > L.fi && inPoly(L.c[0], L.c[1], P))) return;
       ctx.font = F(10.5, '700'); const tw = ctx.measureText(L.txt).width; ctx.fillStyle = 'rgba(255,255,255,.82)'; ctx.fillRect(L.c[0] - tw / 2 - 3, L.c[1] - 8, tw + 6, 15);
