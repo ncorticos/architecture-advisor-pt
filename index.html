@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.208.1',
+  version:     '1.209.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -11903,6 +11903,43 @@ if (F.chim || F.par) {
   zoomGesture(rcv, 'roof');
 }
 
+/* ---- the shading of a window, by the national method -----------------------------------------------
+   Manual SCE (Despacho n.º 6476-H/2021, with Despacho n.º 9216/2021), §8.4, pp. 83–88: the solar obstruction
+   factor Fs = Fh · Fo · Ff (Eq. 32), Fh from the horizon (Table 53, heating; 1 in cooling), Fo from overhangs
+   (Tables 54, heating, and 55, cooling) and Ff from side elements, left and right as seen from inside, their
+   product (Eq. 34; Tables 56 and 57); each angle taken at the middle of the glass, from its plane to the
+   element's edge. Fs is never under 0.27 / Xj (Eq. 33, Table 52). Mainland and Azores share a column, Madeira
+   has its own for Fh and Fo. */
+const SCE_ANG = [0, 30, 45, 60];
+const SCE_X = { N:0.27, NE:0.33, NW:0.33, E:0.56, W:0.56, SE:0.84, SW:0.84, S:1 };
+const SCE_FH = { ang:[0, 10, 20, 30, 40, 45],
+  cont:{ N:[1, 1, 1, 1, 1, 1], NE:[1, 0.96, 0.96, 0.85, 0.81, 0.80], E:[1, 0.94, 0.84, 0.71, 0.61, 0.58], SE:[1, 0.96, 0.88, 0.68, 0.52, 0.48], S:[1, 0.97, 0.90, 0.67, 0.50, 0.45] },
+  mad:{ N:[1, 1, 1, 1, 1, 1], NE:[1, 0.96, 0.91, 0.85, 0.81, 0.80], E:[1, 0.96, 0.87, 0.75, 0.64, 0.60], SE:[1, 0.97, 0.90, 0.77, 0.59, 0.53], S:[1, 0.98, 0.93, 0.80, 0.58, 0.51] } };
+const SCE_FO = {
+  i:{ cont:{ N:[1, 1, 1, 1], NE:[1, 0.94, 0.90, 0.85], E:[1, 0.84, 0.74, 0.64], SE:[1, 0.76, 0.63, 0.49], S:[1, 0.73, 0.59, 0.44] },
+      mad:{ N:[1, 1, 1, 1], NE:[1, 0.92, 0.88, 0.83], E:[1, 0.82, 0.72, 0.62], SE:[1, 0.68, 0.60, 0.48], S:[1, 0.45, 0.56, 0.43] } },
+  v:{ cont:{ N:[1, 0.98, 0.97, 0.94], NE:[1, 0.86, 0.78, 0.70], E:[1, 0.75, 0.64, 0.55], SE:[1, 0.68, 0.57, 0.50], S:[1, 0.63, 0.55, 0.52] },
+      mad:{ N:[1, 0.97, 0.95, 0.92], NE:[1, 0.84, 0.76, 0.68], E:[1, 0.74, 0.63, 0.55], SE:[1, 0.69, 0.60, 0.54], S:[1, 0.68, 0.62, 0.60] } } };
+const SCE_FF = {
+  i:{ L:{ N:[1, 1, 1, 1], NE:[1, 1, 1, 1], E:[1, 1, 1, 1], SE:[1, 0.97, 0.95, 0.91], S:[1, 0.93, 0.88, 0.83], SW:[1, 0.91, 0.86, 0.79], W:[1, 0.87, 0.80, 0.72], NW:[1, 0.89, 0.84, 0.80] },
+      R:{ N:[1, 1, 1, 1], NE:[1, 0.89, 0.84, 0.80], E:[1, 0.87, 0.80, 0.72], SE:[1, 0.91, 0.86, 0.79], S:[1, 0.93, 0.88, 0.83], SW:[1, 0.97, 0.95, 0.91], W:[1, 1, 1, 1], NW:[1, 1, 1, 1] } },
+  v:{ L:{ N:[1, 1, 1, 1], NE:[1, 1, 1, 1], E:[1, 0.96, 0.96, 0.95], SE:[1, 0.91, 0.85, 0.77], S:[1, 0.91, 0.87, 0.84], SW:[1, 0.96, 0.95, 0.93], W:[1, 0.95, 0.93, 0.88], NW:[1, 0.86, 0.78, 0.69] },
+      R:{ N:[1, 1, 1, 1], NE:[1, 0.86, 0.78, 0.69], E:[1, 0.95, 0.93, 0.88], SE:[1, 0.96, 0.95, 0.93], S:[1, 0.91, 0.87, 0.84], SW:[1, 0.91, 0.85, 0.77], W:[1, 0.96, 0.96, 0.95], NW:[1, 1, 1, 1] } } };
+/** A table read between its angles, held at its last angle beyond it. */
+const tabAt = (angs, vals, a) => { const x = clamp(a, angs[0], angs[angs.length - 1]); for (let i = 1; i < angs.length; i++) if (x <= angs[i]) return vals[i - 1] + (vals[i] - vals[i - 1]) * (x - angs[i - 1]) / (angs[i] - angs[i - 1]); return vals[vals.length - 1]; };
+/** The eight-point orientation of a facade and the five-column one the tables group it in. */
+const ori8 = az => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(((az % 360) + 360) % 360 / 45) % 8];
+const ori5 = o => ({ NW:'NE', W:'E', SW:'SE' })[o] || o;
+/** One window's factors from its angles: α overhang, βL and βR the side elements, γ the horizon. */
+function shadeStdFactors(o8, alpha, bL, bR, gam, site) {
+  const mad = site && site.lat < 33.5 && site.lon < -15, col = mad ? 'mad' : 'cont', o5 = ori5(o8);
+  const Fh = tabAt(SCE_FH.ang, SCE_FH[col][o5], gam);
+  const Foi = tabAt(SCE_ANG, SCE_FO.i[col][o5], alpha), Fov = tabAt(SCE_ANG, SCE_FO.v[col][o5], alpha);
+  const Ffi = tabAt(SCE_ANG, SCE_FF.i.L[o8], bL) * tabAt(SCE_ANG, SCE_FF.i.R[o8], bR), Ffv = tabAt(SCE_ANG, SCE_FF.v.L[o8], bL) * tabAt(SCE_ANG, SCE_FF.v.R[o8], bR);
+  const X = SCE_X[o8], floor = v => X * v < 0.27 ? 0.27 / X : v;
+  return { Fh, Foi, Fov, Ffi, Ffv, Fsi:floor(Fh * Foi * Ffi), Fsv:floor(Fov * Ffv), std:'SCE' };
+}
+const SHADE_STD_NAME = 'Manual SCE §8.4';
 function buildOpenings(host) {
   const S = STATE.site, C = STATE.clim;
   const lat = S.lat, lon = S.lon, tz = lon / 15;
@@ -11948,7 +11985,7 @@ function buildOpenings(host) {
   /** WWR fit of the clerestory glass against its own band — same teaching
       score as facadeScore, kept out of the four-side average. */
   const clerFit = () => {
-    const fn = facadeNumbers('C'), [lo, hi] = wwrRange(clerKey()), w = fn.eff;
+    const fn = facadeNumbers('C'), [lo, hi] = wwrRange('C'), w = fn.eff;
     if (!fn.wall) return null;
     if (w < lo) return lo > 0 ? clamp(100 * (w / lo), 0, 100) : 100;
     if (w > hi) return clamp(100 * (1 - (w - hi) / hi), 0, 100);
@@ -11977,11 +12014,14 @@ function buildOpenings(host) {
      source's number — treat them as a band to aim for, not a pass/fail. */
   const Hm = C.t.filter(v => v < 18).length, Cm = C.t.filter(v => v > 22).length;
   const heating = Hm >= Cm;
+  /* the target turns with the facade like a clock: 30 % from 15° east to 15° west of the equator side, falling
+     evenly to 15 % at east and west, then to 5 % at the pole side — a band of a quarter either side of it */
+  const wwrTargetAz = az => { const s = lat < 0 ? 0 : 180, th = Math.abs(((az - s + 540) % 360) - 180);
+    return th <= 15 ? 0.30 : th <= 90 ? 0.30 - 0.15 * (th - 15) / 75 : 0.15 - 0.10 * (th - 90) / 90; };
+  const wwrTarget = f => f === 'C' ? wwrTargetAz({ N:0, E:90, S:180, W:270 }[clerKey()]) : wwrTargetAz(faceAz(f));
   function wwrRange(f) {
-    const k = bandKey(f);
-    if (k === 'S') return heating ? [0.25, 0.40] : [0.15, 0.25];
-    if (k === 'N') return [0.05, 0.10];   // north: least glass — no winter sun, heat lost all year
-    return heating ? [0.10, 0.20] : [0.08, 0.15];
+    const tg = wwrTarget(f), d = Math.max(0.015, tg * 0.25);
+    return [+(tg - d).toFixed(3), +(tg + d).toFixed(3)];
   }
   /** 0–100 score for one side's WWR against its own recommended band: 100
       inside the band, falling off linearly to 0 at zero glazing below it, or
@@ -12672,6 +12712,49 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
   };
   /** The share of a season's beam on this side's glass its devices stop,
       in % — days as an array of days of the year (or one day). */
+  /** The national method's factors for one side, area-weighted over its windows: the angles read off the same
+      devices the drawing shows — the band's overhangs and fins, the eave, a canopy, balconies above, a loggia's
+      sides — and the horizon from the model's other bodies, the row and the courtyard wall. */
+  function shadeFactors(f) {
+    if (f === 'C') return null;
+    const rects = shadeRects(f); if (!rects.length) return null;
+    const o8 = ori8(faceAz(f)), acc = { Fh:0, Foi:0, Fov:0, Ffi:0, Ffv:0, Fsi:0, Fsv:0, a:0, bL:0, bR:0, g:0, A:0 };
+    rects.forEach(rc => {
+      const tc = rc.pts.reduce((a, q) => a + q[0], 0) / rc.pts.length, zc = rc.pts.reduce((a, q) => a + q[1], 0) / rc.pts.length, E = rc.els, sg = E.sg;
+      let a = 0, bL = 0, bR = 0, g = 0;
+      E.plates.forEach(P => { if (P.per) return; const ze = Math.max(P.za, P.zb); if (ze <= zc + 0.05 || tc < P.t0 - 0.05 || tc > P.t1 + 0.05) return; a = Math.max(a, Math.atan2(P.d, Math.max(0.05, Math.min(P.za, P.zb) - zc)) / RAD); });
+      E.fins.forEach(F => { if (zc < F.z0 - 0.3 || zc > F.z1 + 0.3) return; const dx = F.t - tc; if (Math.abs(dx) < 0.05) return; const b = Math.atan2(F.d, Math.abs(dx)) / RAD;
+        if (dx * rc.sgnT > 0) bR = Math.max(bR, b); else bL = Math.max(bL, b); });
+      if (E.blocks && E.blocks.length) { const tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, px = sg.a[0] + tx * tc, py = sg.a[1] + ty * tc;
+        E.blocks.forEach(B => B.poly.forEach((q, i) => { const r = B.poly[(i + 1) % B.poly.length]; [q, [(q[0] + r[0]) / 2, (q[1] + r[1]) / 2]].forEach(m => {
+          const dx = m[0] - px, dy = m[1] - py, d = Math.hypot(dx, dy); if (d < 0.3) return; const c = (dx * sg.n[0] + dy * sg.n[1]) / d; if (c < 0.5) return;   // within 60° of the normal
+          g = Math.max(g, Math.atan2(B.h - zc, d) / RAD); }); })); }
+      const k = shadeStdFactors(o8, a, bL, bR, g, STATE.site);
+      ['Fh', 'Foi', 'Fov', 'Ffi', 'Ffv', 'Fsi', 'Fsv'].forEach(q => { acc[q] += k[q] * rc.area; });
+      acc.a += a * rc.area; acc.bL += bL * rc.area; acc.bR += bR * rc.area; acc.g += g * rc.area; acc.A += rc.area; });
+    const out = { ori:o8 }; ['Fh', 'Foi', 'Fov', 'Ffi', 'Ffv', 'Fsi', 'Fsv', 'a', 'bL', 'bR', 'g'].forEach(q => { out[q] = acc[q] / acc.A; });
+    return out;
+  }
+  /** Every window rectangle of a side, storey by storey, with its devices and the points that sample its glass. */
+  function shadeRects(f) {
+    const bg = balcGeo(G), us = faceUnits(f), MmE = Mod(), H0E = MmE.H0, beiE = beiAny(RF) ? 1 : 0;
+    const cpC = (() => { const Mm = Mod(); for (const { c } of roofCanopies(RF)) { const h = canopySpanFor(Mm.pl.segs, c, h0(), Mm); if (h) return h; } return null; })();
+    const rects = [];
+    winsOf(f).forEach(x => x.w.rows.forEach((r, k) => {
+      const head = Math.min(r.head, h0()), u0 = x.w.uc - x.w.w / 2, u1 = x.w.uc + x.w.w / 2;
+      glassSpans(f, u0, u1, x.sg.len, k).filter(sp => sp.on && sp.b - sp.a > 0.05).forEach(sp => {
+        const u = us[sp.ui]; if (!u) return;
+        const eu = unitFloor(u, k); if (eu.gel) return;
+        const vv = eu.door ? doorSpanV(u, head, k, G.fh) : unitSpanV(u, r.sill, head, k, G.fh), w = sp.b - sp.a, h = vv[1] - vv[0];
+        if (h <= 0.05) return;
+        const nu = clamp(Math.ceil(w / 0.3), 3, 6), nv = clamp(Math.ceil(h / 0.3), 3, 6), pts = [];
+        for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) pts.push([sp.a + w * (i + 0.5) / nu, vv[0] + h * (j + 0.5) / nv]);
+        const tx = (x.sg.b[0] - x.sg.a[0]) / x.sg.len, ty = (x.sg.b[1] - x.sg.a[1]) / x.sg.len;
+        rects.push({ area:w * h, pts, sgnT:(tx * x.sg.n[1] - ty * x.sg.n[0]) > 0 ? 1 : -1, els:shadeElements(f, x, sp, k, vv, MmE, H0E, beiE, bg, cpC) });
+      });
+    }));
+    return rects;
+  }
   function shadeEffectiveness(f, days) {
     const doys = Array.isArray(days) ? days : [days];
     const wallAz = faceAz(f), bg = balcGeo(G), us = faceUnits(f);
@@ -12760,9 +12843,12 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     if ((o.ovD === 0 && o.finD === 0 && !balcOnFace(f) && !eaveOnFace(f) && !canopyOnFace(f) && !CB.blocks.length) || !faceUnits(f).some(u => u.on)) return null;
     const key = [f, heating, lat, lon, tz, h0(), JSON.stringify(o), JSON.stringify(RF), JSON.stringify(G), CB.key].join('|');
     if (SHADE_MEMO.has(key)) return SHADE_MEMO.get(key);
-    const summer = shadeEffectiveness(f, SHADE_SUMMER).pct;
-    const winter = shadeEffectiveness(f, SHADE_WINTER).pct;
-    const v = !heating ? summer : (summer + (100 - winter)) / 2;
+    /* the national method: what the devices cut of the cooling season's sun (1 − Fs,v), weighed by how much of the
+       year wants cooling, against what they cost of the heating season's (1 − Fs,i) — 50 is a wash; summer counts
+       half again, as overheating is the harder fault to undo */
+    const K = shadeFactors(f); if (!K) return null;
+    const cM = C.t.filter(v => v >= 20).length + 1, hM = C.t.filter(v => v < 15).length + 1, wc = cM / (cM + hM), wh = hM / (cM + hM);
+    const v = clamp(50 + 125 * (1.5 * wc * (1 - K.Fsv) - wh * (1 - K.Fsi)), 0, 100);
     if (SHADE_MEMO.size > 64) SHADE_MEMO.clear();
     SHADE_MEMO.set(key, v);
     return v;
@@ -12784,11 +12870,14 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       const gl = winsOf(curFace).reduce((a, x) => a + x.w.area, 0);
       pillWWR.textContent += ' · ' + t(fmt(gl, 1) + ' m² of glass lights at most ' + fmt(10 * gl, 0) + ' m² of rooms on this side, ' + Math.floor(gl / 1.08 + 1e-9) + ' at most (RGEU art. 71.º)');
     }
-    const sc = shadingScore(curFace);
+    const sc = shadingScore(curFace), K = sc === null ? null : shadeFactors(curFace);
+    const kTxt = K ? ' · ' + SHADE_STD_NAME + ': Fh ' + fmt(K.Fh, 2) + ' · Fo ' + fmt(K.Foi, 2) + '/' + fmt(K.Fov, 2) + ' · Ff ' + fmt(K.Ffi, 2) + '/' + fmt(K.Ffv, 2)
+      + ' → Fs ' + t('winter') + ' ' + fmt(K.Fsi, 2) + ' (' + t('loses') + ' ' + Math.round(100 * (1 - K.Fsi)) + ' %) · Fs ' + t('summer') + ' ' + fmt(K.Fsv, 2) + ' (' + t('cuts') + ' ' + Math.round(100 * (1 - K.Fsv)) + ' %)'
+      + ' · α ' + Math.round(K.a) + '° βL ' + Math.round(K.bL) + '° βR ' + Math.round(K.bR) + '°' + (K.g > 0.5 ? ' · ' + t('horizon') + ' ' + Math.round(K.g) + '°' : '') : '';
     if (sc === null) { pillShade.className = 'pill empty'; pillShade.textContent = t('No shading device on this facade'); }
-    else if (sc >= 80) { pillShade.className = 'pill ok'; pillShade.textContent = t(heating ? 'Cuts summer sun while keeping winter gains' : 'Cuts most of the summer sun on this window'); }
-    else if (sc >= 60) { pillShade.className = 'pill empty'; pillShade.textContent = t(heating ? 'Some seasonal discrimination, but still costs real winter sun' : 'Leaves some of the summer sun on this window'); }
-    else { pillShade.className = 'pill bad'; pillShade.textContent = t(heating ? 'Blocks winter sun almost as much as summer — too deep for this climate' : 'Leaves much of the summer sun on this window'); }
+    else if (sc >= 60) { pillShade.className = 'pill ok'; pillShade.textContent = t('Cuts more summer sun than it costs in winter') + kTxt; }
+    else if (sc >= 45) { pillShade.className = 'pill empty'; pillShade.textContent = t('About as much winter sun lost as summer sun cut') + kTxt; }
+    else { pillShade.className = 'pill bad'; pillShade.textContent = t('Costs more winter sun than the summer sun it cuts') + kTxt; }
     [[cRwN, 'N'], [cRwE, 'E'], [cRwW, 'W']].forEach(([c, sl]) => { c.style.display = RF.n !== 0 && planeFor(sl) ? '' : 'none'; });
     /* a slope's size row shows while it carries windows */
     [[zS, 'S', RWIN.s], [zN, 'N', RWIN.n], [zE, 'E', RWIN.e], [zW, 'W', RWIN.w]].forEach(([z, sl, n]) => { z.style.display = n > 0 && (sl === 'S' || (RF.n !== 0 && planeFor(sl))) ? '' : 'none'; });
@@ -13053,8 +13142,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
          starts to cost, and reddens as it fails. */
       const shadeColor = v => {
         if (v === null) return CH.faint;
-        if (v >= 80) return GREEN;
-        const f = clamp(v / 80, 0, 1);
+        if (v >= 65) return GREEN;
+        const f = clamp((v - 35) / 30, 0, 1);
         return 'rgb(' + Math.round(220 + 14 * f) + ',' + Math.round(38 + 141 * f) + ',' + Math.round(38 - 30 * f) + ')';
       };
       const bw = narrow ? Math.min(110, (W - 16) / 2) : 84;
@@ -28622,6 +28711,7 @@ function supFaces(w) {
      L_den as Directive 2002/49/EC defines it and read against the Portuguese RGR (DL 9/2007).
    The default levels, the hourly emission profiles, the screening and the wind-noise relation are
    this application's teaching values and are labelled as such. */
+let SF_GEO = null;
 const SF = {
   sel:{ months:null, h:12, mode:'hour', compare:false },
   cam:{ rad:{ az:225, el:32 }, temp:{ az:225, el:32 }, light:{ az:225, el:32 }, noise:{ az:225, el:40 } },
@@ -28664,7 +28754,8 @@ function sfClimFor(site, onReady) {
 const SF_DAY_CACHE = {};
 function sfDay(m) {
   const S = STATE.site, C = STATE.clim, lat = S.lat, f = lat * RAD;
-  const hm = horizontalMonths(S), cr = sfClimFor(S), key = [S.lat, S.lon, m, hm.measured, !!cr.dr, C.t[m]].join('|');
+  const hm0 = horizontalMonths(S), pw = SF.sel.src === 'power' ? sfPower(S) : null, cr = sfClimFor(S);
+  const hm = pw && pw.H ? { H:pw.H, measured:true } : hm0, key = [S.lat, S.lon, m, hm.measured, !!cr.dr, C.t[m], pw && pw.H ? 'power' : 'era5'].join('|');
   if (SF_DAY_CACHE[key]) return SF_DAY_CACHE[key];
   const sm = solarMonth(lat, m), ws = sm.ws, d = sm.d, H = hm.H[m], KT = clamp(H / Math.max(0.01, sm.H0), 0, 0.9);
   const wsd = ws / RAD, Hd = H * (wsd <= 81.4 ? 1.391 - 3.560 * KT + 4.189 * KT * KT - 2.137 * KT ** 3 : 1.311 - 3.022 * KT + 3.427 * KT * KT - 1.821 * KT ** 3);
@@ -28684,6 +28775,45 @@ function sfDay(m) {
     hrs.push({ s, gh, dh:s[2] > 0.035 ? dh : gh, dni, T:Tm + dr * (SF_ASHRAE_MEAN - fr) });
   }
   return SF_DAY_CACHE[key] = { hrs, dr, drMeasured:!!cr.dr, wmax:cr.wmax ? cr.wmax[m] : null, Hmeasured:hm.measured };
+}
+/** NASA POWER (Langley Research Center): the site's monthly climatology of all-sky irradiation on the horizontal
+    (CERES SYN1deg and MERRA-2, 2001–2020) and of the mean air temperature at 2 m, kept per site — the second source
+    each surface tab can be read on, beside ERA5. */
+const SF_POWER = {};
+function sfPower(site, onReady) {
+  const k = site.lat.toFixed(2) + ',' + site.lon.toFixed(2), rec = SF_POWER[k] || (SF_POWER[k] = { pending:false, H:null, T:null, failed:false, cbs:[] });
+  if (onReady) rec.cbs.push(onReady);
+  if (rec.H || rec.pending || rec.failed) return rec;
+  rec.pending = true;
+  fetch('https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=ALLSKY_SFC_SW_DWN,T2M&community=RE&latitude=' + site.lat.toFixed(3) + '&longitude=' + site.lon.toFixed(3) + '&format=JSON')
+    .then(r => r.json()).then(d => { const P = d.properties.parameter, M = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      /* kWh/m²·day to MJ/m²·day, the unit the day's split is written in */
+      rec.H = M.map(x => +P.ALLSKY_SFC_SW_DWN[x] * 3.6); rec.T = M.map(x => +P.T2M[x]);
+      if (rec.H.some(v => !(v >= 0))) { rec.H = null; rec.failed = true; } })
+    .catch(() => { rec.failed = true; })
+    .finally(() => { rec.pending = false; const cb = rec.cbs.splice(0); cb.forEach(f => { try { f(); } catch (e) { } }); });
+  return rec;
+}
+/** The EEA's noise exposure for the agglomeration the plot lies in, from the strategic noise maps of the Environmental
+    Noise Directive (2002/49/EC) reported to the EEA: residents at L_den ≥ 55 dB and at L_night ≥ 50 dB, by source. */
+const SF_EEA = {};
+function sfEEANoise(site, onReady) {
+  const k = site.lat.toFixed(3) + ',' + site.lon.toFixed(3), rec = SF_EEA[k] || (SF_EEA[k] = { pending:false, data:null, failed:false, cbs:[] });
+  if (onReady) rec.cbs.push(onReady);
+  if (rec.data || rec.pending || rec.failed) return rec;
+  rec.pending = true;
+  const x = site.lon, y = site.lat, L = { 92:'roads', 65:'railways', 11:'airports', 38:'industry' };
+  fetch('https://noise.discomap.eea.europa.eu/arcgis/rest/services/Noise/Noise_Dyna_LAEA/MapServer/identify?geometry=' + x + ',' + y + '&geometryType=esriGeometryPoint&sr=4326&layers=all:92,65,11,38&tolerance=1&mapExtent='
+    + (x - 0.01) + ',' + (y - 0.01) + ',' + (x + 0.01) + ',' + (y + 0.01) + '&imageDisplay=400,400,96&returnGeometry=false&f=json')
+    .then(r => r.json()).then(d => { const out = { agg:null, src:{} };
+      (d.results || []).forEach(q => { const a = q.attributes || {}, nm = L[q.layerId]; if (!nm) return; const n = +a.N_INHAB, d55 = +a.SNLD55, n50 = +a.SNLN50;
+        out.agg = out.agg || { id:a.RLID, n:isFinite(n) ? n : null };
+        const ok = v => isFinite(v) && v >= 0 ? v : null;   /* a negative count is the EEA's code for a figure not reported */
+        out.src[nm] = { d55:ok(d55), n50:ok(n50), d65:ok(+a.SNLD65) }; });
+      rec.data = out; })
+    .catch(() => { rec.failed = true; })
+    .finally(() => { rec.pending = false; const cb = rec.cbs.splice(0); cb.forEach(f => { try { f(); } catch (e) { } }); });
+  return rec;
 }
 /** Irradiance on a plane with unit normal n (world: east, north, up), W/m², split. */
 function sfPlaneIrr(hr, n) {
@@ -28863,7 +28993,7 @@ function sfScene(F0, R) {
     });
   }
   /* the ground: square cells inside the disc, each on the relief, off the buildings' footprints */
-  const cells = [], st = Math.max(2, R / 16);
+  const cells = [], st = clamp(R / 45, 0.6, 2);
   for (let x = -R; x < R; x += st) for (let y = -R; y < R; y += st) {
     const cx = x + st / 2, cy = y + st / 2; if (Math.hypot(cx, cy) > R - st * 0.3) continue;
     if (prisms.some(p => cx > p.bb[0] && cx < p.bb[2] && cy > p.bb[1] && cy < p.bb[3] && inPoly(cx, cy, p.pts))) continue;
@@ -28874,6 +29004,32 @@ function sfScene(F0, R) {
   return { prisms, nbs, nbFaces:faces, cells, R };
 }
 const sfBB = pts => pts.reduce((b, q) => [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.max(b[2], q[0]), Math.max(b[3], q[1])], [Infinity, Infinity, -Infinity, -Infinity]);
+/** A plane face cut into a fine grid of small cells, each read on its own: the colour then runs across a wall, a roof or
+    the ground in small steps — under an eave, past a corner, into a neighbour's shadow — instead of one tint per face. */
+function sfCells(f, step) {
+  const n = f.n, P = f.pts, o = P[0];
+  /* a horizontal axis along the face, square to its normal (east on a level face) */
+  let e1 = Math.hypot(n[0], n[1]) > 1e-3 ? [-n[1], n[0], 0] : [1, 0, 0];
+  const dn = e1[0] * n[0] + e1[1] * n[1] + e1[2] * n[2]; e1 = [e1[0] - dn * n[0], e1[1] - dn * n[1], e1[2] - dn * n[2]];
+  const l1 = Math.hypot(e1[0], e1[1], e1[2]) || 1; e1 = e1.map(v => v / l1);
+  const e2 = [n[1] * e1[2] - n[2] * e1[1], n[2] * e1[0] - n[0] * e1[2], n[0] * e1[1] - n[1] * e1[0]];
+  const st = P.map(q => { const d = [q[0] - o[0], q[1] - o[1], q[2] - o[2]]; return [d[0] * e1[0] + d[1] * e1[1] + d[2] * e1[2], d[0] * e2[0] + d[1] * e2[1] + d[2] * e2[2]]; });
+  const s0 = Math.min(...st.map(q => q[0])), s1 = Math.max(...st.map(q => q[0])), t0 = Math.min(...st.map(q => q[1])), t1 = Math.max(...st.map(q => q[1]));
+  const ns = Math.max(1, Math.round((s1 - s0) / step)), nt = Math.max(1, Math.round((t1 - t0) / step)), ds = (s1 - s0) / ns, dt = (t1 - t0) / nt, out = [];
+  const clip = (poly, k, v, keep) => { const r = []; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length], ia = keep(a[k] - v), ib = keep(b[k] - v);
+      if (ia) r.push(a); if (ia !== ib) { const u = (v - a[k]) / (b[k] - a[k]); r.push([a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]); } } return r; };
+  for (let i = 0; i < ns; i++) for (let j = 0; j < nt; j++) {
+    const a0 = s0 + i * ds, a1 = a0 + ds, b0 = t0 + j * dt, b1 = b0 + dt;
+    let q = clip(st, 0, a0, x => x >= -1e-9); q = q.length ? clip(q, 0, a1, x => x <= 1e-9) : q; q = q.length ? clip(q, 1, b0, x => x >= -1e-9) : q; q = q.length ? clip(q, 1, b1, x => x <= 1e-9) : q;
+    if (q.length < 3) continue;
+    let ar = 0; q.forEach((p, k) => { const r = q[(k + 1) % q.length]; ar += p[0] * r[1] - r[0] * p[1]; }); if (Math.abs(ar) / 2 < 0.004) continue;
+    const pts = q.map(p => [o[0] + p[0] * e1[0] + p[1] * e2[0], o[1] + p[0] * e1[1] + p[1] * e2[1], o[2] + p[0] * e1[2] + p[1] * e2[2]]);
+    out.push(sfMk({ kind:f.kind, nb:f.nb, bld:f.bld, sg:f.sg, face:f.face, alpha:f.alpha, pts, n, area:Math.abs(ar) / 2, parent:f }));
+  }
+  return out;
+}
+/** A value of a face or cell, kept until the reading asked of it changes. */
+function sfVal(T, f, months, h, mode, key) { if (f._vk === key) return f._v; f._vk = key; return f._v = T.val(f, months, h, mode); }
 /** A face of the surroundings: its centre, a few sample points just off it, its receiver point for noise. */
 function sfMk(f) {
   const c = f.pts.reduce((a, q) => [a[0] + q[0] / f.pts.length, a[1] + q[1] / f.pts.length, a[2] + q[2] / f.pts.length], [0, 0, 0]);
@@ -28938,12 +29094,11 @@ function sfNoiseGeo(fc) {
 }
 
 /* ---- colour ---- */
-const SF_RAMP = {
-  rad:[[0, '#1E2A5A'], [0.25, '#3B5BA9'], [0.5, '#4FA3A5'], [0.7, '#E7C547'], [0.88, '#F08A24'], [1, '#C8321E']],
-  light:[[0, '#20232A'], [0.3, '#5E5A73'], [0.6, '#C9B458'], [0.85, '#F3E58A'], [1, '#FFFBE6']],
-  temp:[[0, '#2B4C9B'], [0.3, '#7FB2E0'], [0.5, '#F2F0E6'], [0.7, '#F2B36B'], [0.85, '#E0612F'], [1, '#9E1B1B']],
-  noise:[[0, '#3E8E41'], [0.2, '#9BCB5A'], [0.4, '#F0E14A'], [0.55, '#F2A33A'], [0.7, '#E2462F'], [0.85, '#A51F55'], [1, '#4B2C83']]
-};
+/* one rainbow for all four readings, blue (least) through cyan, green and yellow to red (most), in small even steps
+   so the passage from one value to the next reads as a continuous band — the "turbo" map of Mikhailov (Google, 2019) */
+const SF_TURBO = [[0, '#30123B'], [0.07, '#4145AB'], [0.14, '#4675ED'], [0.21, '#39A2FC'], [0.28, '#1BCFD4'], [0.35, '#24ECA6'], [0.42, '#61FC6C'],
+  [0.5, '#A4FC3B'], [0.57, '#D1E834'], [0.64, '#F3C63A'], [0.71, '#FE9B2D'], [0.78, '#F36315'], [0.86, '#D93806'], [0.93, '#B11901'], [1, '#7A0403']];
+const SF_RAMP = { rad:SF_TURBO, light:SF_TURBO, temp:SF_TURBO, noise:SF_TURBO };
 function sfColour(kind, f) {
   const R = SF_RAMP[kind], x = clamp(f, 0, 1);
   for (let i = 1; i < R.length; i++) if (x <= R[i][0]) {
@@ -28973,11 +29128,30 @@ const SF_TAB = {
 
 /** The model drawn in false colour, once or twice side by side (winter | summer). */
 function sfRender(ctx, W, H, kind, sets, cam) {
-  const T = SF_TAB[kind], mode = SF.sel.mode, h = Math.floor(SF.sel.h) % 24, F0 = sfFaces(), faces = F0.faces;
-  const rng = mode === 'day' ? T.rangeD : T.rangeH, legendH = 46;
+  const T = SF_TAB[kind], mode = SF.sel.mode, h = Math.floor(SF.sel.h) % 24;
+  const gKey = JSON.stringify([MASS, ROOF, OPEN]);
+  if (!SF_GEO || SF_GEO.key !== gKey) { const F1 = sfFaces(); SF_GEO = { key:gKey, F0:F1, cells:new Map(F1.faces.map(f => [f, sfCells(f, 0.5)])), env:null }; }
+  const F0 = SF_GEO.F0, faces = F0.faces;
+  let rng = mode === 'day' ? T.rangeD : T.rangeH; const legendH = 46;
   const A = camAxes(cam, 8), reach = faces.reduce((a, f) => Math.max(a, ...f.pts.map(q => Math.hypot(q[0], q[1]))), 4), surr = SF.sel.surr !== false;
   const Rg = surr ? clamp(reach * 2.6, 25, 75) : reach * 1.7;
-  SF_ENV = surr ? sfScene(F0, Rg) : null;
+  const eKey = [Rg.toFixed(1), NB.list.length, NB.status, ENV.nb, JSON.stringify(ENV.plot || null), (sfTerrain() || {}).pending, !!(sfTerrain() || {}).g].join('|');
+  if (surr && (!SF_GEO.env || SF_GEO.env.key !== eKey)) { const E0 = sfScene(F0, Rg); E0.nbFaces.forEach(f => SF_GEO.cells.set(f, sfCells(f, 1.5))); SF_GEO.env = Object.assign(E0, { key:eKey });
+    faces.forEach(f => (SF_GEO.cells.get(f) || []).forEach(c => { delete c._sf; delete c._ng; delete c._vk; })); }
+  SF_ENV = surr ? SF_GEO.env : null;
+  if (!surr) faces.forEach(f => (SF_GEO.cells.get(f) || []).forEach(c => { if (c._surr !== false) { delete c._sf; delete c._ng; delete c._vk; c._surr = false; } }));
+  else faces.forEach(f => (SF_GEO.cells.get(f) || []).forEach(c => { if (c._surr === false) { delete c._sf; delete c._ng; delete c._vk; c._surr = true; } }));
+  const vKey = [kind, SF.sel.months.join(','), SF.sel.monthsB.join(','), h, mode, SF.sel.src || 'era5', JSON.stringify(SF.noise.src), SF.noise.ctx, SF.noise.wind, SF_ENV ? SF_ENV.key : '-'].join('|');
+  /* the scale fitted to the values seen, so the rainbow spans what is actually there; or the tab's fixed scale */
+  if (SF.sel.fit !== false) {
+    let lo = Infinity, hi = -Infinity;
+    sets.forEach((set, ci) => { const k = vKey + '|' + ci;
+      [].concat(...faces.map(f => SF_GEO.cells.get(f) || [f]), SF_ENV ? SF_ENV.cells : [], ...(SF_ENV ? SF_ENV.nbFaces.map(f => SF_GEO.cells.get(f) || [f]) : []))
+        .forEach(c => { const v = sfVal(T, c, set.months, h, mode, k); if (isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } }); });
+    if (isFinite(lo) && hi > lo + 1e-6) { const raw = (hi - lo) / 10, e = Math.pow(10, Math.floor(Math.log10(raw))), stp = [1, 2, 2.5, 5, 10].map(m => m * e).find(m => m >= raw) || raw;
+      rng = [Math.floor(lo / stp) * stp, Math.ceil(hi / stp) * stp]; }
+    else if (isFinite(lo)) rng = [lo - 1, lo + 1];
+  }
   const around = SF_ENV ? SF_ENV.nbFaces.concat(SF_ENV.cells) : [];
   const Hmax = faces.reduce((a, f) => Math.max(a, ...f.pts.map(q => q[2])), 3);
   camPersp(A, Rg, 0, 0, Hmax / 2);
@@ -28997,7 +29171,7 @@ function sfRender(ctx, W, H, kind, sets, cam) {
     /* the ground's cells, back to front, each in its own colour */
     const colOf = v => sfColour(kind, (v - rng[0]) / (rng[1] - rng[0]));
     if (SF_ENV) SF_ENV.cells.slice().sort((p, q) => camDepth(A, q.c[0], q.c[1], q.c[2]) - camDepth(A, p.c[0], p.c[1], p.c[2])).forEach(f => {
-      const v = T.val(f, set.months, h, mode); f._v = v;
+      const v = sfVal(T, f, set.months, h, mode, vKey + '|' + ci);
       ctx.beginPath(); f.pts.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath();
       ctx.fillStyle = colOf(v); ctx.fill(); ctx.strokeStyle = colOf(v); ctx.lineWidth = 0.6; ctx.stroke(); });
     ['N', 'E', 'S', 'W'].forEach((c2, i) => { const a = i * 90, q = pt((Rg + 0.9) * Math.sin(a * RAD), (Rg + 0.9) * Math.cos(a * RAD), 0);
@@ -29020,12 +29194,19 @@ function sfRender(ctx, W, H, kind, sets, cam) {
     vis.sort((p, q) => (bldOf(p) === bldOf(q) ? (isRf(p) && !isRf(q) ? 1 : !isRf(p) && isRf(q) ? -1 : 0) : 0) || dep(q) - dep(p));
     const scr = vis.map(f => f.pts.map(q => pt(q[0], q[1], q[2]))), labs = [];
     vis.forEach((f, fi) => {
-      const v = T.val(f, set.months, h, mode); f._v = v;
-      ctx.beginPath(); f.pts.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath();
       /* a neighbour standing between the eye and the design is drawn see-through, so the design always reads */
       const ghost = !f.bld && SF_ENV && camDepth(A, ...SF_ENV.nbs[f.nb].pts.reduce((a2, q) => [a2[0] + q[0] / SF_ENV.nbs[f.nb].pts.length, a2[1] + q[1] / SF_ENV.nbs[f.nb].pts.length], [0, 0]), 0) < camDepth(A, 0, 0, 0) - 2;
       ctx.globalAlpha = ghost ? 0.32 : 1;
-      ctx.fillStyle = sfColour(kind, (v - rng[0]) / (rng[1] - rng[0])); ctx.fill(); stroke(ctx, f.bld ? '#2A2622' : 'rgba(42,38,34,.55)', f.bld ? 1.1 : 0.7); ctx.stroke();
+      /* the face's own fine cells, each in its colour; the face's value is their area-weighted mean */
+      const cl = SF_GEO.cells.get(f) || [];
+      let v = 0, aw = 0;
+      cl.forEach(c => { const cv = sfVal(T, c, set.months, h, mode, vKey + '|' + ci); if (isFinite(cv)) { v += cv * c.area; aw += c.area; }
+        ctx.beginPath(); c.pts.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath();
+        const col = sfColour(kind, (cv - rng[0]) / (rng[1] - rng[0])); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 0.5; ctx.stroke(); });
+      v = aw > 0 ? v / aw : sfVal(T, f, set.months, h, mode, vKey + '|' + ci); f._v = v;
+      ctx.beginPath(); f.pts.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath();
+      if (!cl.length) { ctx.fillStyle = sfColour(kind, (v - rng[0]) / (rng[1] - rng[0])); ctx.fill(); }
+      stroke(ctx, f.bld ? '#2A2622' : 'rgba(42,38,34,.55)', f.bld ? 1.1 : 0.7); ctx.stroke();
       ctx.globalAlpha = 1;
       f.wins.forEach(w => { ctx.beginPath(); w.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath(); stroke(ctx, 'rgba(255,255,255,.9)', 1.4); ctx.stroke(); });
       if (f.bld && f.area > 3) labs.push({ fi, c:pt(f.c[0], f.c[1], f.c[2]), txt:fmt(v, (kind === 'rad' && mode === 'day') || kind === 'temp' ? 1 : 0) });
@@ -29038,8 +29219,8 @@ function sfRender(ctx, W, H, kind, sets, cam) {
   });
   /* the legend */
   const lx = 16, ly = H - legendH + 10, lw = W - 32;
-  for (let i = 0; i < 100; i++) { ctx.fillStyle = sfColour(kind, i / 99); ctx.fillRect(lx + lw * i / 100, ly, lw / 100 + 1, 10); }
-  for (let k = 0; k <= 5; k++) { const x = lx + lw * k / 5, v = rng[0] + (rng[1] - rng[0]) * k / 5; seg(ctx, x, ly + 10, x, ly + 14); label(ctx, fmt(v, 0), x, ly + 23, CH.muted, F(10), k === 0 ? 'left' : k === 5 ? 'right' : 'center', 'middle'); }
+  for (let i = 0; i < 240; i++) { ctx.fillStyle = sfColour(kind, i / 239); ctx.fillRect(lx + lw * i / 240, ly, lw / 240 + 1, 10); }
+  for (let k = 0; k <= 10; k++) { const x = lx + lw * k / 10, v = rng[0] + (rng[1] - rng[0]) * k / 10; seg(ctx, x, ly + 10, x, ly + 14); label(ctx, fmt(v, rng[1] - rng[0] < 20 ? 1 : 0), x, ly + 23, CH.muted, F(10), k === 0 ? 'left' : k === 10 ? 'right' : 'center', 'middle'); }
   label(ctx, t(mode === 'day' ? T.unitD : T.unitH), W / 2, ly + 34, CH.ink, F(10.5, '600'), 'center', 'middle');
 }
 
@@ -29098,12 +29279,41 @@ function buildSurfaces(host, kind) {
   if (ENV.nb !== false) wantNeighbours(ENV.plot || { lat:S.lat, lon:S.lon }, () => redraw());
   sfTerrain(() => redraw());
   rail.appendChild(el('div', { class:'gh', text:t('Hour') }));
+  rail.appendChild(segCtl(t('Colour scale'), [{ value:'fit', label:t('Fitted to the values') }, { value:'fixed', label:t('Fixed') }], SF.sel.fit === false ? 'fixed' : 'fit', v => { SF.sel.fit = v === 'fit'; redraw(); }));
   const modeSeg = rail.appendChild(segCtl(t('Reading'), [{ value:'hour', label:t('At the hour') }, { value:'day', label:kind === 'noise' ? 'L_den' : t('Whole day') }], SF.sel.mode, v => { SF.sel.mode = v; redraw(); }));
   rail.appendChild(rangeCtl(t('Solar time'), 0, 23, 1, SF.sel.h, v => { SF.sel.h = v; if (SF.sel.mode !== 'hour') { SF.sel.mode = 'hour'; modeSeg.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-pressed', String(i === 0))); } redraw(); }, v => String(v).padStart(2, '0') + ':30'));
   function paint() { pA.paint(); pB.paint(); pA.head.textContent = t('Months') + (SF.sel.compare ? ' — A' : ''); pB.box.style.display = SF.sel.compare ? '' : 'none';
     const c = cmp.querySelector('input'); if (c) c.checked = SF.sel.compare; }
   paint();
 
+  /* left: where the figures come from, each with its own check */
+  {
+    rail.appendChild(el('div', { class:'gh', text:t('Data sources') }));
+    const srcLine = rail.appendChild(el('p', { class:'hint', style:'margin:2px 0 6px' }));
+    const link = (txt, url) => el('a', { href:url, target:'_blank', rel:'noopener', text:txt + ' ↗', style:'display:block;font-size:12px;margin:2px 0' });
+    if (kind !== 'noise') {
+      rail.appendChild(segCtl(t('Irradiation'), [{ value:'era5', label:'ERA5 (Copernicus)' }, { value:'power', label:'NASA POWER' }], SF.sel.src || 'era5', v => { SF.sel.src = v; Object.keys(SF_DAY_CACHE).forEach(k => delete SF_DAY_CACHE[k]); if (v === 'power') sfPower(S, () => { Object.keys(SF_DAY_CACHE).forEach(k => delete SF_DAY_CACHE[k]); srcTxt(); redraw(); }); srcTxt(); redraw(); }));
+      const srcTxt = () => { const e = horizontalMonths(S), p = sfPower(S), yr = a => a.reduce((x, v) => x + v, 0) / 12 / 3.6;
+        srcLine.textContent = t('Mean irradiation on the horizontal') + ': ERA5 ' + (e.measured ? fmt(yr(e.H), 2) : '…') + ' · NASA POWER ' + (p.H ? fmt(yr(p.H), 2) : p.failed ? '—' : '…') + ' kWh/m²·' + t('day')
+          + (kind === 'temp' && p.T ? ' · ' + t('mean air') + ': ' + t('normals') + ' ' + fmt(C.t.reduce((a, v) => a + v, 0) / 12, 1) + ' · NASA POWER ' + fmt(p.T.reduce((a, v) => a + v, 0) / 12, 1) + ' °C' : ''); };
+      sfPower(S, srcTxt); srcTxt();
+      rail.appendChild(link(t('PVGIS (European Commission JRC) — check this site'), 'https://re.jrc.ec.europa.eu/pvg_tools/en/'));
+      rail.appendChild(link('NASA POWER Data Access Viewer', 'https://power.larc.nasa.gov/data-access-viewer/'));
+      rail.appendChild(link('NASA Eyes on the Earth', 'https://eyes.nasa.gov/apps/earth/'));
+      rail.appendChild(el('p', { class:'hint', style:'margin:2px 0 6px', text:t('PVGIS cannot be read from a web page (it refuses other sites’ requests): open it for these coordinates') + ' — ' + fmt(S.lat, 4) + ', ' + fmt(S.lon, 4) }));
+    } else {
+      const eea = () => { const r = sfEEANoise(S), D = r.data, N0 = n => n === null ? '—' : Math.round(n).toLocaleString(LANG === 'pt' ? 'pt-PT' : 'en-GB');
+        if (r.pending) return t('Reading the EEA noise maps…');
+        if (r.failed) return t('The EEA noise maps could not be read.');
+        if (!D || !D.agg) return t('EEA (Environmental Noise Directive): the plot is outside the agglomerations mapped for the EEA — the roads, railways and airports mapped outside them are on the EEA viewer.');
+        const pct = v => v === null || !D.agg.n ? '' : ' (' + fmt(100 * v / D.agg.n, 0) + ' %)';
+        return t('EEA, Environmental Noise Directive') + ' · ' + D.agg.id + ' · ' + N0(D.agg.n) + ' ' + t('residents') + ' — L_den ≥ 55 dB: ' + ['roads', 'railways', 'airports', 'industry'].filter(k => D.src[k] && D.src[k].d55 !== null).map(k => t(k) + ' ' + N0(D.src[k].d55) + pct(D.src[k].d55)).join(' · ')
+          + ' · L_night ≥ 50 dB: ' + ['roads', 'railways', 'airports', 'industry'].filter(k => D.src[k] && D.src[k].n50 !== null).map(k => t(k) + ' ' + N0(D.src[k].n50) + pct(D.src[k].n50)).join(' · '); };
+      sfEEANoise(S, () => { srcLine.textContent = eea(); }); srcLine.textContent = eea();
+      rail.appendChild(link(t('EEA noise viewer (strategic noise maps)'), 'https://noise.eea.europa.eu/'));
+      rail.appendChild(link('noise-map.com', 'https://noise-map.com/'));
+    }
+  }
   /* left, on Noise: the sources */
   if (kind === 'noise') {
     const N = SF.noise;
@@ -29193,7 +29403,7 @@ function buildSurfaces(host, kind) {
     out.appendChild(el('p', { class:'hint', text:{ rad:t('W/m² at the hour · kWh/m² a day · glass kWh: on the windows over the months chosen.'), temp:t('Sol-air °C at the hour · the day’s peak · Δ air: above the air at the hour.'),
       light:t('klx at the hour · klx·h a day · hours a day over 10 klx.'), noise:t('dB(A) · RGR: L_den and L_n against the zone chosen.') }[kind] }));
     const d0 = sfDay(SF.sel.months[0]);
-    out.appendChild(el('p', { class:'hint', style:'margin-top:8px', text:(kind === 'rad' || kind === 'light' || kind === 'temp' ? (d0.Hmeasured ? t('Irradiation: ERA5 1991–2020 (Open-Meteo).') : t('Irradiation: estimate, clearness index 0.55, until the ERA5 figures arrive.')) + ' ' : '')
+    out.appendChild(el('p', { class:'hint', style:'margin-top:8px', text:(kind === 'rad' || kind === 'light' || kind === 'temp' ? (SF.sel.src === 'power' && sfPower(S).H ? t('Irradiation: NASA POWER climatology (CERES, MERRA-2).') : d0.Hmeasured ? t('Irradiation: ERA5 1991–2020 (Open-Meteo).') : t('Irradiation: estimate, clearness index 0.55, until the ERA5 figures arrive.')) + ' ' : '')
       + (kind === 'temp' ? (d0.drMeasured ? t('Daily range: ERA5 1991–2020.') : t('Daily range: 8 K assumed until the ERA5 figures arrive.')) + ' ' + (sfFaces().wallF ? '' : t('Wall colour not chosen on Site: α = 0.5 assumed.')) : '') }));
   }
   function csvOut() {
@@ -31852,7 +32062,8 @@ function mountApp(site, clim, keepTab, keepModel, keepScroll) {
      own wall area (L or D × the eave height). */
   const faceDefault = () => ({ wwr:0.20, sillZ:0.9, headZ:2.1, ovD:0, ovN:1, ovL:0, ovR:0, finD:0, finN:0, finSide:'both', units:[{ on:true, frac:1 }] });
   OPEN = { S:faceDefault(), N:faceDefault(), E:faceDefault(), W:faceDefault(), C:faceDefault() };
-  OPEN.S.wwr = 0.35;   // a defensible start, not a recommendation — the badge judges it live
+  OPEN.S.wwr = 0.30;   // the target of the side facing the sun, as the Openings clock sets it
+  OPEN.E.wwr = 0.15; OPEN.W.wwr = 0.15;
   OPEN.N.wwr = 0.05;   // north starts at the low end of its band
   OPEN.C.wwr = 0.30;   // clerestory: high glass earns its keep as daylight, shaded by the upper roof
   /* the defaults first, then the study over them: set after it, they wiped the sunspace, roof windows and turbine
@@ -33147,6 +33358,15 @@ Object.assign(PT, {
   "Blocks winter sun almost as much as summer — too deep for this climate": "Bloqueia o sol de Inverno quase tanto como o de Verão — demasiado profundo para este clima",
   "WWR fit /100": "Ajuste WWR /100",
   "Shading fit /100": "Ajuste do sombreamento /100",
+  "Data sources": "Fontes de dados", "Colour scale": "Escala de cor", "Fitted to the values": "Ajustada aos valores", "Fixed": "Fixa", "Irradiation": "Irradiação", "Mean irradiation on the horizontal": "Irradiação média no plano horizontal", "mean air": "ar médio", "normals": "normais",
+  "PVGIS (European Commission JRC) — check this site": "PVGIS (JRC, Comissão Europeia) — verificar este local",
+  "PVGIS cannot be read from a web page (it refuses other sites’ requests): open it for these coordinates": "O PVGIS não pode ser lido a partir de uma página web (recusa pedidos de outros sítios): abra-o com estas coordenadas",
+  "Reading the EEA noise maps…": "A ler os mapas de ruído da AEA…", "The EEA noise maps could not be read.": "Não foi possível ler os mapas de ruído da AEA.",
+  "EEA (Environmental Noise Directive): the plot is outside the agglomerations mapped for the EEA — the roads, railways and airports mapped outside them are on the EEA viewer.": "AEA (Diretiva do Ruído Ambiente): o lote está fora das aglomerações cartografadas para a AEA — as estradas, ferrovias e aeroportos cartografados fora delas estão no visualizador da AEA.",
+  "EEA, Environmental Noise Directive": "AEA, Diretiva do Ruído Ambiente", "residents": "residentes", "roads": "estradas", "railways": "ferrovias", "airports": "aeroportos", "industry": "indústria",
+  "EEA noise viewer (strategic noise maps)": "Visualizador de ruído da AEA (mapas estratégicos de ruído)", "Irradiation: NASA POWER climatology (CERES, MERRA-2).": "Irradiação: climatologia NASA POWER (CERES, MERRA-2).",
+  "Cuts more summer sun than it costs in winter": "Corta mais sol de verão do que custa no inverno", "About as much winter sun lost as summer sun cut": "Perde tanto sol de inverno quanto corta de verão",
+  "Costs more winter sun than the summer sun it cuts": "Custa mais sol de inverno do que o de verão que corta", "loses": "perde", "cuts": "corta", "horizon": "horizonte",
   "Windows": "Janelas",
   "Share": "Quota",
   "From the left corner": "Do canto esquerdo",
