@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.212.0',
+  version:     '1.213.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -10623,6 +10623,7 @@ function buildRoof(host) {
   buildRoofColUI();
 
   const pillRoof = el('span', { class:'pill ok' });
+  const pillCnp = el('span', { class:'pill empty' });
   const pillRoofCol = el('span', { class:'pill empty' });
   const pillSolar = el('span', { class:'pill empty' });
   host.appendChild(hint('roof-score',
@@ -10654,6 +10655,18 @@ function buildRoof(host) {
         pillChim.textContent = t('Chimney draw') + ' ' + Math.round(sc) + '/100';
       }
     }
+    /* the canopy or pergola, judged by the shade it gives the glass under it */
+    { const cs = canopyShade(G, RF), r = cs.find(q => q.v !== undefined) || cs[0];
+      if (!r) { pillCnp.className = 'pill empty'; pillCnp.textContent = t('No eave canopy or pergola — set one on the right to shade the glass under it'); }
+      else { const head = t(r.per ? 'Pergola' : 'Canopy') + ' ' + t('on the') + ' ' + COMPASS8[Math.round(((G.rot + { S:0, N:180, E:270, W:90 }[r.f]) % 360) / 45) % 8] + ': ';
+        if (r.v === undefined) { pillCnp.className = 'pill bad'; pillCnp.textContent = head + t('no glass under it — move it over the windows'); }
+        else { const K = r.K, v = Math.round(r.v);
+          pillCnp.className = 'pill ' + (v >= 80 ? 'ok' : v >= 50 ? 'empty' : 'bad');
+          pillCnp.textContent = head + v + '/100 — ' + t(v >= 80 ? 'in the best zone for this side' : r.h.d > r.best.d ? 'too deep — it costs the winter sun' : 'too shallow — it lets in the summer sun')
+            + ' · ' + t('shades') + ' ' + r.n + '/' + r.all + ' ' + t('of the glass on that side') + ' · α ' + Math.round(K.a) + '°'
+            + (r.per ? ' · ' + t('lets through') + ' ' + Math.round(100 * r.tw) + ' % ' + t('winter') + ', ' + Math.round(100 * r.ts) + ' % ' + t('summer') : '')
+            + ' · ' + 'Manual SCE §8.4' + ' · Fs ' + t('winter') + ' ' + fmt(K.Fsi, 2) + ' (' + t('loses') + ' ' + Math.round(100 * (1 - K.Fsi)) + ' %) · Fs ' + t('summer') + ' ' + fmt(K.Fsv, 2) + ' (' + t('cuts') + ' ' + Math.round(100 * (1 - K.Fsv)) + ' %)'
+            + ' · ' + t('best depth here') + ' ≈ ' + fmt(r.best.d, 1) + ' m (' + Math.round(r.best.v) + '/100)'; } } }
     const pn = pitchNow();
     if (!pn) { pillRoof.className = 'pill empty'; pillRoof.textContent = t('Flat — no pitch to judge; racked collectors take the tilt set beside them'); return; }
     const ni = nearestIdeal(pn.th), facing = COMPASS8[Math.round(slopeAz() / 45) % 8];
@@ -11084,9 +11097,11 @@ if (F.chim || F.par) {
       const racol = raf === null ? CH.faint : raf >= 80 ? '#16A34A' : raf >= 50 ? '#D97706' : '#DC2626';
       badge(1, raf, racol, t('Albedo fit') + ' /100');
       badge(2, rfin ? fmt(1 - FINISH_ALPHA[rfin.cls], 2) : null, racol, t('Albedo · ' + sumBand + ' summer'));
+      let solarOn = false;
       [['pv', 3, 'PV kWh/year'], ['thermal', 4, 'Heat kWh/year']].forEach(([tech, bi, cap]) => {
         const sn = solarNowFor(tech);
         if (!sn) return;
+        solarOn = true;
         const rt = solRate(sn);
         /* each number takes the worse of how well the field faces the sun and how far it is past the house's need */
         const Zs = rt === null ? null : solSizing(tech, sn.out, G), szCol = Zs ? solWorse(solRateCol(rt), Zs.col) : solRateCol(rt);
@@ -11097,6 +11112,9 @@ if (F.chim || F.par) {
         /* a kit's share of the hot water it serves */
         if (sn.kit) badge(6, Math.round(sn.kit.frac * 100) + ' %', sn.kit.frac >= 0.7 ? '#16A34A' : sn.kit.frac >= 0.5 ? '#D97706' : '#DC2626', t('Solar fraction · hot water'));
       });
+      /* the canopy's shade on the glass beneath it, as Openings scores it */
+      { const cs = canopyShade(G, RF), r = cs.find(q => q.v !== undefined);
+        if (cs.length) { const v = r ? Math.round(r.v) : null; badge(solarOn ? 9 : 3, v, v === null ? '#DC2626' : v >= 80 ? '#16A34A' : v >= 50 ? '#D97706' : '#DC2626', t('Canopy shading /100')); } }
 
       /* --- the numbers, last, each beside its line and on its own pad ------ */
       {
@@ -11183,7 +11201,7 @@ if (F.chim || F.par) {
       ['Köppen–Geiger', STATE.clim.k.code]]);
     }
   });
-  stage.appendChild(el('div', { class:'limitrow readings' }, [pillRoof, pillRoofCol, pillSolar]));
+  stage.appendChild(el('div', { class:'limitrow readings' }, [pillRoof, pillCnp, pillRoofCol, pillSolar]));
   /* --- the bar over the model: turn, tilt, the plan, the main facade's
      elevation, the end elevation (the roof's true pitch), and the building
      seen from true south or north ------------------------------------------- */
@@ -11964,7 +11982,70 @@ function shadeRange(o8, gam, wc, wh) {
   SHADE_RANGE.set(key, R);
   return R;
 }
-const SHADE_BEST = {};
+const SHADE_BEST = {}, SHADE_INFO = {};
+/** The score of a side's shade on the SCE's terms, with an optimum: the best device the tables allow here scores 100;
+    bare glass where a device would help scores 20, and a device past the best falls again — too deep costs the winter sun.
+    Where no device helps (a north side), the bare glass is the best and scores 100. */
+const shadeZone = (b, b0, bTop, bBot) => bTop - b0 < 0.02 ? clamp(100 - 100 * (bTop - b) / Math.max(0.02, bTop - bBot), 0, 100)
+  : clamp(b >= b0 ? 20 + 80 * (b - b0) / (bTop - b0) : 20 * (b - bBot) / Math.max(0.02, b0 - bBot), 0, 100);
+/** The best a pergola of this cover could do on this side, its angle tried from 0 to 85°. */
+function shadePerTop(o8, gam, wc, wh, tw, ts) {
+  const k0 = shadeStdFactors(o8, 0, 0, 0, gam, STATE.site); let top = -Infinity;
+  for (let a = 0; a <= 85; a += 5) { const k1 = shadeStdFactors(o8, a, 0, 0, gam, STATE.site);
+    top = Math.max(top, shadeBenefit({ Fsi:tw * k0.Fsi + (1 - tw) * k1.Fsi, Fsv:ts * k0.Fsv + (1 - ts) * k1.Fsv }, wc, wh)); }
+  return top;
+}
+/** The eave canopies and pergolas set on Roof, judged by the shade they give the glass beneath them: the windows of their
+    wall under their span, the overhang angle their depth and height make over each window's middle, a pergola by the share
+    of the beam its cover lets through in each season — scored as Openings scores a side, and tried at every depth for the best. */
+function canopyShade(G, RF) {
+  const site = STATE.site, C = STATE.clim; if (!site || !C || !C.t || !G || !RF) return [];
+  let Mm; try { Mm = roofModel(G, RF); } catch (e) { return []; }
+  const out = [];
+  roofCanopies(RF).forEach(({ c }) => {
+    const h = canopySpanFor(Mm.pl.segs, c, H0of(G), Mm); if (!h) return;
+    const sg = h.sg, f = segFace(sg), az = (((G.rot || 0) + { S:0, N:180, E:270, W:90 }[f]) % 360 + 360) % 360, o8 = ori8(az);
+    let rects = []; try { const wn = segWindow(sg, G); rects = wn ? unitRects(sg, wn, G, Mm.H0).filter(q => q.b - q.a > 0.05) : []; } catch (e) { rects = []; }
+    const per = isPergola(c) ? c : null, so = site.lat < 0, tw = per ? pergolaTau(per, so ? 196 : 15) : 0, ts = per ? pergolaTau(per, so ? 15 : 196) : 0;
+    const k = (h.z0 - h.z1) / h.d, zEdge = d => h.z0 - k * d;
+    const cov = q => clamp((Math.min(q.b, h.u1) - Math.max(q.a, h.u0)) / (q.b - q.a), 0, 1);
+    const factorsAt = d => { let A = 0, Fsi = 0, Fsv = 0, aS = 0;
+      rects.forEach(q => { const ar = (q.b - q.a) * (q.v1 - q.v0); if (ar <= 0) return;
+        const cv = cov(q), zc = (q.v0 + q.v1) / 2, zl = Math.min(h.z0, zEdge(d)), a = cv > 0 && zl > zc + 0.05 ? Math.atan2(d + 0.2, Math.max(0.05, zl - zc)) / RAD : 0;
+        const k0 = shadeStdFactors(o8, 0, 0, 0, 0, site), k1 = shadeStdFactors(o8, a, 0, 0, 0, site), mi = (x0, x1, tq) => x0 == null ? null : tq * x0 + (1 - tq) * x1;
+        const fi = mi(k0.Fsi, k1.Fsi, tw), fv = mi(k0.Fsv, k1.Fsv, ts);
+        Fsi += ar * (cv * fi + (1 - cv) * k0.Fsi); if (fv !== null) Fsv += ar * (cv * fv + (1 - cv) * k0.Fsv); aS += ar * cv * a; A += ar; });
+      return A > 0 ? { Fsi:Fsi / A, Fsv:Fsv / A, a:aS / A } : null; };
+    /* the summer beam on the glass the canopy stops, ray by ray, a pergola letting its share through */
+    const tx = (sg.b[0] - sg.a[0]) / sg.len, ty = (sg.b[1] - sg.a[1]) / sg.len, sgnT = (tx * sg.n[1] - ty * sg.n[0]) > 0 ? 1 : -1, tz = site.lon / 15;
+    const cutAt = d => { let tot = 0, lit = 0;
+      (so ? [355, 15, 46] : [172, 196, 227]).forEach(doy => { const noon = sunriseSunset(doy, site.lat, site.lon, tz).noon, tau = per ? pergolaTau(per, doy) : 0;
+        for (let dh = -6; dh <= 6; dh += 1) { const sun = sunPos(doy, noon + dh, site.lat, site.lon, tz); if (sun.alt <= 1) continue;
+          const phi = ((sun.azi - az + 540) % 360) - 180; if (Math.abs(phi) >= 89) continue;
+          const ca = Math.cos(sun.alt * RAD), dn = ca * Math.cos(phi * RAD), dz = Math.sin(sun.alt * RAD), dt = sgnT * ca * Math.sin(phi * RAD);
+          rects.forEach(q => { const w = q.b - q.a, hh = q.v1 - q.v0, ar = w * hh;
+            for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { const t0 = q.a + w * (i + 0.5) / 3, z = q.v0 + hh * (j + 0.5) / 3, wt = dn * ar / 9; tot += wt;
+              let tr = 1; const den = dz + k * dn; if (z < h.z0 && den > 1e-9) { const sR = (h.z0 - z) / den, n = sR * dn, u = t0 + sR * dt; if (n <= d + 0.2 && u >= h.u0 && u <= h.u1) tr = tau; }
+              lit += wt * tr; } }); } });
+      return tot > 0 ? 1 - lit / tot : 0; };
+    const R = { c, h, f, o8, per, tw, ts, n:rects.filter(q => cov(q) > 0.2).length, all:rects.length };
+    if (!R.n) { out.push(R); return; }
+    const cM = C.t.filter(v => v >= 20).length + 1, hM = C.t.filter(v => v < 15).length + 1, wc = cM / (cM + hM), wh = hM / (cM + hM);
+    /* 50 the bare glass, 100 the best the SCE tables allow here — a solid overhang with fins, or this canopy or pergola at its best depth */
+    const Rg = shadeRange(o8, 0, wc, wh), ben = d => { const K = factorsAt(d); return K ? { K, b:shadeBenefit(K, wc, wh) } : null; };
+    let bTop = Rg.bMax, bBot = Rg.bMin; for (let d = 0.6; d <= 4 + 1e-9; d += 0.1) { const q = ben(d); if (q) { bTop = Math.max(bTop, q.b); bBot = Math.min(bBot, q.b); } }
+    const scoreAt = d => { const q = ben(d); if (!q) return null; return { K:q.K, v:shadeZone(q.b, Rg.b0, bTop, bBot) }; };
+    const step = 0.1;
+    const now = scoreAt(h.d); if (!now) { out.push(R); return; }
+    let best = { d:h.d, v:now.v };
+    for (let d = 0.6; d <= 4 + 1e-9; d += step) { const q = scoreAt(d); if (q && q.v > best.v + 0.5) best = { d:+d.toFixed(1), v:q.v }; }
+    Object.assign(R, { K:now.K, v:now.v, best });
+    out.push(R);
+  });
+  return out;
+}
+Object.assign(PT, { 'Canopy shading /100':'Sombra do alpendre /100', 'Pergola':'Pérgola', 'Canopy':'Alpendre', 'on the':'na fachada', 'shades':'cobre', 'of the glass on that side':'do vidro dessa fachada', 'no glass under it — move it over the windows':'sem vidro por baixo — mova-o para cima das janelas', 'No eave canopy or pergola — set one on the right to shade the glass under it':'Sem alpendre nem pérgola — ponha um à direita para sombrear o vidro por baixo', 'lets through':'deixa passar', 'winter':'inverno', 'summer':'verão', 'loses':'perde', 'cuts':'corta', 'heating':'aquecimento', 'summer, computed':'verão, calculado', 'best depth here':'melhor profundidade aqui', 'cuts more summer sun than it costs in winter':'corta mais sol de verão do que custa no inverno', 'about as much winter sun lost as summer sun cut':'perde tanto sol de inverno como o de verão que corta', 'costs more winter sun than the summer sun it cuts':'custa mais sol de inverno do que o de verão que corta' });
+
 function buildOpenings(host) {
   const S = STATE.site, C = STATE.clim;
   const lat = S.lat, lon = S.lon, tz = lon / 15;
@@ -12876,7 +12957,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     if (f === 'C') return null;
     /* the popular model's other bodies, the row and the courtyard wall shade it too, devices or none */
     const CB = vmCompanion();
-    if ((o.ovD === 0 && o.finD === 0 && !balcOnFace(f) && !eaveOnFace(f) && !canopyOnFace(f) && !CB.blocks.length) || !faceUnits(f).some(u => u.on)) return null;
+    if (!faceUnits(f).some(u => u.on)) return null;
+    const hasDev = !(o.ovD === 0 && o.finD === 0 && !balcOnFace(f) && !eaveOnFace(f) && !canopyOnFace(f) && !CB.blocks.length);
     const key = [f, heating, lat, lon, tz, h0(), JSON.stringify(o), JSON.stringify(RF), JSON.stringify(G), CB.key].join('|');
     if (SHADE_MEMO.has(key)) return SHADE_MEMO.get(key);
     /* the national method: what the devices cut of the cooling season's sun (1 − Fs,v), weighed by how much of the
@@ -12887,8 +12969,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
     /* the benefit is read against what the method allows on this side: 50 is the bare glass under the same horizon,
        100 the best overhang-and-fins the SCE tables give here, 0 the worst — every device moves it */
     const R = shadeRange(K.ori, K.g, wc, wh), b = shadeBenefit(K, wc, wh);
-    const v = clamp(b >= R.b0 ? 50 + 50 * (b - R.b0) / Math.max(0.02, R.bMax - R.b0) : 50 - 50 * (R.b0 - b) / Math.max(0.02, R.b0 - R.bMin), 0, 100);
-    SHADE_BEST[f] = R.best;
+    const bTop = K.per ? Math.max(R.bMax, shadePerTop(K.ori, K.g, wc, wh, K.per.tw, K.per.ts)) : R.bMax, v = shadeZone(b, R.b0, bTop, R.bMin);
+    SHADE_BEST[f] = R.best; SHADE_INFO[f] = { hasDev, aEff:Math.max(K.a, K.per ? K.per.a : 0), helps:bTop - R.b0 >= 0.02 };
     if (SHADE_MEMO.size > 64) SHADE_MEMO.clear();
     SHADE_MEMO.set(key, v);
     return v;
@@ -12916,10 +12998,12 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
       + ' · α ' + Math.round(K.a) + '° βL ' + Math.round(K.bL) + '° βR ' + Math.round(K.bR) + '°' + (K.g > 0.5 ? ' · ' + t('horizon') + ' ' + Math.round(K.g) + '°' : '')
       + (K.per ? ' · ' + t('pergola') + ' α ' + Math.round(K.per.a) + '° (' + t('lets through') + ' ' + Math.round(100 * K.per.tw) + ' % ' + t('winter') + ', ' + Math.round(100 * K.per.ts) + ' % ' + t('summer') + ')' : '')
       + (SHADE_BEST[curFace] ? ' · ' + t('best on this side by the SCE') + ': α ' + SHADE_BEST[curFace].a + '°' + (SHADE_BEST[curFace].b ? ' β ' + SHADE_BEST[curFace].b + '°' : '') : '') : '';
+    const SI = SHADE_INFO[curFace] || {}, BE = SHADE_BEST[curFace];
     if (sc === null) { pillShade.className = 'pill empty'; pillShade.textContent = t('No shading device on this facade'); }
-    else if (sc >= 55) { pillShade.className = 'pill ok'; pillShade.textContent = t('Cuts more summer sun than it costs in winter') + kTxt; }
-    else if (sc >= 45) { pillShade.className = 'pill empty'; pillShade.textContent = t('About as much winter sun lost as summer sun cut') + kTxt; }
-    else { pillShade.className = 'pill bad'; pillShade.textContent = t('Costs more winter sun than the summer sun it cuts') + kTxt; }
+    else if (!SI.hasDev) { pillShade.className = SI.helps ? 'pill bad' : 'pill ok'; pillShade.textContent = t(SI.helps ? 'No shading device on this facade — the SCE asks for one here' : 'No shading device on this facade — none is needed here') + ' · ' + Math.round(sc) + '/100' + kTxt; }
+    else if (sc >= 80) { pillShade.className = 'pill ok'; pillShade.textContent = t('In the best zone for this side') + ' · ' + Math.round(sc) + '/100' + kTxt; }
+    else if (BE && SI.aEff > BE.a + 5) { pillShade.className = sc >= 50 ? 'pill empty' : 'pill bad'; pillShade.textContent = t('Too much shade — deeper than the best for this side, it costs the winter sun') + ' · ' + Math.round(sc) + '/100' + kTxt; }
+    else { pillShade.className = sc >= 50 ? 'pill empty' : 'pill bad'; pillShade.textContent = t('Too little shade for this side') + ' · ' + Math.round(sc) + '/100' + kTxt; }
     [[cRwN, 'N'], [cRwE, 'E'], [cRwW, 'W']].forEach(([c, sl]) => { c.style.display = RF.n !== 0 && planeFor(sl) ? '' : 'none'; });
     /* a slope's size row shows while it carries windows */
     [[zS, 'S', RWIN.s], [zN, 'N', RWIN.n], [zE, 'E', RWIN.e], [zW, 'W', RWIN.w]].forEach(([z, sl, n]) => { z.style.display = n > 0 && (sl === 'S' || (RF.n !== 0 && planeFor(sl))) ? '' : 'none'; });
@@ -13184,8 +13268,8 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
          starts to cost, and reddens as it fails. */
       const shadeColor = v => {
         if (v === null) return CH.faint;
-        if (v >= 65) return GREEN;
-        const f = clamp((v - 35) / 30, 0, 1);
+        if (v >= 80) return GREEN;
+        const f = clamp((v - 40) / 40, 0, 1);
         return 'rgb(' + Math.round(220 + 14 * f) + ',' + Math.round(38 + 141 * f) + ',' + Math.round(38 - 30 * f) + ')';
       };
       const bw = narrow ? Math.min(110, (W - 16) / 2) : 84;
@@ -23495,6 +23579,11 @@ function pergolaCoverCtl(c, after) {
 }
 Object.assign(PT, { 'Canopy':'Alpendre', 'Pergola':'Pérgola', 'Pergola cover':'Cobertura da pérgola', 'pergola':'pérgola',
   'sun let through':'sol que passa', 'in June':'em Junho', 'in December':'em Dezembro', 'Eave canopy or pergola':'Alpendre ou pérgola' });
+Object.assign(PT, { 'No shading device on this facade — the SCE asks for one here':'Sem dispositivo de sombreamento nesta fachada — o SCE pede um aqui',
+  'No shading device on this facade — none is needed here':'Sem dispositivo de sombreamento nesta fachada — aqui não é preciso',
+  'In the best zone for this side':'Na zona ótima para esta fachada', 'Too much shade — deeper than the best for this side, it costs the winter sun':'Sombra a mais — mais fundo do que o ótimo para esta fachada, custa o sol de inverno',
+  'Too little shade for this side':'Sombra a menos para esta fachada', 'in the best zone for this side':'na zona ótima para esta fachada',
+  'too deep — it costs the winter sun':'fundo demais — custa o sol de inverno', 'too shallow — it lets in the summer sun':'curto demais — deixa entrar o sol de verão' });
 Object.assign(PT, { 'lets through':'deixa passar', 'best on this side by the SCE':'o melhor nesta fachada pelo SCE' });
 Object.assign(PT, { 'Roof step opening':'Abertura da parede de remate',
   'selected — drag it along the wall; door and brick ventilation are under Roof step walls':'seleccionada — arraste-a ao longo da parede; porta e ventilação em tijolo estão em Paredes de remate da cobertura' });
