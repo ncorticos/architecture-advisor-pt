@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.214.0',
+  version:     '1.215.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -13774,7 +13774,7 @@ function buildVentilation(host) {
      from the same open-Meteo elevation service as the altitude lookup —
      only the coordinates leave the browser. Null until derived. */
   let terrainGrid = K0 && K0.terrainGrid ? K0.terrainGrid : null;
-  if (terrainGrid) EXPORT_TERRAIN = terrainGrid;
+  if (terrainGrid) { EXPORT_TERRAIN = terrainGrid; VENT_TG = { lat, lon, g:terrainGrid }; }
   /** Bilinear ground height under a plan point, m above the site; 0 where
       there is no grid yet, or the point lies beyond it. The grid is stored
       in world metres east/north of the site; the plan frame turns with the
@@ -15328,7 +15328,7 @@ function buildVentilation(host) {
       if (!Array.isArray(tv) || tv.length !== TN * TN || tv.some(v => typeof v !== 'number' || !isFinite(v))) throw new Error('terrain');
       const datum = tv[TC * TN + TC];
       terrainGrid = { n:TN, step:TSTEP, h:tv.map(v => +(v - datum).toFixed(1)) };
-      EXPORT_TERRAIN = terrainGrid;
+      EXPORT_TERRAIN = terrainGrid; VENT_TG = { lat, lon, g:terrainGrid };
       const mm = terraMinMax();
       notes.push(t('terrain 240 m grid: low ' + fmt(mm.lo, 0) + ' m, high +' + fmt(mm.hi, 0) + ' m (Copernicus DEM via Open-Meteo)'));
       ok = true;
@@ -23584,6 +23584,7 @@ Object.assign(PT, { 'No shading device on this facade — the SCE asks for one h
   'In the best zone for this side':'Na zona ótima para esta fachada', 'Too much shade — deeper than the best for this side, it costs the winter sun':'Sombra a mais — mais fundo do que o ótimo para esta fachada, custa o sol de inverno',
   'Too little shade for this side':'Sombra a menos para esta fachada', 'in the best zone for this side':'na zona ótima para esta fachada',
   'too deep — it costs the winter sun':'fundo demais — custa o sol de inverno', 'too shallow — it lets in the summer sun':'curto demais — deixa entrar o sol de verão' });
+Object.assign(PT, { 'contours every':'curvas de nível a cada', 'relief: Copernicus DEM via Open-Meteo, 240 m at 30 m — the ground of Passive systems':'relevo: Copernicus DEM via Open-Meteo, 240 m a 30 m — o terreno dos Sistemas passivos' });
 Object.assign(PT, { 'lets through':'deixa passar', 'best on this side by the SCE':'o melhor nesta fachada pelo SCE' });
 Object.assign(PT, { 'Roof step opening':'Abertura da parede de remate',
   'selected — drag it along the wall; door and brick ventilation are under Roof step walls':'seleccionada — arraste-a ao longo da parede; porta e ventilação em tijolo estão em Paredes de remate da cobertura' });
@@ -29245,18 +29246,29 @@ async function sfFetchNoise(onDone) {
    relief (Terrarium / EU-DEM, as Ventilation reads it). They shade one another and the design, screen the noise, and
    take their own values: a grid on the ground and every neighbour's walls and roof. */
 const SF_TERRA = {};
+/* the ground of Passive systems: a 9 × 9 grid at 30 m (240 m across) from the Copernicus DEM through Open-Meteo, in metres
+   east and north of the site, heights from the site's own — the surface tabs read the very same grid, or ask for it the
+   same way where Passive systems has not yet */
+let VENT_TG = null;
 function sfTerrain(onReady) {
-  const pp = ENV.plot || { lat:STATE.site.lat, lon:STATE.site.lon }, key = pp.lat.toFixed(4) + ',' + pp.lon.toFixed(4);
+  const lat = STATE.site.lat, lon = STATE.site.lon, key = lat.toFixed(4) + ',' + lon.toFixed(4);
+  if (VENT_TG && Math.abs(VENT_TG.lat - lat) < 1e-4 && Math.abs(VENT_TG.lon - lon) < 1e-4) return { pending:false, g:VENT_TG.g, vent:true };
   if (SF_TERRA[key]) return SF_TERRA[key];
   const rec = SF_TERRA[key] = { pending:true, g:null };
-  terrariumGrid(pp.lat, pp.lon, 80, 5).then(g => { rec.g = g; }).catch(() => { rec.failed = true; }).then(() => { rec.pending = false; if (onReady) onReady(); });
+  (async () => {
+    const TN = 9, TSTEP = 30, TC = (TN - 1) / 2, mLat = TSTEP / 111320, mLon = TSTEP / Math.max(0.2, 111320 * Math.cos(lat * RAD)), tLa = [], tLo = [];
+    for (let j = 0; j < TN; j++) for (let i = 0; i < TN; i++) { tLa.push((lat + (j - TC) * mLat).toFixed(5)); tLo.push((lon + (i - TC) * mLon).toFixed(5)); }
+    const tg = await (await fetch('https://api.open-meteo.com/v1/elevation?latitude=' + tLa.join(',') + '&longitude=' + tLo.join(','))).json(), tv = tg && tg.elevation;
+    if (!Array.isArray(tv) || tv.length !== TN * TN || tv.some(v => typeof v !== 'number' || !isFinite(v))) throw new Error('terrain');
+    const datum = tv[TC * TN + TC]; rec.g = { n:TN, step:TSTEP, h:tv.map(v => +(v - datum).toFixed(1)) };
+    if (!VENT_TG) VENT_TG = { lat, lon, g:rec.g };
+  })().catch(() => { rec.failed = true; }).then(() => { rec.pending = false; if (onReady) onReady(); });
   return rec;
 }
 /** Height of the ground at (x east, y north), m above the plot's centre: bilinear in the grid, 0 where none. */
 function sfGround(x, y) {
   /* the relief Passive systems reads (Copernicus DEM through Open-Meteo), where it has been fetched; else Terrarium */
-  const tv = (typeof KEEP !== 'undefined' && KEEP.vent && KEEP.vent.terrainGrid) || EXPORT_TERRAIN;
-  const r = tv ? null : sfTerrain(), g = tv || (r && r.g); if (!g) return 0;
+  const r = sfTerrain(), g = r && r.g; if (!g) return 0;
   const c = (g.n - 1) / 2, fi = clamp(x / g.step + c, 0, g.n - 1.001), fj = clamp(y / g.step + c, 0, g.n - 1.001), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j;
   const H = (ii, jj) => g.h[jj * g.n + ii];
   return H(i, j) * (1 - a) * (1 - b) + H(i + 1, j) * a * (1 - b) + H(i, j + 1) * (1 - a) * b + H(i + 1, j + 1) * a * b;
@@ -29285,8 +29297,11 @@ function sfScene(F0, R) {
     });
   }
   /* the ground: the square of terrain Passive systems draws round the house, in cells on the relief, off the buildings' footprints */
-  const cells = [], st = clamp(R / 45, 0.6, 2);
-  for (let x = -R; x < R; x += st) for (let y = -R; y < R; y += st) {
+  const cells = [], tg = sfTerrain().g, TE = tg ? (tg.n - 1) * tg.step / 2 : R, CO = 8, Rin = Math.min(TE, Math.ceil(Math.min(R, 32) / CO) * CO);
+  const grid = [], stF = Rin / Math.max(1, Math.round(Rin / 1.6));
+  for (let x = -Rin; x < Rin - 1e-6; x += stF) for (let y = -Rin; y < Rin - 1e-6; y += stF) grid.push([x, y, stF]);
+  for (let x = -TE; x < TE - 1e-6; x += CO) for (let y = -TE; y < TE - 1e-6; y += CO) if (!(x >= -Rin - 1e-6 && x + CO <= Rin + 1e-6 && y >= -Rin - 1e-6 && y + CO <= Rin + 1e-6)) grid.push([x, y, CO]);
+  for (const [x, y, st] of grid) {
     const cx = x + st / 2, cy = y + st / 2;
     if (prisms.some(p => !p.el && cx > p.bb[0] && cx < p.bb[2] && cy > p.bb[1] && cy < p.bb[3] && inPoly(cx, cy, p.pts))) continue;
     const z = [[x, y], [x + st, y], [x + st, y + st], [x, y + st]].map(q => sfGround(q[0], q[1]));
@@ -29455,19 +29470,27 @@ function sfRender(ctx, W, H, kind, sets, cam) {
   }
   const around = SF_ENV ? SF_ENV.nbFaces.concat(SF_ENV.cells) : [];
   const Hmax = faces.reduce((a, f) => Math.max(a, ...f.pts.map(q => q[2])), 3);
-  camPersp(A, Rg, 0, 0, Hmax / 2);
+  const Gd = reach + 8, TEr = (() => { const g = sfTerrain().g; return g ? (g.n - 1) * g.step / 2 : Rg; })();
+  camPersp(A, Math.hypot(Gd, Gd), 0, 0, Hmax / 2);
   const cols = sets.length, cw = W / cols;
   /* the scale that fits the ground disc and the model into one column */
   const probe = [];
-  [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j]) => probe.push(camUV(A, Rg * i, Rg * j, sfGround(Rg * i * 0.98, Rg * j * 0.98))));
-  faces.concat(around).forEach(f => f.pts.forEach(q => probe.push(camUV(A, q[0], q[1], q[2]))));
-  const u0 = Math.min(...probe.map(p => p[0])), u1 = Math.max(...probe.map(p => p[0])), v0 = Math.min(...probe.map(p => p[1])), v1 = Math.max(...probe.map(p => p[1]));
-  const sc = Math.min((cw - 24) / (u1 - u0), (H - legendH - 46) / (v1 - v0));
+  [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j]) => probe.push(camUV(A, Gd * i, Gd * j, sfGround(Gd * i, Gd * j))));
+  faces.forEach(f => f.pts.forEach(q => probe.push(camUV(A, q[0], q[1], q[2]))));
+  /* the height Passive systems keeps over the house for its wind layer, so the frame is the same */
+  probe.push(camUV(A, 0, 0, Math.max(10, Hmax + 1) + 0.45 * Hmax));
+  /* framed as Passive systems frames its model: the garden round the house fills the width, the house sits low with the
+     height of the wind layer kept over it, and the terrain runs on to the back of the view */
+  const gc = [[-Gd, -Gd], [Gd, -Gd], [Gd, Gd], [-Gd, Gd]].map(([x, y]) => camUV(A, x, y, 0)), c0 = camUV(A, 0, 0, 0);
+  const uMax = Math.max(...gc.map(q => Math.abs(q[0] - c0[0]))), gvMin = Math.min(...gc.map(q => q[1])), gvMax = Math.max(...gc.map(q => q[1]));
+  const hTop = camUV(A, 0, 0, Math.max(10, Hmax + 1) + 0.45 * Hmax)[1] - c0[1], fTop = 40, fBot = H - legendH - 30;
+  const sc = Math.max(1, Math.min((cw / 2 - 16) / uMax, (fBot - fTop) / ((gvMax - gvMin) + hTop)));
   sets.forEach((set, ci) => {
-    const ox = ci * cw + (cw - (u1 - u0) * sc) / 2 - u0 * sc, oy = 34 + (v1 * sc);
+    const ox = ci * cw + cw / 2 - c0[0] * sc, oy = fBot + gvMin * sc;
     const pt = (x, y, z) => { const q = camUV(A, x, y, z); return [ox + q[0] * sc, oy - q[1] * sc]; };
     /* the ground and its compass */
-    ctx.beginPath(); [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j], k) => { const q = pt(Rg * i, Rg * j, sfGround(Rg * i * 0.98, Rg * j * 0.98)); k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
+    ctx.save(); ctx.beginPath(); ctx.rect(ci * cw, 26, cw, H - legendH - 46); ctx.clip();
+    ctx.beginPath(); [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j], k) => { const q = pt(TEr * i, TEr * j, sfGround(TEr * i * 0.999, TEr * j * 0.999)); k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
     ctx.closePath(); ctx.fillStyle = '#EEF0EA'; ctx.fill(); stroke(ctx, '#D5D8D0', 1); ctx.stroke();
     /* the ground's cells, back to front, each in its own colour */
     const colOf = v => sfColour(kind, (v - rng[0]) / (rng[1] - rng[0]));
@@ -29475,17 +29498,38 @@ function sfRender(ctx, W, H, kind, sets, cam) {
       const v = sfVal(T, f, set.months, h, mode, vKey + '|' + ci);
       ctx.beginPath(); f.pts.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath();
       ctx.fillStyle = colOf(v); ctx.fill(); ctx.strokeStyle = colOf(v); ctx.lineWidth = 0.6; ctx.stroke(); });
-    ['N', 'E', 'S', 'W'].forEach((c2, i) => { const a = i * 90, q = pt((Rg + 0.9) * Math.sin(a * RAD), (Rg + 0.9) * Math.cos(a * RAD), 0);
+    /* the relief, read as on Passive systems: contour lines over the ground's colours, and the low and the high in view */
+    { const tg = sfTerrain().g;
+      if (tg && SF_ENV) { const hs = tg.h, lo = Math.min(...hs), hi = Math.max(...hs), span = hi - lo, iv = span > 60 ? 10 : span > 25 ? 5 : span > 10 ? 2 : 1;
+        const stp = 4, n = Math.round(2 * TEr / stp), H2 = [];
+        for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) H2.push(sfGround(-TEr + i * stp * 0.9999, -TEr + j * stp * 0.9999));
+        const P2 = (i, j) => [-TEr + i * stp, -TEr + j * stp];
+        ctx.beginPath();
+        for (let L = Math.ceil(lo / iv) * iv; L <= hi; L += iv) for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+          const c = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]], hv = c.map(([a2, b2]) => H2[b2 * (n + 1) + a2]), xs = [];
+          for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4, h0 = hv[k], h1 = hv[k2]; if ((h0 < L) !== (h1 < L)) { const f = (L - h0) / (h1 - h0), A2 = P2(...c[k]), B2 = P2(...c[k2]); xs.push([A2[0] + (B2[0] - A2[0]) * f, A2[1] + (B2[1] - A2[1]) * f]); } }
+          for (let k = 0; k + 1 < xs.length; k += 2) { const p1 = pt(xs[k][0], xs[k][1], L + 0.03), p2 = pt(xs[k + 1][0], xs[k + 1][1], L + 0.03); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); } }
+        stroke(ctx, 'rgba(40,34,28,.42)', 0.8); ctx.stroke();
+        let kL = -1, kH = -1; const vis2 = [];
+        for (let k = 0; k < hs.length; k++) { const E = -TEr + (k % tg.n) * tg.step, N = -TEr + Math.floor(k / tg.n) * tg.step, q = pt(E, N, hs[k]);
+          if (q[0] < ci * cw + 30 || q[0] > (ci + 1) * cw - 30 || q[1] < 40 || q[1] > H - legendH - 30) continue; vis2.push(k);
+          if (kL < 0 || hs[k] < hs[kL]) kL = k; if (kH < 0 || hs[k] > hs[kH]) kH = k; }
+        [[kL, 'terrain low'], [kH, 'terrain high']].forEach(([k, nm]) => { if (k < 0) return; const E = -TEr + (k % tg.n) * tg.step, N = -TEr + Math.floor(k / tg.n) * tg.step, q = pt(E, N, hs[k]);
+          ctx.fillStyle = 'rgba(250,251,249,.92)'; ctx.fillRect(q[0] - 34, q[1] - 22, 68, 15);
+          label(ctx, t(nm) + ' ' + (hs[k] > 0 ? '+' : '') + fmt(hs[k], 0) + ' m', q[0], q[1] - 14, CH.ink2, F(9), 'center', 'middle');
+          ctx.fillStyle = '#14171a'; ctx.beginPath(); ctx.arc(q[0], q[1] - 4, 2.5, 0, 6.284); ctx.fill(); });
+        label(ctx, t('contours every') + ' ' + iv + ' m', (ci + 1) * cw - 12, H - legendH - 8, CH.muted, F(10), 'right', 'middle'); } }
+    ['N', 'E', 'S', 'W'].forEach((c2, i) => { const a = i * 90, q = pt((Gd + 1.5) * Math.sin(a * RAD), (Gd + 1.5) * Math.cos(a * RAD), sfGround((Gd + 1.5) * Math.sin(a * RAD), (Gd + 1.5) * Math.cos(a * RAD)));
       label(ctx, COMPASS8[i * 2], q[0], q[1], c2 === 'N' ? CH.ink : CH.muted, F(11, '700'), 'center', 'middle'); });
     /* the sun at the hour, or the noise sources' bearings */
     const m0 = set.months[0], hr = sfDay(m0).hrs[h];
     if (kind !== 'noise' && mode !== 'day' && hr.s[2] > 0.02) {
-      const az = Math.atan2(hr.s[0], hr.s[1]), q = pt(Rg * 0.92 * Math.sin(az), Rg * 0.92 * Math.cos(az), 0);
+      const az = Math.atan2(hr.s[0], hr.s[1]), q = pt(Gd * 0.92 * Math.sin(az), Gd * 0.92 * Math.cos(az), sfGround(Gd * 0.92 * Math.sin(az), Gd * 0.92 * Math.cos(az)));
       ctx.fillStyle = '#F59E0B'; ctx.beginPath(); ctx.arc(q[0], q[1], 7, 0, 6.284); ctx.fill();
       label(ctx, fmt(Math.asin(hr.s[2]) / RAD, 0) + '°', q[0], q[1] - 12, '#B45309', F(10, '700'), 'center', 'middle');
     }
     if (kind === 'noise') SF.noise.src.filter(o => o.on !== false).forEach(o => {
-      const bz = (+o.brg || 0) * RAD, a = pt(Rg * 0.98 * Math.sin(bz), Rg * 0.98 * Math.cos(bz), 0), b2 = pt(reach * 1.05 * Math.sin(bz), reach * 1.05 * Math.cos(bz), 0);
+      const bz = (+o.brg || 0) * RAD, a = pt(Gd * Math.sin(bz), Gd * Math.cos(bz), sfGround(Gd * Math.sin(bz), Gd * Math.cos(bz))), b2 = pt(reach * 1.05 * Math.sin(bz), reach * 1.05 * Math.cos(bz), 0);
       const lv = sfSrcLevel(o); stroke(ctx, sfColour('noise', (lv - 35) / 45), 2.2, [5, 4]); seg(ctx, a[0], a[1], b2[0], b2[1]); ctx.setLineDash([]);
       label(ctx, (VL(SF_NOISE_KIND[o.kind]) || o.kind).slice(0, 18) + ' ' + fmt(o.d, 0) + ' m', a[0], a[1] - 9, '#3A3530', F(9.5, '600'), 'center', 'middle'); });
     /* the faces, back to front, roofs over the walls they meet */
@@ -29515,6 +29559,7 @@ function sfRender(ctx, W, H, kind, sets, cam) {
     labs.forEach(L => { if (scr.some((P, j) => j > L.fi && inPoly(L.c[0], L.c[1], P))) return;
       ctx.font = F(10.5, '700'); const tw = ctx.measureText(L.txt).width; ctx.fillStyle = 'rgba(255,255,255,.82)'; ctx.fillRect(L.c[0] - tw / 2 - 3, L.c[1] - 8, tw + 6, 15);
       label(ctx, L.txt, L.c[0], L.c[1], '#1F1B17', F(10.5, '700'), 'center', 'middle'); });
+    ctx.restore();
     label(ctx, set.name, ci * cw + 12, 18, CH.ink, F(12, '700'), 'left', 'middle');
     label(ctx, set.months.map(m => MON3[m]).join(' ') + (mode === 'day' ? ' · ' + t('whole day') : ' · ' + String(h).padStart(2, '0') + ':30 ' + t('solar time')), ci * cw + 12, H - legendH - 8, CH.muted, F(10.5), 'left', 'middle');
   });
@@ -29576,7 +29621,7 @@ function buildSurfaces(host, kind) {
   const surrLine = rail.appendChild(el('p', { class:'hint', style:'margin:2px 0 6px' }));
   surrTxt = () => { const tr = sfTerrain(), nbN = SF_ENV ? SF_ENV.nbs.length : 0;
     surrLine.textContent = SF.sel.surr === false ? '' : (ENV.nb === false ? t('Neighbouring buildings are switched off on Environmental.') : NB.status === 'loading' ? t('Reading the neighbouring buildings…') : NB.status === 'failed' ? t('The neighbouring buildings could not be read (OpenStreetMap).') : nbN + ' ' + t('neighbouring buildings (OpenStreetMap)'))
-      + ' · ' + (tr.pending ? t('reading the relief…') : tr.g ? t('relief: EU-DEM via Terrarium') : t('relief not available: flat ground assumed')); };
+      + ' · ' + (tr.pending ? t('reading the relief…') : tr.g ? t('relief: Copernicus DEM via Open-Meteo, 240 m at 30 m — the ground of Passive systems') : t('relief not available: flat ground assumed')); };
   if (ENV.nb !== false) wantNeighbours(ENV.plot || { lat:S.lat, lon:S.lon }, () => redraw());
   sfTerrain(() => redraw());
   rail.appendChild(el('div', { class:'gh', text:t('Hour') }));
@@ -29649,7 +29694,7 @@ function buildSurfaces(host, kind) {
 
   /* middle: the model */
   camBar(stage, cam, () => G.rot, () => redraw(), null, set => [['S', 'From the south', () => set(270, 30)], ['N', 'From the north', () => set(90, 30)]], 8);
-  panel = makePanel(stage, { title:T.title, note:t('False colour on every wall and roof plane — drag to turn the model'), heightFn:w => Math.round(SF.sel.compare ? Math.max(360, w / 1.9) : w / 1.35),
+  panel = makePanel(stage, { title:T.title, note:t('False colour on every wall and roof plane — drag to turn the model'), heightFn:w => Math.round(SF.sel.compare ? Math.max(360, w / 1.9) : (phoneW(w) ? w * 0.95 + 80 : clamp(Math.min(w * 0.64, roomH() - 262), 340, 660)) + 76),
     render:(ctx, W, H) => sfRender(ctx, W, H, kind, sets(), cam),
     csv:() => csvRows(csvOut()) });
   { const orb = orbitDrag(cam, (az, e) => { cam.az = ((az % 360) + 360) % 360; cam.el = clamp(e, 8, 89.5); panel.draw(); });
