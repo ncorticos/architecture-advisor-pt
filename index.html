@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.218.0',
+  version:     '1.218.1',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -8813,12 +8813,15 @@ function buildSite(host) {
   function refreshWin() {
     refreshSce();
     const rA = roofWindowQuads(G, ROOF).reduce((a2, o) => { const q = o.q; return a2 + Math.hypot(q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]) * Math.hypot(q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]); }, 0);
-    const ws = WIN_KEYS.map(f => ({ f, g:glassOf(f) })).filter(o => o.g > 0).concat(rA > 0 ? [{ f:'roof', g:rA }] : []);
+    const ws = WIN_KEYS.map(f => ({ f, g:glassOf(f) })).filter(o => o.g > 0);
+    const roofTxt = rA > 0 ? t('roof windows') + ' ' + fmt(rA, 1) + ' m²' : '';
+    if (!ws.length && rA > 0) { const aim0 = winAim(); pillWin.className = 'pill ' + (aim0 && aim0.fit >= 80 ? 'ok' : 'empty'); pillWin.textContent = t('Glass only in the roof') + ': ' + roofTxt; return; }
     if (!ws.length) { pillWin.className = 'pill empty'; pillWin.textContent = t('No windows yet — size them on Openings and Shadowing'); return; }
     const amax = Math.max.apply(null, ws.map(o => o.g)), amin = Math.min.apply(null, ws.map(o => o.g));
-    const dirs = a => ws.filter(o => Math.abs(o.g - a) <= 0.01 * amax).map(o => o.f === 'roof' ? t('the roof') : faceDir(o.f)).join('/');
+    const dirs = a => ws.filter(o => Math.abs(o.g - a) <= 0.01 * amax).map(o => faceDir(o.f)).join('/');
     let txt = t('Most glass faces') + ' ' + dirs(amax);
     if (amax - amin > 0.01 * amax) txt += ' · ' + t('least faces') + ' ' + dirs(amin);
+    if (roofTxt) txt += ' · ' + roofTxt;
     const aim = winAim(), south = lat < 0 ? 'north' : 'south';
     if (!aim) { pillWin.className = 'pill empty'; pillWin.textContent = txt + ' — ' + t('opposite windows are equal: make the ' + south + ' one larger'); }
     else if (aim.fit >= 80) { pillWin.className = 'pill ok'; pillWin.textContent = txt + ' — ' + t('the right way round'); }
@@ -34089,6 +34092,8 @@ Object.assign(PT, {
   "Summer": "Verão",
   "Ventilation": "Ventilação",
   "Solar radiation": "Radiação solar",
+  "roof windows": "janelas de cobertura",
+  "Glass only in the roof": "Vidro só na cobertura",
   "in the lee of the winter wind: it cannot shelter the walls": "a sotavento do vento de inverno: não pode abrigar as paredes",
   "too far upwind to shelter the walls (more than 20 of its heights)": "demasiado longe a barlavento para abrigar as paredes (mais de 20 vezes a sua altura)",
   "upwind of the winter wind but beside the house: it shelters little": "a barlavento do vento de inverno mas ao lado da casa: abriga pouco",
