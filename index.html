@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.218.1',
+  version:     '1.219.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -13846,6 +13846,15 @@ const gelCount = f => { const us = faceUnits(f); return winsOf(f).reduce((a, x) 
 }
 
  /* --------------------------------------------------------------- 9. VENTILATION -- */
+/* The species that drop their leaves for the winter: their crown keeps a share of its summer density — bare twigs about
+   0.45, the marcescent oaks that hold their dry leaves about 0.7 — a teaching figure of the order windbreak studies give. */
+const TREE_WINTER = { oak:0.45, castanheiro:0.45, vidoeiro:0.45, amieiro:0.45, freixo:0.45, poplar:0.45, lodao:0.45, pilriteiro:0.45, cornalheira:0.45,
+  negral:0.7, cerquinho:0.7,
+  lipa:0.45, dab:0.45, buk:0.45, brzoza:0.45, klon:0.45, jesion:0.45, wierzba:0.45, topola:0.45, olsza:0.45, grab:0.45, kasztanowiec:0.45, modrzew:0.45, glog:0.45, bez:0.45, leszczyna:0.45 };
+/** How much of the wind a crown of optical density d cuts at most, just behind it. */
+const treeCut = d => clamp(0.85 * Math.pow(clamp(d, 0, 1), 0.8), 0.03, 0.85);
+/** How far, in heights, its lee reaches: farthest at a medium density, sooner for a dense crown or a sparse one. */
+const treeReach = d => 12 + 13 * (1 - Math.min(1, Math.abs(d - 0.55) / 0.45));
 function buildVentilation(host) {
   const S = STATE.site, C = STATE.clim;
   const lat = S.lat, lon = S.lon;
@@ -14989,6 +14998,8 @@ function buildVentilation(host) {
     }
     return k;
   };
+  /** The share of a height band [a, b] a crown between zb and zt covers. */
+  const crownCover = (o, a, b) => o.zt === undefined ? 1 : b <= a ? 0 : Math.max(0, Math.min(b, o.zt) - Math.max(a, o.zb)) / (b - a);
   const obstacles = () => {
     const out = [];
     /* neighbours first: solid lee like the building's own (fresh list —
@@ -15008,10 +15019,17 @@ function buildVentilation(host) {
       }
       out.push({ ref:nb, pts:per, r:nb.r, h:Math.max(0.5, nb.top), R0:0.7, Lmax:20, F0:0, solid:true });
     });
+    /* v1.219: a tree's windbreak follows what the student sets — its species (a deciduous crown is bare in winter),
+       its height (the shelter reaches 5 heights in full and fades out to Lmax heights), its clear trunk (the wind passes
+       under the crown: it only shelters the part of the house the crown covers), its crown's size and form (how wide a
+       wind it intercepts) and its density, which sets both how much it cuts and how far its lee reaches: a dense crown
+       cuts most right behind it but the wind closes in sooner; a medium-porous one (optical density ≈ 0.55) shelters
+       farthest (Heisler & DeWalle 1988). The relations are this application's teaching curves. */
     VEGETATION.forEach(v => {
-      const bush = specOf(v.type).kind === 'bush', d = v.density != null ? v.density : 0.6;
-      out.push({ ref:v, pts:[[v.x, v.y]], r:Math.max(0.4, canopyOf(v) * spreadOf(v)), h:Math.max(0.3, v.height),
-        R0:clamp((bush ? 0.2 : 0.15) + (bush ? 0.5 : 0.55) * d, 0.1, 0.75), Lmax:20, F0:(bush ? 0.12 : 0.1) * d });
+      const sp = specOf(v.type), bush = sp.kind === 'bush', d = v.density != null ? v.density : (sp.d != null ? sp.d : 0.6);
+      const zb = bush ? 0 : Math.min(trunkOf(v), Math.max(0, v.height - 0.3)), zt = Math.max(zb + 0.3, v.height), wf = TREE_WINTER[v.type] || 1;
+      out.push({ ref:v, veg:true, pts:[[v.x, v.y]], r:Math.max(0.4, canopyOf(v) * spreadOf(v)), h:Math.max(0.3, zt), zb, zt, d, dw:d * wf, wf,
+        R0:treeCut(d), Rw:treeCut(d * wf), Lmax:treeReach(d), Lw:treeReach(d * wf), F0:(bush ? 0.12 : 0.1) * d });
     });
     WALLS.forEach(w => {
       const n = Math.max(2, Math.ceil(w.length / 0.5)), pts = [];
@@ -15053,9 +15071,10 @@ function buildVentilation(host) {
           o.pts.forEach(q => {
             const rx = q[0] - x, ry = q[1] - y, along = rx * u[0] + ry * u[1], lat = Math.abs(rx * u[1] - ry * u[0]);
             if (along <= 0 || lat > o.r) return;
-            const L = along / o.h, g = L <= 5 ? 1 : L >= o.Lmax ? 0 : (o.Lmax - L) / (o.Lmax - 5);
-            ro = Math.max(ro, o.R0 * g);
+            const Lm = o.Lw || o.Lmax, L = along / o.h, g = L <= 5 ? 1 : L >= Lm ? 0 : (Lm - L) / (Lm - 5);
+            ro = Math.max(ro, (o.Rw !== undefined ? o.Rw : o.R0) * g);
           });
+          ro *= crownCover(o, 0, H0);   // the wind passes under a crown raised on its trunk
           if (o.solid) solid = Math.max(solid, ro); else pass *= 1 - ro; });
         const red = 1 - (1 - solid) * pass;
         wsum += c; hsum += c * chan * (1 - red);
@@ -15130,6 +15149,7 @@ function buildVentilation(host) {
       if (sg) {
         const c = [(sg.a[0] + sg.b[0]) / 2, (sg.a[1] + sg.b[1]) / 2], half = (wn ? wn.w : sg.len * 0.5) / 2;
         let kbS = 0, passB = 1;
+        const wr = wn && wn.rows && wn.rows[0], z0w = wr ? wr.sill : 0.9, z1w = wr ? wr.head : 2.1;
         obs.forEach(o => {
           let blk = 0, fun = 0;
           o.pts.forEach(q => {
@@ -15139,6 +15159,7 @@ function buildVentilation(host) {
             if (lat < half + o.r) blk = Math.max(blk, o.R0 * g);
             else if (lat < half + o.r + 3) fun = Math.max(fun, o.F0 * g);
           });
+          blk *= crownCover(o, z0w, z1w);   // a crown above the inlet's windows lets the breeze in under it
           if (o.solid) kbS = Math.max(kbS, blk); else passB *= 1 - blk;
           kf += fun;
         });
@@ -17668,16 +17689,26 @@ function buildVentilation(host) {
     const bb = planModel(G).bbox, cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, half = Math.max(bb[2] - bb[0], bb[3] - bb[1]) / 2;
     const aW = (it.x - cx) * uw[0] + (it.y - cy) * uw[1], lW = Math.abs((it.x - cx) * uw[1] - (it.y - cy) * uw[0]);
     const win = aW <= 0 ? t('in the lee of the winter wind: it cannot shelter the walls') : aW > 20 * h ? t('too far upwind to shelter the walls (more than 20 of its heights)')
-      : lW > half + r ? t('upwind of the winter wind but beside the house: it shelters little') : t('upwind of the winter wind: it shelters the walls');
+      : lW > half + r ? t('upwind of the winter wind but beside the house: it shelters little')
+      : sel.kind !== 'wall' && (() => { const o = obstacles().find(q => q.ref === it); return o && crownCover(o, 0, h0live()) < 0.1; })() ? t('upwind of the winter wind, but its crown stands above the house: the wind passes under it')
+      : t('upwind of the winter wind: it shelters the walls');
     const sa = summerAir(), inl = sa.best ? sa.best.inlet : null, pl = planModel(G), sg = inl ? sunspaceWall(pl, inl) : null;
     let sum = t('no summer cross path to act on');
     if (sg) { const c = [(sg.a[0] + sg.b[0]) / 2, (sg.a[1] + sg.b[1]) / 2], wn = segWindow(sg, G), hw = (wn ? wn.w : sg.len * 0.5) / 2;
       const a = (it.x - c[0]) * us[0] + (it.y - c[1]) * us[1], l = Math.abs((it.x - c[0]) * us[1] - (it.y - c[1]) * us[0]);
       sum = a <= 0 ? t('downwind of the summer inlet') + ' (' + faceDirName(inl) + '): ' + t('it cannot change the air coming in — stand it upwind, beside the path, to funnel the breeze into the windows')
         : a > 10 * h ? t('too far upwind of the summer inlet to change it (more than 10 of its heights)')
-        : l < hw + r ? t('in front of the summer inlet') + ' (' + faceDirName(inl) + '): ' + t('it blocks the breeze — move it aside, beside the path, so it funnels instead')
+        : l < hw + r ? (sel.kind !== 'wall' && (() => { const o = obstacles().find(q => q.ref === it), wr = wn && wn.rows && wn.rows[0]; return o && crownCover(o, wr ? wr.sill : 0.9, wr ? wr.head : 2.1) < 0.1; })()
+            ? t('in front of the summer inlet') + ' (' + faceDirName(inl) + '), ' + t('but its crown stands above the windows: the breeze passes under it')
+            : t('in front of the summer inlet') + ' (' + faceDirName(inl) + '): ' + t('it blocks the breeze — move it aside, beside the path, so it funnels instead'))
         : l < hw + r + 3 ? t('beside the summer path: it funnels air into the inlet') : t('upwind of the summer inlet but off its path: it does little'); }
-    return '<br>' + t('Winter wind from') + ' ' + COMPASS8[Math.round(ww.dir / 45) % 8] + ': ' + win + '.<br>' + t('Summer wind from') + ' ' + COMPASS8[Math.round(sw.dir / 45) % 8] + ': ' + sum + '.';
+    let crown = '';
+    if (sel.kind !== 'wall') { const o = obstacles().find(q => q.ref === it);
+      if (o) { const H0 = h0live(), cv = crownCover(o, 0, H0);
+        crown = '<br>' + t('Its crown') + ': ' + t('cuts up to') + ' ' + fmt(100 * o.R0, 0) + ' % ' + t('in summer') + (o.wf < 1 ? ', ' + fmt(100 * o.Rw, 0) + ' % ' + t('in winter (it drops its leaves)') : ', ' + t('the same in winter (evergreen)'))
+          + ' · ' + t('lee to') + ' ' + fmt(o.Lmax, 0) + ' ' + t('heights') + ' (' + fmt(o.Lmax * o.h, 0) + ' m)'
+          + ' · ' + t('covers') + ' ' + fmt(100 * cv, 0) + ' % ' + t('of the house\u2019s height') + (cv < 0.5 && o.zb > 1 ? ' — ' + t('the wind passes under its crown: a lower trunk, or a bush beneath it, would shelter more') : ''); } }
+    return crown + '<br>' + t('Winter wind from') + ' ' + COMPASS8[Math.round(ww.dir / 45) % 8] + ': ' + win + '.<br>' + t('Summer wind from') + ' ' + COMPASS8[Math.round(sw.dir / 45) % 8] + ': ' + sum + '.';
   };
   const faceDirName = f => { try { return COMPASS8[Math.round(faceAzV(f) / 45) % 8]; } catch (e) { return f; } };
   const refresh = () => {
@@ -34092,6 +34123,18 @@ Object.assign(PT, {
   "Summer": "Verão",
   "Ventilation": "Ventilação",
   "Solar radiation": "Radiação solar",
+  "upwind of the winter wind, but its crown stands above the house: the wind passes under it": "a barlavento do vento de inverno, mas a copa está acima da casa: o vento passa por baixo",
+  "but its crown stands above the windows: the breeze passes under it": "mas a copa está acima das janelas: a brisa passa por baixo",
+  "Its crown": "A sua copa",
+  "cuts up to": "corta até",
+  "in summer": "no verão",
+  "in winter (it drops its leaves)": "no inverno (perde a folha)",
+  "the same in winter (evergreen)": "o mesmo no inverno (perene)",
+  "lee to": "abrigo até",
+  "heights": "alturas",
+  "covers": "cobre",
+  "of the house’s height": "da altura da casa",
+  "the wind passes under its crown: a lower trunk, or a bush beneath it, would shelter more": "o vento passa por baixo da copa: um tronco mais baixo, ou um arbusto por baixo, abrigaria mais",
   "roof windows": "janelas de cobertura",
   "Glass only in the roof": "Vidro só na cobertura",
   "in the lee of the winter wind: it cannot shelter the walls": "a sotavento do vento de inverno: não pode abrigar as paredes",
