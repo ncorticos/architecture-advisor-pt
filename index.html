@@ -983,7 +983,7 @@ const L_MAX = 50;
 const APP = {
   name:        'Architecture Advisor PT',
   tag:         'AA PT',
-  version:     '1.217.0',
+  version:     '1.218.0',
   author:      'Nuno Dinis Cortiços',
   institution: 'Lisbon School of Architecture, Universidade de Lisboa',
   builtWith:   'Claude Opus 5 (Anthropic)',
@@ -15003,7 +15003,7 @@ function buildVentilation(host) {
         const f = lens[k] > 1e-9 ? (tgt - acc) / lens[k] : 0, a = P[k], c = P[(k + 1) % P.length];
         per.push([a[0] + (c[0] - a[0]) * clamp(f, 0, 1), a[1] + (c[1] - a[1]) * clamp(f, 0, 1)]);
       }
-      out.push({ ref:nb, pts:per, r:nb.r, h:Math.max(0.5, nb.top), R0:0.7, Lmax:20, F0:0 });
+      out.push({ ref:nb, pts:per, r:nb.r, h:Math.max(0.5, nb.top), R0:0.7, Lmax:20, F0:0, solid:true });
     });
     VEGETATION.forEach(v => {
       const bush = specOf(v.type).kind === 'bush', d = v.density != null ? v.density : 0.6;
@@ -15042,13 +15042,19 @@ function buildVentilation(host) {
         const t0 = (k + 0.5) / nS, x = sg.a[0] + (sg.b[0] - sg.a[0]) * t0 + sg.n[0] * 0.05, y = sg.a[1] + (sg.b[1] - sg.a[1]) * t0 + sg.n[1] * 0.05;
         const chan = canyonChanAt(avs, x, y, H0 * 0.5);
         if (chan > chanMax) chanMax = chan;
-        let red = pl.boxes.some(r => rayHitsBox([x, y, H0 * 0.5], [u[0], u[1], 0], r, H0)) ? 0.7 : 0;
-        obs.forEach(o => o.pts.forEach(q => {
-          const rx = q[0] - x, ry = q[1] - y, along = rx * u[0] + ry * u[1], lat = Math.abs(rx * u[1] - ry * u[0]);
-          if (along <= 0 || lat > o.r) return;
-          const L = along / o.h, g = L <= 5 ? 1 : L >= o.Lmax ? 0 : (o.Lmax - L) / (o.Lmax - 5);
-          red = Math.max(red, o.R0 * g);
-        }));
+        /* v1.218: the buildings' lees (the design's own, the neighbours') by the strongest; each tree, hedge or garden
+           wall then cuts its share of what they let through — shelters in series, so a tree still counts in a
+           street of houses instead of vanishing behind the strongest single lee */
+        let solid = pl.boxes.some(r => rayHitsBox([x, y, H0 * 0.5], [u[0], u[1], 0], r, H0)) ? 0.7 : 0, pass = 1;
+        obs.forEach(o => { let ro = 0;
+          o.pts.forEach(q => {
+            const rx = q[0] - x, ry = q[1] - y, along = rx * u[0] + ry * u[1], lat = Math.abs(rx * u[1] - ry * u[0]);
+            if (along <= 0 || lat > o.r) return;
+            const L = along / o.h, g = L <= 5 ? 1 : L >= o.Lmax ? 0 : (o.Lmax - L) / (o.Lmax - 5);
+            ro = Math.max(ro, o.R0 * g);
+          });
+          if (o.solid) solid = Math.max(solid, ro); else pass *= 1 - ro; });
+        const red = 1 - (1 - solid) * pass;
         wsum += c; hsum += c * chan * (1 - red);
       }
     });
@@ -15120,6 +15126,7 @@ function buildVentilation(host) {
       let kb = 0, kf = 0;
       if (sg) {
         const c = [(sg.a[0] + sg.b[0]) / 2, (sg.a[1] + sg.b[1]) / 2], half = (wn ? wn.w : sg.len * 0.5) / 2;
+        let kbS = 0, passB = 1;
         obs.forEach(o => {
           let blk = 0, fun = 0;
           o.pts.forEach(q => {
@@ -15129,8 +15136,10 @@ function buildVentilation(host) {
             if (lat < half + o.r) blk = Math.max(blk, o.R0 * g);
             else if (lat < half + o.r + 3) fun = Math.max(fun, o.F0 * g);
           });
-          kb = Math.max(kb, blk); kf += fun;
+          if (o.solid) kbS = Math.max(kbS, blk); else passB *= 1 - blk;
+          kf += fun;
         });
+        kb = 1 - (1 - kbS) * passB;
       }
       const k = (1 - kb) * (1 + Math.min(0.4, kf));
       /* ...times what the avenue pours in: a canyon mouth at the inlet
@@ -17646,6 +17655,28 @@ function buildVentilation(host) {
     return { w:w1 - w0, s:s1 - s0 };
   };
   const signed = v => (v > 0.005 ? '+' : v < -0.005 ? '−' : '±') + fmt(Math.abs(v), 2);
+  /** Where a tree, hedge or garden wall stands against the two winds — the reason it changes what it changes, and where
+      it would act: upwind of the house it shelters the winter walls; upwind of the summer inlet, in front of its windows,
+      it blocks the inflow; beside that path it funnels air into it; downwind, in the lee, it touches neither. */
+  const placeNote = sel => {
+    const it = (sel.kind === 'wall' ? WALLS : VEGETATION)[sel.index]; if (!it) return '';
+    const h = Math.max(0.5, sel.kind === 'wall' ? it.height : it.height), r = sel.kind === 'wall' ? it.length / 2 : Math.max(0.4, canopyOf(it) * spreadOf(it));
+    const ww = seasonWind('winter'), uw = localDir(ww.dir), sw = seasonWind('summer'), us = localDir(sw.dir);
+    const bb = planModel(G).bbox, cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, half = Math.max(bb[2] - bb[0], bb[3] - bb[1]) / 2;
+    const aW = (it.x - cx) * uw[0] + (it.y - cy) * uw[1], lW = Math.abs((it.x - cx) * uw[1] - (it.y - cy) * uw[0]);
+    const win = aW <= 0 ? t('in the lee of the winter wind: it cannot shelter the walls') : aW > 20 * h ? t('too far upwind to shelter the walls (more than 20 of its heights)')
+      : lW > half + r ? t('upwind of the winter wind but beside the house: it shelters little') : t('upwind of the winter wind: it shelters the walls');
+    const sa = summerAir(), inl = sa.best ? sa.best.inlet : null, pl = planModel(G), sg = inl ? sunspaceWall(pl, inl) : null;
+    let sum = t('no summer cross path to act on');
+    if (sg) { const c = [(sg.a[0] + sg.b[0]) / 2, (sg.a[1] + sg.b[1]) / 2], wn = segWindow(sg, G), hw = (wn ? wn.w : sg.len * 0.5) / 2;
+      const a = (it.x - c[0]) * us[0] + (it.y - c[1]) * us[1], l = Math.abs((it.x - c[0]) * us[1] - (it.y - c[1]) * us[0]);
+      sum = a <= 0 ? t('downwind of the summer inlet') + ' (' + faceDirName(inl) + '): ' + t('it cannot change the air coming in — stand it upwind, beside the path, to funnel the breeze into the windows')
+        : a > 10 * h ? t('too far upwind of the summer inlet to change it (more than 10 of its heights)')
+        : l < hw + r ? t('in front of the summer inlet') + ' (' + faceDirName(inl) + '): ' + t('it blocks the breeze — move it aside, beside the path, so it funnels instead')
+        : l < hw + r + 3 ? t('beside the summer path: it funnels air into the inlet') : t('upwind of the summer inlet but off its path: it does little'); }
+    return '<br>' + t('Winter wind from') + ' ' + COMPASS8[Math.round(ww.dir / 45) % 8] + ': ' + win + '.<br>' + t('Summer wind from') + ' ' + COMPASS8[Math.round(sw.dir / 45) % 8] + ': ' + sum + '.';
+  };
+  const faceDirName = f => { try { return COMPASS8[Math.round(faceAzV(f) / 45) % 8]; } catch (e) { return f; } };
   const refresh = () => {
     const nowW = +winterWind().Uwall.toFixed(2), noFlow = effectiveArea('S', 'N') <= 0 && effectiveArea('E', 'W') <= 0 && !(stackAir().Q > 0);
     const nowS = noFlow ? null : +summerAir().v.toFixed(2);
@@ -17667,7 +17698,8 @@ function buildVentilation(host) {
         + '<br><span style="color:var(--muted)">' + t('against the dry garden without it, on the hottest month\u2019s afternoon') + '</span>'
       : !sel0 || !eff ? t('Pick a tool on the left and click open ground; click a placed item to see what it does.')
       : '<b>' + t(sel0.kind === 'wall' ? 'This wall' : 'This plant') + '</b>: ' + t('winter wind at the walls') + ' <b>' + signed(eff.w) + ' m/s</b> · '
-        + t('summer air at the inlets') + ' <b>' + signed(eff.s) + ' m/s</b><br><span style="color:var(--muted)">' + t('what it changes, against the garden without it') + '</span>';
+        + t('summer air at the inlets') + ' <b>' + signed(eff.s) + ' m/s</b><br><span style="color:var(--muted)">' + t('what it changes, against the garden without it') + '</span>'
+        + '<span style="font-size:11.5px">' + placeNote(sel0) + '</span>';
     syncEditor();
     refreshScores();
     syncWallEd();
@@ -23541,13 +23573,13 @@ const POP_HEAD = {
     p:{ en:'The roof of the archetype — form, pitch, eave and covering — as the sources record them.', pt:'A cobertura do arquétipo — forma, inclinação, beirado e revestimento — tal como as fontes a registam.' } },
   openings:{ t:{ en:'Openings', pt:'Vãos' },
     p:{ en:'The few, small openings of the popular house: how many, where, and the facade that has none.', pt:'Os poucos e pequenos vãos da casa popular: quantos, onde, e a fachada que não tem nenhum.' } },
-  ventilation:{ t:{ en:'Passive systems', pt:'Sistemas passivos' },
+  ventilation:{ t:{ en:'Ventilation', pt:'Ventilação' },
     p:{ en:'What the house relied on instead of machines — mass, thatch, smoke, shade, the latada, the wind — with the airflow and the sun on the model.', pt:'Aquilo em que a casa confiava em vez de máquinas — massa, colmo, fumo, sombra, latada, vento — com o ar e o sol sobre o modelo.' } },
   visualization:{ t:{ en:'Materials and image', pt:'Materiais e imagem' },
     p:{ en:'The archetype’s materials and colours: walls, roof, doors and their bands — and the image of it.', pt:'Os materiais e as cores do arquétipo: paredes, cobertura, portas e as suas barras — e a sua imagem.' } }
 };
 Object.assign(PT, { 'Draw the model':'Desenhar o modelo', 'Archetype':'Arquétipo', 'Plan and massing':'Planta e volumetria', 'Roof and covering':'Cobertura e revestimento',
-  'Passive systems':'Sistemas passivos', 'Materials and image':'Materiais e imagem' });
+  'Materials and image':'Materiais e imagem' });
 
 /** A page as before, retitled for the popular study, its checklist open at the head. */
 const popular = (key, build) => host => {
@@ -23618,7 +23650,7 @@ function tabsFor(S) {
     { key:'site', label:'Plan and massing', build:popular('site', buildSite) },
     { key:'roof', label:'Roof and covering', build:popular('roof', buildRoof) },
     { key:'openings', label:'Openings', build:popular('openings', buildOpenings) },
-    { key:'ventilation', label:'Passive systems', build:popular('ventilation', buildVentilation) },
+    { key:'ventilation', label:'Ventilation', build:popular('ventilation', buildVentilation) },
     { key:'sunrad', label:'Solar radiation', build:buildSurfRad },
     { key:'outtemp', label:'Outdoor temperature', build:buildSurfTemp },
     { key:'daylight', label:'Daylight', build:buildSurfLight },
@@ -23712,7 +23744,7 @@ Object.assign(PT, { 'No shading device on this facade — the SCE asks for one h
   'In the best zone for this side':'Na zona ótima para esta fachada', 'Too much shade — deeper than the best for this side, it costs the winter sun':'Sombra a mais — mais fundo do que o ótimo para esta fachada, custa o sol de inverno',
   'Too little shade for this side':'Sombra a menos para esta fachada', 'in the best zone for this side':'na zona ótima para esta fachada',
   'too deep — it costs the winter sun':'fundo demais — custa o sol de inverno', 'too shallow — it lets in the summer sun':'curto demais — deixa entrar o sol de verão' });
-Object.assign(PT, { 'contours every':'curvas de nível a cada', 'relief: Copernicus DEM via Open-Meteo, 240 m at 30 m — the ground of Passive systems':'relevo: Copernicus DEM via Open-Meteo, 240 m a 30 m — o terreno dos Sistemas passivos' });
+Object.assign(PT, { 'contours every':'curvas de nível a cada', 'relief: Copernicus DEM via Open-Meteo, 240 m at 30 m — the ground of Ventilation':'relevo: Copernicus DEM via Open-Meteo, 240 m a 30 m — o terreno de Ventilação' });
 Object.assign(PT, { 'lets through':'deixa passar', 'best on this side by the SCE':'o melhor nesta fachada pelo SCE' });
 Object.assign(PT, { 'Roof step opening':'Abertura da parede de remate',
   'selected — drag it along the wall; door and brick ventilation are under Roof step walls':'seleccionada — arraste-a ao longo da parede; porta e ventilação em tijolo estão em Paredes de remate da cobertura' });
@@ -29200,9 +29232,9 @@ function sfFaces() {
   });
   /* sample points just off each face, for the neighbours' shade: its centre and halfway to each corner */
   out.forEach(f => { f.samp = [f.c].concat(f.pts.map(q => [(q[0] + f.c[0]) / 2, (q[1] + f.c[1]) / 2, (q[2] + f.c[2]) / 2])).map(q => [q[0] + f.n[0] * 0.15, q[1] + f.n[1] * 0.15, q[2] + f.n[2] * 0.15]); });
-  /* everything else Passive systems draws, in the same frame: the canopy or pergola with its posts and slats, the balconies,
+  /* everything else Ventilation draws, in the same frame: the canopy or pergola with its posts and slats, the balconies,
      the plinth, the stairs, the chimney and the parapet, the overhangs and fins of Openings, the popular model's other
-     bodies and courtyard wall, the walls and the planting placed on Passive systems — each face read as the walls are,
+     bodies and courtyard wall, the walls and the planting placed on Ventilation — each face read as the walls are,
      each solid casting its shade (a pergola and a crown letting their share of the sun through) */
   const prisms = [], W3 = q => { const w = toW(q[0], q[1]); return [w[0], w[1], q[2]]; }, Wn = n => { const w = toW(n[0], n[1]); return [w[0], w[1], n[2]]; };
   const newell = P => { let x = 0, y = 0, z = 0; P.forEach((a, i) => { const b = P[(i + 1) % P.length]; x += (a[1] - b[1]) * (a[2] + b[2]); y += (a[2] - b[2]) * (a[0] + b[0]); z += (a[0] - b[0]) * (a[1] + b[1]); });
@@ -29253,7 +29285,7 @@ function sfFaces() {
       CB.blocks.forEach(B => { const bc = ctr(B.poly.map(p => [p[0], p[1], 0])), d = Math.hypot(bc[0] - cn[0], bc[1] - cn[1]); if (d < bd) { bd = d; best = bc; } });
       el(q.P, null, { from:best || [0, 0, 0], alpha:q.roof ? aR : aW }); });
     CB.blocks.forEach(B => prism(B.poly, 0, B.h)); } catch (e) {}
-  /* the walls and the planting set on Passive systems */
+  /* the walls and the planting set on Ventilation */
   try { (SCENE.walls || []).forEach(w => { if (w.sup) { supFaces(w).forEach(f => { if (!f.ground) el(f.pts, null, { from:[w.x, w.y, 0] }); }); return; }
       const hw = w.length / 2, t2 = 0.1, ax = w.along === 'y';
       const B = ax ? [w.x - t2, w.y - hw, 0, w.x + t2, w.y + hw, w.height] : [w.x - hw, w.y - t2, 0, w.x + hw, w.y + t2, w.height];
@@ -29374,9 +29406,9 @@ async function sfFetchNoise(onDone) {
    relief (Terrarium / EU-DEM, as Ventilation reads it). They shade one another and the design, screen the noise, and
    take their own values: a grid on the ground and every neighbour's walls and roof. */
 const SF_TERRA = {};
-/* the ground of Passive systems: a 9 × 9 grid at 30 m (240 m across) from the Copernicus DEM through Open-Meteo, in metres
+/* the ground of Ventilation: a 9 × 9 grid at 30 m (240 m across) from the Copernicus DEM through Open-Meteo, in metres
    east and north of the site, heights from the site's own — the surface tabs read the very same grid, or ask for it the
-   same way where Passive systems has not yet */
+   same way where Ventilation has not yet */
 let VENT_TG = null;
 function sfTerrain(onReady) {
   const lat = STATE.site.lat, lon = STATE.site.lon, key = lat.toFixed(4) + ',' + lon.toFixed(4);
@@ -29395,7 +29427,7 @@ function sfTerrain(onReady) {
 }
 /** Height of the ground at (x east, y north), m above the plot's centre: bilinear in the grid, 0 where none. */
 function sfGround(x, y) {
-  /* the relief Passive systems reads (Copernicus DEM through Open-Meteo), where it has been fetched; else Terrarium */
+  /* the relief Ventilation reads (Copernicus DEM through Open-Meteo), where it has been fetched; else Terrarium */
   const r = sfTerrain(), g = r && r.g; if (!g) return 0;
   const c = (g.n - 1) / 2, fi = clamp(x / g.step + c, 0, g.n - 1.001), fj = clamp(y / g.step + c, 0, g.n - 1.001), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j;
   const H = (ii, jj) => g.h[jj * g.n + ii];
@@ -29424,7 +29456,7 @@ function sfScene(F0, R) {
       faces.push(sfMk({ kind:'nbroof', nb:k, pts:pts.map(q => [q[0], q[1], z1]), n:[0, 0, 1], area:Math.abs(ar) / 2, alpha:0.6 }));
     });
   }
-  /* the ground: the square of terrain Passive systems draws round the house, in cells on the relief, off the buildings' footprints */
+  /* the ground: the square of terrain Ventilation draws round the house, in cells on the relief, off the buildings' footprints */
   const cells = [], tg = sfTerrain().g, TE = tg ? (tg.n - 1) * tg.step / 2 : R, CO = 8, Rin = Math.min(TE, Math.ceil(Math.min(R, 32) / CO) * CO);
   const grid = [], stF = Rin / Math.max(1, Math.round(Rin / 1.6));
   for (let x = -Rin; x < Rin - 1e-6; x += stF) for (let y = -Rin; y < Rin - 1e-6; y += stF) grid.push([x, y, stF]);
@@ -29605,9 +29637,9 @@ function sfRender(ctx, W, H, kind, sets, cam) {
   const probe = [];
   [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j]) => probe.push(camUV(A, Gd * i, Gd * j, sfGround(Gd * i, Gd * j))));
   faces.forEach(f => f.pts.forEach(q => probe.push(camUV(A, q[0], q[1], q[2]))));
-  /* the height Passive systems keeps over the house for its wind layer, so the frame is the same */
+  /* the height Ventilation keeps over the house for its wind layer, so the frame is the same */
   probe.push(camUV(A, 0, 0, Math.max(10, Hmax + 1) + 0.45 * Hmax));
-  /* framed as Passive systems frames its model: the garden round the house fills the width, the house sits low with the
+  /* framed as Ventilation frames its model: the garden round the house fills the width, the house sits low with the
      height of the wind layer kept over it, and the terrain runs on to the back of the view */
   const gc = [[-Gd, -Gd], [Gd, -Gd], [Gd, Gd], [-Gd, Gd]].map(([x, y]) => camUV(A, x, y, 0)), c0 = camUV(A, 0, 0, 0);
   const uMax = Math.max(...gc.map(q => Math.abs(q[0] - c0[0]))), gvMin = Math.min(...gc.map(q => q[1])), gvMax = Math.max(...gc.map(q => q[1]));
@@ -29627,7 +29659,7 @@ function sfRender(ctx, W, H, kind, sets, cam) {
       const v = sfVal(T, f, set.months, h, mode, vKey + '|' + ci);
       ctx.beginPath(); f.pts.forEach((q, i) => { const p2 = pt(q[0], q[1], q[2]); i ? ctx.lineTo(p2[0], p2[1]) : ctx.moveTo(p2[0], p2[1]); }); ctx.closePath();
       ctx.fillStyle = colOf(v); ctx.fill(); ctx.strokeStyle = colOf(v); ctx.lineWidth = 0.6; ctx.stroke(); });
-    /* the relief, read as on Passive systems: contour lines over the ground's colours, and the low and the high in view */
+    /* the relief, read as on Ventilation: contour lines over the ground's colours, and the low and the high in view */
     { const tg = sfTerrain().g;
       if (tg && SF_ENV) { const hs = tg.h, lo = Math.min(...hs), hi = Math.max(...hs), span = hi - lo, iv = span > 60 ? 10 : span > 25 ? 5 : span > 10 ? 2 : 1;
         const stp = 4, n = Math.round(2 * TEr / stp), H2 = [];
@@ -29750,7 +29782,7 @@ function buildSurfaces(host, kind) {
   const surrLine = rail.appendChild(el('p', { class:'hint', style:'margin:2px 0 6px' }));
   surrTxt = () => { const tr = sfTerrain(), nbN = SF_ENV ? SF_ENV.nbs.length : 0;
     surrLine.textContent = SF.sel.surr === false ? '' : (ENV.nb === false ? t('Neighbouring buildings are switched off on Environmental.') : NB.status === 'loading' ? t('Reading the neighbouring buildings…') : NB.status === 'failed' ? t('The neighbouring buildings could not be read (OpenStreetMap).') : nbN + ' ' + t('neighbouring buildings (OpenStreetMap)'))
-      + ' · ' + (tr.pending ? t('reading the relief…') : tr.g ? t('relief: Copernicus DEM via Open-Meteo, 240 m at 30 m — the ground of Passive systems') : t('relief not available: flat ground assumed')); };
+      + ' · ' + (tr.pending ? t('reading the relief…') : tr.g ? t('relief: Copernicus DEM via Open-Meteo, 240 m at 30 m — the ground of Ventilation') : t('relief not available: flat ground assumed')); };
   if (ENV.nb !== false) wantNeighbours(ENV.plot || { lat:S.lat, lon:S.lon }, () => redraw());
   sfTerrain(() => redraw());
   rail.appendChild(el('div', { class:'gh', text:t('Hour') }));
@@ -34057,6 +34089,20 @@ Object.assign(PT, {
   "Summer": "Verão",
   "Ventilation": "Ventilação",
   "Solar radiation": "Radiação solar",
+  "in the lee of the winter wind: it cannot shelter the walls": "a sotavento do vento de inverno: não pode abrigar as paredes",
+  "too far upwind to shelter the walls (more than 20 of its heights)": "demasiado longe a barlavento para abrigar as paredes (mais de 20 vezes a sua altura)",
+  "upwind of the winter wind but beside the house: it shelters little": "a barlavento do vento de inverno mas ao lado da casa: abriga pouco",
+  "upwind of the winter wind: it shelters the walls": "a barlavento do vento de inverno: abriga as paredes",
+  "no summer cross path to act on": "não há percurso cruzado de verão sobre o qual agir",
+  "downwind of the summer inlet": "a sotavento da entrada de verão",
+  "it cannot change the air coming in — stand it upwind, beside the path, to funnel the breeze into the windows": "não pode alterar o ar que entra — coloque-a a barlavento, ao lado do percurso, para canalizar a brisa para as janelas",
+  "too far upwind of the summer inlet to change it (more than 10 of its heights)": "demasiado longe a barlavento da entrada de verão para a alterar (mais de 10 vezes a sua altura)",
+  "in front of the summer inlet": "em frente da entrada de verão",
+  "it blocks the breeze — move it aside, beside the path, so it funnels instead": "bloqueia a brisa — afaste-a para o lado do percurso, para que canalize em vez de bloquear",
+  "beside the summer path: it funnels air into the inlet": "ao lado do percurso de verão: canaliza o ar para a entrada",
+  "upwind of the summer inlet but off its path: it does little": "a barlavento da entrada de verão mas fora do percurso: faz pouco",
+  "Winter wind from": "Vento de inverno de",
+  "Summer wind from": "Vento de verão de",
   "Winter sun through the glass (Manual SCE)": "Sol de inverno pelos vãos (Manual SCE)",
   "year": "ano",
   "of the reference": "da referência",
